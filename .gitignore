@@ -1,0 +1,4 @@
+3rdparty
+out
+.vs
+CMakeSettings.json

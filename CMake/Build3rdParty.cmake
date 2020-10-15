@@ -1,0 +1,6 @@
+function(Build3rdParty)
+  add_subdirectory(${fmt_SOURCE_DIR})
+  add_subdirectory(${sdl_SOURCE_DIR})
+  add_subdirectory(${glm_SOURCE_DIR})
+  add_subdirectory(${catch2_SOURCE_DIR})
+endfunction()

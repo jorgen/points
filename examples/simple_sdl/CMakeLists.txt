@@ -1,0 +1,6 @@
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+add_executable(simple_sdl main.cpp glad.c)
+target_include_directories(simple_sdl PRIVATE include)
+target_link_libraries(simple_sdl PRIVATE points_render fmt SDL2 SDL2main opengl32)
+copyDllForTarget(simple_sdl SDL2)
+setWarningFlagsForTarget(simple_sdl)
