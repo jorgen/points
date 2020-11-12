@@ -10,11 +10,19 @@ namespace points
     {
       std::vector<struct camera*> cameras;
       renderer_dirty_callback callback = nullptr;
+      aabb aabb;
     };
 
     struct renderer* renderer_create(const char* url, int url_size)
     {
       (void)url; (void)url_size;
+      auto renderer = new struct renderer();
+      renderer->aabb.min[0] = 0.0f;
+      renderer->aabb.min[1] = 0.0f;
+      renderer->aabb.min[2] = 0.0f;
+      renderer->aabb.max[0] = 1.0f;
+      renderer->aabb.max[1] = 1.0f;
+      renderer->aabb.max[2] = 1.0f;
       return new struct renderer();
     }
     void renderer_destroy(struct renderer *renderer)
@@ -40,6 +48,11 @@ namespace points
     void renderer_add_callback(struct renderer *renderer, renderer_dirty_callback callback)
     {
       renderer->callback = callback;
+    }
+
+    struct aabb renderer_aabb(struct renderer* renderer)
+    {
+      return renderer->aabb;
     }
 
   }

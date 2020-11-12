@@ -1,8 +1,15 @@
 add_library(catch_main STATIC catch-main.cpp)
 target_link_libraries(catch_main Catch2::Catch2)
 
-add_executable(unit_tests renderer_base.cpp)
-target_link_libraries(unit_tests PRIVATE catch_main Catch2::Catch2 fmt points_render)
+add_executable(public_interface_unit_tests "public/renderer_base.cpp")
+target_link_libraries(public_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt points_render)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
-	target_precompile_headers(unit_tests PRIVATE <catch2/catch.hpp>)
+	target_precompile_headers(public_interface_unit_tests PRIVATE <catch2/catch.hpp>)
+endif()
+
+add_executable(private_interface_unit_tests "private/basic_camera.cpp")
+target_link_libraries(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm points_render_objects)
+target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render)
+if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
+	target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)
 endif()

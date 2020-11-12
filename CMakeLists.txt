@@ -33,6 +33,7 @@ endif()
 
 option(BUILD_TESTS "Build tests" ON)
 option(BUILD_EXAMPLES "Build examples" ON)
+option(BUILD_SHARED_LIBS "Build shared libs" ON)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 find_package(Threads)

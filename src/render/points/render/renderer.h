@@ -1,7 +1,8 @@
 #ifndef POINTS_RENDERER_H
 #define POINTS_RENDERER_H
 
-#include <points/render/points_render_export.h>
+#include <points/render/export.h>
+#include <points/render/aabb.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,6 +75,7 @@ namespace points
     POINTS_RENDER_EXPORT void renderer_remove_camera(struct renderer* renderer, struct camera* camera);
     POINTS_RENDER_EXPORT struct frame renderer_frame(struct renderer* renderer, struct camera* camera);
     POINTS_RENDER_EXPORT void renderer_add_callback(struct renderer* renderer, renderer_dirty_callback callback);
+    POINTS_RENDER_EXPORT struct aabb renderer_aabb(struct renderer* renderer);
   }
 }
 

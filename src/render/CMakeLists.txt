@@ -1,14 +1,24 @@
-set(public_headers points/render/camera.h points/render/renderer.h)
+set(public_headers
+  points/render/camera.h
+  points/render/renderer.h
+  points/render/aabb.h "points/render/export.h")
+set(private_headers
+  camera_p.h
+  glm_include.h)
 set(sources renderer.cpp camera.cpp)
-add_library(points_render SHARED ${public_headers} ${sources} "camera_p.h" "glm_include.h")
-target_link_libraries(points_render PRIVATE fmt glm)
-target_include_directories(points_render
+add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources})
+target_link_libraries(points_render_objects PRIVATE fmt glm)
+target_include_directories(points_render_objects
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:include>
 )
-#target_include_directories(points_render PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-setWarningflagsForTarget(points_render)
-generate_export_header(points_render
-    EXPORT_FILE_NAME points/render/points_render_export.h)
+#target_include_directories(points_render_objects PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+setWarningflagsForTarget(points_render_objects)
+if (BUILD_SHARED_LIBS)
+    target_compile_definitions(points_render_objects PRIVATE points_render_EXPORTS)
+endif()
+
+add_library(points_render $<TARGET_OBJECTS:points_render_objects>)
+target_link_libraries(points_render PUBLIC points_render_objects)

@@ -17,7 +17,7 @@ namespace points
       delete camera;
     }
 
-    void camera_look_at(struct camera* camera, float* eye, float* center, float* up)
+    void camera_look_at(struct camera* camera, double* eye, double* center, double* up)
     {
       camera->eye = glm::make_vec3(eye);
       camera->center = glm::make_vec3(center);
@@ -25,19 +25,34 @@ namespace points
       camera->view_dirty = true;
       camera->view_inverse_dirty = false;
     }
-    void camera_set_view_matrix(struct camera* camera, float* data)
+    
+    void camera_look_at_aabb(struct camera* camera, struct aabb* aabb, double* direction, double* up)
+    {
+
+      if (camera->perspective_inverse_dirty)
+      {
+
+      }
+
+      (void)camera;
+      (void)aabb;
+      (void)direction;
+      (void)up;
+    }
+
+    void camera_set_view_matrix(struct camera* camera, double* data)
     {
       camera->view = glm::make_mat4(data);
       camera->view_dirty = false;
-      camera->view_inverse_dirty = false;
+      camera->view_inverse_dirty = true;
     }
-    void camera_set_perspective_matrix(struct camera* camera, float* data)
+    void camera_set_perspective_matrix(struct camera* camera, double* data)
     {
       camera->perspective = glm::make_mat4(data);
       camera->perspective_dirty = false;
       camera->perspective_inverse_dirty = true;
     }
-    void camera_set_perspective(struct camera* camera, float fov, float width, float height, float near, float far)
+    void camera_set_perspective(struct camera* camera, double fov, double width, double height, double near, double far)
     {
       camera->fov = fov;
       camera->aspect = width / height;
