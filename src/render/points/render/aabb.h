@@ -28,8 +28,8 @@ namespace points
   {
     struct aabb
     {
-      float min[3];
-      float max[3];
+      double min[3];
+      double max[3];
     };
 
   }

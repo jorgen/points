@@ -1,4 +1,5 @@
 #include <points/render/camera.h>
+#include <points/render/aabb.h>
 #include "camera_p.h"
 
 #include "glm_include.h"
@@ -17,49 +18,52 @@ namespace points
       delete camera;
     }
 
-    void camera_look_at(struct camera* camera, double* eye, double* center, double* up)
+    void camera_look_at(struct camera* camera, const double eye[3], const double center[3], const double up[3])
     {
-      camera->eye = glm::make_vec3(eye);
-      camera->center = glm::make_vec3(center);
-      camera->up = glm::make_vec3(up);
-      camera->view_dirty = true;
-      camera->view_inverse_dirty = false;
+      camera->view = glm::lookAt(glm::make_vec3(eye), glm::make_vec3(center), glm::make_vec3(up));
     }
     
-    void camera_look_at_aabb(struct camera* camera, struct aabb* aabb, double* direction, double* up)
+    void camera_look_at_aabb(struct camera* camera, struct aabb* aabb, const double direction[3], const double up[3])
     {
-
-      if (camera->perspective_inverse_dirty)
-      {
-
-      }
-
-      (void)camera;
-      (void)aabb;
-      (void)direction;
-      (void)up;
+      double half_x = (aabb->min[0] - aabb->max[0]) / 2;
+      double half_y = (aabb->min[1] - aabb->max[1]) / 2;
+      double half_z = (aabb->min[2] - aabb->max[2]) / 2;
+      glm::dvec3 aabb_center;
+      aabb_center[0] = aabb->min[0] + half_x;
+      aabb_center[1] = aabb->min[1] + half_y;
+      aabb_center[2] = aabb->min[2] + half_z;
+      double fov = 2.0 * atan(1.0 / camera->projection[1][1]);
+      double distance = half_x / tan(fov / 2.0);
+      glm::dvec3 direction_vector = glm::make_vec3(direction);
+      camera_look_at(camera, glm::value_ptr(aabb_center + (direction_vector * distance)), glm::value_ptr(aabb_center), up);
     }
 
-    void camera_set_view_matrix(struct camera* camera, double* data)
+    void camera_set_view_matrix(struct camera* camera, const double data[16])
     {
       camera->view = glm::make_mat4(data);
-      camera->view_dirty = false;
-      camera->view_inverse_dirty = true;
     }
-    void camera_set_perspective_matrix(struct camera* camera, double* data)
+
+    void camera_set_perspective_matrix(struct camera* camera, const double data[16])
     {
-      camera->perspective = glm::make_mat4(data);
-      camera->perspective_dirty = false;
-      camera->perspective_inverse_dirty = true;
+      camera->projection = glm::make_mat4(data);
     }
+    
     void camera_set_perspective(struct camera* camera, double fov, double width, double height, double near, double far)
     {
-      camera->fov = fov;
-      camera->aspect = width / height;
-      camera->near = near;
-      camera->far = far;
-      camera->perspective_dirty = true;
-      camera->perspective_inverse_dirty = false;
+      camera->projection = glm::perspective(fov, width / height, near, far);
     }
+
+    void camera_perspective_properties(struct camera *camera, double *fov, double *aspect, double *near, double *far)
+    {
+      if (fov)
+        *fov = 2.0 * atan(1.0 / camera->projection[1][1]);
+      if (aspect)
+        *aspect = camera->projection[1][1] / camera->projection[0][0];
+      if (near)
+        *near = camera->projection[3][2] / (camera->projection[2][2] - 1.0);
+      if (far)
+        *far = camera->projection[3][2] / (camera->projection[2][2] + 1.0);
+    }
+
   }
 }

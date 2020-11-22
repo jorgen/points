@@ -9,6 +9,9 @@ project(Points VERSION 0.0.1)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 include(GNUInstallDirs)
 include(GenerateExportHeader)
 

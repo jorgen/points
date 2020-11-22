@@ -6,7 +6,7 @@ set(private_headers
   camera_p.h
   glm_include.h)
 set(sources renderer.cpp camera.cpp)
-add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources})
+add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources} "frustum_p.h")
 target_link_libraries(points_render_objects PRIVATE fmt glm)
 target_include_directories(points_render_objects
     PUBLIC
