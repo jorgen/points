@@ -112,7 +112,7 @@ int createProgram(const char(&vertex_shader)[vertex_size], const char(&fragment_
 }
 
 static const char vertex_shader[] =
-"#version 130\n"
+"#version 330\n"
 "in vec2 i_position;\n"
 "in vec4 i_color;\n"
 "out vec4 v_color;\n"
@@ -123,7 +123,7 @@ static const char vertex_shader[] =
 "}\n";
 
 static const char fragment_shader[] =
-"#version 130\n"
+"#version 330\n"
 "in vec4 v_color;\n"
 "out vec4 o_color;\n"
 "void main() {\n"

@@ -4,7 +4,9 @@
 #include "glm_include.h"
 #include "frustum_p.h"
 
-#define M_PI       3.14159265358979323846   // pi
+#ifdef _MSC_VER
+#define M_PI       3.14159265358979323846
+#endif
 
 #include <cmath>
 

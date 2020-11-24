@@ -15,26 +15,8 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef POINTS_AABB_H
-#define POINTS_AABB_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-namespace points
+int return_three()
 {
-  namespace render
-  {
-    struct aabb
-    {
-      double min[3];
-      double max[3];
-    };
-  }
+    return 3;
 }
-#ifdef __cplusplus
-}
-#endif
-
-#endif

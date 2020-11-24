@@ -21,7 +21,7 @@
 #ifdef POINTS_RENDER_STATIC_DEFINE
 #  define POINTS_RENDER_EXPORT
 #  define POINTS_RENDER_NO_EXPORT
-#else
+#elif defined(_MSC_VER)
 #  ifndef POINTS_RENDER_EXPORT
 #    ifdef points_render_EXPORTS
         /* We are building this library */
@@ -33,12 +33,32 @@
 #  endif
 
 #  ifndef POINTS_RENDER_NO_EXPORT
-#    define POINTS_RENDER_NO_EXPORT 
+#    define POINTS_RENDER_NO_EXPORT
+#  endif
+#else
+#  ifndef POINTS_RENDER_EXPORT
+#    ifdef points_render_objects_EXPORTS
+        /* We are building this library */
+#      define POINTS_RENDER_EXPORT __attribute__((visibility("default")))
+#    else
+        /* We are using this library */
+#      define POINTS_RENDER_EXPORT __attribute__((visibility("default")))
+#    endif
+#  endif
+
+#  ifndef POINTS_RENDER_NO_EXPORT
+#    define POINTS_RENDER_NO_EXPORT __attribute__((visibility("hidden")))
 #  endif
 #endif
 
-#ifndef POINTS_RENDER_DEPRECATED
-#  define POINTS_RENDER_DEPRECATED __declspec(deprecated)
+#if defined(_MSC_VER)
+#  ifndef POINTS_RENDER_DEPRECATED
+#    define POINTS_RENDER_DEPRECATED __declspec(deprecated)
+#  endif
+#else
+#  ifndef POINTS_RENDER_DEPRECATED
+#    define POINTS_RENDER_DEPRECATED __attribute__ ((__deprecated__))
+#  endif
 #endif
 
 #ifndef POINTS_RENDER_DEPRECATED_EXPORT

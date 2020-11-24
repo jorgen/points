@@ -5,6 +5,7 @@
 #include <points/render/aabb.h>
 #include <camera_p.h>
 #include <frustum_p.h>
+#include <aabb_p.h>
 #include <glm_include.h>
 
 TEST_CASE("Verify_Perspective", "[render]")
@@ -34,16 +35,17 @@ TEST_CASE("Check_Frustum_AABB_Culling", "[render]")
   points::render::aabb aabb;
   aabb.min[0] = 0.5; aabb.min[1] = 0.25; aabb.min[2] = 0.34;
   aabb.max[0] = 1.1; aabb.max[1] = 0.56; aabb.max[2] = 0.45;
-  glm::dvec3 center(0.0, 0.0, 0.0);
+  glm::dvec3 center = /*glm::dvec3(0,0,0) - */points::render::aabb_center(aabb);
+  center = glm::normalize(center);
   glm::dvec3 up(0.0, 1.0, 0.0);
   points::render::camera_look_at_aabb(camera, &aabb, glm::value_ptr(center), glm::value_ptr(up));
 
-  auto frustum = points::render::make_frustum(camera->view * camera->projection);
+  auto frustum = points::render::make_frustum(camera->projection * camera->view);
   REQUIRE(points::render::frustum_contains_aabb(frustum, aabb));
 
-  auto rotated_frustum10 = points::render::make_frustum(glm::rotate(glm::dmat4(), points::render::to_radians(10.0), glm::dvec3(1.0, 0.0, 0.0)) * camera->view * camera->projection);
-  REQUIRE(points::render::frustum_contains_aabb(frustum, aabb));
+  auto rotated_frustum10 = points::render::make_frustum(camera->projection * (glm::rotate(glm::dmat4(), points::render::to_radians(10.0), glm::dvec3(0.0, 0.0, 1.0)) * camera->view));
+  REQUIRE(points::render::frustum_contains_aabb(rotated_frustum10, aabb));
   
-  auto rotated_frustum50 = points::render::make_frustum(glm::rotate(glm::dmat4(), points::render::to_radians(30.0), glm::dvec3(0.0, 1.0, 0.0)) * camera->view * camera->projection);
-  REQUIRE(!points::render::frustum_contains_aabb(frustum, aabb));
+  auto rotated_frustum50 = points::render::make_frustum(camera->projection * (glm::rotate(glm::dmat4(), points::render::to_radians(150.0), glm::dvec3(0.0, 0.0, 1.0)) * camera->view));
+  REQUIRE(!points::render::frustum_contains_aabb(rotated_frustum50, aabb));
 }

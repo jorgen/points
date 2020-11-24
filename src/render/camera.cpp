@@ -35,7 +35,7 @@ namespace points
       double fov = 2.0 * atan(1.0 / camera->projection[1][1]);
       double distance = half_x / tan(fov / 2.0);
       glm::dvec3 direction_vector = glm::make_vec3(direction);
-      camera_look_at(camera, glm::value_ptr(aabb_center + (direction_vector * distance)), glm::value_ptr(aabb_center), up);
+      camera->view = glm::lookAt(aabb_center + (direction_vector * (distance * 1.01)), aabb_center, glm::make_vec3(up));
     }
 
     void camera_set_view_matrix(struct camera* camera, const double data[16])
