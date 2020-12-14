@@ -1,13 +1,16 @@
 set(public_headers
   points/render/camera.h
   points/render/renderer.h
-  points/render/aabb.h "points/render/export.h")
+  points/render/aabb.h 
+  points/render/export.h
+)
 set(private_headers
   camera_p.h
   aabb_p.h
+  frustum_p.h
   glm_include.h)
 set(sources renderer.cpp camera.cpp)
-add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources} "frustum_p.h")
+add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources} )
 target_link_libraries(points_render_objects PRIVATE fmt glm)
 target_include_directories(points_render_objects
     PUBLIC

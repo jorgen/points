@@ -1,1 +1,1 @@
-add_subdirectory(simple_sdl)
+add_subdirectory(frustum)

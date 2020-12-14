@@ -52,30 +52,93 @@ namespace points
     template<typename T>
     inline double plane_distance(const plane& plane, const T& pos)
     {
-      return plane.x * pos[0] + plane.y * pos[0] + plane.z * pos[0] + plane.w;
+      return plane.x * pos[0] + plane.y * pos[1] + plane.z * pos[2] + plane.w;
     }
-    
-    inline bool frustum_contains_aabb(const frustum& frustum, const aabb& aabb)
+   
+    inline bool frustum_contains_point(const frustum &frustum, const glm::dvec3 &point)
     {
       for (int i = 0; i < 6; i++)
       {
-        if (plane_distance(frustum.planes[i], glm::dvec3(aabb.min[0], aabb.min[1], aabb.min[2])) < 0.0)
-          return false;
-        if (plane_distance(frustum.planes[i], glm::dvec3(aabb.max[0], aabb.min[1], aabb.min[2])) < 0.0) 
-          return false;
-        if (plane_distance(frustum.planes[i], glm::dvec3(aabb.min[0], aabb.max[1], aabb.min[2])) < 0.0) 
-          return false;
-        if (plane_distance(frustum.planes[i], glm::dvec3(aabb.min[0], aabb.min[1], aabb.max[2])) < 0.0) 
-          return false;
-        if (plane_distance(frustum.planes[i], glm::dvec3(aabb.max[0], aabb.max[1], aabb.min[2])) < 0.0) 
-          return false;
-        if (plane_distance(frustum.planes[i], glm::dvec3(aabb.max[0], aabb.min[1], aabb.max[2])) < 0.0) 
-          return false;
-        if (plane_distance(frustum.planes[i], glm::dvec3(aabb.min[0], aabb.max[1], aabb.max[2])) < 0.0) 
-          return false;
-        if (plane_distance(frustum.planes[i], glm::dvec3(aabb.max[0], aabb.max[1], aabb.max[2])) < 0.0) 
+        if (plane_distance(frustum.planes[i], point) < 0.0)
           return false;
       }
+      return true;
+    }
+
+    inline bool frustum_contains_aabb(const frustum& frustum, const aabb& aabb)
+    {
+      if (frustum_contains_point(frustum, glm::dvec3(aabb.min[0], aabb.min[1], aabb.min[2])))
+        return true;
+      if (frustum_contains_point(frustum, glm::dvec3(aabb.max[0], aabb.min[1], aabb.min[2])))
+        return true;
+      if (frustum_contains_point(frustum, glm::dvec3(aabb.min[0], aabb.max[1], aabb.min[2])))
+        return true;
+      if (frustum_contains_point(frustum, glm::dvec3(aabb.min[0], aabb.min[1], aabb.max[2])))
+        return true;
+      if (frustum_contains_point(frustum, glm::dvec3(aabb.max[0], aabb.max[1], aabb.min[2])))
+        return true;
+      if (frustum_contains_point(frustum, glm::dvec3(aabb.max[0], aabb.min[1], aabb.max[2])))
+        return true;
+      if (frustum_contains_point(frustum, glm::dvec3(aabb.min[0], aabb.max[1], aabb.max[2])))
+        return true;
+      if (frustum_contains_point(frustum, glm::dvec3(aabb.max[0], aabb.max[1], aabb.max[2])))
+        return true;
+
+      return false;
+    }
+
+    inline bool frustum_contains_aabb2(const glm::dmat4 &view_perspective, const aabb &aabb)
+    {
+      glm::dvec4 min_vec(aabb.min[0], aabb.min[1], aabb.min[2], 1.0);
+      glm::dvec4 max_vec(aabb.max[0], aabb.max[1], aabb.max[2], 1.0);
+
+      glm::dvec4 projected_min = view_perspective * min_vec;
+      glm::dvec4 projected_max = view_perspective * max_vec;
+
+      if (projected_min.x < projected_max.x)
+      {
+        if (projected_max.x < -projected_max.w || projected_min.x > projected_min.w)
+        {
+          return false;
+        }
+      }
+      else
+      {
+        if (projected_min.x < -projected_min.w || projected_max.x > projected_max.w)
+        {
+          return false;
+        }
+      }
+      if (projected_min.y < projected_max.y)
+      {
+        if (projected_max.y < -projected_max.w || projected_min.y > projected_min.w)
+        {
+          return false;
+        }
+      }
+      else
+      {
+        if (projected_min.y < -projected_min.w || projected_max.y > projected_max.w)
+        {
+          return false;
+        }
+      }
+      if (projected_min.z < projected_max.z)
+      {
+        if (projected_max.z < -projected_max.w || projected_min.z > projected_min.w)
+        {
+          return false;
+        }
+      }
+      else
+      {
+        if (projected_min.z < -projected_min.w || projected_max.z > projected_max.w)
+        {
+          return false;
+        }
+      }
+
+       
       return true;
     }
 

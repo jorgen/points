@@ -31,11 +31,11 @@ TEST_CASE("Verify_Perspective", "[render]")
 TEST_CASE("Check_Frustum_AABB_Culling", "[render]")
 {
   points::render::camera* camera = points::render::camera_create();
-  points::render::camera_set_perspective(camera, points::render::to_radians(45.0), 10.0, 9.0, 0.01, 1000.0);
+  points::render::camera_set_perspective(camera, points::render::to_radians(45.0), 10.0, 9.0, 0.01, 50.0);
   points::render::aabb aabb;
   aabb.min[0] = 0.5; aabb.min[1] = 0.25; aabb.min[2] = 0.34;
   aabb.max[0] = 1.1; aabb.max[1] = 0.56; aabb.max[2] = 0.45;
-  glm::dvec3 center = /*glm::dvec3(0,0,0) - */points::render::aabb_center(aabb);
+  glm::dvec3 center = points::render::aabb_center(aabb);
   center = glm::normalize(center);
   glm::dvec3 up(0.0, 1.0, 0.0);
   points::render::camera_look_at_aabb(camera, &aabb, glm::value_ptr(center), glm::value_ptr(up));
@@ -43,9 +43,20 @@ TEST_CASE("Check_Frustum_AABB_Culling", "[render]")
   auto frustum = points::render::make_frustum(camera->projection * camera->view);
   REQUIRE(points::render::frustum_contains_aabb(frustum, aabb));
 
-  auto rotated_frustum10 = points::render::make_frustum(camera->projection * (glm::rotate(glm::dmat4(), points::render::to_radians(10.0), glm::dvec3(0.0, 0.0, 1.0)) * camera->view));
+  glm::dvec3 pos(camera->view[3]);
+  glm::dmat4 origin_view = glm::translate(camera->view, pos * -1.0);
+  glm::dmat4 rotated10 = glm::rotate(origin_view, points::render::to_radians(10.0), glm::dvec3(0.0, 1.0, 0.0));
+  glm::dmat4 rotated10View = glm::translate(rotated10, pos);
+
+  auto rotated_frustum10 = points::render::make_frustum(camera->projection * rotated10View);
   REQUIRE(points::render::frustum_contains_aabb(rotated_frustum10, aabb));
   
-  auto rotated_frustum50 = points::render::make_frustum(camera->projection * (glm::rotate(glm::dmat4(), points::render::to_radians(150.0), glm::dvec3(0.0, 0.0, 1.0)) * camera->view));
-  REQUIRE(!points::render::frustum_contains_aabb(rotated_frustum50, aabb));
+  glm::dmat4 rotated80 = glm::rotate(origin_view, points::render::to_radians(130.0), glm::dvec3(0.0, 1.0, 0.0));
+  glm::dmat4 rotated80View = glm::translate(rotated80, pos);
+  auto rotated_frustum80 = points::render::make_frustum(camera->projection * rotated80View);
+
+  REQUIRE(points::render::frustum_contains_aabb2(camera->projection * camera->view, aabb));
+  REQUIRE(points::render::frustum_contains_aabb2(camera->projection * rotated10View, aabb));
+  REQUIRE(!points::render::frustum_contains_aabb2(camera->projection * rotated80View, aabb));
+  REQUIRE(!points::render::frustum_contains_aabb(rotated_frustum80, aabb));
 }

@@ -23,7 +23,7 @@ namespace points
       renderer->aabb.max[0] = 1.0f;
       renderer->aabb.max[1] = 1.0f;
       renderer->aabb.max[2] = 1.0f;
-      return new struct renderer();
+      return renderer;
     }
     void renderer_destroy(struct renderer *renderer)
     {
