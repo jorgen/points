@@ -94,8 +94,9 @@ struct arcball *arcball_create(struct camera *camera, const double center[3])
 {
   auto ret = new arcball;
   ret->camera = camera;
-
   ret->center = glm::dvec3(center[0], center[1], center[2]);
+
+  arcball_reset(ret);
   return ret;
 }
 
@@ -104,24 +105,41 @@ void arcball_destroy(struct arcball *arcball)
   delete arcball;
 }
 
-void arcball_commit(struct arcball *arcball, float normalized_dx, float normalized_dy, float normalized_dz)
+void arcball_reset(struct arcball *arcball)
 {
-  auto camera_inverse = glm::inverse(arcball->camera->view);
+  arcball->inverse_view = glm::inverse(arcball->camera->view);
+  arcball->initial_rot = glm::translate(glm::dmat4(1), arcball->center);
+}
 
-  glm::dmat4 rot(1);
-  rot = glm::translate(rot, arcball->center);
-  rot = glm::rotate(rot, -normalized_dx * M_PI, glm::dvec3(camera_inverse[1]));
-  rot = glm::rotate(rot, -normalized_dy * M_PI, glm::dvec3(camera_inverse[0]));
-  rot = glm::rotate(rot, -normalized_dz * M_PI, glm::dvec3(camera_inverse[2]));
-  rot = glm::translate(rot, -arcball->center);
+void arcball_rotate(struct arcball *arcball, float normalized_dx, float normalized_dy, float normalized_dz)
+{
+  auto &view_inverse = arcball->inverse_view;
 
-  glm::dvec3 translate = glm::dvec3(camera_inverse[3]);
-  auto new_view = camera_inverse;
-  new_view = glm::translate(new_view, -glm::dvec3(translate));
-  new_view = rot * new_view;
-  new_view = glm::translate(new_view, glm::dvec3(translate));
+  auto qrot = glm::rotate(glm::dquat(1.0, 0.0, 0.0, 0.0) , -normalized_dx * M_PI, glm::dvec3(view_inverse[1]));
+  qrot = glm::rotate(qrot, -normalized_dy * M_PI, glm::dvec3(view_inverse[0]));
+  qrot = glm::rotate(qrot, normalized_dz * M_PI, glm::dvec3(view_inverse[2]));
 
-  arcball->camera->view = glm::inverse(new_view);
+  auto arcball_rot = arcball->initial_rot * glm::mat4_cast(qrot);
+
+  arcball_rot = glm::translate(arcball_rot, -arcball->center);
+
+  glm::dvec3 translate = glm::dvec3(view_inverse[3]);
+  view_inverse = glm::translate(view_inverse, -glm::dvec3(translate));
+  view_inverse = arcball_rot * view_inverse;
+  view_inverse = glm::translate(view_inverse, glm::dvec3(translate));
+
+  arcball->camera->view = glm::inverse(view_inverse);
+}
+  
+void arcball_zoom(struct arcball *arcball, float normalized_zoom)
+{
+  auto &view_inverse = arcball->inverse_view;
+
+  auto distance = glm::dvec3(view_inverse[3]) - arcball->center;
+  auto move_distance = glm::length(distance) * normalized_zoom;
+  auto translate = glm::dvec3(view_inverse[2]) * move_distance;
+  view_inverse[3] += glm::dvec4(translate, 0.0);
+  arcball->camera->view = glm::inverse(view_inverse);
 }
 } // namespace camera_manipulator
 } // namespace render

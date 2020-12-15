@@ -107,6 +107,7 @@ int main(int , char** )
   SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 8);
 
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
@@ -126,6 +127,7 @@ int main(int , char** )
     return 1;
   }
 
+  glEnable(GL_DEPTH_TEST);
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGuiIO &io = ImGui::GetIO();
@@ -255,7 +257,7 @@ int main(int , char** )
 
   while(loop)
   {
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
     SDL_WaitEvent(nullptr);
     SDL_Event event;
@@ -293,13 +295,13 @@ int main(int , char** )
             float dx = (float(event.motion.xrel) / float(width));
             float dy = (float(event.motion.yrel) / float(height));
             float avg = (dx + dy) / 2;
-            points::render::camera_manipulator::arcball_commit(arcball, 0.0f, 0.0f, avg);
+            points::render::camera_manipulator::arcball_rotate(arcball, 0.0f, 0.0f, avg);
           }
           else if (left_pressed)
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = (float(event.motion.yrel) / float(height));
-            points::render::camera_manipulator::arcball_commit(arcball, dx, dy, 0.0f);
+            points::render::camera_manipulator::arcball_rotate(arcball, dx, dy, 0.0f);
           }
           break;
         case SDL_MOUSEBUTTONUP:
@@ -310,6 +312,12 @@ int main(int , char** )
           } else if (event.button.button == SDL_BUTTON_RIGHT)
           {
             left_right_pressed = false;
+          }
+          break;
+        case SDL_MOUSEWHEEL: 
+          if (event.wheel.y)
+          {
+            points::render::camera_manipulator::arcball_zoom(arcball, -float(event.wheel.y)/30); 
           }
           break;
         case SDL_WINDOWEVENT:

@@ -80,6 +80,8 @@ struct arcball
 {
   camera *camera;
   glm::dvec3 center;
+  glm::dmat4 inverse_view;
+  glm::dmat4 initial_rot;
 };
 
 } // namespace camera_manipulator

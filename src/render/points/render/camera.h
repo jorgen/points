@@ -32,8 +32,9 @@ namespace render
   struct arcball;
   POINTS_RENDER_EXPORT struct arcball *arcball_create(struct camera *camera, const double center[3]);
   POINTS_RENDER_EXPORT void arcball_destroy(struct arcball *arcball);
-  POINTS_RENDER_EXPORT void arcball_commit(struct arcball *arcball, float normalized_dx, float normalized_dy,
-                                           float normalized_dz);
+  POINTS_RENDER_EXPORT void arcball_reset(struct arcball *arcball);
+  POINTS_RENDER_EXPORT void arcball_rotate(struct arcball *arcball, float normalized_dx, float normalized_dy, float normalized_dz);
+  POINTS_RENDER_EXPORT void arcball_zoom(struct arcball *arcball, float normalized_zoom);
   } // namespace camera_manipulator
   } // namespace render
   } // namespace points
