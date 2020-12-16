@@ -98,7 +98,22 @@ int createProgram(const char *vertex_shader, size_t vertex_size, const char *fra
   return program;
 }
 
-int main(int , char** )
+static std::vector<glm::vec3> coordinates_for_aabb(const points::render::aabb &aabb)
+{
+  std::vector<glm::vec3> coordinates;
+  coordinates.resize(8);
+  coordinates[0] = glm::vec3(aabb.min[0], aabb.min[1], aabb.min[2]);
+  coordinates[1] = glm::vec3(aabb.min[0], aabb.min[1], aabb.max[2]);
+  coordinates[2] = glm::vec3(aabb.min[0], aabb.max[1], aabb.min[2]);
+  coordinates[3] = glm::vec3(aabb.min[0], aabb.max[1], aabb.max[2]);
+  coordinates[4] = glm::vec3(aabb.max[0], aabb.min[1], aabb.min[2]);
+  coordinates[5] = glm::vec3(aabb.max[0], aabb.min[1], aabb.max[2]);
+  coordinates[6] = glm::vec3(aabb.max[0], aabb.max[1], aabb.min[2]);
+  coordinates[7] = glm::vec3(aabb.max[0], aabb.max[1], aabb.max[2]);
+  return coordinates;
+}
+    ;
+  int main(int , char** )
 {
   SDL_Init(SDL_INIT_VIDEO);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
@@ -107,7 +122,7 @@ int main(int , char** )
   SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
-  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 8);
+  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 32);
 
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
@@ -171,9 +186,6 @@ int main(int , char** )
   auto diff = some_offset - aabb_center;
   glm::dvec3 up(0.0, 1.0, 0.0);
 
-//  glm::dvec3 origin(0.0, 0.0, 0.0);
-//  glm::dvec3 direction(origin - aabb_center);
-//  points::render::camera_look_at_aabb(camera, &aabb, glm::value_ptr(direction), glm::value_ptr(up)); 
   points::render::camera_set_perspective(camera, 45, width, height, 0.001, 1000);
   points::render::camera_look_at_aabb(camera, &aabb, glm::value_ptr(diff), glm::value_ptr(up)); 
 
@@ -192,32 +204,32 @@ int main(int , char** )
   glClearColor(0.5, 0.0, 0.0, 0.0);
   glViewport(0, 0, width, height);
 
-  GLuint vao, vbo, color_buffer, ibo;
+  GLuint vao, vbo1, vbo2, color_buffer, ibo;
 
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
 
-  glGenBuffers(1, &vbo);
-  glGenBuffers(1, &color_buffer);
+  glGenBuffers(1, &vbo1);
   
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo1);
   
-  std::vector<glm::vec3> coordinates;
-  coordinates.resize(8);
-  coordinates[0] = glm::vec3(aabb.min[0], aabb.min[1], aabb.min[2]);
-  coordinates[1] = glm::vec3(aabb.min[0], aabb.min[1], aabb.max[2]);
-  coordinates[2] = glm::vec3(aabb.min[0], aabb.max[1], aabb.min[2]);
-  coordinates[3] = glm::vec3(aabb.min[0], aabb.max[1], aabb.max[2]);
-  coordinates[4] = glm::vec3(aabb.max[0], aabb.min[1], aabb.min[2]);
-  coordinates[5] = glm::vec3(aabb.max[0], aabb.min[1], aabb.max[2]);
-  coordinates[6] = glm::vec3(aabb.max[0], aabb.max[1], aabb.min[2]);
-  coordinates[7] = glm::vec3(aabb.max[0], aabb.max[1], aabb.max[2]);
-  glBufferData(GL_ARRAY_BUFFER, coordinates.size() * sizeof(coordinates[0]), coordinates.data(), GL_STATIC_DRAW);
-  
+  std::vector<glm::vec3> coordinates1 = coordinates_for_aabb(aabb);
+  glBufferData(GL_ARRAY_BUFFER, coordinates1.size() * sizeof(coordinates1[0]), coordinates1.data(), GL_STATIC_DRAW);
+
   glEnableVertexAttribArray(attrib_position);
   glVertexAttribPointer(attrib_position, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
+  points::render::aabb aabb2;
+  aabb2.min[0] = 10.0f; aabb2.min[1] = 10.0f; aabb2.min[2] = 10.0f;
+  aabb2.max[0] = 15.0f; aabb2.max[1] = 15.0f; aabb2.max[2] = 15.0f;
+
+  glGenBuffers(1, &vbo2);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo2);
+  std::vector<glm::vec3> coordinates2 = coordinates_for_aabb(aabb2);
+  glBufferData(GL_ARRAY_BUFFER, coordinates2.size() * sizeof(coordinates2[0]), coordinates2.data(), GL_STATIC_DRAW);
+
+  glGenBuffers(1, &color_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, color_buffer);
   
   std::vector<glm::vec3> colors;
@@ -239,13 +251,15 @@ int main(int , char** )
 
   std::vector<int> indecies;
   indecies.reserve(36);
-  indecies.push_back(0); indecies.push_back(2); indecies.push_back(4); indecies.push_back(4); indecies.push_back(2); indecies.push_back(6);
+  indecies.push_back(0); indecies.push_back(2); indecies.push_back(4); indecies.push_back(2); indecies.push_back(4); indecies.push_back(6);
   indecies.push_back(4); indecies.push_back(6); indecies.push_back(5); indecies.push_back(5); indecies.push_back(6); indecies.push_back(7);
   indecies.push_back(5); indecies.push_back(7); indecies.push_back(1); indecies.push_back(1); indecies.push_back(7); indecies.push_back(3);
   indecies.push_back(2); indecies.push_back(0); indecies.push_back(3); indecies.push_back(3); indecies.push_back(0); indecies.push_back(1);
-  indecies.push_back(1); indecies.push_back(0); indecies.push_back(5); indecies.push_back(5); indecies.push_back(0); indecies.push_back(4);
+  indecies.push_back(5); indecies.push_back(0); indecies.push_back(1); indecies.push_back(5); indecies.push_back(0); indecies.push_back(4);
   indecies.push_back(2); indecies.push_back(3); indecies.push_back(7); indecies.push_back(7); indecies.push_back(6); indecies.push_back(2);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, indecies.size() * sizeof(indecies[0]), indecies.data(), GL_STATIC_DRAW);
+  
+  glEnableVertexAttribArray(attrib_color);
 
 
   auto error = glGetError();
@@ -253,7 +267,11 @@ int main(int , char** )
   bool loop = true;
   bool left_pressed = false;
   bool left_right_pressed = false;
-  auto *arcball = points::render::camera_manipulator::arcball_create(camera, glm::value_ptr(aabb_center));
+
+  std::unique_ptr<points::render::camera_manipulator::arcball, decltype(&points::render::camera_manipulator::arcball_destroy)>
+    arcball(points::render::camera_manipulator::arcball_create(camera, glm::value_ptr(aabb_center)), &points::render::camera_manipulator::arcball_destroy);
+  std::unique_ptr<points::render::camera_manipulator::fps, decltype(&points::render::camera_manipulator::fps_destroy)>
+    fps(nullptr, &points::render::camera_manipulator::fps_destroy);
 
   while(loop)
   {
@@ -274,6 +292,22 @@ int main(int , char** )
       {
         switch (event.type)
         {
+        case SDL_KEYDOWN:
+          if (fps)
+          {
+            if (event.key.keysym.sym == SDLK_w || event.key.keysym.sym == SDLK_UP)
+              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, -0.3f);
+            if (event.key.keysym.sym == SDLK_s || event.key.keysym.sym == SDLK_DOWN)
+              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, 0.3f);
+            if (event.key.keysym.sym == SDLK_a || event.key.keysym.sym == SDLK_LEFT)
+              points::render::camera_manipulator::fps_move(fps.get(), -0.3f, 0.0f, 0.0f);
+            if (event.key.keysym.sym == SDLK_d || event.key.keysym.sym == SDLK_RIGHT)
+              points::render::camera_manipulator::fps_move(fps.get(), 0.3f, 0.0f, 0.0f);
+            if (event.key.keysym.sym == SDLK_q)
+              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, -0.3f, 0.0f);
+            if (event.key.keysym.sym == SDLK_e)
+              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.3f, 0.0f);
+          }
         case SDL_KEYUP:
           if (event.key.keysym.sym == SDLK_ESCAPE)
             loop = false;
@@ -295,13 +329,19 @@ int main(int , char** )
             float dx = (float(event.motion.xrel) / float(width));
             float dy = (float(event.motion.yrel) / float(height));
             float avg = (dx + dy) / 2;
-            points::render::camera_manipulator::arcball_rotate(arcball, 0.0f, 0.0f, avg);
+            if (arcball)
+              points::render::camera_manipulator::arcball_rotate(arcball.get(), 0.0f, 0.0f, avg);
+            else if (fps)
+              points::render::camera_manipulator::fps_rotate(fps.get(), 0.0f, 0.0f, avg);
           }
           else if (left_pressed)
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = (float(event.motion.yrel) / float(height));
-            points::render::camera_manipulator::arcball_rotate(arcball, dx, dy, 0.0f);
+            if (arcball)
+              points::render::camera_manipulator::arcball_rotate(arcball.get(), dx, dy, 0.0f);
+            else
+              points::render::camera_manipulator::fps_rotate(fps.get(), dx, dy, 0.0f);
           }
           break;
         case SDL_MOUSEBUTTONUP:
@@ -315,9 +355,9 @@ int main(int , char** )
           }
           break;
         case SDL_MOUSEWHEEL: 
-          if (event.wheel.y)
+          if (arcball && event.wheel.y)
           {
-            points::render::camera_manipulator::arcball_zoom(arcball, -float(event.wheel.y)/30); 
+            points::render::camera_manipulator::arcball_zoom(arcball.get(), -float(event.wheel.y)/30); 
           }
           break;
         case SDL_WINDOWEVENT:
@@ -343,6 +383,12 @@ int main(int , char** )
 
     glUniformMatrix4fv(glGetUniformLocation(program, "pv"), 1, GL_FALSE, glm::value_ptr(pv));
 
+    glBindBuffer(GL_ARRAY_BUFFER, vbo1);
+    glVertexAttribPointer(attrib_position, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glDrawElements(GL_TRIANGLES, GLsizei(indecies.size()), GL_UNSIGNED_INT, 0);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, vbo2);
+    glVertexAttribPointer(attrib_position, 3, GL_FLOAT, GL_FALSE, 0, 0);
     glDrawElements(GL_TRIANGLES, GLsizei(indecies.size()), GL_UNSIGNED_INT, 0);
 
     auto inv_v = glm::inverse(view_matrix);
@@ -353,7 +399,30 @@ int main(int , char** )
     ImGui_ImplSDL2_NewFrame(window);
     ImGui::NewFrame();
 
-    ImGui::ShowDemoWindow();
+    ImGui::Begin("Input", 0, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+
+    ImGui::BeginGroup();
+    if (ImGui::RadioButton("ArcBall", arcball.get()))
+    {
+      if (!arcball)
+      {
+        fps.reset();
+        arcball.reset(points::render::camera_manipulator::arcball_create(camera, glm::value_ptr(aabb_center)));
+      }
+    }
+    if (ImGui::RadioButton("FPS", fps.get()))
+    {
+      if (!fps)
+      {
+        arcball.reset();
+        fps.reset(points::render::camera_manipulator::fps_create(camera));
+      }
+    }
+    ImGui::EndGroup();
+
+    ImGui::End();
+   
+    //ImGui::ShowDemoWindow();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

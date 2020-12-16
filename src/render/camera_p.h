@@ -84,6 +84,12 @@ struct arcball
   glm::dmat4 initial_rot;
 };
 
+struct fps
+{
+  camera *camera;
+  glm::dmat4 inverse_view;
+};
+
 } // namespace camera_manipulator
 } // namespace render
 } // namespace points

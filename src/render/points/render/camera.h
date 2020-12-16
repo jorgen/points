@@ -35,6 +35,14 @@ namespace render
   POINTS_RENDER_EXPORT void arcball_reset(struct arcball *arcball);
   POINTS_RENDER_EXPORT void arcball_rotate(struct arcball *arcball, float normalized_dx, float normalized_dy, float normalized_dz);
   POINTS_RENDER_EXPORT void arcball_zoom(struct arcball *arcball, float normalized_zoom);
+
+  struct fps;
+  POINTS_RENDER_EXPORT struct fps *fps_create(struct camera *camera);
+  POINTS_RENDER_EXPORT void fps_destroy(struct fps *fps);
+  POINTS_RENDER_EXPORT void fps_reset(struct fps *fps);
+  POINTS_RENDER_EXPORT void fps_rotate(struct fps *fps, float normalized_dx, float normalized_dy, float normalized_dz);
+  POINTS_RENDER_EXPORT void fps_move(struct fps *fps, float dx, float dy, float dz);
+
   } // namespace camera_manipulator
   } // namespace render
   } // namespace points

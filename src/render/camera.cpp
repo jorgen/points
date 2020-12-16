@@ -115,9 +115,13 @@ void arcball_rotate(struct arcball *arcball, float normalized_dx, float normaliz
 {
   auto &view_inverse = arcball->inverse_view;
 
-  auto qrot = glm::rotate(glm::dquat(1.0, 0.0, 0.0, 0.0) , -normalized_dx * M_PI, glm::dvec3(view_inverse[1]));
-  qrot = glm::rotate(qrot, -normalized_dy * M_PI, glm::dvec3(view_inverse[0]));
-  qrot = glm::rotate(qrot, normalized_dz * M_PI, glm::dvec3(view_inverse[2]));
+  auto qrot = glm::dquat(1.0, 0.0, 0.0, 0.0);
+  if (normalized_dx)
+    qrot = glm::rotate(qrot, -normalized_dx * M_PI, glm::dvec3(view_inverse[1]));
+  if (normalized_dy)
+    qrot = glm::rotate(qrot, -normalized_dy * M_PI, glm::dvec3(view_inverse[0]));
+  if (normalized_dz)
+    qrot = glm::rotate(qrot, normalized_dz * M_PI, glm::dvec3(view_inverse[2]));
 
   auto arcball_rot = arcball->initial_rot * glm::mat4_cast(qrot);
 
@@ -141,6 +145,56 @@ void arcball_zoom(struct arcball *arcball, float normalized_zoom)
   view_inverse[3] += glm::dvec4(translate, 0.0);
   arcball->camera->view = glm::inverse(view_inverse);
 }
+
+struct fps *fps_create(struct camera *camera)
+{
+  fps *ret = new fps();
+  ret->camera = camera;
+  fps_reset(ret);
+  return ret;
+}
+
+void fps_destroy(struct fps *fps)
+{
+  delete fps;
+}
+
+void fps_reset(struct fps *fps)
+{
+  fps->inverse_view = glm::inverse(fps->camera->view);
+}
+
+void fps_rotate(struct fps *fps, float normalized_dx, float normalized_dy, float normalized_dz)
+{
+  auto &view_inverse = fps->inverse_view;
+  auto qrot = glm::rotate(glm::dquat(1.0, 0.0, 0.0, 0.0) , -normalized_dx * M_PI, glm::dvec3(view_inverse[1]));
+  qrot = glm::rotate(qrot, -normalized_dy * M_PI, glm::dvec3(view_inverse[0]));
+  qrot = glm::rotate(qrot, normalized_dz * M_PI, glm::dvec3(view_inverse[2]));
+
+  glm::dvec4 translate = view_inverse[3];
+  view_inverse[3] = glm::dvec4(0.0, 0.0, 0.0, 1.0);
+  view_inverse = glm::mat4_cast(qrot) * view_inverse;
+  view_inverse[3] = translate;
+
+  fps->camera->view = glm::inverse(view_inverse);
+}
+
+void fps_move(struct fps *fps, float dx, float dy, float dz)
+{
+  auto &view_inverse = fps->inverse_view;
+
+  auto move = glm::dvec4(0.0);
+  if (dx)
+    move += glm::normalize(view_inverse[0]) * double(dx);
+  if (dy)
+    move += glm::normalize(view_inverse[1]) * double(dy);
+  if (dz)
+    move += glm::normalize(view_inverse[2]) * double(dz);
+
+  view_inverse[3] += move;
+  fps->camera->view = glm::inverse(view_inverse);
+}
+
 } // namespace camera_manipulator
 } // namespace render
 } // namespace points
