@@ -39,8 +39,10 @@ void camera_look_at_aabb(struct camera *camera, struct aabb *aabb, const double 
   aabb_center[0] = aabb->min[0] + half_x;
   aabb_center[1] = aabb->min[1] + half_y;
   aabb_center[2] = aabb->min[2] + half_z;
+
+  double longest_half = std::max(half_x, std::max(half_y, half_z));
   double fov = 2.0 * atan(1.0 / camera->projection[1][1]);
-  double distance = half_x / tan(fov / 2.0);
+  double distance = longest_half / tan(fov / 2.0);
   glm::dvec3 direction_vector = glm::normalize(glm::make_vec3(direction));
   camera->view = glm::lookAt(aabb_center + (direction_vector * distance * 2.0), aabb_center, glm::make_vec3(up));
 }
@@ -84,17 +86,11 @@ void camera_perspective_properties(struct camera *camera, double *fov, double *a
 
 namespace camera_manipulator
 {
-
-  /*struct fps;
-  {
-  }
-  */
-
 struct arcball *arcball_create(struct camera *camera, const double center[3])
 {
   auto ret = new arcball;
   ret->camera = camera;
-  ret->center = glm::dvec3(center[0], center[1], center[2]);
+  ret->center = glm::make_vec3(center);
 
   arcball_reset(ret);
   return ret;

@@ -15,7 +15,7 @@ add_executable(frustum frustum.cpp glad.c
   ${imgui_SOURCE_DIR}/imgui_widgets.cpp
   ${imgui_SOURCE_DIR}/examples/imgui_impl_sdl.cpp
   ${imgui_SOURCE_DIR}/examples/imgui_impl_opengl3.cpp
-  )
+   "gl_renderer.cpp" "gl_renderer.h")
 target_include_directories(frustum PRIVATE include ${imgui_SOURCE_DIR})
 cmrc_add_resource_library(frustum_shaders ALIAS frustum::shaders NAMESPACE shaders shaders/simple.frag shaders/simple.vert)
 cmrc_add_resource_library(frustum_fonts   ALIAS frustum::fonts NAMESPACE fonts 

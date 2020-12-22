@@ -15,24 +15,14 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef POINTS_AABB_P_H
-#define POINTS_AABB_P_H
-
-#include <points/render/aabb.h>
-#include "glm_include.h"
+#include <data_source_p.h>
 
 namespace points
 {
 namespace render
 {
-inline glm::dvec3 aabb_center(const aabb &aabb)
+data_source::~data_source()
 {
-  double half_x = aabb.max[0] - aabb.min[0];
-  double half_y = aabb.max[1] - aabb.min[1];
-  double half_z = aabb.max[2] - aabb.min[2];
-  return glm::dvec3(aabb.min[0] + half_x, aabb.min[1] + half_y, aabb.min[2] + half_z);
 }
-
 } // namespace render
 } // namespace points
-#endif // POINTS_AABB_P_H

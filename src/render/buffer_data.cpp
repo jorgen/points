@@ -15,24 +15,37 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef POINTS_AABB_P_H
-#define POINTS_AABB_P_H
-
-#include <points/render/aabb.h>
-#include "glm_include.h"
+#include <points/render/renderer.h>
+#include "buffer_data_p.h"
 
 namespace points
 {
 namespace render
 {
-inline glm::dvec3 aabb_center(const aabb &aabb)
+void buffer_data_remove_ref(struct buffer_data *buffer)
 {
-  double half_x = aabb.max[0] - aabb.min[0];
-  double half_y = aabb.max[1] - aabb.min[1];
-  double half_z = aabb.max[2] - aabb.min[2];
-  return glm::dvec3(aabb.min[0] + half_x, aabb.min[1] + half_y, aabb.min[2] + half_z);
+  buffer->ref = false;
 }
 
-} // namespace render
+void buffer_data_set_rendered(struct buffer_data *buffer)
+{
+  buffer->rendered = true;
+}
+
+const void *buffer_data_get(struct buffer_data *buffer)
+{
+  return buffer->data;
+}
+
+int buffer_data_size(struct buffer_data *buffer)
+{
+  return buffer->data_size;
+}
+
+int buffer_data_offset(struct buffer_data *buffer)
+{
+  return buffer->data_offset;
+}
+
+}
 } // namespace points
-#endif // POINTS_AABB_P_H

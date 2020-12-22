@@ -5,13 +5,7 @@
 #include <fmt/printf.h>
 #include <stdio.h>
 
-#pragma warning(push)
-#pragma warning(disable : 4201 )
-#pragma warning(disable : 4127 )  
-#include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#pragma warning(pop)
+#include "gl_renderer.h"
 
 #include <examples/imgui_impl_sdl.h>
 #include <examples/imgui_impl_opengl3.h>
@@ -19,101 +13,21 @@
 #include <points/render/renderer.h>
 #include <points/render/camera.h>
 #include <points/render/aabb.h>
+#include <points/render/aabb_data_source.h>
 
 #include <vector>
 
 #include <cmrc/cmrc.hpp>
 
-CMRC_DECLARE(shaders);
 CMRC_DECLARE(fonts);
 
-struct shader_deleter
+template <typename T, typename Deleter>
+std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
 {
-  shader_deleter(GLuint shader)
-    : shader(shader)
-  {}
-  ~shader_deleter()
-  {
-    if (shader)
-      glDeleteShader(shader);
-  }
-  GLuint shader;
-};
-
-int createShader(const GLchar * shader, GLint size, GLenum shader_type)
-{
-  GLuint s = glCreateShader(shader_type);
-  glShaderSource(s, 1, &shader, &size);
-  glCompileShader(s);
-
-  GLint status;
-  glGetShaderiv(s, GL_COMPILE_STATUS, &status);
-  if (status == GL_FALSE)
-  {
-    GLint logSize = 0;
-    glGetShaderiv(s, GL_INFO_LOG_LENGTH, &logSize);
-    std::vector<GLchar> errorLog(logSize);
-    glGetShaderInfoLog(s, logSize, &logSize, errorLog.data());
-    fmt::print(stderr, "Failed to create shader:\n{}.\n", (const char*)errorLog.data());
-    glDeleteShader(s);
-    return 0;
-  }
-  return s;
+  return std::unique_ptr<T, decltype(d)>(t, d);
 }
 
-int createProgram(const char *vertex_shader, size_t vertex_size, const char *fragment_shader, size_t fragment_size)
-{
-  GLuint vs = createShader(vertex_shader, GLint(vertex_size), GL_VERTEX_SHADER);
-  shader_deleter delete_vs(vs);
-
-  GLuint fs = createShader(fragment_shader, GLint(fragment_size), GL_FRAGMENT_SHADER);
-  shader_deleter delete_fs(fs);
-
-  GLuint program = glCreateProgram();
-  glAttachShader(program, vs);
-  glAttachShader(program, fs);
-
-  glLinkProgram(program);
-
-  GLint isLinked = 0;
-  glGetProgramiv(program, GL_LINK_STATUS, (int*)&isLinked);
-  if (isLinked == GL_FALSE)
-  {
-    GLint maxLength = 0;
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
-
-    // The maxLength includes the NULL character
-    std::vector<GLchar> infoLog(maxLength);
-    glGetProgramInfoLog(program, maxLength, &maxLength, &infoLog[0]);
-
-    // We don't need the program anymore.
-    glDeleteProgram(program);
-    fmt::print(stderr, "Failed to link program:\n{}\n", infoLog.data());
-    return 0 ;
-  }
-
-  glDetachShader(program, vs);
-  glDetachShader(program, fs);
-
-  return program;
-}
-
-static std::vector<glm::vec3> coordinates_for_aabb(const points::render::aabb &aabb)
-{
-  std::vector<glm::vec3> coordinates;
-  coordinates.resize(8);
-  coordinates[0] = glm::vec3(aabb.min[0], aabb.min[1], aabb.min[2]);
-  coordinates[1] = glm::vec3(aabb.min[0], aabb.min[1], aabb.max[2]);
-  coordinates[2] = glm::vec3(aabb.min[0], aabb.max[1], aabb.min[2]);
-  coordinates[3] = glm::vec3(aabb.min[0], aabb.max[1], aabb.max[2]);
-  coordinates[4] = glm::vec3(aabb.max[0], aabb.min[1], aabb.min[2]);
-  coordinates[5] = glm::vec3(aabb.max[0], aabb.min[1], aabb.max[2]);
-  coordinates[6] = glm::vec3(aabb.max[0], aabb.max[1], aabb.min[2]);
-  coordinates[7] = glm::vec3(aabb.max[0], aabb.max[1], aabb.max[2]);
-  return coordinates;
-}
-    ;
-  int main(int , char** )
+int main(int, char **)
 {
   SDL_Init(SDL_INIT_VIDEO);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
@@ -142,20 +56,12 @@ static std::vector<glm::vec3> coordinates_for_aabb(const points::render::aabb &a
     return 1;
   }
 
-  glEnable(GL_DEPTH_TEST);
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGuiIO &io = ImGui::GetIO();
-  (void)io;
-  // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-  // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
   // Setup Dear ImGui style
   ImGui::StyleColorsDark();
-  // ImGui::StyleColorsClassic();
-
-  // Setup Platform/Renderer bindings
-
   const char *glsl_version = "#version 130";
   ImGui_ImplSDL2_InitForOpenGL(window, context);
   ImGui_ImplOpenGL3_Init(glsl_version);
@@ -175,92 +81,32 @@ static std::vector<glm::vec3> coordinates_for_aabb(const points::render::aabb &a
   auto proggy = fontsfs.open("fonts/ProggyTiny.ttf");
   io.Fonts->AddFontFromMemoryTTF((void *)proggy.begin(), (int)proggy.size(), 10.0f);
 
-  std::string file = "test.las";
-  auto *renderer = points::render::renderer_create(file.c_str(), int(file.size()));
-  auto* camera = points::render::camera_create();
-  auto aabb = points::render::renderer_aabb(renderer);
+  //std::string file = "test.las";
+  auto renderer = create_unique_ptr(points::render::renderer_create(), &points::render::renderer_destroy);
+  auto camera = create_unique_ptr(points::render::camera_create(), &points::render::camera_destroy);
 
-  glm::dvec3 aabb_center(aabb.min[0] + (aabb.max[0] - aabb.min[0]) / 2, aabb.min[1] + (aabb.max[1] - aabb.min[1]) / 2,
-                         aabb.min[2] + (aabb.max[2] - aabb.min[2]) / 2);
-  glm::dvec3 some_offset(-14.0, -13.0, -12.0);
-  auto diff = some_offset - aabb_center;
-  glm::dvec3 up(0.0, 1.0, 0.0);
-
-  points::render::camera_set_perspective(camera, 45, width, height, 0.001, 1000);
-  points::render::camera_look_at_aabb(camera, &aabb, glm::value_ptr(diff), glm::value_ptr(up)); 
-
-  auto shaderfs = cmrc::shaders::get_filesystem();
-  auto vertex_shader = shaderfs.open("shaders/simple.vert");
-  auto fragment_shader = shaderfs.open("shaders/simple.frag");
-
-  GLuint program = createProgram(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(),
-    fragment_shader.begin(), vertex_shader.end() - vertex_shader.begin());
-
-  GLint attrib_position = glGetAttribLocation(program, "position");
-  GLint attrib_color = glGetAttribLocation(program, "color");
-
-  glUseProgram(program);
-
-  glClearColor(0.5, 0.0, 0.0, 0.0);
-  glViewport(0, 0, width, height);
-
-  GLuint vao, vbo1, vbo2, color_buffer, ibo;
-
-  glGenVertexArrays(1, &vao);
-  glBindVertexArray(vao);
-
-
-  glGenBuffers(1, &vbo1);
+  auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(), &points::render::aabb_data_source_destroy);
+  points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
+  points::render::aabb aabb;
+  aabb.min[0] = 1.0; aabb.min[1] = 1.5; aabb.min[2] = 8.0;
+  aabb.max[0] = 1.5; aabb.max[1] = 2.5; aabb.max[2] = 8.9;
+  int aabb_box = points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
   
-  glBindBuffer(GL_ARRAY_BUFFER, vbo1);
+  double aabb_center[3];
+  points::render::aabb_data_source_get_center(aabb_ds.get(), aabb_box, aabb_center);
   
-  std::vector<glm::vec3> coordinates1 = coordinates_for_aabb(aabb);
-  glBufferData(GL_ARRAY_BUFFER, coordinates1.size() * sizeof(coordinates1[0]), coordinates1.data(), GL_STATIC_DRAW);
+  double up[3];
+  up[0] = 0.0; up[1] = 1.0; up[2] = 0.0;
 
-  glEnableVertexAttribArray(attrib_position);
-  glVertexAttribPointer(attrib_position, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  points::render::camera_set_perspective(camera.get(), 45, width, height, 0.001, 1000);
+  points::render::camera_look_at_aabb(camera.get(), &aabb, aabb_center, up);
 
   points::render::aabb aabb2;
-  aabb2.min[0] = 10.0f; aabb2.min[1] = 10.0f; aabb2.min[2] = 10.0f;
-  aabb2.max[0] = 15.0f; aabb2.max[1] = 15.0f; aabb2.max[2] = 15.0f;
-
-  glGenBuffers(1, &vbo2);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo2);
-  std::vector<glm::vec3> coordinates2 = coordinates_for_aabb(aabb2);
-  glBufferData(GL_ARRAY_BUFFER, coordinates2.size() * sizeof(coordinates2[0]), coordinates2.data(), GL_STATIC_DRAW);
-
-  glGenBuffers(1, &color_buffer);
-  glBindBuffer(GL_ARRAY_BUFFER, color_buffer);
-  
-  std::vector<glm::vec3> colors;
-  colors.resize(8);
-  colors[0] = glm::vec3(0.0, 0.0, 0.0);
-  colors[1] = glm::vec3(0.0, 0.0, 1.0);
-  colors[2] = glm::vec3(0.0, 1.0, 0.0);
-  colors[3] = glm::vec3(0.0, 1.0, 1.0);
-  colors[4] = glm::vec3(1.0, 0.0, 0.0);
-  colors[5] = glm::vec3(1.0, 0.0, 1.0);
-  colors[6] = glm::vec3(1.0, 1.0, 0.0);
-  colors[7] = glm::vec3(1.0, 1.0, 1.0);
-  glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(colors[0]), colors.data(), GL_STATIC_DRAW);
-  glEnableVertexAttribArray(attrib_color);
-  glVertexAttribPointer(attrib_color, 3, GL_FLOAT, GL_TRUE, 0, 0);
-
-  glGenBuffers(1, &ibo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-
-  std::vector<int> indecies;
-  indecies.reserve(36);
-  indecies.push_back(0); indecies.push_back(2); indecies.push_back(4); indecies.push_back(2); indecies.push_back(4); indecies.push_back(6);
-  indecies.push_back(4); indecies.push_back(6); indecies.push_back(5); indecies.push_back(5); indecies.push_back(6); indecies.push_back(7);
-  indecies.push_back(5); indecies.push_back(7); indecies.push_back(1); indecies.push_back(1); indecies.push_back(7); indecies.push_back(3);
-  indecies.push_back(2); indecies.push_back(0); indecies.push_back(3); indecies.push_back(3); indecies.push_back(0); indecies.push_back(1);
-  indecies.push_back(5); indecies.push_back(0); indecies.push_back(1); indecies.push_back(5); indecies.push_back(0); indecies.push_back(4);
-  indecies.push_back(2); indecies.push_back(3); indecies.push_back(7); indecies.push_back(7); indecies.push_back(6); indecies.push_back(2);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indecies.size() * sizeof(indecies[0]), indecies.data(), GL_STATIC_DRAW);
-  
-  glEnableVertexAttribArray(attrib_color);
-
+  aabb2.min[0] = 10.0; aabb2.min[1] = 1.5; aabb2.min[2] = 8.0;
+  aabb2.max[0] = 10.5; aabb2.max[1] = 2.5; aabb2.max[2] = 8.9;
+  int aabb_box2 = points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb2.min, aabb2.max);
+  (void)aabb_box2;
+  gl_renderer points_gl_renderer(renderer.get(), camera.get());
 
   auto error = glGetError();
   (void)error;
@@ -268,10 +114,8 @@ static std::vector<glm::vec3> coordinates_for_aabb(const points::render::aabb &a
   bool left_pressed = false;
   bool left_right_pressed = false;
 
-  std::unique_ptr<points::render::camera_manipulator::arcball, decltype(&points::render::camera_manipulator::arcball_destroy)>
-    arcball(points::render::camera_manipulator::arcball_create(camera, glm::value_ptr(aabb_center)), &points::render::camera_manipulator::arcball_destroy);
-  std::unique_ptr<points::render::camera_manipulator::fps, decltype(&points::render::camera_manipulator::fps_destroy)>
-    fps(nullptr, &points::render::camera_manipulator::fps_destroy);
+  auto arcball = create_unique_ptr(points::render::camera_manipulator::arcball_create(camera.get(), aabb_center), &points::render::camera_manipulator::arcball_destroy);
+  auto fps = create_unique_ptr((points::render::camera_manipulator::fps *)nullptr, &points::render::camera_manipulator::fps_destroy);
 
   while(loop)
   {
@@ -321,7 +165,6 @@ static std::vector<glm::vec3> coordinates_for_aabb(const points::render::aabb &a
           {
             left_right_pressed = true; 
           }
-          fmt::print(stderr, "mousebutton pressed {}\n", event.button.button);
           break;
         case SDL_MOUSEMOTION:
           if (left_right_pressed)
@@ -365,35 +208,17 @@ static std::vector<glm::vec3> coordinates_for_aabb(const points::render::aabb &a
           {
           case SDL_WINDOWEVENT_SIZE_CHANGED:
             glViewport(0, 0, event.window.data1, event.window.data2);
-            points::render::camera_set_perspective(camera, 45, event.window.data1, event.window.data2, 0.01, 1000);
+            points::render::camera_set_perspective(camera.get(), 45, event.window.data1, event.window.data2, 0.01, 1000);
             break;
           }
           break;
         }
       }
     }
-    error = glGetError();
-    glBindVertexArray(vao);
-    glm::dmat4 projection_matrix;
-    points::render::camera_get_perspective_matrix(camera, glm::value_ptr(projection_matrix));
-    glm::dmat4 view_matrix;
-    points::render::camera_get_view_matrix(camera, glm::value_ptr(view_matrix));
 
-    glm::mat4 pv = projection_matrix * view_matrix;
+    clear clear_mask = clear(int(clear::color) | int(clear::depth));
 
-    glUniformMatrix4fv(glGetUniformLocation(program, "pv"), 1, GL_FALSE, glm::value_ptr(pv));
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo1);
-    glVertexAttribPointer(attrib_position, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glDrawElements(GL_TRIANGLES, GLsizei(indecies.size()), GL_UNSIGNED_INT, 0);
-    
-    glBindBuffer(GL_ARRAY_BUFFER, vbo2);
-    glVertexAttribPointer(attrib_position, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glDrawElements(GL_TRIANGLES, GLsizei(indecies.size()), GL_UNSIGNED_INT, 0);
-
-    auto inv_v = glm::inverse(view_matrix);
-    glm::vec4 pos(0.00001, 0.0001, 0.00001, 0.000001);
-    auto projected = view_matrix* pos;
+    points_gl_renderer.draw(clear_mask, width, height);
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(window);
@@ -407,7 +232,7 @@ static std::vector<glm::vec3> coordinates_for_aabb(const points::render::aabb &a
       if (!arcball)
       {
         fps.reset();
-        arcball.reset(points::render::camera_manipulator::arcball_create(camera, glm::value_ptr(aabb_center)));
+        arcball.reset(points::render::camera_manipulator::arcball_create(camera.get(), aabb_center));
       }
     }
     if (ImGui::RadioButton("FPS", fps.get()))
@@ -415,14 +240,14 @@ static std::vector<glm::vec3> coordinates_for_aabb(const points::render::aabb &a
       if (!fps)
       {
         arcball.reset();
-        fps.reset(points::render::camera_manipulator::fps_create(camera));
+        fps.reset(points::render::camera_manipulator::fps_create(camera.get()));
       }
     }
     ImGui::EndGroup();
 
     ImGui::End();
    
-    //ImGui::ShowDemoWindow();
+    ImGui::ShowDemoWindow();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
