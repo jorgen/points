@@ -11,37 +11,37 @@ namespace points
 {
 namespace render
 {
-  struct camera;
-  POINTS_RENDER_EXPORT struct camera *camera_create();
-  POINTS_RENDER_EXPORT void camera_destroy(struct camera *camera);
-  POINTS_RENDER_EXPORT void camera_look_at(struct camera *camera, const double eye[3], const double center[3],
+  struct camera_t;
+  POINTS_RENDER_EXPORT struct camera_t *camera_create();
+  POINTS_RENDER_EXPORT void camera_destroy(struct camera_t *camera);
+  POINTS_RENDER_EXPORT void camera_look_at(struct camera_t *camera, const double eye[3], const double center[3],
                                            const double up[3]);
-  POINTS_RENDER_EXPORT void camera_look_at_aabb(struct camera *camera, struct aabb *aabb, const double direction[3],
+  POINTS_RENDER_EXPORT void camera_look_at_aabb(struct camera_t *camera, struct aabb_t *aabb, const double direction[3],
                                                 const double up[3]);
-  POINTS_RENDER_EXPORT void camera_get_view_matrix(struct camera *camera, double data[16]);
-  POINTS_RENDER_EXPORT void camera_set_view_matrix(struct camera *camera, const double data[16]);
-  POINTS_RENDER_EXPORT void camera_get_perspective_matrix(struct camera *camera, double data[16]);
-  POINTS_RENDER_EXPORT void camera_set_perspective_matrix(struct camera *camera, const double data[16]);
-  POINTS_RENDER_EXPORT void camera_set_perspective(struct camera *camera, double fov, double width, double height,
+  POINTS_RENDER_EXPORT void camera_get_view_matrix(struct camera_t *camera, double data[16]);
+  POINTS_RENDER_EXPORT void camera_set_view_matrix(struct camera_t *camera, const double data[16]);
+  POINTS_RENDER_EXPORT void camera_get_perspective_matrix(struct camera_t *camera, double data[16]);
+  POINTS_RENDER_EXPORT void camera_set_perspective_matrix(struct camera_t *camera, const double data[16]);
+  POINTS_RENDER_EXPORT void camera_set_perspective(struct camera_t *camera, double fov, double width, double height,
                                                    double near, double far);
-  POINTS_RENDER_EXPORT void camera_perspective_properties(struct camera *camera, double *fov, double *aspect,
+  POINTS_RENDER_EXPORT void camera_perspective_properties(struct camera_t *camera, double *fov, double *aspect,
                                                           double *near, double *far);
 
   namespace camera_manipulator
   {
-  struct arcball;
-  POINTS_RENDER_EXPORT struct arcball *arcball_create(struct camera *camera, const double center[3]);
-  POINTS_RENDER_EXPORT void arcball_destroy(struct arcball *arcball);
-  POINTS_RENDER_EXPORT void arcball_reset(struct arcball *arcball);
-  POINTS_RENDER_EXPORT void arcball_rotate(struct arcball *arcball, float normalized_dx, float normalized_dy, float normalized_dz);
-  POINTS_RENDER_EXPORT void arcball_zoom(struct arcball *arcball, float normalized_zoom);
+  struct arcball_t;
+  POINTS_RENDER_EXPORT struct arcball_t *arcball_create(struct camera_t *camera, const double center[3]);
+  POINTS_RENDER_EXPORT void arcball_destroy(struct arcball_t *arcball);
+  POINTS_RENDER_EXPORT void arcball_reset(struct arcball_t *arcball);
+  POINTS_RENDER_EXPORT void arcball_rotate(struct arcball_t *arcball, float normalized_dx, float normalized_dy, float normalized_dz);
+  POINTS_RENDER_EXPORT void arcball_zoom(struct arcball_t *arcball, float normalized_zoom);
 
-  struct fps;
-  POINTS_RENDER_EXPORT struct fps *fps_create(struct camera *camera);
-  POINTS_RENDER_EXPORT void fps_destroy(struct fps *fps);
-  POINTS_RENDER_EXPORT void fps_reset(struct fps *fps);
-  POINTS_RENDER_EXPORT void fps_rotate(struct fps *fps, float normalized_dx, float normalized_dy, float normalized_dz);
-  POINTS_RENDER_EXPORT void fps_move(struct fps *fps, float dx, float dy, float dz);
+  struct fps_t;
+  POINTS_RENDER_EXPORT struct fps_t *fps_create(struct camera_t *camera);
+  POINTS_RENDER_EXPORT void fps_destroy(struct fps_t *fps);
+  POINTS_RENDER_EXPORT void fps_reset(struct fps_t *fps);
+  POINTS_RENDER_EXPORT void fps_rotate(struct fps_t *fps, float normalized_dx, float normalized_dy, float normalized_dz);
+  POINTS_RENDER_EXPORT void fps_move(struct fps_t *fps, float dx, float dy, float dz);
 
   } // namespace camera_manipulator
   } // namespace render

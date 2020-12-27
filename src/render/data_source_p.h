@@ -24,10 +24,12 @@ namespace points
 {
 namespace render
 {
-  struct data_source
+  struct data_source_t
   {
-    virtual ~data_source();
-    virtual void add_to_frame(const renderer &renderer, const camera &camera, std::vector<buffer> &to_add, std::vector<buffer> &to_update, std::vector<buffer> &to_remove, std::vector<draw_group> &to_render) = 0;
+    virtual ~data_source_t();
+    virtual void add_to_frame(const camera_t &camera, std::vector<draw_group_t> &to_render) = 0;
   };
 }
 } // namespace points
+
+#endif

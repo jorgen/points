@@ -10,7 +10,7 @@
 
 TEST_CASE("Verify_Perspective", "[render]")
 {
-  points::render::camera* camera = points::render::camera_create();
+  points::render::camera_t* camera = points::render::camera_create();
   glm::dmat4 perspective = glm::perspectiveFov(points::render::to_radians(90.0), 1024.0, 768.0, 3.3, 2345.0);
   points::render::camera_set_perspective_matrix(camera, glm::value_ptr(perspective));
 
@@ -30,9 +30,9 @@ TEST_CASE("Verify_Perspective", "[render]")
 
 TEST_CASE("Check_Frustum_AABB_Culling", "[render]")
 {
-  points::render::camera* camera = points::render::camera_create();
+  points::render::camera_t* camera = points::render::camera_create();
   points::render::camera_set_perspective(camera, points::render::to_radians(45.0), 10.0, 9.0, 0.01, 50.0);
-  points::render::aabb aabb;
+  points::render::aabb_t aabb;
   aabb.min[0] = 0.5; aabb.min[1] = 0.25; aabb.min[2] = 0.34;
   aabb.max[0] = 1.1; aabb.max[1] = 0.56; aabb.max[2] = 0.45;
   glm::dvec3 center = points::render::aabb_center(aabb);

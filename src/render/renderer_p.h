@@ -15,14 +15,29 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <data_source_p.h>
+#ifndef POINTS_RENDERER_P_H
+#define POINTS_RENDERER_P_H
 
+#include <points/render/renderer.h>
+
+#include "renderer_callbacks_p.h"
+#include "camera_p.h"
+#include "data_source_p.h"
 namespace points
 {
 namespace render
 {
-data_source_t::~data_source_t()
+struct renderer_t
 {
+  renderer_t()
+    : callbacks(this)
+  {}
+  std::vector<camera_t*> cameras;
+  std::vector<data_source_t *> data_sources;
+  std::vector<draw_group_t> to_render;
+  callback_manager_t callbacks;
+};
+
 }
-} // namespace render
-} // namespace points
+}
+#endif

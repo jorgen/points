@@ -29,7 +29,11 @@ std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
 
 int main(int, char **)
 {
-  SDL_Init(SDL_INIT_VIDEO);
+  if (SDL_Init(SDL_INIT_VIDEO)<0)
+  {
+      fmt::print(stderr, "could not initialize sdl video.");
+      return -1;
+  }
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
   SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
@@ -42,8 +46,9 @@ int main(int, char **)
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
-  static const int width = 800;
-  static const int height = 600;
+  int width = 800;
+  int height = 600;
+
 
   SDL_Window *window =
     SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height,
@@ -56,13 +61,15 @@ int main(int, char **)
     return 1;
   }
 
+  SDL_GL_GetDrawableSize(window, &width, &height);
+
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGuiIO &io = ImGui::GetIO();
 
   // Setup Dear ImGui style
   ImGui::StyleColorsDark();
-  const char *glsl_version = "#version 130";
+  const char *glsl_version = "#version 330";
   ImGui_ImplSDL2_InitForOpenGL(window, context);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
@@ -84,10 +91,11 @@ int main(int, char **)
   //std::string file = "test.las";
   auto renderer = create_unique_ptr(points::render::renderer_create(), &points::render::renderer_destroy);
   auto camera = create_unique_ptr(points::render::camera_create(), &points::render::camera_destroy);
+  gl_renderer points_gl_renderer(renderer.get(), camera.get());
 
-  auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(), &points::render::aabb_data_source_destroy);
+  auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get()), &points::render::aabb_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
-  points::render::aabb aabb;
+  points::render::aabb_t aabb;
   aabb.min[0] = 1.0; aabb.min[1] = 1.5; aabb.min[2] = 8.0;
   aabb.max[0] = 1.5; aabb.max[1] = 2.5; aabb.max[2] = 8.9;
   int aabb_box = points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
@@ -101,21 +109,21 @@ int main(int, char **)
   points::render::camera_set_perspective(camera.get(), 45, width, height, 0.001, 1000);
   points::render::camera_look_at_aabb(camera.get(), &aabb, aabb_center, up);
 
-  points::render::aabb aabb2;
+  points::render::aabb_t aabb2;
   aabb2.min[0] = 10.0; aabb2.min[1] = 1.5; aabb2.min[2] = 8.0;
   aabb2.max[0] = 10.5; aabb2.max[1] = 2.5; aabb2.max[2] = 8.9;
   int aabb_box2 = points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb2.min, aabb2.max);
   (void)aabb_box2;
-  gl_renderer points_gl_renderer(renderer.get(), camera.get());
 
   auto error = glGetError();
   (void)error;
   bool loop = true;
   bool left_pressed = false;
-  bool left_right_pressed = false;
+  bool right_pressed = false;
+  bool ctrl_modifier = false;
 
   auto arcball = create_unique_ptr(points::render::camera_manipulator::arcball_create(camera.get(), aabb_center), &points::render::camera_manipulator::arcball_destroy);
-  auto fps = create_unique_ptr((points::render::camera_manipulator::fps *)nullptr, &points::render::camera_manipulator::fps_destroy);
+  auto fps = create_unique_ptr((points::render::camera_manipulator::fps_t *)nullptr, &points::render::camera_manipulator::fps_destroy);
 
   while(loop)
   {
@@ -152,22 +160,27 @@ int main(int, char **)
             if (event.key.keysym.sym == SDLK_e)
               points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.3f, 0.0f);
           }
+          if (event.key.keysym.sym == SDLK_LCTRL || event.key.keysym.sym == SDLK_RCTRL)
+            ctrl_modifier = true;
+          break;
         case SDL_KEYUP:
           if (event.key.keysym.sym == SDLK_ESCAPE)
             loop = false;
+          if (event.key.keysym.sym == SDLK_LCTRL || event.key.keysym.sym == SDLK_RCTRL)
+            ctrl_modifier = false;
           break;
         case SDL_MOUSEBUTTONDOWN:
           if (event.button.button == SDL_BUTTON_LEFT)
           {
             left_pressed = true;
           }
-          else if (left_pressed && event.button.button == SDL_BUTTON_RIGHT)
+          else if (event.button.button == SDL_BUTTON_RIGHT)
           {
-            left_right_pressed = true; 
+            right_pressed = true;
           }
           break;
         case SDL_MOUSEMOTION:
-          if (left_right_pressed)
+          if ((right_pressed && !left_pressed) || (left_pressed && ctrl_modifier))
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = (float(event.motion.yrel) / float(height));
@@ -191,10 +204,9 @@ int main(int, char **)
           if (event.button.button == SDL_BUTTON_LEFT)
           {
             left_pressed = false;
-            left_right_pressed = false;
           } else if (event.button.button == SDL_BUTTON_RIGHT)
           {
-            left_right_pressed = false;
+            right_pressed = false;
           }
           break;
         case SDL_MOUSEWHEEL: 
@@ -207,8 +219,9 @@ int main(int, char **)
           switch (event.window.event)
           {
           case SDL_WINDOWEVENT_SIZE_CHANGED:
-            glViewport(0, 0, event.window.data1, event.window.data2);
-            points::render::camera_set_perspective(camera.get(), 45, event.window.data1, event.window.data2, 0.01, 1000);
+            SDL_GL_GetDrawableSize(window, &width, &height);
+            glViewport(0, 0, width, height);
+            points::render::camera_set_perspective(camera.get(), 45, width, height, 0.01, 1000);
             break;
           }
           break;
@@ -247,7 +260,7 @@ int main(int, char **)
 
     ImGui::End();
    
-    ImGui::ShowDemoWindow();
+    //ImGui::ShowDemoWindow();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

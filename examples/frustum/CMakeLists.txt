@@ -7,7 +7,11 @@ configure_file(${imgui_SOURCE_DIR}/misc/fonts/ProggyClean.ttf ${CMAKE_CURRENT_SO
 configure_file(${imgui_SOURCE_DIR}/misc/fonts/ProggyTiny.ttf ${CMAKE_CURRENT_SOURCE_DIR}/fonts/ProggyTiny.ttf COPYONLY)
 configure_file(${imgui_SOURCE_DIR}/misc/fonts/Roboto-Medium.ttf ${CMAKE_CURRENT_SOURCE_DIR}/fonts/Roboto-Medium.ttf COPYONLY)
 
-add_executable(frustum frustum.cpp glad.c
+add_executable(frustum
+  frustum.cpp
+  gl_renderer.cpp
+  gl_renderer.h
+  glad.c
   ${imgui_SOURCE_DIR}/imgui.cpp
   ${imgui_SOURCE_DIR}/imgui_draw.cpp
   ${imgui_SOURCE_DIR}/imgui_demo.cpp
@@ -15,7 +19,8 @@ add_executable(frustum frustum.cpp glad.c
   ${imgui_SOURCE_DIR}/imgui_widgets.cpp
   ${imgui_SOURCE_DIR}/examples/imgui_impl_sdl.cpp
   ${imgui_SOURCE_DIR}/examples/imgui_impl_opengl3.cpp
-   "gl_renderer.cpp" "gl_renderer.h")
+  )
+
 target_include_directories(frustum PRIVATE include ${imgui_SOURCE_DIR})
 cmrc_add_resource_library(frustum_shaders ALIAS frustum::shaders NAMESPACE shaders shaders/simple.frag shaders/simple.vert)
 cmrc_add_resource_library(frustum_fonts   ALIAS frustum::fonts NAMESPACE fonts 
@@ -26,7 +31,16 @@ cmrc_add_resource_library(frustum_fonts   ALIAS frustum::fonts NAMESPACE fonts
  fonts/ProggyTiny.ttf
  fonts/Roboto-Medium.ttf
 )
-target_link_libraries(frustum PRIVATE points_render fmt glm SDL2 SDL2main OpenGL::GL frustum::shaders frustum::fonts)
-target_compile_definitions(frustum PRIVATE FONTS_DIR=)
+
+cmrc_add_resource_library(frustum_textures ALIAS frustum::textures NAMESPACE textures
+  textures/bluecloud_bk.jpg
+  textures/bluecloud_dn.jpg
+  textures/bluecloud_ft.jpg
+  textures/bluecloud_lf.jpg
+  textures/bluecloud_rt.jpg
+  textures/bluecloud_up.jpg
+  )
+
+target_link_libraries(frustum PRIVATE points_render fmt glm SDL2 SDL2main OpenGL::GL frustum::shaders frustum::fonts frustum::textures)
 copyDllForTarget(frustum SDL2)
 setWarningFlagsForTarget(frustum)

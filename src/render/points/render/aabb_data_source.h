@@ -29,14 +29,14 @@ namespace points
 {
 namespace render
 {
-struct aabb_data_source;
-POINTS_RENDER_EXPORT struct aabb_data_source *aabb_data_source_create();
-POINTS_RENDER_EXPORT void aabb_data_source_destroy(struct aabb_data_source *aabb_data_source);
-POINTS_RENDER_EXPORT struct data_source *aabb_data_source_get(struct aabb_data_source *aabb_data_source);
-POINTS_RENDER_EXPORT int aabb_data_source_add_aabb(struct aabb_data_source *aabb_data_source, const double min[3], const double max[3]);
-POINTS_RENDER_EXPORT void aabb_data_source_remove_aabb(struct aabb_data_source *aabb_data_source, int id);
-POINTS_RENDER_EXPORT void aabb_data_source_modify_aabb(struct aabb_data_source *aabb_data_source, int id, const double min[3], const double max[3]);
-POINTS_RENDER_EXPORT void aabb_data_source_get_center(struct aabb_data_source *aabb_data_source, int id, double center[3]);
+struct aabb_data_source_t;
+POINTS_RENDER_EXPORT struct aabb_data_source_t *aabb_data_source_create(struct renderer_t *renderer);
+POINTS_RENDER_EXPORT void aabb_data_source_destroy(struct aabb_data_source_t *aabb_data_source);
+POINTS_RENDER_EXPORT struct data_source_t *aabb_data_source_get(struct aabb_data_source_t *aabb_data_source);
+POINTS_RENDER_EXPORT int aabb_data_source_add_aabb(struct aabb_data_source_t *aabb_data_source, const double min[3], const double max[3]);
+POINTS_RENDER_EXPORT void aabb_data_source_remove_aabb(struct aabb_data_source_t *aabb_data_source, int id);
+POINTS_RENDER_EXPORT void aabb_data_source_modify_aabb(struct aabb_data_source_t *aabb_data_source, int id, const double min[3], const double max[3]);
+POINTS_RENDER_EXPORT void aabb_data_source_get_center(struct aabb_data_source_t *aabb_data_source, int id, double center[3]);
 }
 
 } // namespace points

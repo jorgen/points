@@ -20,42 +20,42 @@
 #include <points/render/renderer.h>
 #include "data_source_p.h"
 #include "glm_include.h"
-#include "buffer_data_p.h"
-
+#include "buffer_p.h"
+#include "renderer_callbacks_p.h"
 #include <vector>
 #include <memory>
+
 namespace points
 {
 namespace render
 {
 
-struct aabb_buffer
+struct aabb_buffer_t
 {
-  aabb aabb;
+  aabb_t aabb;
   std::vector<glm::vec3> vertices;
-  std::unique_ptr<buffer_data> vertices_buffer_data;
+  std::unique_ptr<buffer_t> vertices_buffer;
 
-  buffer render_list[3];
+  draw_buffer_t render_list[3];
 };
 
 
-struct aabb_data_source : public data_source
+struct aabb_data_source_t : public data_source_t
 {
-  aabb_data_source();
+  aabb_data_source_t(callback_manager_t &callback_manager);
 
-  void add_to_frame(const renderer &renderer, const camera &camera, std::vector<buffer> &to_add, std::vector<buffer> &to_update, std::vector<buffer> &to_remove, std::vector<draw_group> &to_render) override;
+  void add_to_frame(const camera_t &camera, std::vector<draw_group_t> &to_render) override;
 
-  std::vector<aabb_buffer> aabbs;
-  std::vector<std::pair<buffer, buffer_data>> to_remove_buffers;
+  callback_manager_t &callbacks;
+
+  std::vector<aabb_buffer_t> aabbs;
 
   std::vector<uint32_t> aabbs_ids;
 
-  buffer index_buffer;
-  std::unique_ptr<buffer_data> index_buffer_data;
+  buffer_t index_buffer;
   std::vector<uint16_t> indecies;
 
-  buffer color_buffer;
-  std::unique_ptr<buffer_data> color_buffer_data;
+  buffer_t color_buffer;
   std::vector<glm::u8vec3> colors;
 
 };

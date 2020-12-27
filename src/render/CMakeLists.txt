@@ -13,13 +13,15 @@ set(private_headers
   frustum_p.h
   glm_include.h
   data_source_p.h
-   "buffer_data_p.h")
+  buffer_p.h)
 
 set(sources
   renderer.cpp 
   camera.cpp 
   data_source_aabb.cpp
-   "buffer_data.cpp" "data_source.cpp")
+  data_source.cpp
+  buffer.cpp
+  )
 add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources} )
 target_link_libraries(points_render_objects PRIVATE fmt glm)
 target_include_directories(points_render_objects

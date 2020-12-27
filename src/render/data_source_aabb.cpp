@@ -17,6 +17,9 @@
 ************************************************************************/
 #include "data_source_aabb_p.h"
 #include <points/render/aabb_data_source.h>
+#include <points/render/buffer.h>
+
+#include "renderer_p.h"
 
 namespace points
 {
@@ -29,7 +32,7 @@ int array_size(const T (&)[SIZE])
   return SIZE;
 }
 
-static std::vector<glm::vec3> coordinates_for_aabb(const aabb &aabb)
+static std::vector<glm::vec3> coordinates_for_aabb(const aabb_t &aabb)
 {
   std::vector<glm::vec3> coordinates;
   coordinates.resize(8);
@@ -72,101 +75,79 @@ static std::vector<uint16_t> indecies_for_aabb()
   return indecies;
 }
 
-template<typename buffer_t>
-inline void initialize_buffer(buffer &render_buffer, const std::vector<buffer_t> &data_vector, std::unique_ptr<buffer_data> &buffer_data, buffer_type buffer_type, buffer_format buffer_format, buffer_components components, buffer_data_normalize normalize, int buffer_mapping)
+template<typename buffer_data_t>
+inline void initialize_buffer(callback_manager_t &callbacks, const std::vector<buffer_data_t> &data_vector, buffer_type_t type, buffer_format_t format, buffer_components_t components, buffer_normalize_t normalize, int buffer_mapping, buffer_t &buffer)
 {
-  if (!buffer_data)
-    buffer_data.reset(new points::render::buffer_data());
-  if (buffer_data->state == buffer_data::state::add || buffer_data->state == buffer_data::state::modify)
-  {
-    if (data_vector.size())
-    {
-      buffer_data->data = static_cast<const void *>(data_vector.data());
-      buffer_data->data_size = int(data_vector.size() * sizeof(data_vector[0]));
-    } 
-    else
-    {
-      buffer_data->data = nullptr;
-      buffer_data->data_size = int(0);
-    }
-    buffer_data->rendered = false;
-    render_buffer = {buffer_type, buffer_format, components, normalize, buffer_mapping, buffer_data.get(), &(buffer_data->user_ptr)};
-  }
+
+  assert(data_vector.size());
+  buffer.data = static_cast<const void *>(data_vector.data());
+  buffer.data_size = int(data_vector.size() * sizeof(data_vector[0]));
+  buffer.type = type;
+  buffer.format = format;
+  buffer.components = components;
+  buffer.normalize = normalize;
+  buffer.buffer_mapping = int(buffer_mapping);
+
+  callbacks.do_create_buffer(&buffer);
+  callbacks.do_initialize_buffer(&buffer);
 }
 
-template<typename buffer_t>
-static void add_buffers_to_renderlist(buffer &render_buffer, std::vector<buffer_t> &data_vector, std::unique_ptr<buffer_data> &buffer_data, std::vector<buffer> &to_add, std::vector<buffer> &to_update)
-{
-  assert(buffer_data);
-  if (buffer_data->state == buffer_data::state::add)
-  {
-    to_add.emplace_back(render_buffer);
-  }
-  else if (buffer_data->state == buffer_data::state::modify)
-  {
-    to_update.emplace_back(render_buffer);
-  }
-  else if (buffer_data->rendered)
-  {
-    buffer_data->data = nullptr;
-    buffer_data->data_size = 0;
-    data_vector.clear();
-  }
-  buffer_data->state = buffer_data::state::render;
-}
-
-aabb_data_source::aabb_data_source()
+aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
+  : callbacks(callbacks)
 {
   indecies = indecies_for_aabb();
-  initialize_buffer(index_buffer, indecies, index_buffer_data, buffer_type_index, u16, component_1, do_not_normalize, 0);
+  initialize_buffer(callbacks, indecies, buffer_type_index, u16, component_1, do_not_normalize, 0, index_buffer);
   colors = colors_for_aabb();
-  initialize_buffer(color_buffer, colors, color_buffer_data, buffer_type_vertex, u8, component_3, normalize, aabb_triangle_mesh_color);
+  initialize_buffer(callbacks, colors, buffer_type_vertex, u8, component_3, normalize, aabb_triangle_mesh_color, color_buffer);
 }
 
-void aabb_data_source::add_to_frame(const renderer &renderer, const camera &camera, std::vector<buffer> &to_add, std::vector<buffer> &to_update, std::vector<buffer> &to_remove, std::vector<draw_group> &to_render)
+void aabb_data_source_t::add_to_frame(const camera_t &camera, std::vector<draw_group_t> &to_render)
 {
-  (void)renderer;
   (void)camera;
-  (void)to_remove;
  
   for (auto &aabb_buffer : aabbs)
   {
-    initialize_buffer(aabb_buffer.render_list[0], aabb_buffer.vertices, aabb_buffer.vertices_buffer_data, buffer_type::buffer_type_vertex, buffer_format::r32, buffer_components::component_3, do_not_normalize, aabb_triangle_mesh_position);
-    add_buffers_to_renderlist(aabb_buffer.render_list[0], aabb_buffer.vertices, aabb_buffer.vertices_buffer_data, to_add, to_update);
-    aabb_buffer.render_list[1] = index_buffer;
-    add_buffers_to_renderlist(aabb_buffer.render_list[1], indecies, index_buffer_data, to_add, to_update);
-    aabb_buffer.render_list[2] = color_buffer;
-    add_buffers_to_renderlist(aabb_buffer.render_list[2], colors, color_buffer_data, to_add, to_update);
-    draw_group draw_group;
+    if (!aabb_buffer.vertices_buffer)
+    {
+      aabb_buffer.vertices_buffer.reset(new buffer_t());
+      initialize_buffer(callbacks, aabb_buffer.vertices, buffer_type_t::buffer_type_vertex, buffer_format_t::r32, buffer_components_t::component_3, do_not_normalize, aabb_triangle_mesh_position, *aabb_buffer.vertices_buffer.get());
+    }
+    aabb_buffer.render_list[0].data = aabb_buffer.vertices_buffer.get();
+    aabb_buffer.render_list[0].user_ptr = aabb_buffer.vertices_buffer->user_ptr;
+    aabb_buffer.render_list[1].data = &index_buffer;
+    aabb_buffer.render_list[1].user_ptr = index_buffer.user_ptr;
+    aabb_buffer.render_list[2].data = &color_buffer;
+    aabb_buffer.render_list[2].user_ptr = color_buffer.user_ptr;
+    draw_group_t draw_group;
     draw_group.buffers = aabb_buffer.render_list;
     draw_group.buffers_size = array_size(aabb_buffer.render_list);
-    draw_group.draw_type = draw_type::aabb_triangle_mesh;
+    draw_group.draw_type = draw_type_t::aabb_triangle_mesh;
     draw_group.draw_size = 36;
     to_render.emplace_back(draw_group);
   }
 }
 
-struct aabb_data_source *aabb_data_source_create()
+struct aabb_data_source_t *aabb_data_source_create(struct renderer_t *renderer)
 {
-  return new aabb_data_source();
+  return new aabb_data_source_t(renderer->callbacks);
 }
-void aabb_data_source_destroy(struct aabb_data_source *aabb_data_source)
+void aabb_data_source_destroy(struct aabb_data_source_t *aabb_data_source)
 {
   delete aabb_data_source;
 }
-struct data_source *aabb_data_source_get(struct aabb_data_source *aabb_data_source)
+struct data_source_t *aabb_data_source_get(struct aabb_data_source_t *aabb_data_source)
 {
   return aabb_data_source;
 }
 
-void create_aabb_buffer(const double min[3], const double max[3], aabb_buffer &buffer)
+void create_aabb_buffer(const double min[3], const double max[3], aabb_buffer_t &buffer)
 {
   memcpy(buffer.aabb.min, min, sizeof(*min) * 3);
   memcpy(buffer.aabb.max, max, sizeof(*max) * 3);
   buffer.vertices = coordinates_for_aabb(buffer.aabb);
 }
 
-int aabb_data_source_add_aabb(struct aabb_data_source *aabb_data_source, const double min[3], const double max[3])
+int aabb_data_source_add_aabb(struct aabb_data_source_t *aabb_data_source, const double min[3], const double max[3])
 {
   static uint16_t ids = 0;
   aabb_data_source->aabbs.emplace_back();
@@ -176,7 +157,7 @@ int aabb_data_source_add_aabb(struct aabb_data_source *aabb_data_source, const d
   return id;
 }
 
-void aabb_data_source_modify_aabb(struct aabb_data_source *aabb_data_source, int id, const double min[3], const double max[3])
+void aabb_data_source_modify_aabb(struct aabb_data_source_t *aabb_data_source, int id, const double min[3], const double max[3])
 {
   auto it = std::find(aabb_data_source->aabbs_ids.begin(), aabb_data_source->aabbs_ids.end(), uint16_t(id));
   if (it == aabb_data_source->aabbs_ids.end())
@@ -189,7 +170,7 @@ void aabb_data_source_modify_aabb(struct aabb_data_source *aabb_data_source, int
   aabb_buffer.vertices = coordinates_for_aabb(aabb_buffer.aabb);
 }
 
-void aabb_data_source_remove_aabb(struct aabb_data_source *aabb_data_source, int id)
+void aabb_data_source_remove_aabb(struct aabb_data_source_t *aabb_data_source, int id)
 {
   auto it = std::find(aabb_data_source->aabbs_ids.begin(), aabb_data_source->aabbs_ids.end(), uint16_t(id));
   if (it == aabb_data_source->aabbs_ids.end())
@@ -197,15 +178,15 @@ void aabb_data_source_remove_aabb(struct aabb_data_source *aabb_data_source, int
   auto i = it - aabb_data_source->aabbs_ids.begin();
   auto aabb_it = aabb_data_source->aabbs.begin() + i;
 //  aabb_data_source->to_remove_buffers.emplace_back(
-//    std::make_pair(aabb_it->render_list[0], aabb_it->vertices_buffer_data));
-  auto &to_remove = aabb_data_source->to_remove_buffers.back();
-  to_remove.second.data = nullptr;
-  to_remove.second.data_size = 0;
+//    std::make_pair(aabb_it->render_list[0], aabb_it->vertices_buffer));
+  //auto &to_remove = aabb_data_source->to_remove_buffers.back();
+  //to_remove.second.data = nullptr;
+  //to_remove.second.data_size = 0;
   aabb_data_source->aabbs_ids.erase(it);
   aabb_data_source->aabbs.erase(aabb_it);
 }
 
-void aabb_data_source_get_center(struct aabb_data_source *aabb_data_source, int id, double center[3])
+void aabb_data_source_get_center(struct aabb_data_source_t *aabb_data_source, int id, double center[3])
 {
   auto it = std::find(aabb_data_source->aabbs_ids.begin(), aabb_data_source->aabbs_ids.end(), uint16_t(id));
   if (it == aabb_data_source->aabbs_ids.end())

@@ -14,8 +14,8 @@ public:
   virtual ~gl_frame_handler();
 
   virtual void initialize() = 0;
-  virtual void set_camera_state(points::render::camera *camera) = 0;
-  virtual void draw(points::render::draw_group &group) = 0;
+  virtual void set_camera_state(points::render::camera_t *camera) = 0;
+  virtual void draw(points::render::draw_group_t &group) = 0;
 };
 
 class gl_aabb_handler : public gl_frame_handler
@@ -24,8 +24,8 @@ public:
   gl_aabb_handler();
   ~gl_aabb_handler();
   void initialize() override; 
-  void set_camera_state(points::render::camera *camera) override;
-  void draw(points::render::draw_group &group) override;
+  void set_camera_state(points::render::camera_t *camera) override;
+  void draw(points::render::draw_group_t &group) override;
 
   GLuint vao;
   GLuint program;
@@ -46,13 +46,24 @@ class gl_renderer
 {
 
 public:
-  gl_renderer(points::render::renderer *renderer, points::render::camera *camera);
+  gl_renderer(points::render::renderer_t *renderer, points::render::camera_t *camera);
 
   void draw(clear clear, int viewport_width, int viewport_height);
 
 private:
-  points::render::renderer *renderer;
-  points::render::camera *camera;
+  static void dirty_callback_static(struct points::render::renderer_t* renderer, void *user_ptr);
+  static void create_buffer_static(struct points::render::renderer_t *renderer, void *user_ptr, struct points::render::buffer_t *buffer);
+  static void initialize_buffer_static(struct points::render::renderer_t *renderer, void *user_ptr, struct points::render::buffer_t *buffer);
+  static void modify_buffer_static(struct points::render::renderer_t *renderer, void *user_ptr, struct points::render::buffer_t *buffer);
+  static void destroy_buffer_static(struct points::render::renderer_t *renderer, void *user_ptr, struct points::render::buffer_t *buffer);
+  void dirty_callback(struct points::render::renderer_t* renderer);
+  void create_buffer(struct points::render::renderer_t *renderer, struct points::render::buffer_t *buffer);
+  void initialize_buffer(struct points::render::renderer_t *renderer, struct points::render::buffer_t *buffer);
+  void modify_buffer(struct points::render::renderer_t *renderer, struct points::render::buffer_t *buffer);
+  void destroy_buffer(struct points::render::renderer_t *renderer, struct points::render::buffer_t *buffer);
+
+  points::render::renderer_t *renderer;
+  points::render::camera_t *camera;
   std::vector<gl_frame_handler *> frame_handlers;
   std::vector<GLuint> index_buffers;
   std::vector<GLuint> vertex_buffers;

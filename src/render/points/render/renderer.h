@@ -3,6 +3,7 @@
 
 #include <points/render/export.h>
 #include <points/render/aabb.h>
+#include <points/render/buffer.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,103 +11,67 @@ extern "C" {
 
 namespace points
 {
-  namespace render
-  {
-    enum buffer_type
-    {
-      buffer_type_render_type,
-      buffer_type_vertex,
-      buffer_type_uv,
-      buffer_type_index,
-    };
-    enum buffer_format
-    {
-      u8,
-      u16,
-      u32,
-      u64,
-      r32,
-      r64,
-    };
+namespace render
+{
+struct buffer_t;
+struct draw_buffer_t
+{
+  buffer_t *data;
+  void *user_ptr;
+};
 
-    enum buffer_components
-    {
-      component_1 = 1,
-      component_2 = 2,
-      component_3 = 3,
-      component_4 = 4
-    };
+enum draw_type_t
+{
+  aabb_triangle_mesh
+};
 
-    enum buffer_data_normalize
-    {
-      do_not_normalize,
-      normalize
-    };
+enum aabb_triangle_mesh_buffer_mapping_t
+{
+  aabb_triangle_mesh_color,
+  aabb_triangle_mesh_position
+};
 
-    struct buffer_data;
-    struct buffer
-    {
-      enum buffer_type type;
-      enum buffer_format format;
-      enum buffer_components components;
-      enum buffer_data_normalize normalize;
-      int buffer_mapping;
-      struct buffer_data *data;
-      void **user_ptr;
-    };
+struct draw_group_t
+{
+  float origin[3];
+  draw_type_t draw_type;
+  struct draw_buffer_t *buffers;
+  int buffers_size;
+  int draw_size;
+};
 
-    POINTS_RENDER_EXPORT void buffer_data_remove_ref(struct buffer_data *buffer);
-    POINTS_RENDER_EXPORT void buffer_data_set_rendered(struct buffer_data *buffer);
-    POINTS_RENDER_EXPORT const void *buffer_data_get(struct buffer_data *buffer);
-    POINTS_RENDER_EXPORT int buffer_data_size(struct buffer_data *buffer);
-    POINTS_RENDER_EXPORT int buffer_data_offset(struct buffer_data *buffer);
+struct frame_t
+{
+  struct draw_group_t* to_render;
+  int to_render_size;
+};
 
+struct renderer_t;
+typedef void (*renderer_dirty_callback_t)(struct renderer_t* renderer, void *user_ptr);
+typedef void (*renderer_create_buffer_t)(struct renderer_t *renderer, void *user_ptr, struct buffer_t *buffer);
+typedef void (*renderer_initialize_buffer_t)(struct renderer_t *renderer, void *user_ptr, struct buffer_t *buffer);
+typedef void (*renderer_modify_buffer_t)(struct renderer_t *renderer, void *user_ptr, struct buffer_t *buffer);
+typedef void (*renderer_destroy_buffer_t)(struct renderer_t *renderer, void *user_ptr, struct buffer_t *buffer);
 
-    enum draw_type
-    {
-      aabb_triangle_mesh 
-    };
+struct renderer_callbacks_t
+{
+  renderer_dirty_callback_t dirty;
+  renderer_create_buffer_t create_buffer;
+  renderer_initialize_buffer_t initialize_buffer;
+  renderer_modify_buffer_t modify_buffer;
+  renderer_destroy_buffer_t destroy_buffer;
+};
 
-    enum aabb_triangle_mesh_buffer_mapping
-    {
-      aabb_triangle_mesh_color,
-      aabb_triangle_mesh_position
-    };
-
-    struct draw_group 
-    {
-      float origin[3];
-      draw_type draw_type;
-      struct buffer* buffers;
-      int buffers_size;
-      int draw_size;
-    };
-
-    struct frame
-    {
-      struct buffer* to_add;
-      int to_add_size;
-      struct buffer *to_update;
-      int to_update_size;
-      struct buffer* to_remove;
-      int to_remove_size;
-      struct draw_group* to_render;
-      int to_render_size;
-    };
-
-    typedef void (*renderer_dirty_callback)(struct renderer* renderer, void* user_ptr);
-    struct renderer;
-    struct data_source;
-    POINTS_RENDER_EXPORT struct renderer* renderer_create();
-    POINTS_RENDER_EXPORT void renderer_destroy(struct renderer *renderer);
-    POINTS_RENDER_EXPORT void renderer_add_camera(struct renderer* renderer, struct camera* camera);
-    POINTS_RENDER_EXPORT void renderer_remove_camera(struct renderer* renderer, struct camera* camera);
-    POINTS_RENDER_EXPORT struct frame renderer_frame(struct renderer* renderer, struct camera* camera);
-    POINTS_RENDER_EXPORT void renderer_add_callback(struct renderer* renderer, renderer_dirty_callback callback);
-    POINTS_RENDER_EXPORT struct aabb renderer_aabb(struct renderer* renderer);
-    POINTS_RENDER_EXPORT void renderer_add_data_source(struct renderer *renderer, struct data_source *data_source);
-    POINTS_RENDER_EXPORT void renderer_remove_data_source(struct renderer *renderer, struct data_source *data_source);
-  }
+struct data_source_t;
+POINTS_RENDER_EXPORT struct renderer_t* renderer_create();
+POINTS_RENDER_EXPORT void renderer_destroy(struct renderer_t *renderer);
+POINTS_RENDER_EXPORT void renderer_add_camera(struct renderer_t* renderer, struct camera_t* camera);
+POINTS_RENDER_EXPORT void renderer_remove_camera(struct renderer_t* renderer, struct camera_t* camera);
+POINTS_RENDER_EXPORT struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* camera);
+POINTS_RENDER_EXPORT void renderer_set_callback(struct renderer_t* renderer, renderer_callbacks_t callbacks, void *user_ptr);
+POINTS_RENDER_EXPORT void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t *data_source);
+POINTS_RENDER_EXPORT void renderer_remove_data_source(struct renderer_t *renderer, struct data_source_t *data_source);
+}
 }
 
 #ifdef __cplusplus

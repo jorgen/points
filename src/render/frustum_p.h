@@ -18,6 +18,8 @@
 #ifndef POINTS_FRUSTUM_P_H
 #define POINTS_FRUSTUM_P_H
 
+#include <points/render/aabb.h>
+
 #include "glm_include.h"
 
 namespace points
@@ -25,9 +27,9 @@ namespace points
   namespace render
   {
     typedef glm::dvec4 plane;
-    struct frustum
+    struct frustum_t
     {
-      enum plane_names
+      enum plane_names_t
       {
         left,
         right,
@@ -55,7 +57,7 @@ namespace points
       return plane.x * pos[0] + plane.y * pos[1] + plane.z * pos[2] + plane.w;
     }
    
-    inline bool frustum_contains_point(const frustum &frustum, const glm::dvec3 &point)
+    inline bool frustum_contains_point(const frustum_t &frustum, const glm::dvec3 &point)
     {
       for (int i = 0; i < 6; i++)
       {
@@ -65,7 +67,7 @@ namespace points
       return true;
     }
 
-    inline bool frustum_contains_aabb(const frustum& frustum, const aabb& aabb)
+    inline bool frustum_contains_aabb(const frustum_t& frustum, const aabb_t& aabb)
     {
       if (frustum_contains_point(frustum, glm::dvec3(aabb.min[0], aabb.min[1], aabb.min[2])))
         return true;
@@ -87,7 +89,7 @@ namespace points
       return false;
     }
 
-    inline bool frustum_contains_aabb2(const glm::dmat4 &view_perspective, const aabb &aabb)
+    inline bool frustum_contains_aabb2(const glm::dmat4 &view_perspective, const aabb_t &aabb)
     {
       glm::dvec4 min_vec(aabb.min[0], aabb.min[1], aabb.min[2], 1.0);
       glm::dvec4 max_vec(aabb.max[0], aabb.max[1], aabb.max[2], 1.0);

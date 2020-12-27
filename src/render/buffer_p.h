@@ -19,26 +19,24 @@
 #include <cstdint>
 #include <vector>
 
+#include <points/render/buffer.h>
+
 namespace points
 {
 namespace render
 {
-  struct buffer_data
+  struct buffer_t
   {
-    enum class state : uint8_t
-    {
-      add,
-      modify,
-      render,
-      to_remove,
-      removed
-    };
     bool ref = true;
     bool rendered = false;
-    state state = state::add;
     const void *data = nullptr;
     int data_size = 0;
     int data_offset = 0;
+    buffer_type_t type;
+    buffer_format_t format;
+    buffer_components_t components;
+    buffer_normalize_t normalize;
+    int buffer_mapping;
     void *user_ptr = nullptr;
   };
 }
