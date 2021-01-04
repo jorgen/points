@@ -19,6 +19,7 @@ set(sources
   renderer.cpp 
   camera.cpp 
   data_source_aabb.cpp
+  data_source_skybox.cpp
   data_source.cpp
   buffer.cpp
   )

@@ -42,11 +42,11 @@ int format_to_glformat(points::render::buffer_format_t format)
 {
   switch (format)
   {
-  case points::render::u8: return GL_UNSIGNED_BYTE;
-  case points::render::u16: return GL_UNSIGNED_SHORT;
-  case points::render::u32: return GL_UNSIGNED_INT;
-  case points::render::r32: return GL_FLOAT;
-  case points::render::r64: return GL_DOUBLE;
+  case points::render::buffer_format_u8: return GL_UNSIGNED_BYTE;
+  case points::render::buffer_format_u16: return GL_UNSIGNED_SHORT;
+  case points::render::buffer_format_u32: return GL_UNSIGNED_INT;
+  case points::render::buffer_format_r32: return GL_FLOAT;
+  case points::render::buffer_format_r64: return GL_DOUBLE;
   default: return GL_INVALID_VALUE;
   }
 }
@@ -55,7 +55,7 @@ GLboolean normalize_to_glnormalize(points::render::buffer_normalize_t normalize)
 {
   switch (normalize)
   {
-  case points::render::normalize:
+  case points::render::buffer_normalize_normalize:
     return GL_TRUE; 
   default:
     return GL_FALSE;

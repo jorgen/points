@@ -31,6 +31,12 @@ enum aabb_triangle_mesh_buffer_mapping_t
   aabb_triangle_mesh_position
 };
 
+enum skybox_buffer_mapping_t
+{
+  skybox_vertex,
+  skybox_texture
+};
+
 struct draw_group_t
 {
   float origin[3];

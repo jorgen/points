@@ -35,11 +35,11 @@ enum buffer_type_t
 };
 enum buffer_format_t
 {
-  u8,
-  u16,
-  u32,
-  r32,
-  r64,
+  buffer_format_u8,
+  buffer_format_u16,
+  buffer_format_u32,
+  buffer_format_r32,
+  buffer_format_r64
 };
 
 enum buffer_components_t
@@ -52,8 +52,8 @@ enum buffer_components_t
 
 enum buffer_normalize_t
 {
-  do_not_normalize,
-  normalize
+  buffer_normalize_do_not_normalize,
+  buffer_normalize_normalize
 };
 
 struct buffer_t;
