@@ -36,11 +36,11 @@ public:
     memset(&callbacks, 0, sizeof(callbacks));
   }
 
-  void set_callbacks(const renderer_callbacks_t &callbacks, void *user_ptr)
+  void set_callbacks(const renderer_callbacks_t &cbs, void *u_ptr)
   {
     std::unique_lock<std::mutex> lock(mutex);
-    this->callbacks = callbacks;
-    this->user_ptr = user_ptr;
+    this->callbacks = cbs;
+    this->user_ptr = u_ptr;
   }
 
   void do_dirty_callback()

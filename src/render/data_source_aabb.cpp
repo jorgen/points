@@ -94,7 +94,20 @@ inline void initialize_buffer(callback_manager_t &callbacks, const std::vector<b
 
 aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
   : callbacks(callbacks)
+  , project_view(1)
 {
+ 
+  
+  camera_buffer.type = buffer_type_uniform;
+  camera_buffer.format = buffer_format_r32;
+  camera_buffer.components = component_4x4;
+  camera_buffer.normalize = buffer_normalize_do_not_normalize;
+  camera_buffer.buffer_mapping = int(aabb_triangle_mesh_camera);
+  camera_buffer.data = &project_view;
+  camera_buffer.data_size = sizeof(project_view);
+  callbacks.do_create_buffer(&camera_buffer);
+  callbacks.do_initialize_buffer(&camera_buffer);
+
   indecies = indecies_for_aabb();
   initialize_buffer(callbacks, indecies, buffer_type_index, buffer_format_u16, component_1, buffer_normalize_do_not_normalize, 0, index_buffer);
   colors = colors_for_aabb();
@@ -103,8 +116,8 @@ aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
 
 void aabb_data_source_t::add_to_frame(const camera_t &camera, std::vector<draw_group_t> &to_render)
 {
-  (void)camera;
- 
+  project_view = camera.projection * camera.view;
+  callbacks.do_modify_buffer(&camera_buffer); 
   for (auto &aabb_buffer : aabbs)
   {
     if (!aabb_buffer.vertices_buffer)
@@ -118,6 +131,8 @@ void aabb_data_source_t::add_to_frame(const camera_t &camera, std::vector<draw_g
     aabb_buffer.render_list[1].user_ptr = index_buffer.user_ptr;
     aabb_buffer.render_list[2].data = &color_buffer;
     aabb_buffer.render_list[2].user_ptr = color_buffer.user_ptr;
+    aabb_buffer.render_list[3].data = &camera_buffer;
+    aabb_buffer.render_list[3].user_ptr= camera_buffer.user_ptr;
     draw_group_t draw_group;
     draw_group.buffers = aabb_buffer.render_list;
     draw_group.buffers_size = array_size(aabb_buffer.render_list);

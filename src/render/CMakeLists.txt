@@ -13,7 +13,9 @@ set(private_headers
   frustum_p.h
   glm_include.h
   data_source_p.h
-  buffer_p.h)
+  buffer_p.h
+  image_decoder_p.h
+  )
 
 set(sources
   renderer.cpp 
@@ -22,6 +24,7 @@ set(sources
   data_source_skybox.cpp
   data_source.cpp
   buffer.cpp
+  image_decoder.cpp
   )
 add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources} )
 target_link_libraries(points_render_objects PRIVATE fmt glm)
@@ -31,6 +34,7 @@ target_include_directories(points_render_objects
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:include>
 )
+target_include_directories(points_render_objects  PRIVATE ${stbimage_SOURCE_DIR})
 #target_include_directories(points_render_objects PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 setWarningflagsForTarget(points_render_objects)
 if (BUILD_SHARED_LIBS)

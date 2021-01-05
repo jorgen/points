@@ -27,6 +27,7 @@ enum draw_type_t
 
 enum aabb_triangle_mesh_buffer_mapping_t
 {
+  aabb_triangle_mesh_camera,
   aabb_triangle_mesh_color,
   aabb_triangle_mesh_position
 };
@@ -39,7 +40,6 @@ enum skybox_buffer_mapping_t
 
 struct draw_group_t
 {
-  float origin[3];
   draw_type_t draw_type;
   struct draw_buffer_t *buffers;
   int buffers_size;

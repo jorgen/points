@@ -32,6 +32,7 @@ enum buffer_type_t
 {
   buffer_type_vertex,
   buffer_type_index,
+  buffer_type_uniform
 };
 enum buffer_format_t
 {
@@ -47,7 +48,8 @@ enum buffer_components_t
   component_1 = 1,
   component_2 = 2,
   component_3 = 3,
-  component_4 = 4
+  component_4 = 4,
+  component_4x4 = 5
 };
 
 enum buffer_normalize_t

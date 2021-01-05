@@ -19,6 +19,7 @@
 
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
+#include <points/render/skybox_data_source.h>
 #include "data_source_p.h"
 #include "buffer_p.h"
 #include "renderer_callbacks_p.h"
@@ -30,21 +31,18 @@ namespace points
 {
 namespace render
 {
-struct skybox_resource_t
+
+struct skybox_texture_t
 {
-  void *positive_x;
-  void *negative_x;
-  void *positive_y;
-  void *negative_y;
-  void *positive_z;
-  void *negative_z;
-  int size;
-  int pitch;
+  std::unique_ptr<uint8_t, decltype(&free)> image = {nullptr, &free};
+  int width = 0;
+  int height = 0;
+  int components = 0;
 };
 
 struct skybox_data_source_t : public data_source_t
 {
-  skybox_data_source_t(callback_manager_t &callbacks, skybox_resource_t skybox_resource);
+  skybox_data_source_t(callback_manager_t &callbacks, skybox_data_t skybox_data);
 
   void add_to_frame(const camera_t &camera, std::vector<draw_group_t> &to_render) override;
 
@@ -52,6 +50,8 @@ struct skybox_data_source_t : public data_source_t
   std::vector<glm::vec3> vertices;
 
   buffer_t cube_texture;
+
+  skybox_texture_t textures[6];
 };
 } // namespace render
 } // namespace points

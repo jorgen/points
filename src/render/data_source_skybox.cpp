@@ -22,8 +22,9 @@ namespace points
 namespace render
 {
 
-skybox_data_source_t::skybox_data_source_t(callback_manager_t &callbacks, skybox_resource_t skybox_resource)
+skybox_data_source_t::skybox_data_source_t(callback_manager_t &callbacks, skybox_data_t skybox_data)
 {
+  (void)skybox_data;
   vertex_buffer.buffer_mapping = skybox_vertex;
   vertex_buffer.components = component_2;
   vertex_buffer.format = buffer_format_r32;
@@ -46,6 +47,8 @@ skybox_data_source_t::skybox_data_source_t(callback_manager_t &callbacks, skybox
 
 void skybox_data_source_t::add_to_frame(const camera_t &camera, std::vector<draw_group_t> &to_render)
 {
+  (void)camera;
+  (void)to_render;
 
 }
 

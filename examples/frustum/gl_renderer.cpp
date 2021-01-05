@@ -163,24 +163,12 @@ void gl_aabb_handler::initialize()
   glDeleteBuffers(1, &tmp_buffer);
 }
 
-void gl_aabb_handler::set_camera_state(points::render::camera_t *camera)
+void gl_aabb_handler::draw(points::render::draw_group_t &group)
 {
   if (!is_initialized)
     initialize();
   glUseProgram(program);
 
-  glm::dmat4 projection_matrix;
-  points::render::camera_get_perspective_matrix(camera, glm::value_ptr(projection_matrix));
-  glm::dmat4 view_matrix;
-  points::render::camera_get_view_matrix(camera, glm::value_ptr(view_matrix));
-
-  glm::mat4 pv = projection_matrix * view_matrix;
-
-  glUniformMatrix4fv(uniform_pv, 1, GL_FALSE, glm::value_ptr(pv));
-}
-
-void gl_aabb_handler::draw(points::render::draw_group_t &group)
-{
   glBindVertexArray(vao);
   glUseProgram(program);
   int index_buffer_type = GL_INVALID_VALUE;
@@ -189,13 +177,13 @@ void gl_aabb_handler::draw(points::render::draw_group_t &group)
     auto &buffer = group.buffers[i];
     GLuint buffer_id = cast_to_uint(points::render::buffer_user_ptr(buffer.data));
     auto buffer_type = points::render::buffer_type(buffer.data);
-    auto buffer_mapping = points::render::buffer_mapping(buffer.data);
+    auto buffer_mapping = points::render::aabb_triangle_mesh_buffer_mapping_t(points::render::buffer_mapping(buffer.data));
     auto buffer_components = points::render::buffer_components(buffer.data);
     auto buffer_format = points::render::buffer_format(buffer.data);
     auto buffer_normalize = points::render::buffer_normalize(buffer.data);
     if (buffer_type == points::render::buffer_type_vertex)
     {
-      switch (points::render::aabb_triangle_mesh_buffer_mapping_t(buffer_mapping))
+      switch (buffer_mapping)
       {
       case points::render::aabb_triangle_mesh_color:
         glBindBuffer(GL_ARRAY_BUFFER, buffer_id);
@@ -210,6 +198,13 @@ void gl_aabb_handler::draw(points::render::draw_group_t &group)
     {
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_id);
       index_buffer_type = format_to_glformat(buffer_format);
+    }
+    else if (buffer_type == points::render::buffer_type_uniform)
+    {
+      if (buffer_mapping == points::render::aabb_triangle_mesh_camera)
+        glUniformMatrix4fv(uniform_pv, 1, GL_FALSE, (const GLfloat *)points::render::buffer_get(buffer.data));
+      else
+        fmt::print(stderr, "Internal state error. Not expected buffer_type.");
     }
     else
     {
@@ -346,7 +341,6 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
     switch (to_render.draw_type)
     {
     case points::render::aabb_triangle_mesh:
-      aabb_handler.set_camera_state(camera);
       aabb_handler.draw(to_render);
     }
   }
@@ -377,14 +371,14 @@ void gl_renderer::destroy_buffer_static(points::render::renderer_t *renderer, vo
   static_cast<gl_renderer *>(user_ptr)->destroy_buffer(renderer, buffer);
 }
 
-void gl_renderer::dirty_callback(points::render::renderer_t *renderer)
+void gl_renderer::dirty_callback(points::render::renderer_t *r)
 {
-  (void) renderer;
+  (void) r;
 }
 
-void gl_renderer::create_buffer(points::render::renderer_t *renderer, points::render::buffer_t *buffer)
+void gl_renderer::create_buffer(points::render::renderer_t *r, points::render::buffer_t *buffer)
 {
-  (void) renderer;
+  (void) r;
   auto buffer_type = points::render::buffer_type(buffer);
   switch(buffer_type)
   {
@@ -394,12 +388,14 @@ void gl_renderer::create_buffer(points::render::renderer_t *renderer, points::re
     case points::render::buffer_type_vertex:
       create_vertex_buffer(buffer, vertex_buffers);
     break;
+    case points::render::buffer_type_uniform:
+      break;
   }
 }
 
-void gl_renderer::initialize_buffer(points::render::renderer_t *renderer, points::render::buffer_t *buffer)
+void gl_renderer::initialize_buffer(points::render::renderer_t *r, points::render::buffer_t *buffer)
 {
-  (void) renderer;
+  (void) r;
   auto buffer_type = points::render::buffer_type(buffer);
   switch(buffer_type)
   {
@@ -409,12 +405,14 @@ void gl_renderer::initialize_buffer(points::render::renderer_t *renderer, points
     case points::render::buffer_type_vertex:
       initialize_vertex_buffer(buffer);
     break;
+    case points::render::buffer_type_uniform:
+      break;
   }
 }
 
-void gl_renderer::modify_buffer(points::render::renderer_t *renderer, points::render::buffer_t *buffer)
+void gl_renderer::modify_buffer(points::render::renderer_t *r, points::render::buffer_t *buffer)
 {
-  (void) renderer;
+  (void) r;
   auto buffer_type = points::render::buffer_type(buffer);
   switch(buffer_type)
   {
@@ -424,13 +422,15 @@ void gl_renderer::modify_buffer(points::render::renderer_t *renderer, points::re
     case points::render::buffer_type_vertex:
       update_vertex_buffer(buffer);
     break;
+    case points::render::buffer_type_uniform:
+      break;
   }
 
 }
 
-void gl_renderer::destroy_buffer(points::render::renderer_t *renderer, points::render::buffer_t *buffer)
+void gl_renderer::destroy_buffer(points::render::renderer_t *r, points::render::buffer_t *buffer)
 {
-  (void) renderer;
+  (void) r;
   auto buffer_type = points::render::buffer_type(buffer);
   switch(buffer_type)
   {
@@ -440,6 +440,8 @@ void gl_renderer::destroy_buffer(points::render::renderer_t *renderer, points::r
     case points::render::buffer_type_vertex:
       remove_vertex_buffer(buffer, vertex_buffers);
     break;
+    case points::render::buffer_type_uniform:
+      break;
   }
 
 }
