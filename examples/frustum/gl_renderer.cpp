@@ -55,10 +55,10 @@ int component_to_tex_format(points::render::buffer_components_t components)
 {
   switch (components)
   {
-  case points::render::component_1: return GL_RED;
-  case points::render::component_2: return GL_RG;
-  case points::render::component_3: return GL_RGB;
-  case points::render::component_4: return GL_RGBA;
+  case points::render::buffer_components_1: return GL_RED;
+  case points::render::buffer_components_2: return GL_RG;
+  case points::render::buffer_components_3: return GL_RGB;
+  case points::render::buffer_components_4: return GL_RGBA;
   default:
     break;
   }

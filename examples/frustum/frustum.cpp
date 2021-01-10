@@ -40,10 +40,10 @@ static void get_texture_data_size(const char (&name)[N], void *&data, int &size)
 
 int main(int, char **)
 {
-  if (SDL_Init(SDL_INIT_VIDEO)<0)
+  if (SDL_Init(SDL_INIT_VIDEO) < 0)
   {
-      fmt::print(stderr, "could not initialize sdl video.");
-      return -1;
+    fmt::print(stderr, "could not initialize sdl video.");
+    return -1;
   }
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
@@ -100,7 +100,7 @@ int main(int, char **)
   auto proggy = fontsfs.open("fonts/ProggyTiny.ttf");
   io.Fonts->AddFontFromMemoryTTF((void *)proggy.begin(), (int)proggy.size(), 10.0f);
 
-  //std::string file = "test.las";
+  // std::string file = "test.las";
   auto renderer = create_unique_ptr(points::render::renderer_create(), &points::render::renderer_destroy);
   auto camera = create_unique_ptr(points::render::camera_create(), &points::render::camera_destroy);
   gl_renderer points_gl_renderer(renderer.get(), camera.get());
@@ -112,18 +112,19 @@ int main(int, char **)
   get_texture_data_size("textures/bottom.jpg", skybox_data.negative_y, skybox_data.negative_y_size);
   get_texture_data_size("textures/front.jpg", skybox_data.positive_z, skybox_data.positive_z_size);
   get_texture_data_size("textures/back.jpg", skybox_data.negative_z, skybox_data.negative_z_size);
-  auto skybox = create_unique_ptr(points::render::skybox_data_source_create(renderer.get(), skybox_data), &points::render::skybox_data_source_destroy);
+  auto skybox = create_unique_ptr(points::render::skybox_data_source_create(renderer.get(), skybox_data),
+                                  &points::render::skybox_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::skybox_data_source_get(skybox.get()));
 
-  auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get()), &points::render::aabb_data_source_destroy);
+  auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get()),
+                                   &points::render::aabb_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
   points::render::aabb_t aabb;
-  aabb.min[0] = 1.0; aabb.min[1] = 1.5; aabb.min[2] = 8.0;
-  aabb.max[0] = 1.5; aabb.max[1] = 2.5; aabb.max[2] = 8.9;
-  int aabb_box = points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
-  
-  double aabb_center[3];
-  points::render::aabb_data_source_get_center(aabb_ds.get(), aabb_box, aabb_center);
+  aabb.min[0] = -1.0; aabb.min[1] = -1.0; aabb.min[2] = -1.0;
+  aabb.max[0] = 1.0; aabb.max[1] = 1.0; aabb.max[2] = 1.0;
+  points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+
+  double aabb_center[3] = {5.0, 0.0, 5.0};
   
   double up[3];
   up[0] = 0.0; up[1] = 1.0; up[2] = 0.0;
@@ -144,7 +145,8 @@ int main(int, char **)
   bool right_pressed = false;
   bool ctrl_modifier = false;
 
-  auto arcball = create_unique_ptr(points::render::camera_manipulator::arcball_create(camera.get(), aabb_center), &points::render::camera_manipulator::arcball_destroy);
+  double arcball_center[] = {0.0, 0.0, 0.0};
+  auto arcball = create_unique_ptr(points::render::camera_manipulator::arcball_create(camera.get(), arcball_center), &points::render::camera_manipulator::arcball_destroy);
   auto fps = create_unique_ptr((points::render::camera_manipulator::fps_t *)nullptr, &points::render::camera_manipulator::fps_destroy);
 
   while(loop)

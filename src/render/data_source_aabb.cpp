@@ -98,7 +98,7 @@ aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
 {
   camera_buffer.type = buffer_type_uniform;
   camera_buffer.format = buffer_format_r32;
-  camera_buffer.components = component_4x4;
+  camera_buffer.components = buffer_components_4x4;
   camera_buffer.normalize = buffer_normalize_do_not_normalize;
   camera_buffer.buffer_mapping = int(aabb_triangle_mesh_camera);
   camera_buffer.data = &project_view;
@@ -107,9 +107,9 @@ aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
   callbacks.do_initialize_buffer(&camera_buffer);
 
   indecies = indecies_for_aabb();
-  initialize_buffer(callbacks, indecies, buffer_type_index, buffer_format_u16, component_1, buffer_normalize_do_not_normalize, 0, index_buffer);
+  initialize_buffer(callbacks, indecies, buffer_type_index, buffer_format_u16, buffer_components_1, buffer_normalize_do_not_normalize, 0, index_buffer);
   colors = colors_for_aabb();
-  initialize_buffer(callbacks, colors, buffer_type_vertex, buffer_format_u8, component_3, buffer_normalize_normalize, aabb_triangle_mesh_color, color_buffer);
+  initialize_buffer(callbacks, colors, buffer_type_vertex, buffer_format_u8, buffer_components_3, buffer_normalize_normalize, aabb_triangle_mesh_color, color_buffer);
 }
 
 void aabb_data_source_t::add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render)
@@ -121,7 +121,7 @@ void aabb_data_source_t::add_to_frame(const frame_camera_t &camera, std::vector<
     if (!aabb_buffer.vertices_buffer)
     {
       aabb_buffer.vertices_buffer.reset(new buffer_t());
-      initialize_buffer(callbacks, aabb_buffer.vertices, buffer_type_t::buffer_type_vertex, buffer_format_t::buffer_format_r32, buffer_components_t::component_3, buffer_normalize_do_not_normalize, aabb_triangle_mesh_position, *aabb_buffer.vertices_buffer.get());
+      initialize_buffer(callbacks, aabb_buffer.vertices, buffer_type_t::buffer_type_vertex, buffer_format_t::buffer_format_r32, buffer_components_t::buffer_components_3, buffer_normalize_do_not_normalize, aabb_triangle_mesh_position, *aabb_buffer.vertices_buffer.get());
     }
     aabb_buffer.render_list[0].data = aabb_buffer.vertices_buffer.get();
     aabb_buffer.render_list[0].user_ptr = aabb_buffer.vertices_buffer->user_ptr;

@@ -42,7 +42,7 @@ skybox_data_source_t::skybox_data_source_t(callback_manager_t &c, skybox_data_t 
 {
   inverse_vp_buffer.type = buffer_type_uniform;
   inverse_vp_buffer.format = buffer_format_r32;
-  inverse_vp_buffer.components = component_4x4;
+  inverse_vp_buffer.components = buffer_components_4x4;
   inverse_vp_buffer.normalize = buffer_normalize_do_not_normalize;
   inverse_vp_buffer.buffer_mapping = int(skybox_inverse_view_projection);
   inverse_vp_buffer.data = &inverse_vp;
@@ -52,7 +52,7 @@ skybox_data_source_t::skybox_data_source_t(callback_manager_t &c, skybox_data_t 
 
   camera_pos_buffer.type = buffer_type_uniform;
   camera_pos_buffer.format = buffer_format_r32;
-  camera_pos_buffer.components = component_3;
+  camera_pos_buffer.components = buffer_components_3;
   camera_pos_buffer.normalize = buffer_normalize_do_not_normalize;
   camera_pos_buffer.buffer_mapping = int(skybox_camera_pos);
   camera_pos_buffer.data = &camera_pos;
@@ -79,7 +79,7 @@ skybox_data_source_t::skybox_data_source_t(callback_manager_t &c, skybox_data_t 
   cube_texture.buffer_mapping = skybox_texture_cube;
 
   vertex_buffer.buffer_mapping = skybox_vertex;
-  vertex_buffer.components = component_2;
+  vertex_buffer.components = buffer_components_2;
   vertex_buffer.format = buffer_format_r32;
   vertex_buffer.normalize = buffer_normalize_do_not_normalize;
   vertex_buffer.type = buffer_type_vertex;

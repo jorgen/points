@@ -46,11 +46,11 @@ enum buffer_format_t
 
 enum buffer_components_t
 {
-  component_1 = 1,
-  component_2 = 2,
-  component_3 = 3,
-  component_4 = 4,
-  component_4x4 = 5
+  buffer_components_1 = 1,
+  buffer_components_2 = 2,
+  buffer_components_3 = 3,
+  buffer_components_4 = 4,
+  buffer_components_4x4 = 5
 };
 
 enum buffer_texture_type_t
