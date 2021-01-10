@@ -35,9 +35,17 @@ void renderer_remove_camera(struct renderer_t* renderer, struct camera_t* camera
 
 struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* camera)
 {
+  frame_camera_t frame_camera;
+  frame_camera.view = camera->view;
+  frame_camera.projection = camera->projection;
+  frame_camera.view_projection = frame_camera.projection * frame_camera.view;
+  frame_camera.inverse_view = glm::inverse(frame_camera.view);
+  frame_camera.inverse_projection = glm::inverse(frame_camera.projection);
+  frame_camera.inverse_view_projection = glm::inverse(frame_camera.view_projection);
+  renderer->to_render.clear();
   for (auto &data_source : renderer->data_sources)
   {
-    data_source->add_to_frame(*camera, renderer->to_render);
+    data_source->add_to_frame(frame_camera, renderer->to_render);
   }
   frame_t ret;
   ret.to_render = renderer->to_render.data();

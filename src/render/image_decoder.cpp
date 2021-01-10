@@ -20,8 +20,8 @@
 
 #include "image_decoder_p.h"
 
-std::unique_ptr<uint8_t, decltype(&free)> load_image(uint8_t *data, int data_size, int &x, int &h, int &channels)
+std::unique_ptr<uint8_t, decltype(&free)> load_image(const void *data, int data_size, int &x, int &h, int &channels)
 {
-  uint8_t *image = stbi_load_from_memory(data, data_size, &x, &h, &channels, 0);
+  uint8_t *image = stbi_load_from_memory((uint8_t *)data, data_size, &x, &h, &channels, 0);
   return std::unique_ptr<uint8_t, decltype(&free)>(image, &free);
 }

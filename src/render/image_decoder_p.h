@@ -18,4 +18,4 @@
 #include <memory>
 #include <stdint.h>
 
-std::unique_ptr<uint8_t, decltype(&free)> load_image(uint8_t *data, int data_size, int &channels);
+std::unique_ptr<uint8_t, decltype(&free)> load_image(const void *data, int data_size, int &x, int &h, int &channels);

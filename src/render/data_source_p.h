@@ -24,12 +24,22 @@ namespace points
 {
 namespace render
 {
-  struct data_source_t
-  {
-    virtual ~data_source_t();
-    virtual void add_to_frame(const camera_t &camera, std::vector<draw_group_t> &to_render) = 0;
-  };
-}
+struct frame_camera_t
+{
+  glm::dmat4 view;
+  glm::dmat4 projection;
+  glm::dmat4 view_projection;
+  glm::dmat4 inverse_view;
+  glm::dmat4 inverse_projection;
+  glm::dmat4 inverse_view_projection;
+};
+
+struct data_source_t
+{
+  virtual ~data_source_t();
+  virtual void add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render) = 0;
+};
+} // namespace render
 } // namespace points
 
 #endif

@@ -22,7 +22,12 @@ add_executable(frustum
   )
 
 target_include_directories(frustum PRIVATE include ${imgui_SOURCE_DIR})
-cmrc_add_resource_library(frustum_shaders ALIAS frustum::shaders NAMESPACE shaders shaders/simple.frag shaders/simple.vert)
+cmrc_add_resource_library(frustum_shaders ALIAS frustum::shaders NAMESPACE shaders
+  shaders/aabb.frag
+  shaders/aabb.vert
+  shaders/skybox.frag
+  shaders/skybox.vert
+  )
 cmrc_add_resource_library(frustum_fonts   ALIAS frustum::fonts NAMESPACE fonts 
  fonts/Cousine-Regular.ttf
  fonts/DroidSans.ttf
@@ -33,12 +38,12 @@ cmrc_add_resource_library(frustum_fonts   ALIAS frustum::fonts NAMESPACE fonts
 )
 
 cmrc_add_resource_library(frustum_textures ALIAS frustum::textures NAMESPACE textures
-  textures/bluecloud_bk.jpg
-  textures/bluecloud_dn.jpg
-  textures/bluecloud_ft.jpg
-  textures/bluecloud_lf.jpg
-  textures/bluecloud_rt.jpg
-  textures/bluecloud_up.jpg
+  textures/back.jpg
+  textures/bottom.jpg
+  textures/front.jpg
+  textures/left.jpg
+  textures/right.jpg
+  textures/top.jpg
   )
 
 target_link_libraries(frustum PRIVATE points_render fmt glm SDL2 SDL2main OpenGL::GL frustum::shaders frustum::fonts frustum::textures)

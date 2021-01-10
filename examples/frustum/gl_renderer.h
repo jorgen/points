@@ -33,6 +33,23 @@ public:
   bool is_initialized;
 };
 
+class gl_skybox_handler: public gl_frame_handler
+{
+public:
+  gl_skybox_handler();
+  ~gl_skybox_handler();
+  void initialize() override; 
+  void draw(points::render::draw_group_t &group) override;
+
+  GLuint vao;
+  GLuint program;
+  GLint attrib_position;
+  GLint uniform_inverse_vp;
+  GLint uniform_skybox;
+  GLint uniform_camera_pos;
+  bool is_initialized;
+};
+
   enum class clear
 {
   none = 0,
@@ -65,7 +82,9 @@ private:
   std::vector<gl_frame_handler *> frame_handlers;
   std::vector<GLuint> index_buffers;
   std::vector<GLuint> vertex_buffers;
+  std::vector<GLuint> texture_buffers;
   gl_aabb_handler aabb_handler;
+  gl_skybox_handler skybox_handler;
 };
 
 #endif //FRUSTUM_GL_RENDERER_H

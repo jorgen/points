@@ -32,11 +32,15 @@ namespace render
     const void *data = nullptr;
     int data_size = 0;
     int data_offset = 0;
+    int width = 0;
+    int height = 0;
     buffer_type_t type;
     buffer_format_t format;
     buffer_components_t components;
     buffer_normalize_t normalize;
+    buffer_texture_type_t texture_type;
     int buffer_mapping;
+    const struct buffer_t *parent_buffer = nullptr;
     void *user_ptr = nullptr;
   };
 }

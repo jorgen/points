@@ -57,6 +57,21 @@ int buffer_offset(struct buffer_t *buffer)
   return buffer->data_offset;
 }
 
+int buffer_width(struct buffer_t *buffer)
+{
+  return buffer->width;
+}
+
+int buffer_height(struct buffer_t *buffer)
+{
+  return buffer->height;
+}
+
+enum buffer_texture_type_t buffer_texture_type(struct buffer_t *buffer)
+{
+  return buffer->texture_type;
+}
+
 enum buffer_type_t buffer_type(struct buffer_t *buffer)
 {
   return buffer->type;

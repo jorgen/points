@@ -96,8 +96,6 @@ aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
   : callbacks(callbacks)
   , project_view(1)
 {
- 
-  
   camera_buffer.type = buffer_type_uniform;
   camera_buffer.format = buffer_format_r32;
   camera_buffer.components = component_4x4;
@@ -114,9 +112,9 @@ aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
   initialize_buffer(callbacks, colors, buffer_type_vertex, buffer_format_u8, component_3, buffer_normalize_normalize, aabb_triangle_mesh_color, color_buffer);
 }
 
-void aabb_data_source_t::add_to_frame(const camera_t &camera, std::vector<draw_group_t> &to_render)
+void aabb_data_source_t::add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render)
 {
-  project_view = camera.projection * camera.view;
+  project_view = camera.view_projection;
   callbacks.do_modify_buffer(&camera_buffer); 
   for (auto &aabb_buffer : aabbs)
   {

@@ -36,12 +36,16 @@ struct skybox_data_t
   void *negative_y;
   void *positive_z;
   void *negative_z;
-  int size;
-  int pitch;
+  int positive_x_size;
+  int negative_x_size;
+  int positive_y_size;
+  int negative_y_size;
+  int positive_z_size;
+  int negative_z_size;
 };
 
 struct skybox_data_source_t;
-POINTS_RENDER_EXPORT struct skybox_data_source_t *skybox_data_source_create(struct renderer_t *renderer);
+POINTS_RENDER_EXPORT struct skybox_data_source_t *skybox_data_source_create(struct renderer_t *renderer, skybox_data_t data);
 POINTS_RENDER_EXPORT void skybox_data_source_destroy(struct skybox_data_source_t *skybox_data_source);
 POINTS_RENDER_EXPORT struct data_source_t *skybox_data_source_get(struct skybox_data_source_t *skybox_data_source);
 //POINTS_RENDER_EXPORT void set

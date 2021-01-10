@@ -14,17 +14,28 @@
 #include <points/render/camera.h>
 #include <points/render/aabb.h>
 #include <points/render/aabb_data_source.h>
+#include <points/render/skybox_data_source.h>
 
 #include <vector>
 
 #include <cmrc/cmrc.hpp>
 
 CMRC_DECLARE(fonts);
+CMRC_DECLARE(textures);
 
 template <typename T, typename Deleter>
 std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
 {
   return std::unique_ptr<T, decltype(d)>(t, d);
+}
+
+template<size_t N>
+static void get_texture_data_size(const char (&name)[N], void *&data, int &size)
+{
+  auto texturefs = cmrc::textures::get_filesystem();
+  auto tex = texturefs.open(name);
+  data = (void *)tex.begin();
+  size = (int)tex.size();
 }
 
 int main(int, char **)
@@ -62,6 +73,7 @@ int main(int, char **)
   }
 
   SDL_GL_GetDrawableSize(window, &width, &height);
+  SDL_GL_SetSwapInterval(1);
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -92,6 +104,16 @@ int main(int, char **)
   auto renderer = create_unique_ptr(points::render::renderer_create(), &points::render::renderer_destroy);
   auto camera = create_unique_ptr(points::render::camera_create(), &points::render::camera_destroy);
   gl_renderer points_gl_renderer(renderer.get(), camera.get());
+
+  points::render::skybox_data_t skybox_data;
+  get_texture_data_size("textures/right.jpg", skybox_data.positive_x, skybox_data.positive_x_size);
+  get_texture_data_size("textures/left.jpg", skybox_data.negative_x, skybox_data.negative_x_size);
+  get_texture_data_size("textures/top.jpg", skybox_data.positive_y, skybox_data.positive_y_size);
+  get_texture_data_size("textures/bottom.jpg", skybox_data.negative_y, skybox_data.negative_y_size);
+  get_texture_data_size("textures/front.jpg", skybox_data.positive_z, skybox_data.positive_z_size);
+  get_texture_data_size("textures/back.jpg", skybox_data.negative_z, skybox_data.negative_z_size);
+  auto skybox = create_unique_ptr(points::render::skybox_data_source_create(renderer.get(), skybox_data), &points::render::skybox_data_source_destroy);
+  points::render::renderer_add_data_source(renderer.get(), points::render::skybox_data_source_get(skybox.get()));
 
   auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get()), &points::render::aabb_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
@@ -127,8 +149,6 @@ int main(int, char **)
 
   while(loop)
   {
-    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-
     SDL_WaitEvent(nullptr);
     SDL_Event event;
     while (SDL_PollEvent(&event))

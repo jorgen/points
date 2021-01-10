@@ -51,6 +51,22 @@ int format_to_glformat(points::render::buffer_format_t format)
   }
 }
 
+int component_to_tex_format(points::render::buffer_components_t components)
+{
+  switch (components)
+  {
+  case points::render::component_1: return GL_RED;
+  case points::render::component_2: return GL_RG;
+  case points::render::component_3: return GL_RGB;
+  case points::render::component_4: return GL_RGBA;
+  default:
+    break;
+  }
+    
+  fmt::print(stderr, "initializing buffer with invalid component.");
+  return GL_RGB;
+}
+
 GLboolean normalize_to_glnormalize(points::render::buffer_normalize_t normalize)
 {
   switch (normalize)
@@ -142,8 +158,8 @@ void gl_aabb_handler::initialize()
 {
   is_initialized = true;
   auto shaderfs = cmrc::shaders::get_filesystem();
-  auto vertex_shader = shaderfs.open("shaders/simple.vert");
-  auto fragment_shader = shaderfs.open("shaders/simple.frag");
+  auto vertex_shader = shaderfs.open("shaders/aabb.vert");
+  auto fragment_shader = shaderfs.open("shaders/aabb.frag");
 
   program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), vertex_shader.end() - vertex_shader.begin());
   glUseProgram(program);
@@ -161,6 +177,7 @@ void gl_aabb_handler::initialize()
   glEnableVertexAttribArray(attrib_color);
   glBindVertexArray(0);
   glDeleteBuffers(1, &tmp_buffer);
+  glBindVertexArray(0);
 }
 
 void gl_aabb_handler::draw(points::render::draw_group_t &group)
@@ -213,9 +230,106 @@ void gl_aabb_handler::draw(points::render::draw_group_t &group)
   }
 
   glDrawElements(GL_TRIANGLES, group.draw_size, index_buffer_type, 0);
+  glBindVertexArray(0);
 
 }
 
+gl_skybox_handler::gl_skybox_handler()
+  : is_initialized(false)
+{
+}
+
+gl_skybox_handler::~gl_skybox_handler()
+{
+  if (program)
+    glDeleteProgram(program);
+  if (vao)
+    glDeleteVertexArrays(1, &vao);
+}
+
+void gl_skybox_handler::initialize()
+{
+  is_initialized = true;
+  auto shaderfs = cmrc::shaders::get_filesystem();
+  auto vertex_shader = shaderfs.open("shaders/skybox.vert");
+  auto fragment_shader = shaderfs.open("shaders/skybox.frag");
+
+  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), vertex_shader.end() - vertex_shader.begin());
+  glUseProgram(program);
+  attrib_position = glGetAttribLocation(program, "position");
+  uniform_inverse_vp = glGetUniformLocation(program, "inverse_vp");
+  uniform_skybox = glGetUniformLocation(program, "skybox");
+  uniform_camera_pos = glGetUniformLocation(program, "camera_pos");
+
+  glGenVertexArrays(1, &vao);
+  glBindVertexArray(vao);
+
+  GLuint tmp_buffer;
+  glGenBuffers(1, &tmp_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, tmp_buffer);
+  glEnableVertexAttribArray(attrib_position);
+  glBindVertexArray(0);
+  glDeleteBuffers(1, &tmp_buffer);
+  glBindVertexArray(0);
+}
+
+void gl_skybox_handler::draw(points::render::draw_group_t &group)
+{
+  if (!is_initialized)
+    initialize();
+  glUseProgram(program);
+  glBindVertexArray(vao);
+  glUseProgram(program);
+  for (int i = 0; i < group.buffers_size; i++)
+  {
+    auto &buffer = group.buffers[i];
+    GLuint buffer_id = cast_to_uint(points::render::buffer_user_ptr(buffer.data));
+    auto buffer_type = points::render::buffer_type(buffer.data);
+    auto buffer_mapping = points::render::skybox_buffer_mapping_t(points::render::buffer_mapping(buffer.data));
+    auto buffer_components = points::render::buffer_components(buffer.data);
+    auto buffer_format = points::render::buffer_format(buffer.data);
+    auto buffer_normalize = points::render::buffer_normalize(buffer.data);
+    if (buffer_type == points::render::buffer_type_vertex)
+    {
+      switch (buffer_mapping)
+      {
+      case points::render::skybox_vertex:
+        glBindBuffer(GL_ARRAY_BUFFER, buffer_id);
+        glVertexAttribPointer(attrib_position, buffer_components, format_to_glformat(buffer_format), normalize_to_glnormalize(buffer_normalize), 0, 0);
+        break;
+      }
+    }
+    else if (buffer_type == points::render::buffer_type_uniform)
+    {
+      if (buffer_mapping == points::render::skybox_inverse_view_projection)
+        glUniformMatrix4fv(uniform_inverse_vp, 1, GL_FALSE, (const GLfloat *)points::render::buffer_get(buffer.data));
+      else if (buffer_mapping == points::render::skybox_camera_pos)
+        glUniform3fv(uniform_camera_pos, 1, (const GLfloat *)points::render::buffer_get(buffer.data));
+    }
+    else if (buffer_type == points::render::buffer_type_texture)
+    {
+      if (buffer_mapping == points::render::skybox_texture_cube)
+      {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, buffer_id);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);  
+      }
+    }
+    else
+    {
+      fmt::print(stderr, "Invalid buffer type {} for gl_skybox_handler\n", buffer_type);
+    }
+  }
+
+  glDisable(GL_DEPTH_TEST);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+  glEnable(GL_DEPTH_TEST);
+  glBindVertexArray(0);
+}
 gl_renderer::gl_renderer(points::render::renderer_t *renderer, points::render::camera_t *camera)
   : renderer(renderer)
   , camera(camera)
@@ -264,6 +378,42 @@ void initialize_vertex_buffer(points::render::buffer_t *buffer)
   glBufferData(GL_ARRAY_BUFFER, size, data, GL_STATIC_DRAW);
 }
 
+void create_texure_buffer(points::render::buffer_t *buffer, std::vector<GLuint> &texture_buffers)
+{
+  GLuint texture;
+  glGenTextures(1, &texture);
+  points::render::buffer_set_user_ptr(buffer, cast_from_uint(texture));
+  texture_buffers.emplace_back(texture);
+}
+
+void initialize_texture_buffer(points::render::buffer_t *buffer)
+{
+  auto texture_type = points::render::buffer_texture_type(buffer);
+  GLuint texture = cast_to_uint(points::render::buffer_user_ptr(buffer));
+  auto width = points::render::buffer_width(buffer);
+  auto height = points::render::buffer_height(buffer);
+  auto data_format = format_to_glformat(points::render::buffer_format(buffer));
+  GLenum tex_format = component_to_tex_format(points::render::buffer_components(buffer));
+  auto data = points::render::buffer_get(buffer);
+  switch (texture_type)
+  {
+  case points::render::buffer_texture_2d:
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, tex_format, data_format,
+                 points::render::buffer_get(buffer));
+    break;
+  case points::render::buffer_texture_cubemap_positive_x:
+  case points::render::buffer_texture_cubemap_negative_x:
+  case points::render::buffer_texture_cubemap_positive_y:
+  case points::render::buffer_texture_cubemap_negative_y:
+  case points::render::buffer_texture_cubemap_positive_z:
+  case points::render::buffer_texture_cubemap_negative_z:
+    int diff = int(texture_type) - int(points::render::buffer_texture_cubemap_positive_x);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + diff, 0, GL_RGB, width, height, 0, tex_format, data_format, data );
+  }
+}
+
 void update_index_buffer(points::render::buffer_t *buffer)
 {
   GLuint ibo = cast_to_uint(points::render::buffer_user_ptr(buffer));
@@ -288,6 +438,36 @@ void update_vertex_buffer(points::render::buffer_t *buffer)
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferSubData(GL_ARRAY_BUFFER, offset, size, data);
   }
+}
+
+void update_texture_buffer(points::render::buffer_t *buffer)
+{
+  auto texture_type = points::render::buffer_texture_type(buffer);
+  GLuint texture = cast_to_uint(points::render::buffer_user_ptr(buffer));
+  auto width = points::render::buffer_width(buffer);
+  auto height = points::render::buffer_height(buffer);
+  auto data_format = format_to_glformat(points::render::buffer_format(buffer));
+  GLenum tex_format = component_to_tex_format(points::render::buffer_components(buffer));
+
+  switch (texture_type)
+  {
+  case points::render::buffer_texture_2d:
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, tex_format, data_format,
+                 points::render::buffer_get(buffer));
+    break;
+  case points::render::buffer_texture_cubemap_positive_x:
+  case points::render::buffer_texture_cubemap_negative_x:
+  case points::render::buffer_texture_cubemap_positive_y:
+  case points::render::buffer_texture_cubemap_negative_y:
+  case points::render::buffer_texture_cubemap_positive_z:
+  case points::render::buffer_texture_cubemap_negative_z:
+    //int diff = int(texture_type) - int(points::render::buffer_texture_cubemap_positive_x);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP, 0, GL_RGB, width, height, 0, tex_format, data_format,
+                 points::render::buffer_get(buffer));
+  }
+
 }
 
 void remove_index_buffer(points::render::buffer_t *buffer, std::vector<GLuint> &index_buffers)
@@ -318,6 +498,20 @@ void remove_vertex_buffer(points::render::buffer_t *buffer, std::vector<GLuint> 
   glDeleteBuffers(1, &vbo);
 }
 
+void remove_texture_buffer(points::render::buffer_t *buffer, std::vector<GLuint> &texture_buffers)
+{
+  GLuint texture = cast_to_uint(points::render::buffer_user_ptr(buffer));
+  auto it = std::find(texture_buffers.begin(), texture_buffers.end(), texture);
+  if (it == texture_buffers.end())
+  {
+    fmt::print(stderr, "illegal state. Trying to delete texture {} but its not registed in texture list.\n", texture);
+    return;
+  }
+
+  texture_buffers.erase(it);
+  glDeleteTextures(1, &texture);
+}
+
 void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
 {
   glEnable(GL_DEPTH_TEST);
@@ -342,6 +536,13 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
     {
     case points::render::aabb_triangle_mesh:
       aabb_handler.draw(to_render);
+      break;
+    case points::render::skybox_triangle:
+      skybox_handler.draw(to_render);
+      break;
+    default:
+      fmt::print(stderr, "Missing gl handler!.");
+      abort();
     }
   }
 }
@@ -390,6 +591,9 @@ void gl_renderer::create_buffer(points::render::renderer_t *r, points::render::b
     break;
     case points::render::buffer_type_uniform:
       break;
+    case points::render::buffer_type_texture:
+      create_texure_buffer(buffer, texture_buffers);
+      break;
   }
 }
 
@@ -406,6 +610,9 @@ void gl_renderer::initialize_buffer(points::render::renderer_t *r, points::rende
       initialize_vertex_buffer(buffer);
     break;
     case points::render::buffer_type_uniform:
+      break;
+    case points::render::buffer_type_texture:
+      initialize_texture_buffer(buffer);
       break;
   }
 }
@@ -424,6 +631,9 @@ void gl_renderer::modify_buffer(points::render::renderer_t *r, points::render::b
     break;
     case points::render::buffer_type_uniform:
       break;
+    case points::render::buffer_type_texture:
+      update_texture_buffer(buffer);
+      break;
   }
 
 }
@@ -441,6 +651,9 @@ void gl_renderer::destroy_buffer(points::render::renderer_t *r, points::render::
       remove_vertex_buffer(buffer, vertex_buffers);
     break;
     case points::render::buffer_type_uniform:
+      break;
+    case points::render::buffer_type_texture:
+      remove_texture_buffer(buffer, texture_buffers);
       break;
   }
 
