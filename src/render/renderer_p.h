@@ -27,6 +27,7 @@ namespace points
 {
 namespace render
 {
+
 struct renderer_t
 {
   renderer_t()

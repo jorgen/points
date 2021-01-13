@@ -60,7 +60,6 @@ int main(int, char **)
   int width = 800;
   int height = 600;
 
-
   SDL_Window *window =
     SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height,
                      SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
@@ -195,6 +194,10 @@ int main(int, char **)
           if (event.button.button == SDL_BUTTON_LEFT)
           {
             left_pressed = true;
+            if (arcball)
+              points::render::camera_manipulator::arcball_reset(arcball.get());
+            else
+              points::render::camera_manipulator::fps_reset(fps.get());
           }
           else if (event.button.button == SDL_BUTTON_RIGHT)
           {
@@ -267,7 +270,7 @@ int main(int, char **)
       if (!arcball)
       {
         fps.reset();
-        arcball.reset(points::render::camera_manipulator::arcball_create(camera.get(), aabb_center));
+        arcball.reset(points::render::camera_manipulator::arcball_create(camera.get(), arcball_center));
       }
     }
     if (ImGui::RadioButton("FPS", fps.get()))

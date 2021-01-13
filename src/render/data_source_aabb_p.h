@@ -34,7 +34,7 @@ struct aabb_buffer_t
 {
   aabb_t aabb;
   std::vector<glm::vec3> vertices;
-  std::unique_ptr<buffer_t> vertices_buffer;
+  buffer_t vertices_buffer;
 
   draw_buffer_t render_list[4];
 };
@@ -48,11 +48,11 @@ struct aabb_data_source_t : public data_source_t
 
   callback_manager_t &callbacks;
 
-  std::vector<aabb_buffer_t> aabbs;
+  std::vector<std::unique_ptr<aabb_buffer_t>> aabbs;
 
   std::vector<uint32_t> aabbs_ids;
 
-  buffer_t camera_buffer;
+  buffer_t project_view_buffer;
   glm::mat4 project_view;
 
   buffer_t index_buffer;

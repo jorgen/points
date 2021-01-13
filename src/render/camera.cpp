@@ -203,7 +203,7 @@ void fps_rotate(struct fps_t *fps, float normalized_dx, float normalized_dy, flo
     fps->pitch = normalize_angle(fps->pitch);
   }
 
-  if (normalized_dx)
+  if (normalized_dy)
   {
     fps->yaw +=  -normalized_dy * M_PI;
     fps->yaw = normalize_angle(fps->yaw);
@@ -216,10 +216,10 @@ void fps_rotate(struct fps_t *fps, float normalized_dx, float normalized_dy, flo
   }
 
   auto qrot = glm::dquat(1.0, 0.0, 0.0, 0.0);
-  if (fps->pitch)
-    qrot = glm::rotate(qrot, fps->pitch, glm::dvec3(view_inverse[1]));
   if (fps->yaw)
     qrot = glm::rotate(qrot, fps->yaw, glm::dvec3(view_inverse[0]));
+  if (fps->pitch)
+    qrot = glm::rotate(qrot, fps->pitch, glm::dvec3(view_inverse[1]));
   if (fps->roll)
     qrot = glm::rotate(qrot, fps->roll, glm::dvec3(view_inverse[2]));
 

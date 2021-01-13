@@ -28,67 +28,9 @@ namespace points
 {
 namespace render
 {
-enum buffer_type_t
-{
-  buffer_type_vertex,
-  buffer_type_index,
-  buffer_type_uniform,
-  buffer_type_texture
-};
-enum buffer_format_t
-{
-  buffer_format_u8,
-  buffer_format_u16,
-  buffer_format_u32,
-  buffer_format_r32,
-  buffer_format_r64
-};
-
-enum buffer_components_t
-{
-  buffer_components_1 = 1,
-  buffer_components_2 = 2,
-  buffer_components_3 = 3,
-  buffer_components_4 = 4,
-  buffer_components_4x4 = 5
-};
-
-enum buffer_texture_type_t
-{
-  buffer_texture_2d,
-  buffer_texture_cubemap,
-  buffer_texture_cubemap_positive_x,
-  buffer_texture_cubemap_negative_x,
-  buffer_texture_cubemap_positive_y,
-  buffer_texture_cubemap_negative_y,
-  buffer_texture_cubemap_positive_z,
-  buffer_texture_cubemap_negative_z,
-};
-
-enum buffer_normalize_t
-{
-  buffer_normalize_do_not_normalize,
-  buffer_normalize_normalize
-};
-
-
 struct buffer_t;
-POINTS_RENDER_EXPORT void buffer_remove_ref(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT void *buffer_user_ptr(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT void buffer_set_user_ptr(struct buffer_t *buffer, void *ptr);
 POINTS_RENDER_EXPORT void buffer_set_rendered(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT const void *buffer_get(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT int buffer_size(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT int buffer_offset(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT int buffer_width(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT int buffer_height(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT enum buffer_texture_type_t buffer_texture_type(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT enum buffer_type_t buffer_type(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT enum buffer_format_t buffer_format(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT enum buffer_components_t buffer_components(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT enum buffer_normalize_t buffer_normalize(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT int buffer_mapping(struct buffer_t *buffer);
-
+POINTS_RENDER_EXPORT void buffer_release_data(struct buffer_t *buffer);
 }
 }
 

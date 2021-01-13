@@ -8,6 +8,29 @@
 
 #include <vector>
 
+struct gl_buffer_t
+{
+  GLuint id = 0;
+  points::render::buffer_t *buffer;
+  points::render::buffer_type_t type;
+  points::render::format_t format;
+  points::render::components_t components;
+  void *data= nullptr;
+  int data_size= 0;
+  bool data_needs_upload = false;
+  bool data_is_update = false;
+};
+
+struct gl_texture_t
+{
+  GLuint id = 0;
+  points::render::buffer_t *buffer;
+  points::render::texture_type_t type;
+  points::render::format_t format;
+  points::render::components_t components;
+  int size[3];
+};
+
 class gl_frame_handler
 {
 public:
@@ -43,7 +66,7 @@ public:
 
   GLuint vao;
   GLuint program;
-  GLint attrib_position;
+  GLint attrib_vertex;
   GLint uniform_inverse_vp;
   GLint uniform_skybox;
   GLint uniform_camera_pos;
@@ -66,23 +89,32 @@ public:
   void draw(clear clear, int viewport_width, int viewport_height);
 
 private:
-  static void dirty_callback_static(struct points::render::renderer_t* r, void *user_ptr);
-  static void create_buffer_static(struct points::render::renderer_t *r, void *user_ptr, struct points::render::buffer_t *buffer);
-  static void initialize_buffer_static(struct points::render::renderer_t *r, void *user_ptr, struct points::render::buffer_t *buffer);
-  static void modify_buffer_static(struct points::render::renderer_t *r, void *user_ptr, struct points::render::buffer_t *buffer);
-  static void destroy_buffer_static(struct points::render::renderer_t *r, void *user_ptr, struct points::render::buffer_t *buffer);
-  void dirty_callback(struct points::render::renderer_t* r);
-  void create_buffer(struct points::render::renderer_t *r, struct points::render::buffer_t *buffer);
-  void initialize_buffer(struct points::render::renderer_t *r, struct points::render::buffer_t *buffer);
-  void modify_buffer(struct points::render::renderer_t *r, struct points::render::buffer_t *buffer);
-  void destroy_buffer(struct points::render::renderer_t *r, struct points::render::buffer_t *buffer);
+  static void static_dirty_callback(struct points::render::renderer_t *renderer, void *renderer_user_ptr);
+  static void static_create_buffer(struct points::render::renderer_t *renderer, void *renderer_user_ptr, enum points::render::buffer_type_t buffer_type, void **buffer_user_ptr);
+  static void static_initialize_buffer(struct points::render::renderer_t *renderer, void *renderer_user_ptr, struct points::render::buffer_t *buffer, void *buffer_user_ptr, enum points::render::format_t format, enum points::render::components_t components, int buffer_size, void *data);
+  static void static_modify_buffer(struct points::render::renderer_t *renderer, void *renderer_user_ptr, struct points::render::buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
+  static void static_destroy_buffer(struct points::render::renderer_t *renderer, void *renderer_user_ptr, void *buffer_user_ptr);
+  static void static_create_texture(struct points::render::renderer_t *renderer, void *renderer_user_ptr, enum points::render::texture_type_t buffer_texture_type, void **buffer_user_ptr);
+  static void static_initialize_texture(struct points::render::renderer_t *renderer, void *renderer_user_ptr, struct points::render::buffer_t *buffer, void *texture_user_ptr, enum points::render::texture_type_t buffer_texture_type, enum points::render::format_t format, enum points::render::components_t components, int size[3], void *data);
+  static void static_modify_texture(struct points::render::renderer_t *renderer, void *renderer_user_ptr, struct points::render::buffer_t *buffer, void *texture_user_ptr, enum points::render::texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
+  static void static_destroy_texture(struct points::render::renderer_t *renderer, void *renderer_user_ptr, void *texture_user_ptr);
+  void dirty_callback();
+  void create_buffer(enum points::render::buffer_type_t buffer_type, void **buffer_user_ptr);
+  void initialize_buffer(struct points::render::buffer_t *buffer, void *buffer_user_ptr, enum points::render::format_t format, enum points::render::components_t components, int buffer_size, void *data);
+  void modify_buffer(struct points::render::buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
+  void destroy_buffer(void *buffer_user_ptr);
+  void create_texture(enum points::render::texture_type_t buffer_texture_type, void **buffer_user_ptr);
+  void initialize_texture(struct points::render::buffer_t *buffer, void *texture_user_ptr, enum points::render::texture_type_t buffer_texture_type, enum points::render::format_t format, enum points::render::components_t components, int size[3], void *data);
+  void modify_texture(struct points::render::buffer_t *buffer, void *texture_user_ptr, enum points::render::texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
+  void destroy_texture(void *texture_user_ptr);
 
   points::render::renderer_t *renderer;
   points::render::camera_t *camera;
   std::vector<gl_frame_handler *> frame_handlers;
-  std::vector<GLuint> index_buffers;
-  std::vector<GLuint> vertex_buffers;
-  std::vector<GLuint> texture_buffers;
+  std::vector<gl_buffer_t *> index_buffers;
+  std::vector<gl_buffer_t *> vertex_buffers;
+  std::vector<gl_buffer_t *> uniform_buffers;
+  std::vector<gl_texture_t *> texture_buffers;
   gl_aabb_handler aabb_handler;
   gl_skybox_handler skybox_handler;
 };

@@ -21,6 +21,7 @@
 #include <mutex>
 
 #include <points/render/renderer.h>
+#include "buffer_p.h"
 
 namespace points
 {
@@ -50,30 +51,58 @@ public:
       callbacks.dirty(this->renderer, user_ptr);
   }
 
-  void do_create_buffer(struct buffer_t *buffer)
+  void do_create_buffer(buffer_t &buffer, buffer_type_t buffer_type)
   {
     std::unique_lock<std::mutex> lock(mutex);
     if (callbacks.create_buffer)
-      callbacks.create_buffer(renderer, user_ptr, buffer);
+      callbacks.create_buffer(renderer, user_ptr, buffer_type, &buffer.user_ptr);
   }
-  void do_initialize_buffer(struct buffer_t *buffer)
+  void do_initialize_buffer(buffer_t &buffer, enum format_t format, enum components_t components, int buffer_size, void *data)
   {
     std::unique_lock<std::mutex> lock(mutex);
     if (callbacks.initialize_buffer)
-      callbacks.initialize_buffer(renderer, user_ptr, buffer);
+      callbacks.initialize_buffer(renderer, user_ptr, &buffer, buffer.user_ptr, format, components, buffer_size, data);
   }
-  void do_modify_buffer(struct buffer_t *buffer)
+  void do_modify_buffer(buffer_t &buffer, int offset, int buffer_size, void *data)
   {
     std::unique_lock<std::mutex> lock(mutex);
     if (callbacks.modify_buffer)
-      callbacks.modify_buffer(renderer, user_ptr, buffer);
+      callbacks.modify_buffer(renderer, user_ptr, &buffer, buffer.user_ptr, offset, buffer_size, data);
   }
-  void do_destroy_buffer(struct buffer_t *buffer)
+  
+  void do_destroy_buffer(buffer_t &buffer)
   {
     std::unique_lock<std::mutex> lock(mutex);
     if (callbacks.destroy_buffer)
-      callbacks.destroy_buffer(renderer, user_ptr, buffer);
+      callbacks.destroy_buffer(renderer, user_ptr, &buffer.user_ptr);
   }
+
+  void do_create_texture(buffer_t &buffer, enum texture_type_t buffer_texture_type)
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    if (callbacks.create_texture)
+      callbacks.create_texture(renderer, user_ptr, buffer_texture_type, &buffer.user_ptr);
+  }
+
+  void do_initialize_texture(buffer_t &buffer, enum texture_type_t buffer_texture_type, enum format_t format, enum components_t components, int size[3], void *data)
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    if (callbacks.initialize_texture)
+      callbacks.initialize_texture(renderer, user_ptr, &buffer, buffer.user_ptr, buffer_texture_type, format, components, size, data);
+  }
+  void do_modify_texture(buffer_t &buffer, enum texture_type_t buffer_texture_type, int offset[3], int size[3], void *data)
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    if (callbacks.modify_texture)
+      callbacks.modify_texture(renderer, user_ptr, &buffer, &buffer.user_ptr, buffer_texture_type, offset, size, data);
+  }
+  void do_destroy_texture(buffer_t &buffer)
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    if (callbacks.destroy_texture)
+      callbacks.destroy_texture(renderer, user_ptr, buffer.user_ptr);
+  }
+
 private:
   //TODO: this mutex should be a shared mutex
   std::mutex mutex;

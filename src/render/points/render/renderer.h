@@ -13,10 +13,46 @@ namespace points
 {
 namespace render
 {
-struct buffer_t;
+enum buffer_type_t
+{
+  buffer_type_vertex,
+  buffer_type_index,
+  buffer_type_uniform
+};
+enum format_t
+{
+  buffer_format_u8,
+  buffer_format_u16,
+  buffer_format_u32,
+  buffer_format_r32,
+  buffer_format_r64
+};
+
+enum components_t
+{
+  buffer_components_1 = 1,
+  buffer_components_2 = 2,
+  buffer_components_3 = 3,
+  buffer_components_4 = 4,
+  buffer_components_4x4 = 5
+};
+
+enum texture_type_t
+{
+  buffer_texture_2d,
+  buffer_texture_3d,
+  buffer_texture_cubemap,
+  buffer_texture_cubemap_positive_x,
+  buffer_texture_cubemap_negative_x,
+  buffer_texture_cubemap_positive_y,
+  buffer_texture_cubemap_negative_y,
+  buffer_texture_cubemap_positive_z,
+  buffer_texture_cubemap_negative_z,
+};
+
 struct draw_buffer_t
 {
-  buffer_t *data;
+  int buffer_mapping;
   void *user_ptr;
 };
 
@@ -26,19 +62,20 @@ enum draw_type_t
   skybox_triangle
 };
 
-enum aabb_triangle_mesh_buffer_mapping_t
+enum aabb_mesh_buffer_mapping_t
 {
-  aabb_triangle_mesh_camera,
-  aabb_triangle_mesh_color,
-  aabb_triangle_mesh_position
+  aabb_bm_camera,
+  aabb_bm_color,
+  aabb_bm_position,
+  aabb_bm_index
 };
 
 enum skybox_buffer_mapping_t
 {
-  skybox_inverse_view_projection,
-  skybox_camera_pos,
-  skybox_vertex,
-  skybox_texture_cube,
+  skybox_bm_inverse_view_projection,
+  skybox_bm_camera_pos,
+  skybox_bm_vertex,
+  skybox_bm_cube_map_texture
 };
 
 struct draw_group_t
@@ -56,19 +93,31 @@ struct frame_t
 };
 
 struct renderer_t;
-typedef void (*renderer_dirty_callback_t)(struct renderer_t* renderer, void *user_ptr);
-typedef void (*renderer_create_buffer_t)(struct renderer_t *renderer, void *user_ptr, struct buffer_t *buffer);
-typedef void (*renderer_initialize_buffer_t)(struct renderer_t *renderer, void *user_ptr, struct buffer_t *buffer);
-typedef void (*renderer_modify_buffer_t)(struct renderer_t *renderer, void *user_ptr, struct buffer_t *buffer);
-typedef void (*renderer_destroy_buffer_t)(struct renderer_t *renderer, void *user_ptr, struct buffer_t *buffer);
+typedef void (*renderer_dirty_callback_t)(struct renderer_t* renderer, void *renderer_user_ptr);
+
+typedef void (*renderer_create_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, enum buffer_type_t buffer_type, void **buffer_user_ptr);
+typedef void (*renderer_initialize_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *buffer_user_ptr, enum format_t format, enum components_t components, int buffer_size, void *data);
+typedef void (*renderer_modify_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
+typedef void (*renderer_destroy_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, void *buffer_user_ptr);
+
+typedef void (*renderer_create_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, enum texture_type_t buffer_texture_type, void **buffer_user_ptr);
+typedef void (*renderer_initialize_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *texture_user_ptr, enum texture_type_t buffer_texture_type, enum format_t format, enum components_t components, int size[3], void *data);
+typedef void (*renderer_modify_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *texture_user_ptr, enum texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
+typedef void (*renderer_destroy_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, void *texture_user_ptr);
 
 struct renderer_callbacks_t
 {
   renderer_dirty_callback_t dirty;
+
   renderer_create_buffer_t create_buffer;
   renderer_initialize_buffer_t initialize_buffer;
   renderer_modify_buffer_t modify_buffer;
   renderer_destroy_buffer_t destroy_buffer;
+
+  renderer_create_texture_t create_texture;
+  renderer_initialize_texture_t initialize_texture;
+  renderer_modify_texture_t modify_texture;
+  renderer_destroy_texture_t destroy_texture;
 };
 
 struct data_source_t;
