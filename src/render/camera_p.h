@@ -82,6 +82,7 @@ struct arcball_t
   glm::dvec3 center;
   glm::dmat4 inverse_view;
   glm::dmat4 initial_rot;
+  double inverse_yaw;
   double yaw;
   double pitch;
   double roll;

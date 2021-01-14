@@ -108,9 +108,19 @@ void arcball_reset(struct arcball_t *arcball)
   arcball->pitch = 0.0;
   arcball->yaw = 0.0;
   arcball->roll = 0.0;
+  arcball_detect_upside_down(arcball);
 }
 
-double normalize_angle(double angle)
+void arcball_detect_upside_down(struct arcball_t *arcball)
+{
+  glm::vec3 up(0.0, 1.0, 0.0);
+  glm::vec3 camup = glm::vec3(glm::inverse(arcball->camera->view)[1]);
+  auto up_dot = glm::dot(camup, up);
+  auto angle = up_dot / (glm::length(up) * glm::length(camup));
+  arcball->inverse_yaw = angle < 0.0 ? -1.0 : 1.0;
+}
+
+static double normalize_angle(double angle)
 {
   constexpr double two_pi = M_PI * 2;
   return angle - two_pi * std::floor((angle + M_PI) / two_pi);
@@ -122,14 +132,14 @@ void arcball_rotate(struct arcball_t *arcball, float normalized_dx, float normal
 
   if (normalized_dx)
   {
-    arcball->pitch += -normalized_dx * M_PI;
-    arcball->pitch = normalize_angle(arcball->pitch);
+    arcball->yaw += (-normalized_dx * arcball->inverse_yaw) * M_PI;
+    arcball->yaw = normalize_angle(arcball->yaw);
   }
 
-  if (normalized_dx)
+  if (normalized_dy)
   {
-    arcball->yaw +=  -normalized_dy * M_PI;
-    arcball->yaw = normalize_angle(arcball->yaw);
+    arcball->pitch +=  -normalized_dy * M_PI;
+    arcball->pitch = normalize_angle(arcball->pitch);
   }
 
   if (normalized_dz)
@@ -140,9 +150,9 @@ void arcball_rotate(struct arcball_t *arcball, float normalized_dx, float normal
 
   auto qrot = glm::dquat(1.0, 0.0, 0.0, 0.0);
   if (arcball->pitch)
-    qrot = glm::rotate(qrot, arcball->pitch, glm::dvec3(view_inverse[1]));
+    qrot = glm::rotate(qrot, arcball->pitch, glm::dvec3(view_inverse[0]));
   if (arcball->yaw)
-    qrot = glm::rotate(qrot, arcball->yaw, glm::dvec3(view_inverse[0]));
+    qrot = glm::rotate(glm::dquat(1.0, 0.0, 0.0, 0.0), arcball->yaw, glm::dvec3(view_inverse[1])) * qrot;
   if (arcball->roll)
     qrot = glm::rotate(qrot, arcball->roll, glm::dvec3(view_inverse[2]));
 
