@@ -1,4 +1,8 @@
+include(BuildExternalTargetLinkLibrary)
+
+
 find_package(OpenGL REQUIRED)
+find_package(SDL2 REQUIRED)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 configure_file(${imgui_SOURCE_DIR}/misc/fonts/Cousine-Regular.ttf ${CMAKE_CURRENT_SOURCE_DIR}/fonts/Cousine-Regular.ttf COPYONLY)
 configure_file(${imgui_SOURCE_DIR}/misc/fonts/DroidSans.ttf ${CMAKE_CURRENT_SOURCE_DIR}/fonts/DroidSans.ttf COPYONLY)
@@ -46,6 +50,8 @@ cmrc_add_resource_library(frustum_textures ALIAS frustum::textures NAMESPACE tex
   textures/top.jpg
   )
 
-target_link_libraries(frustum PRIVATE points_render fmt glm SDL2 SDL2main OpenGL::GL frustum::shaders frustum::fonts frustum::textures)
-copyDllForTarget(frustum SDL2)
+target_link_libraries(frustum PRIVATE points_render fmt glm OpenGL::GL frustum::shaders frustum::fonts frustum::textures)
+
+BuildExternalTargetLinkLibrary(frustum PRIVATE SDL2::SDL2 SDL2::SDL2main)
+copy_dll_for_target(frustum points_render SDL2::SDL2)
 setWarningFlagsForTarget(frustum)
