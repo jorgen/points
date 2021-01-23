@@ -194,7 +194,8 @@ int main(int, char **)
           if (event.button.button == SDL_BUTTON_LEFT)
           {
             left_pressed = true;
-            points::render::camera_manipulator::arcball_detect_upside_down(arcball.get());
+            if (arcball)
+              points::render::camera_manipulator::arcball_detect_upside_down(arcball.get());
             //if (arcball)
             //  points::render::camera_manipulator::arcball_reset(arcball.get());
             //else
@@ -233,6 +234,10 @@ int main(int, char **)
           } else if (event.button.button == SDL_BUTTON_RIGHT)
           {
             right_pressed = false;
+            if (arcball)
+              points::render::camera_manipulator::arcball_reset(arcball.get());
+            if (fps)
+              points::render::camera_manipulator::fps_reset(fps.get());
           }
           break;
         case SDL_MOUSEWHEEL: 

@@ -6,10 +6,17 @@ macro(Build3rdParty)
   GetPackageInstallDir(SDL2_INSTALL_DIR sdl_build ${sdl_VERSION})
   Find_Package(SDL2 REQUIRED)
   BuildExternalCMake(sdl_build ${sdl_VERSION} ${sdl_SOURCE_DIR} "" "SDL2::SDL2;SDL2::SDL2main")
-  
-#  BuildExternalCMake(libuv_build ${libuv_VERSION} ${libuv_SOURCE_DIR} LIBUV_ROOT "")
-#  message("curl ${curl_VERSION} ${curl_SOURCE_DIR}")
-#  BuildExternalCMake(curl_build ${curl_VERSION} ${curl_SOURCE_DIR} CURL_ROOT "")
+ 
+  list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/libuv)
+  GetPackageInstallDir(LIBUV_INSTALL_DIR libuv_build ${libuv_VERSION})
+  Find_Package(libuv REQUIRED)
+  BuildExternalCMake(libuv_build ${libuv_VERSION} ${libuv_SOURCE_DIR} "" "libuv::libuv")
+
+  list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/CURL)
+  GetPackageInstallDir(CURL_INSTALL_DIR curl_build ${curl_VERSION})
+  Find_Package(CURL REQUIRED)
+  BuildExternalCMake(curl_build ${curl_VERSION} ${curl_SOURCE_DIR} "-DBUILD_CURL_EXE=OFF;-DHTTP_ONLY=ON" "CURL::libcurl")
+
   set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
   set(BUILD_SHARED_LIBS OFF)
   add_subdirectory(${fmt_SOURCE_DIR})
@@ -17,12 +24,4 @@ macro(Build3rdParty)
   add_subdirectory(${catch2_SOURCE_DIR})
   set(BUILD_SHARED_LIBS ${OLD_BUILD_SHARED_LIBS})
   include(${cmakerc_SOURCE_DIR}/CMakeRC.cmake)
-  
-  add_custom_target(build_3rd_party
-    DEPENDS
-      sdl_build
-      #libuv_build
-      #curl_build
-  )
-
 endmacro()

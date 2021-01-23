@@ -1,7 +1,7 @@
 include(GetPackageInstallDir)
 function(BuildExternalCMake name version source_dir cmake_args build_targets)
   GetPackageInstallDir(INSTALL_INT_CONFIG ${name} ${version})
-  set(CMAKE_BUILD_TYPE_ARG "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE};")
+  set(CMAKE_BUILD_TYPE_ARG "-DCMAKE_BUILD_TYPE=$<$<NOT:$<CONFIG:Debug>>:Release>$<$<CONFIG:Debug>:Debug>;")
 
   if (cmake_args)
     set(cmake_arg_complete "${cmake_args};")
@@ -39,6 +39,7 @@ function(BuildExternalCMake name version source_dir cmake_args build_targets)
     CMAKE_GENERATOR ${CMAKE_GENERATOR}
     CMAKE_GENERATOR_PLATFORM ${CMAKE_GENERATOR_PLATFORM}
     CMAKE_ARGS ${cmake_arg_complete}
+    BUILD_COMMAND cmake --build . --config $<$<NOT:$<CONFIG:Debug>>:Release>$<$<CONFIG:Debug>:Debug>
     BUILD_BYPRODUCTS ${build_byproducts})
 endfunction()
  

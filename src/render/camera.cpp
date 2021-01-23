@@ -149,10 +149,10 @@ void arcball_rotate(struct arcball_t *arcball, float normalized_dx, float normal
   }
 
   auto qrot = glm::dquat(1.0, 0.0, 0.0, 0.0);
-  if (arcball->pitch)
-    qrot = glm::rotate(qrot, arcball->pitch, glm::dvec3(view_inverse[0]));
   if (arcball->yaw)
     qrot = glm::rotate(glm::dquat(1.0, 0.0, 0.0, 0.0), arcball->yaw, glm::dvec3(view_inverse[1])) * qrot;
+  if (arcball->pitch)
+    qrot = glm::rotate(qrot, arcball->pitch, glm::dvec3(view_inverse[0]));
   if (arcball->roll)
     qrot = glm::rotate(qrot, arcball->roll, glm::dvec3(view_inverse[2]));
 
@@ -206,7 +206,7 @@ void fps_reset(struct fps_t *fps)
 
 void fps_rotate(struct fps_t *fps, float normalized_dx, float normalized_dy, float normalized_dz)
 {
-  auto view_inverse = fps->inverse_view;
+  auto &view_inverse = fps->inverse_view;
   if (normalized_dx)
   {
     fps->pitch += -normalized_dx * M_PI;
@@ -226,10 +226,10 @@ void fps_rotate(struct fps_t *fps, float normalized_dx, float normalized_dy, flo
   }
 
   auto qrot = glm::dquat(1.0, 0.0, 0.0, 0.0);
-  if (fps->yaw)
-    qrot = glm::rotate(qrot, fps->yaw, glm::dvec3(view_inverse[0]));
   if (fps->pitch)
     qrot = glm::rotate(qrot, fps->pitch, glm::dvec3(view_inverse[1]));
+  if (fps->yaw)
+    qrot = glm::rotate(qrot, fps->yaw, glm::dvec3(view_inverse[0]));
   if (fps->roll)
     qrot = glm::rotate(qrot, fps->roll, glm::dvec3(view_inverse[2]));
 
