@@ -51,7 +51,7 @@ function(Fetch3rdParty)
   Fetch3rdParty_Package(imgui     1.79.0     https://github.com/ocornut/imgui/archive/v1.79.tar.gz                                       SHA256=f1908501f6dc6db8a4d572c29259847f6f882684b10488d3a8d2da31744cd0a4)
   Fetch3rdParty_Package(libuv     1.40.0     https://github.com/libuv/libuv/archive/v1.40.0.tar.gz                                       SHA256=70fe1c9ba4f2c509e8166c0ca2351000237da573bb6c82092339207a9715ba6b)
   Fetch3rdParty_Package(curl      7.74.0     https://github.com/curl/curl/releases/download/curl-7_74_0/curl-7.74.0.tar.gz               SHA256=e56b3921eeb7a2951959c02db0912b5fcd5fdba5aca071da819e1accf338bbd7)
-
+  Fetch3rdParty_Package(laszip    3.4.3      https://github.com/LASzip/LASzip/releases/download/3.4.3/laszip-src-3.4.3.tar.gz            SHA256=53f546a7f06fc969b38d1d71cceb1862b4fc2c4a0965191a0eee81a57c7b373d)
   Fetch3rdParty_File(stbimage  b42009b   https://raw.githubusercontent.com/nothings/stb/b42009b3b9d4ca35bc703f5310eedc74f584be58/stb_image.h stb_image.h SHA256=8e5b0d717dfc8a834c97ef202d20e78d083d009586e1731c985817d0155d568c)
 
 endfunction()

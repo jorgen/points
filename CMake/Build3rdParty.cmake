@@ -17,6 +17,11 @@ macro(Build3rdParty)
   Find_Package(CURL REQUIRED)
   BuildExternalCMake(curl_build ${curl_VERSION} ${curl_SOURCE_DIR} "-DBUILD_CURL_EXE=OFF;-DHTTP_ONLY=ON" "CURL::libcurl")
 
+  list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/laszip)
+  GetPackageInstallDir(LASZIP_INSTALL_DIR laszip_build ${laszip_VERSION})
+  Find_Package(laszip REQUIRED)
+  BuildExternalCMake(laszip_build ${laszip_VERSION} ${laszip_SOURCE_DIR} "-DCMAKE_DEBUG_POSTFIX=d" "laszip::api;laszip::impl")
+
   set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
   set(BUILD_SHARED_LIBS OFF)
   add_subdirectory(${fmt_SOURCE_DIR})

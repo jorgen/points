@@ -49,8 +49,6 @@ cmrc_add_resource_library(frustum_textures ALIAS frustum::textures NAMESPACE tex
   textures/top.jpg
   )
 
-target_link_libraries(frustum PRIVATE points_render fmt glm OpenGL::GL frustum::shaders frustum::fonts frustum::textures)
-
-BuildExternalTargetLinkLibrary(frustum PRIVATE SDL2::SDL2 SDL2::SDL2main)
+BuildExternalTargetLinkLibrary(frustum PRIVATE points_render fmt glm OpenGL::GL frustum::shaders frustum::fonts frustum::textures SDL2::SDL2 SDL2::SDL2main)
 copy_dll_for_target(frustum points_render SDL2::SDL2)
 setWarningFlagsForTarget(frustum)
