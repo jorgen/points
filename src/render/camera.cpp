@@ -206,7 +206,7 @@ void fps_reset(struct fps_t *fps)
 
 void fps_rotate(struct fps_t *fps, float normalized_dx, float normalized_dy, float normalized_dz)
 {
-  auto &view_inverse = fps->inverse_view;
+  auto view_inverse = fps->inverse_view;
   if (normalized_dx)
   {
     fps->pitch += -normalized_dx * M_PI;

@@ -9,7 +9,7 @@ set(public_headers
   points/render/aabb.h 
   points/render/export.h
   points/render/aabb_data_source.h
-  )
+  points/render/flat_points_data_source.h)
 
 set(private_headers
   camera_p.h
@@ -20,7 +20,7 @@ set(private_headers
   data_source_p.h
   buffer_p.h
   image_decoder_p.h
-  )
+  data_source_flat_points_p.h)
 
 set(sources
   renderer.cpp 
@@ -30,6 +30,7 @@ set(sources
   data_source.cpp
   buffer.cpp
   image_decoder.cpp
+  data_source_flat_points.cpp
   )
 add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources} )
 target_link_libraries(points_render_objects PRIVATE fmt glm)

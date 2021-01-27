@@ -15,6 +15,7 @@
 #include <points/render/aabb.h>
 #include <points/render/aabb_data_source.h>
 #include <points/render/skybox_data_source.h>
+#include <points/render/flat_points_data_source.h>
 
 #include <vector>
 
@@ -36,6 +37,18 @@ static void get_texture_data_size(const char (&name)[N], void *&data, int &size)
   auto tex = texturefs.open(name);
   data = (void *)tex.begin();
   size = (int)tex.size();
+}
+
+static double halfway(const points::render::aabb_t &aabb, int dimension)
+{
+  double aabb_width = aabb.max[dimension] - aabb.min[dimension];
+  return aabb.min[dimension] + (aabb_width / 2);
+}
+static void get_aabb_center(const points::render::aabb_t &aabb, double (&center)[3])
+{
+  center[0] = halfway(aabb, 0);
+  center[1] = halfway(aabb, 1);
+  center[2] = halfway(aabb, 2);
 }
 
 int main(int, char **)
@@ -123,12 +136,21 @@ int main(int, char **)
   aabb.max[0] = 1.0; aabb.max[1] = 1.0; aabb.max[2] = 1.0;
   points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
 
+  const char points_file[] = "D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-65.laz";
+  auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), points_file, sizeof(points_file)),
+                                   &points::render::flat_points_data_source_destroy);
+  points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
+
+
+  points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
+  (void)points;
+
   double aabb_center[3] = {5.0, 0.0, 5.0};
   
   double up[3];
   up[0] = 0.0; up[1] = 1.0; up[2] = 0.0;
 
-  points::render::camera_set_perspective(camera.get(), 45, width, height, 0.001, 1000);
+  points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 10000);
   points::render::camera_look_at_aabb(camera.get(), &aabb, aabb_center, up);
 
   points::render::aabb_t aabb2;
@@ -144,7 +166,8 @@ int main(int, char **)
   bool right_pressed = false;
   bool ctrl_modifier = false;
 
-  double arcball_center[] = {0.0, 0.0, 0.0};
+  double arcball_center[3];
+  get_aabb_center(aabb, arcball_center);
   auto arcball = create_unique_ptr(points::render::camera_manipulator::arcball_create(camera.get(), arcball_center), &points::render::camera_manipulator::arcball_destroy);
   auto fps = create_unique_ptr((points::render::camera_manipulator::fps_t *)nullptr, &points::render::camera_manipulator::fps_destroy);
 
@@ -169,17 +192,17 @@ int main(int, char **)
           if (fps)
           {
             if (event.key.keysym.sym == SDLK_w || event.key.keysym.sym == SDLK_UP)
-              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, -0.3f);
+              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, -1.3f);
             if (event.key.keysym.sym == SDLK_s || event.key.keysym.sym == SDLK_DOWN)
-              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, 0.3f);
+              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, 1.3f);
             if (event.key.keysym.sym == SDLK_a || event.key.keysym.sym == SDLK_LEFT)
-              points::render::camera_manipulator::fps_move(fps.get(), -0.3f, 0.0f, 0.0f);
+              points::render::camera_manipulator::fps_move(fps.get(), -1.3f, 0.0f, 0.0f);
             if (event.key.keysym.sym == SDLK_d || event.key.keysym.sym == SDLK_RIGHT)
-              points::render::camera_manipulator::fps_move(fps.get(), 0.3f, 0.0f, 0.0f);
+              points::render::camera_manipulator::fps_move(fps.get(), 1.3f, 0.0f, 0.0f);
             if (event.key.keysym.sym == SDLK_q)
-              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, -0.3f, 0.0f);
+              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, -1.3f, 0.0f);
             if (event.key.keysym.sym == SDLK_e)
-              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.3f, 0.0f);
+              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 1.3f, 0.0f);
           }
           if (event.key.keysym.sym == SDLK_LCTRL || event.key.keysym.sym == SDLK_RCTRL)
             ctrl_modifier = true;

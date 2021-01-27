@@ -59,7 +59,8 @@ struct draw_buffer_t
 enum draw_type_t
 {
   aabb_triangle_mesh,
-  skybox_triangle
+  skybox_triangle,
+  flat_points
 };
 
 enum aabb_mesh_buffer_mapping_t
@@ -76,6 +77,13 @@ enum skybox_buffer_mapping_t
   skybox_bm_camera_pos,
   skybox_bm_vertex,
   skybox_bm_cube_map_texture
+};
+
+enum points_buffer_mapping_t
+{
+  points_bm_camera,
+  points_bm_vertex,
+  points_bm_color
 };
 
 struct draw_group_t
