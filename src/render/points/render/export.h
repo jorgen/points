@@ -37,7 +37,7 @@
 #  endif
 #else
 #  ifndef POINTS_RENDER_EXPORT
-#    ifdef points_render_objects_EXPORTS
+#    ifdef points_render_EXPORTS
         /* We are building this library */
 #      define POINTS_RENDER_EXPORT __attribute__((visibility("default")))
 #    else

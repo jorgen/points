@@ -1,0 +1,124 @@
+/************************************************************************
+** Points - point cloud management software.
+** Copyright (C) 2021  Jørgen Lind
+**
+** This program is free software: you can redistribute it and/or modify
+** it under the terms of the GNU General Public License as published by
+** the Free Software Foundation, either version 3 of the License, or
+** (at your option) any later version.
+**
+** This program is distributed in the hope that it will be useful,
+** but WITHOUT ANY WARRANTY; without even the implied warranty of
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+** GNU General Public License for more details.
+**
+** You should have received a copy of the GNU General Public License
+** along with this program.  If not, see <https://www.gnu.org/licenses/>.
+************************************************************************/
+#ifndef POINTS_CONVERTER_H
+#define POINTS_CONVERTER_H
+
+#include <stdint.h>
+
+#include <points/converter/export.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+namespace points
+{
+namespace converter
+{
+
+enum format_t
+{
+  format_u8,
+  format_i8,
+  format_u16,
+  format_i16,
+  format_u32,
+  format_i32,
+  format_r32,
+  format_r64
+};
+
+enum components_t
+{
+  components_1,
+  components_2,
+  components_3,
+  components_4
+};
+
+struct header_t;
+POINTS_CONVERTER_EXPORT void header_set_point_count(header_t *header, uint64_t count);
+POINTS_CONVERTER_EXPORT void header_set_data_start(header_t *header, size_t offset);
+POINTS_CONVERTER_EXPORT void header_set_coordinate_offset(header_t *header, double offset[3]);
+POINTS_CONVERTER_EXPORT void header_set_coordinate_scale(header_t *header, double scale[3]);
+POINTS_CONVERTER_EXPORT void header_add_attribute(header_t *header, const char *name, size_t name_size, format_t format, components_t components);
+
+struct attribute_t
+{
+  const char *name;
+  size_t name_size;
+  format_t format;
+  components_t components;
+};
+
+struct buffer_t
+{
+  void *data;
+  size_t size;
+};
+
+struct processed_data_t
+{
+  size_t points_converted;
+  size_t bytes_read;
+};
+
+typedef size_t (*converter_header_max_size_callback_t)();
+typedef void *(converter_header_create_user_ptr_callback_t)();
+typedef size_t (*converter_header_initialize_callback_t)(void *user_ptr, header_t *header, const void *data, size_t data_size);
+typedef processed_data_t (*converter_convert_data_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, size_t attributes_size, buffer_t *buffers, size_t buffers_size, const void *input_data, size_t data_size);
+typedef void (*converter_destroy_user_ptr_t)(void *user_ptr);
+
+struct converter_convert_callbacks_t
+{
+  converter_header_max_size_callback_t header_max_size;
+  converter_header_initialize_callback_t header_initialize;
+  converter_convert_data_t convert_data;
+  converter_destroy_user_ptr_t destroy_user_ptr;
+};
+
+typedef void (*converter_progress_callback_t)(float progress);
+typedef void (*converter_done_callback_t)(const error_t *error);
+struct converter_runtime_callbacks_t
+{
+  converter_progress_callback_t progress;
+  converter_done_callback_t done;
+};
+
+struct error_t;
+void converter_error_get_info(const error_t *error, int *code, const char **str, int *str_len);
+
+
+struct converter_t;
+POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, size_t cache_filename_size);
+POINTS_CONVERTER_EXPORT void converter_destroy(converter_t *destroy);
+POINTS_CONVERTER_EXPORT void converter_add_converter_callbacks(converter_t *converter, converter_convert_callbacks_t callbacks);
+POINTS_CONVERTER_EXPORT void converter_add_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks);
+POINTS_CONVERTER_EXPORT void converter_add_data_file(converter_t *converter, const char *data_filename, size_t filename_size);
+POINTS_CONVERTER_EXPORT void converter_add_data(converter_t *converter, const char *data_name, size_t data_name_size, const void *data, size_t data_size);
+POINTS_CONVERTER_EXPORT void converter_wait_finish(converter_t *converter);
+POINTS_CONVERTER_EXPORT const error_t *converter_get_current_error(const converter_t *converter);
+
+}
+
+} // namespace points
+#ifdef __cplusplus
+}
+#endif
+
+#endif
