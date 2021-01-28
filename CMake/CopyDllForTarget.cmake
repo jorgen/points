@@ -62,9 +62,12 @@ function(copy_dll_for_target target)
       set(debug_dlls "\"${dll}\" ${debug_dlls}")
     endforeach()
     if (release_dll OR debug_dll)
-      add_custom_command(TARGET ${target} POST_BUILD
+      add_custom_command(OUTPUT ${target}_copy_runtime
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<$<NOT:$<CONFIG:Debug>>:${release_dlls}> $<$<CONFIG:Debug>:${debug_dlls}> $<SHELL_PATH:$<TARGET_FILE_DIR:${target}>>
       )
+      set_property(SOURCE "${target}_copy_runtime"
+                   PROPERTY SYMBOLIC ON)
+      target_sources(${target} PRIVATE ${target}_copy_runtime)
     endif()
 
   endif()

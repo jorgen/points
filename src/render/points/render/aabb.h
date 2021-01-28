@@ -24,15 +24,16 @@ extern "C" {
 
 namespace points
 {
-  namespace render
-  {
-    struct aabb_t
-    {
-      double min[3];
-      double max[3];
-    };
-  }
-}
+namespace render
+{
+struct aabb_t
+{
+  double min[3];
+  double max[3];
+};
+} // namespace render
+} // namespace points
+
 #ifdef __cplusplus
 }
 #endif
