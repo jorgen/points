@@ -44,11 +44,11 @@ int format_to_glformat(points::render::format_t format)
 {
   switch (format)
   {
-  case points::render::buffer_format_u8: return GL_UNSIGNED_BYTE;
-  case points::render::buffer_format_u16: return GL_UNSIGNED_SHORT;
-  case points::render::buffer_format_u32: return GL_UNSIGNED_INT;
-  case points::render::buffer_format_r32: return GL_FLOAT;
-  case points::render::buffer_format_r64: return GL_DOUBLE;
+  case points::render::format_u8: return GL_UNSIGNED_BYTE;
+  case points::render::format_u16: return GL_UNSIGNED_SHORT;
+  case points::render::format_u32: return GL_UNSIGNED_INT;
+  case points::render::format_r32: return GL_FLOAT;
+  case points::render::format_r64: return GL_DOUBLE;
   default: return GL_INVALID_VALUE;
   }
 }
@@ -57,10 +57,10 @@ int component_to_tex_format(points::render::components_t components)
 {
   switch (components)
   {
-  case points::render::buffer_components_1: return GL_RED;
-  case points::render::buffer_components_2: return GL_RG;
-  case points::render::buffer_components_3: return GL_RGB;
-  case points::render::buffer_components_4: return GL_RGBA;
+  case points::render::components_1: return GL_RED;
+  case points::render::components_2: return GL_RG;
+  case points::render::components_3: return GL_RGB;
+  case points::render::components_4: return GL_RGBA;
   default:
     break;
   }
@@ -705,9 +705,9 @@ void gl_renderer::initialize_texture(struct points::render::buffer_t *buffer, vo
   GLenum data_format = format_to_glformat(format);
   GLenum bind_target;
   GLenum image_target;
-  if (gl_texture->type == points::render::buffer_texture_2d)
+  if (gl_texture->type == points::render::texture_type_2d)
   {
-    if (buffer_texture_type != points::render::buffer_texture_2d)
+    if (buffer_texture_type != points::render::texture_type_2d)
     {
       fmt::print(stderr, "Illigal state, initializing a 2d texture with non 2d texture data\n.");
       return;
@@ -715,7 +715,7 @@ void gl_renderer::initialize_texture(struct points::render::buffer_t *buffer, vo
     bind_target = GL_TEXTURE_2D;
     image_target = GL_TEXTURE_2D;
   }
-  else if (buffer_texture_type == points::render::buffer_texture_cubemap)
+  else if (buffer_texture_type == points::render::texture_type_cubemap)
   {
     fmt::print(stderr, "Illigal state, initializing a cubemap with cubemap: must specify buffer_texture_type_t that "
                        "specifies direction.\n");
@@ -724,7 +724,7 @@ void gl_renderer::initialize_texture(struct points::render::buffer_t *buffer, vo
   else
   {
     bind_target = GL_TEXTURE_CUBE_MAP;
-    int diff = int(buffer_texture_type) - int(points::render::buffer_texture_cubemap_positive_x);
+    int diff = int(buffer_texture_type) - int(points::render::texture_type_cubemap_positive_x);
     image_target = GL_TEXTURE_CUBE_MAP_POSITIVE_X + diff;
   }
 
@@ -744,9 +744,9 @@ void gl_renderer::modify_texture(struct points::render::buffer_t *buffer, void *
   GLenum bind_target;
   GLenum image_target;
 
-  if (gl_texture->format == points::render::buffer_texture_2d)
+  if (gl_texture->format == points::render::texture_type_2d)
   {
-    if (buffer_texture_type != points::render::buffer_texture_2d)
+    if (buffer_texture_type != points::render::texture_type_2d)
     {
       fmt::print(stderr, "Illigal state, modifying a 2d texture with non 2d texture data.\n");
       return;
@@ -754,7 +754,7 @@ void gl_renderer::modify_texture(struct points::render::buffer_t *buffer, void *
     bind_target = GL_TEXTURE_2D;
     image_target = GL_TEXTURE_2D;
   }
-  else if (buffer_texture_type == points::render::buffer_texture_cubemap)
+  else if (buffer_texture_type == points::render::texture_type_cubemap)
   {
     fmt::print(stderr, "Illigal state, initializing a cubemap with cubemap: must specify buffer_texture_type_t that "
                        "specifies direction.\n");
@@ -763,7 +763,7 @@ void gl_renderer::modify_texture(struct points::render::buffer_t *buffer, void *
   else
   {
     bind_target = GL_TEXTURE_CUBE_MAP;
-    int diff = int(buffer_texture_type) - int(points::render::buffer_texture_cubemap_positive_x);
+    int diff = int(buffer_texture_type) - int(points::render::texture_type_cubemap_positive_x);
     image_target = GL_TEXTURE_CUBE_MAP_POSITIVE_X + diff;
   }
 

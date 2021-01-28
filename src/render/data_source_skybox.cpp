@@ -30,22 +30,22 @@ skybox_data_source_t::skybox_data_source_t(callback_manager_t &c, skybox_data_t 
   : callbacks(c)
 {
   callbacks.do_create_buffer(inverse_vp_buffer, buffer_type_uniform);
-  callbacks.do_initialize_buffer(inverse_vp_buffer, buffer_format_r32, buffer_components_4x4, int(sizeof(inverse_vp)), &inverse_vp);
+  callbacks.do_initialize_buffer(inverse_vp_buffer, format_r32, components_4x4, int(sizeof(inverse_vp)), &inverse_vp);
 
   callbacks.do_create_buffer(camera_pos_buffer, buffer_type_uniform);
-  callbacks.do_initialize_buffer(camera_pos_buffer, buffer_format_r32, buffer_components_3, int(sizeof(camera_pos)), &camera_pos);
+  callbacks.do_initialize_buffer(camera_pos_buffer, format_r32, components_3, int(sizeof(camera_pos)), &camera_pos);
 
-  callbacks.do_create_texture(cube_texture, buffer_texture_cubemap);
+  callbacks.do_create_texture(cube_texture, texture_type_cubemap);
   std::tuple<void *, int, enum texture_type_t> data_to_mapping[] = {
-    {skybox_data.positive_x, skybox_data.positive_x_size, buffer_texture_cubemap_positive_x}, {skybox_data.negative_x, skybox_data.negative_x_size, buffer_texture_cubemap_negative_x},
-    {skybox_data.positive_y, skybox_data.positive_y_size, buffer_texture_cubemap_positive_y}, {skybox_data.negative_y, skybox_data.negative_y_size, buffer_texture_cubemap_negative_y},
-    {skybox_data.positive_z, skybox_data.positive_z_size, buffer_texture_cubemap_positive_z}, {skybox_data.negative_z, skybox_data.negative_z_size, buffer_texture_cubemap_negative_z}};
+    {skybox_data.positive_x, skybox_data.positive_x_size, texture_type_cubemap_positive_x}, {skybox_data.negative_x, skybox_data.negative_x_size, texture_type_cubemap_negative_x},
+    {skybox_data.positive_y, skybox_data.positive_y_size, texture_type_cubemap_positive_y}, {skybox_data.negative_y, skybox_data.negative_y_size, texture_type_cubemap_negative_y},
+    {skybox_data.positive_z, skybox_data.positive_z_size, texture_type_cubemap_positive_z}, {skybox_data.negative_z, skybox_data.negative_z_size, texture_type_cubemap_negative_z}};
   for (int i = 0; i < 6; i++)
   {
     textures[i].image =
       load_image(std::get<0>(data_to_mapping[i]), std::get<1>(data_to_mapping[i]), textures[i].width, textures[i].height, textures[i].components);
     int size[3] = {textures[i].width, textures[i].height, 0};
-    callbacks.do_initialize_texture(cube_texture, std::get<2>(data_to_mapping[i]), buffer_format_u8, components_t(textures[i].components), size, 
+    callbacks.do_initialize_texture(cube_texture, std::get<2>(data_to_mapping[i]), format_u8, components_t(textures[i].components), size, 
                                     textures[i].image.get());
   }
   callbacks.do_create_buffer(vertex_buffer, buffer_type_vertex);
@@ -53,7 +53,7 @@ skybox_data_source_t::skybox_data_source_t(callback_manager_t &c, skybox_data_t 
   vertices.emplace_back(-1.0f, -1.0f);
   vertices.emplace_back(3.0f, -1.0f);
   vertices.emplace_back(-1.0f, 3.0f);
-  callbacks.do_initialize_buffer(vertex_buffer, buffer_format_r32, buffer_components_2,
+  callbacks.do_initialize_buffer(vertex_buffer, format_r32, components_2,
                                  int(sizeof(*vertices.data()) * vertices.size()), vertices.data());
 }
 

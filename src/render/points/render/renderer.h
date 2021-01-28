@@ -21,33 +21,33 @@ enum buffer_type_t
 };
 enum format_t
 {
-  buffer_format_u8,
-  buffer_format_u16,
-  buffer_format_u32,
-  buffer_format_r32,
-  buffer_format_r64
+  format_u8,
+  format_u16,
+  format_u32,
+  format_r32,
+  format_r64
 };
 
 enum components_t
 {
-  buffer_components_1 = 1,
-  buffer_components_2 = 2,
-  buffer_components_3 = 3,
-  buffer_components_4 = 4,
-  buffer_components_4x4 = 5
+  components_1 = 1,
+  components_2 = 2,
+  components_3 = 3,
+  components_4 = 4,
+  components_4x4 = 5
 };
 
 enum texture_type_t
 {
-  buffer_texture_2d,
-  buffer_texture_3d,
-  buffer_texture_cubemap,
-  buffer_texture_cubemap_positive_x,
-  buffer_texture_cubemap_negative_x,
-  buffer_texture_cubemap_positive_y,
-  buffer_texture_cubemap_negative_y,
-  buffer_texture_cubemap_positive_z,
-  buffer_texture_cubemap_negative_z,
+  texture_type_2d,
+  texture_type_3d,
+  texture_type_cubemap,
+  texture_type_cubemap_positive_x,
+  texture_type_cubemap_negative_x,
+  texture_type_cubemap_positive_y,
+  texture_type_cubemap_negative_y,
+  texture_type_cubemap_positive_z,
+  texture_type_cubemap_negative_z
 };
 
 struct draw_buffer_t

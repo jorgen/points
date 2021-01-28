@@ -126,13 +126,13 @@ flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbac
   }
 
   callbacks.do_create_buffer(vertex_buffer, buffer_type_vertex);
-  callbacks.do_initialize_buffer(vertex_buffer, buffer_format_r32, buffer_components_3, int(sizeof(*vertices.data()) * vertices.size()), vertices.data());
+  callbacks.do_initialize_buffer(vertex_buffer, format_r32, components_3, int(sizeof(*vertices.data()) * vertices.size()), vertices.data());
   
   callbacks.do_create_buffer(color_buffer, buffer_type_vertex);
-  callbacks.do_initialize_buffer(color_buffer, buffer_format_u8, buffer_components_1, int(sizeof(*colors.data()) * colors.size()), colors.data());
+  callbacks.do_initialize_buffer(color_buffer, format_u8, components_1, int(sizeof(*colors.data()) * colors.size()), colors.data());
 
   callbacks.do_create_buffer(project_view_buffer, buffer_type_uniform);
-  callbacks.do_initialize_buffer(project_view_buffer, buffer_format_r32, buffer_components_4x4, sizeof(project_view), &project_view);
+  callbacks.do_initialize_buffer(project_view_buffer, format_r32, components_4x4, sizeof(project_view), &project_view);
 
   render_list[0].buffer_mapping = points_bm_camera;
   render_list[0].user_ptr = project_view_buffer.user_ptr;
