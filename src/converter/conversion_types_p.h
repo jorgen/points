@@ -17,39 +17,19 @@
 ************************************************************************/
 #pragma once
 
-#include <uv.h>
+#include <points/converter/converter.h>
 #include <vector>
 #include <memory>
-#include <string>
-#include <thread>
-#include <mutex>
-
-#include <points/converter/converter.h>
-
-#include "conversion_types_p.h"
-#include "event_pipe_p.h"
-#include "sorter_p.h"
-#include "threaded_event_loop_p.h"
 
 namespace points
 {
 namespace converter
 {
-class processor_t
+struct points_t
 {
-public:
-  processor_t();
-  ~processor_t();
-  void add_files(const std::vector<std::string> &files);
-  //void add_data(const void *data, size_t data_size);
-
-private:
-  threaded_event_loop_t event_loop;
-  event_pipe_t<points_t> sorted_points;
-  event_pipe_t<error_t> file_errors;
-  sorter_t sorter;
-  void handle_sorted_points(std::vector<points_t> &&sorted_points);
-  void handle_file_errors(std::vector<error_t> &&errors);
+  std::vector<attribute_t> attributes;
+  std::vector<std::unique_ptr<uint8_t>> buffers;
+  std::vector<uint64_t> buffer_sizes;
 };
-}
+} // namespace converter
 } // namespace points

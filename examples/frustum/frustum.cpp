@@ -17,6 +17,8 @@
 #include <points/render/skybox_data_source.h>
 #include <points/render/flat_points_data_source.h>
 
+#include <points/converter/converter.h>
+
 #include <vector>
 
 #include <cmrc/cmrc.hpp>
@@ -50,6 +52,13 @@ static void get_aabb_center(const points::render::aabb_t &aabb, double (&center)
   center[1] = halfway(aabb, 1);
   center[2] = halfway(aabb, 2);
 }
+
+template <size_t N>
+points::converter::str_buffer make_str_buffer(const char (&data)[N])
+{
+  return {data, N};
+}
+
 
 int main(int, char **)
 {
@@ -136,14 +145,22 @@ int main(int, char **)
   aabb.max[0] = 1.0; aabb.max[1] = 1.0; aabb.max[2] = 1.0;
   points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
 
-  const char points_file[] = "D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-65.laz";
-  auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), points_file, sizeof(points_file)),
+  std::vector<points::converter::str_buffer> input_files;
+  input_files.push_back(make_str_buffer("D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-65.laz"));
+  input_files.push_back(make_str_buffer("D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-63.laz"));
+  const char cache_file[] = "tmp_file.tmp";
+  auto converter = create_unique_ptr(points::converter::converter_create(cache_file, sizeof(cache_file)), &points::converter::converter_destroy);
+  points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
+
+
+  auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size),
                                    &points::render::flat_points_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
 
 
   points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
   (void)points;
+
 
   double aabb_center[3] = {5.0, 0.0, 5.0};
   
