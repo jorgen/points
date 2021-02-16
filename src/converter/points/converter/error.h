@@ -15,41 +15,26 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#pragma once
+#ifndef POINTS_CONVERTER_ERROR_H
+#define POINTS_CONVERTER_ERROR_H
 
-#include <uv.h>
-#include <vector>
-#include <memory>
-#include <string>
-#include <thread>
-#include <mutex>
-
-#include <points/converter/converter.h>
-
-#include "conversion_types_p.h"
-#include "event_pipe_p.h"
-#include "sorter_p.h"
-#include "threaded_event_loop_p.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 namespace points
 {
 namespace converter
 {
-class processor_t
-{
-public:
-  processor_t(converter_t &converter);
-  void add_files(const std::vector<std::string> &files);
-  //void add_data(const void *data, size_t data_size);
-
-private:
-  converter_t &converter;
-  threaded_event_loop_t event_loop;
-  event_pipe_t<points_t> sorted_points;
-  event_pipe_t<error_t> file_errors;
-  sorter_t sorter;
-  void handle_sorted_points(std::vector<points_t> &&sorted_points);
-  void handle_file_errors(std::vector<error_t> &&errors);
-};
-}
+struct error_t;
+POINTS_CONVERTER_EXPORT error_t *converter_error_create();
+POINTS_CONVERTER_EXPORT void converter_error_destroy(error_t *error);
+POINTS_CONVERTER_EXPORT void converter_error_set_info(error_t *error, int code, const char *str, size_t str_len);
+POINTS_CONVERTER_EXPORT void converter_error_get_info(const error_t *error, int *code, const char **str, size_t *str_len);
+} // namespace converter
 } // namespace points
+#ifdef __cplusplus
+}
+#endif
+
+#endif

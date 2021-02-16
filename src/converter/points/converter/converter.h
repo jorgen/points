@@ -21,6 +21,7 @@
 #include <stdint.h>
 
 #include <points/converter/export.h>
+#include <points/converter/error.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,6 +57,7 @@ POINTS_CONVERTER_EXPORT void header_set_point_count(header_t *header, uint64_t c
 POINTS_CONVERTER_EXPORT void header_set_data_start(header_t *header, uint64_t offset);
 POINTS_CONVERTER_EXPORT void header_set_coordinate_offset(header_t *header, double offset[3]);
 POINTS_CONVERTER_EXPORT void header_set_coordinate_scale(header_t *header, double scale[3]);
+POINTS_CONVERTER_EXPORT void header_set_aabb(header_t *header, double min[3], double max[3]);
 POINTS_CONVERTER_EXPORT void header_add_attribute(header_t *header, const char *name, uint64_t name_size, format_t format, components_t components);
 
 struct attribute_t
@@ -72,34 +74,25 @@ struct buffer_t
   uint64_t size;
 };
 
-struct processed_data_t
+typedef uint64_t (*converter_file_init_callback_t)(const char *filename, size_t filename_size, header_t *header, void **user_ptr, struct error_t **error);
+typedef uint64_t (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, buffer_t *buffers, uint64_t buffers_size, uint64_t max_points_to_convert, struct error_t **error);
+typedef void (*converter_file_destroy_user_ptr_t)(void *user_ptr);
+
+struct converter_file_convert_callbacks_t
 {
-  uint64_t points_converted;
-  uint64_t bytes_read;
+  converter_file_init_callback_t init;
+  converter_file_convert_data_callback_t convert_data;
+  converter_file_destroy_user_ptr_t destroy_user_ptr;
 };
-
-typedef uint64_t (*converter_header_max_size_callback_t)();
-typedef void *(converter_header_create_user_ptr_callback_t)();
-typedef uint64_t (*converter_header_initialize_callback_t)(void *user_ptr, header_t *header, const void *data, uint64_t data_size);
-typedef processed_data_t (*converter_convert_data_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, buffer_t *buffers, uint64_t buffers_size, const void *input_data, uint64_t data_size);
-typedef void (*converter_destroy_user_ptr_t)(void *user_ptr);
-
-struct converter_convert_callbacks_t
-{
-  converter_header_max_size_callback_t header_max_size;
-  converter_header_initialize_callback_t header_initialize;
-  converter_convert_data_t convert_data;
-  converter_destroy_user_ptr_t destroy_user_ptr;
-};
-
-struct error_t;
-void converter_error_get_info(const error_t *error, int *code, const char **str, int *str_len);
 
 typedef void (*converter_progress_callback_t)(float progress);
-typedef void (*converter_done_callback_t)(const struct error_t *error);
+typedef void (*converter_error_callback_t)(const struct error_t *error);
+typedef void (*converter_done_callback_t)();
+
 struct converter_runtime_callbacks_t
 {
   converter_progress_callback_t progress;
+  converter_error_callback_t error;
   converter_done_callback_t done;
 };
 
@@ -109,16 +102,21 @@ struct str_buffer
   uint32_t size;
 };
 
+enum converter_conversion_status_t
+{
+  conversion_status_error, 
+  conversion_status_in_progress,
+  conversion_status_completed
+};
 
 struct converter_t;
 POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size);
 POINTS_CONVERTER_EXPORT void converter_destroy(converter_t *destroy);
-POINTS_CONVERTER_EXPORT void converter_add_converter_callbacks(converter_t *converter, converter_convert_callbacks_t callbacks);
+POINTS_CONVERTER_EXPORT void converter_add_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks);
 POINTS_CONVERTER_EXPORT void converter_add_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks);
 POINTS_CONVERTER_EXPORT void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count);
-POINTS_CONVERTER_EXPORT void converter_add_data(converter_t *converter, const char *data_name, uint64_t data_name_size, const void *data, uint64_t data_size);
 POINTS_CONVERTER_EXPORT void converter_wait_finish(converter_t *converter);
-POINTS_CONVERTER_EXPORT const error_t *converter_get_current_error(const converter_t *converter);
+POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter_t *converter, error_t **errors, size_t *error_count);
 
 }
 

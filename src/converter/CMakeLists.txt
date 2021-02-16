@@ -4,7 +4,11 @@ Find_Package(libuv REQUIRED)
 Find_Package(CURL REQUIRED)
 
 set(public_headers
-  points/converter/converter.h)
+  points/converter/converter.h
+  points/converter/export.h
+  points/converter/error.h
+  points/converter/default_attribute_names.h
+  )
 
 set(private_headers
   processor_p.h
@@ -13,7 +17,7 @@ set(private_headers
   conversion_types_p.h
   event_pipe_p.h
   processor_p.h
-  )
+  converter_p.h)
 
 set(sources
   converter.cpp 

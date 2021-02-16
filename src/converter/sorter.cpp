@@ -44,8 +44,6 @@ sorter_t::sorter_t(event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<erro
 {
 }
 
-
-
 void sorter_t::add_files(const std::vector<std::string> &files)
 {
   new_files_pipe.post_event(files);

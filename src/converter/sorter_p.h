@@ -57,6 +57,7 @@ private:
   event_pipe_t<error_t> &file_errors;
   event_pipe_t<std::vector<std::string>> new_files_pipe;
 
+  std::vector<input_files> input_files;
 };
 }
 } // namespace points
