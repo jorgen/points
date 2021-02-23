@@ -21,8 +21,9 @@
 
 #include "renderer_p.h"
 
-#include <laszip/laszip_api.h>
+#include <fmt/printf.h>
 
+#include <laszip/laszip_api.h>
 namespace points
 {
 namespace render
@@ -87,9 +88,9 @@ flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbac
   vertices.reserve(npoints);
   colors.reserve(npoints);
   double offset[3];
-  offset[0] = header->min_x;
-  offset[1] = header->min_y;
-  offset[2] = header->min_z;
+  offset[0] = 0.0;
+  offset[1] = 0.0;
+  offset[2] = 0.0;
   double scale[3];
   scale[0] = header->x_scale_factor;
   scale[1] = header->y_scale_factor;
@@ -107,11 +108,9 @@ flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbac
     {
     }
     vertices.emplace_back(get_point(point, offset, scale, aabb));
-    colors.emplace_back(uint8_t(point->intensity));
-
+    colors.emplace_back(point->rgb[0] >> 8, point->rgb[1] >> 8, point->rgb[2] >> 8);
     p_count++;
   }
-
 
   if (laszip_close_reader(laszip_reader))
   {
@@ -129,7 +128,7 @@ flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbac
   callbacks.do_initialize_buffer(vertex_buffer, format_r32, components_3, int(sizeof(*vertices.data()) * vertices.size()), vertices.data());
   
   callbacks.do_create_buffer(color_buffer, buffer_type_vertex);
-  callbacks.do_initialize_buffer(color_buffer, format_u8, components_1, int(sizeof(*colors.data()) * colors.size()), colors.data());
+  callbacks.do_initialize_buffer(color_buffer, format_u8, components_3, int(sizeof(*colors.data()) * colors.size()), colors.data());
 
   callbacks.do_create_buffer(project_view_buffer, buffer_type_uniform);
   callbacks.do_initialize_buffer(project_view_buffer, format_r32, components_4x4, sizeof(project_view), &project_view);

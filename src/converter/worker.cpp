@@ -15,36 +15,30 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#pragma once
+#include "worker_p.h"
 
-#include <points/converter/converter.h>
-#include <points/converter/error.h>
-#include <points/converter/laszip_file_convert_callbacks.h>
-
-#include <string>
-
-#include "processor_p.h"
+#include "threaded_event_loop_p.h"
 
 namespace points
 {
 namespace converter
 {
-
-struct converter_t
+  
+void worker_t::enqueue(threaded_event_loop_t &loop)
 {
-  converter_t(const char *cache_filename, uint64_t cache_filename_size)
-    : cache_filename(cache_filename, cache_filename_size)
-    , processor(*this)
-    , convert_callbacks(laszip_callbacks())
-    , runtime_callbacks{}
-  {
-  }
-  std::string cache_filename;
-  processor_t processor;
-  converter_file_convert_callbacks_t convert_callbacks;
-  converter_runtime_callbacks_t runtime_callbacks;
-  converter_conversion_status_t status;
-};
+  _worker_request.data = this;
+  uv_queue_work(
+    loop.loop, &_worker_request,
+    [](uv_work_t *req) { static_cast<worker_t *>(req->data)->work(); },
+    [](uv_work_t *req, int status) {
+      completion_t completion = status == UV_ECANCELED ? cancelled : completed;
+      static_cast<worker_t *>(req->data)->after_work(completion);
+    });
+}
+void worker_t::cancel()
+{
+  uv_cancel((uv_req_t*)&_worker_request);
+}
 
-} // namespace converter
+}
 } // namespace points

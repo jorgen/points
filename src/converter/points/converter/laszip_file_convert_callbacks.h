@@ -15,36 +15,25 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#pragma once
+#ifndef POINTS_CONVERTER_LASZIP_CALLBACKS_H
+#define POINTS_CONVERTER_LASZIP_CALLBACKS_H
 
+#include <points/converter/export.h>
 #include <points/converter/converter.h>
-#include <points/converter/error.h>
-#include <points/converter/laszip_file_convert_callbacks.h>
 
-#include <string>
-
-#include "processor_p.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 namespace points
 {
 namespace converter
 {
-
-struct converter_t
-{
-  converter_t(const char *cache_filename, uint64_t cache_filename_size)
-    : cache_filename(cache_filename, cache_filename_size)
-    , processor(*this)
-    , convert_callbacks(laszip_callbacks())
-    , runtime_callbacks{}
-  {
-  }
-  std::string cache_filename;
-  processor_t processor;
-  converter_file_convert_callbacks_t convert_callbacks;
-  converter_runtime_callbacks_t runtime_callbacks;
-  converter_conversion_status_t status;
-};
-
+POINTS_CONVERTER_EXPORT struct converter_file_convert_callbacks_t laszip_callbacks();
 } // namespace converter
 } // namespace points
+#ifdef __cplusplus
+}
+#endif
+
+#endif

@@ -17,34 +17,37 @@
 ************************************************************************/
 #pragma once
 
+#include <stdint.h>
+
+#include <limits>
+#include <vector>
+#include <memory>
+
 #include <points/converter/converter.h>
-#include <points/converter/error.h>
-#include <points/converter/laszip_file_convert_callbacks.h>
-
-#include <string>
-
-#include "processor_p.h"
 
 namespace points
 {
 namespace converter
 {
-
-struct converter_t
+struct header_t
 {
-  converter_t(const char *cache_filename, uint64_t cache_filename_size)
-    : cache_filename(cache_filename, cache_filename_size)
-    , processor(*this)
-    , convert_callbacks(laszip_callbacks())
-    , runtime_callbacks{}
-  {
-  }
-  std::string cache_filename;
-  processor_t processor;
-  converter_file_convert_callbacks_t convert_callbacks;
-  converter_runtime_callbacks_t runtime_callbacks;
-  converter_conversion_status_t status;
+  uint64_t point_count = 0;
+  uint64_t data_start = 0;
+  double offset[3] = {};
+  double scale[3] = {};
+  double min[3] = {-std::numeric_limits<double>::max(), -std::numeric_limits<double>::max(), -std::numeric_limits<double>::max()};
+  double max[3] = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()};
+
+  uint64_t morton_min[3] = {};
+  uint64_t morton_max[3] = {~uint64_t(0), ~uint64_t(0), ~uint64_t(0)};
+
+  std::vector<attribute_t> attributes;
+  std::vector<std::unique_ptr<char[]>> attribute_names;
+
+  void *user_ptr;
 };
 
-} // namespace converter
-} // namespace points
+void header_p_calculate_morton_aabb(header_t &header);
+}
+}
+

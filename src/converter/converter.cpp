@@ -29,54 +29,6 @@ namespace points
 {
 namespace converter
 {
-
-struct header_t
-{
-  uint64_t point_count = 0;
-  uint64_t data_start = 0;
-  double offset[3] = {};
-  double scale[3] = {};
-  double min[3] = {-std::numeric_limits<double>::max(), -std::numeric_limits<double>::max(), -std::numeric_limits<double>::max()};
-  double max[3] = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()};
-
-  std::vector<attribute_t> attributes;
-  std::vector<std::unique_ptr<char[]>> attribute_names;
-};
-
-void header_set_point_count(header_t *header, uint64_t count)
-{
-  header->point_count = count;
-}
-
-void header_set_data_start(header_t *header, uint64_t offset)
-{
-  header->data_start = offset;
-}
-
-void header_set_coordinate_offset(header_t *header, double offset[3])
-{
-  memcpy(header->offset, offset, sizeof(header->offset));
-}
-
-void header_set_coordinate_scale(header_t *header, double scale[3])
-{
-  memcpy(header->scale, scale, sizeof(header->scale));
-}
-
-void header_set_aabb(header_t *header, double min[3], double max[3])
-{
-  memcpy(header->min, min, sizeof(header->min));
-  memcpy(header->max, max, sizeof(header->max));
-}
-
-void header_add_attribute(header_t *header, const char *name, uint64_t name_size, format_t format, components_t components)
-{
-  header->attribute_names.emplace_back(new char[name_size + 1]);
-  memcpy(header->attribute_names.back().get(), name, name_size);
-  header->attribute_names.back().get()[name_size] = 0;
-  header->attributes.push_back({header->attribute_names.back().get(), name_size, format, components});
-}
-
 error_t *converter_error_create()
 {
   return new error_t();

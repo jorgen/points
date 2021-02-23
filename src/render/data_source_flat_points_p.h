@@ -45,7 +45,7 @@ struct flat_points_data_source_t : public data_source_t
   std::vector<glm::vec3> vertices;
   buffer_t vertex_buffer;
 
-  std::vector<uint8_t> colors;
+  std::vector<glm::u8vec3> colors;
   buffer_t color_buffer;
   
   aabb_t aabb;

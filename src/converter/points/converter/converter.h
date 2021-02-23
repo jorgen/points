@@ -40,6 +40,8 @@ enum format_t
   format_i16,
   format_u32,
   format_i32,
+  format_u64,
+  format_i64,
   format_r32,
   format_r64
 };
@@ -54,11 +56,10 @@ enum components_t
 
 struct header_t;
 POINTS_CONVERTER_EXPORT void header_set_point_count(header_t *header, uint64_t count);
-POINTS_CONVERTER_EXPORT void header_set_data_start(header_t *header, uint64_t offset);
 POINTS_CONVERTER_EXPORT void header_set_coordinate_offset(header_t *header, double offset[3]);
 POINTS_CONVERTER_EXPORT void header_set_coordinate_scale(header_t *header, double scale[3]);
 POINTS_CONVERTER_EXPORT void header_set_aabb(header_t *header, double min[3], double max[3]);
-POINTS_CONVERTER_EXPORT void header_add_attribute(header_t *header, const char *name, uint64_t name_size, format_t format, components_t components);
+POINTS_CONVERTER_EXPORT void header_add_attribute(header_t *header, const char *name, uint64_t name_size, format_t format, components_t components, int group = 0);
 
 struct attribute_t
 {
@@ -66,6 +67,7 @@ struct attribute_t
   uint64_t name_size;
   format_t format;
   components_t components;
+  int group;
 };
 
 struct buffer_t
@@ -74,7 +76,7 @@ struct buffer_t
   uint64_t size;
 };
 
-typedef uint64_t (*converter_file_init_callback_t)(const char *filename, size_t filename_size, header_t *header, void **user_ptr, struct error_t **error);
+typedef void (*converter_file_init_callback_t)(const char *filename, size_t filename_size, header_t *header, void **user_ptr, struct error_t **error);
 typedef uint64_t (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, buffer_t *buffers, uint64_t buffers_size, uint64_t max_points_to_convert, struct error_t **error);
 typedef void (*converter_file_destroy_user_ptr_t)(void *user_ptr);
 

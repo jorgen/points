@@ -17,34 +17,30 @@
 ************************************************************************/
 #pragma once
 
-#include <points/converter/converter.h>
-#include <points/converter/error.h>
-#include <points/converter/laszip_file_convert_callbacks.h>
-
-#include <string>
-
-#include "processor_p.h"
+#include <uv.h>
 
 namespace points
 {
 namespace converter
 {
-
-struct converter_t
+class threaded_event_loop_t;
+class worker_t
 {
-  converter_t(const char *cache_filename, uint64_t cache_filename_size)
-    : cache_filename(cache_filename, cache_filename_size)
-    , processor(*this)
-    , convert_callbacks(laszip_callbacks())
-    , runtime_callbacks{}
+public:
+  enum completion_t
   {
-  }
-  std::string cache_filename;
-  processor_t processor;
-  converter_file_convert_callbacks_t convert_callbacks;
-  converter_runtime_callbacks_t runtime_callbacks;
-  converter_conversion_status_t status;
-};
+    cancelled,
+    completed 
+  };
+  virtual void work() = 0;
+  virtual void after_work(completion_t completion) = 0;
 
-} // namespace converter
+  void enqueue(threaded_event_loop_t &loop);
+  void cancel();
+
+private:
+  uv_work_t _worker_request;
+  threaded_event_loop_t *event_loop;
+};
+}
 } // namespace points

@@ -18,8 +18,33 @@
 #ifndef POINTS_DEFAULT_ATTRIBUTE_NAMES_H
 #define POINTS_DEFAULT_ATTRIBUTE_NAMES_H
 
-#define POINTS_ATTRIBUTE_XYZ "xyz";
-#define POINTS_ATTRIBUTE_INTENSITY "intensity";
+#define POINTS_ATTRIBUTE_XYZ "xyz"
+#define POINTS_ATTRIBUTE_INTENSITY "intensity"
+
+// | Return Number 3 bits (bits 0 – 2) | Number of Returns (given pulse) 3 bits (bits 3 – 5) | Scan Direction Flag 1 bit (bit 6) | Edge of Flight Line 1 bit (bit 7) |
+#define POINTS_ATTRIBUTE_LAS_COMPOSITE_0 "las_composite_0"
+// | Return Number 4 bits(bits 0 - 3)  | Number of Returns(given pulse) 4 bits(bits 4 - 7)   |
+#define POINTS_ATTRIBUTE_LAS_COMPOSITE_1 "las_composite_1"
+// | Classification Flags 4 bits(bits 0 - 3) | Scanner Channel 2 bits(bits 4 - 5) | Scan Direction Flag 1 bit(bit 6) | Edge of Flight Line 1 bit(bit 7) |
+#define POINTS_ATTRIBUTE_LAS_COMPOSITE_2 "las_composite_2"
+
+#define POINTS_ATTRIBUTE_CLASSIFICATION "classification"
+#define POINTS_ATTRIBUTE_SCAN_ANGLE_RANK "scan_angle_rank"
+#define POINTS_ATTRIBUTE_USER_DATA "user_data"
+#define POINTS_ATTRIBUTE_POINT_SOURCE_ID "point_source_id"
+#define POINTS_ATTRIBUTE_GPS_TIME "gps_time"
+#define POINTS_ATTRIBUTE_RGB "rgb"
+
+//leaving the wave packet stuff as is, but this needs to change somehow
+#define POINTS_ATTRIBUTE_WAVE_PACKET_DESCRIPTOR_INDEX "wave_packet_descriptor_index"
+#define POINTS_ATTRIBUTE_BYTE_OFFSET_TO_WAVEFORM_DATA "byte_offset_to_waveform_data"
+#define POINTS_ATTRIBUTE_WAVEFORM_PACKET_SIZE_BYTES "waveform_packet_size_bytes"
+#define POINTS_ATTRIBUTE_RETURN_POINT_WAVEFORM_LOCATION "return_point_waveform_location"
+#define POINTS_ATTRIBUTE_XYZ_T "xyz_t"
+
+#define POINTS_ATTRIBUTE_SCAN_ANGLE "scan_angle"
+#define POINTS_ATTRIBUTE_NEAR_INFRARED "near_infrared"
+
 //#define POINTS_ATTRIBUTE_RETURN_NUMBER_NUMBER_OF_RETURNES_SCAN_DIR_EDGE_OF_FLIGHT ""
 //  laszip_U8 number_of_returns : 3;
 //  laszip_U8 scan_direction_flag : 1;
@@ -48,4 +73,4 @@
 //
 //  laszip_I32 num_extra_bytes;
 //  laszip_U8* extra_bytes;
-##endif
+#endif

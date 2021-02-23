@@ -17,14 +17,14 @@ set(private_headers
   conversion_types_p.h
   event_pipe_p.h
   processor_p.h
-  converter_p.h)
+  converter_p.h "worker_p.h" "input_header_p.h" "morton_p.h")
 
 set(sources
   converter.cpp 
   processor.cpp
   sorter.cpp
   
-  )
+   "worker.cpp" "input_header.cpp" "laszip_file_convert_callbacks.cpp")
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources}  )
 target_link_libraries(converter_objects PRIVATE fmt glm)
@@ -35,7 +35,17 @@ target_include_directories(converter_objects
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:include>
 )
+target_include_directories(converter_objects
+  PRIVATE
+   ${libmorton_SOURCE_DIR}
+)
 setWarningflagsForTarget(converter_objects)
+
+if (MSVC)
+  target_compile_options(converter_objects PRIVATE /arch:AVX2)
+else()
+  target_compile_options(converter_objects PRIVATE -mavx2)
+endif()
 
 if (BUILD_SHARED_LIBS)
     target_compile_definitions(converter_objects PRIVATE points_converter_EXPORTS)
