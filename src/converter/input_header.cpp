@@ -19,55 +19,103 @@
 
 #include "morton_p.h"
 
+#include <assert.h>
+
 namespace points
 {
 namespace converter
 {
-void header_set_point_count(header_t *header, uint64_t count)
+void header_add_attribute(struct header_t *h, const char *name, uint64_t name_size, enum format_t format, enum components_t components, int group)
 {
-  header->point_count = count;
+  internal_header_t *header = static_cast<internal_header_t *>(h);
+  header->attributes.attribute_names.emplace_back(new char[name_size + 1]);
+  memcpy(header->attributes.attribute_names.back().get(), name, name_size);
+  header->attributes.attribute_names.back().get()[name_size] = 0;
+  header->attributes.attributes.push_back({header->attributes.attribute_names.back().get(), name_size, format, components, group});
 }
 
-void header_set_data_start(header_t *header, uint64_t offset)
+void header_set_name(header_t *h, const char *name, uint64_t name_size)
 {
-  header->data_start = offset;
+  internal_header_t *header = static_cast<internal_header_t *>(h);
+  header->name = std::string(name, name_size);
 }
 
-void header_set_coordinate_offset(header_t *header, double offset[3])
+const char *header_get_name(header_t *h)
 {
-  memcpy(header->offset, offset, sizeof(header->offset));
+  internal_header_t *header = static_cast<internal_header_t *>(h);
+  return header->name.c_str();
+
 }
 
-void header_set_coordinate_scale(header_t *header, double scale[3])
+void header_p_calculate_morton_aabb(internal_header_t &header)
 {
-  memcpy(header->scale, scale, sizeof(header->scale));
-}
+  double inv_scale[3];
+  inv_scale[0] = 1 / header.scale[0];
+  inv_scale[1] = 1 / header.scale[1];
+  inv_scale[2] = 1 / header.scale[2];
 
-void header_set_aabb(header_t *header, double min[3], double max[3])
-{
-  memcpy(header->min, min, sizeof(header->min));
-  memcpy(header->max, max, sizeof(header->max));
-}
-
-void header_add_attribute(header_t *header, const char *name, uint64_t name_size, format_t format, components_t components, int group)
-{
-  header->attribute_names.emplace_back(new char[name_size + 1]);
-  memcpy(header->attribute_names.back().get(), name, name_size);
-  header->attribute_names.back().get()[name_size] = 0;
-  header->attributes.push_back({header->attribute_names.back().get(), name_size, format, components, group});
-}
-
-void header_p_calculate_morton_aabb(header_t &header)
-{
-  uint64_t max[3];
-  max[0] = uint64_t(header.max[0] * header.scale[0]);
-  max[1] = uint64_t(header.max[1] * header.scale[1]);
-  max[2] = uint64_t(header.max[2] * header.scale[2]);
- 
   uint64_t min[3];
-  min[0] = uint64_t(header.min[0] * header.scale[0]);
-  min[1] = uint64_t(header.min[1] * header.scale[1]);
-  min[2] = uint64_t(header.min[2] * header.scale[2]);
+  min[0] = uint64_t((header.min[0] + header.offset[0]) * inv_scale[0]);
+  min[1] = uint64_t((header.min[1] + header.offset[1]) * inv_scale[1]);
+  min[2] = uint64_t((header.min[2] + header.offset[2]) * inv_scale[2]);
+  morton::encode(min, header.morton_min);
+
+  uint64_t max[3];
+  max[0] = uint64_t((header.max[0] + header.offset[0]) * inv_scale[0]);
+  max[1] = uint64_t((header.max[1] + header.offset[1]) * inv_scale[1]);
+  max[2] = uint64_t((header.max[2] + header.offset[2]) * inv_scale[2]);
+  morton::encode(max, header.morton_max);
+
+  header.lod_span = morton::morton_lod(header.morton_min, header.morton_max);
+}
+
+void attributes_copy(const attributes_t &source, attributes_t &target)
+{
+  assert(target.attributes.empty());
+  assert(target.attribute_names.empty());
+  target.attributes = source.attributes;
+  for (int i = 0; i < source.attributes.size(); i++)
+  {
+    target.attribute_names.emplace_back(new char[source.attributes[i].name_size]); 
+    memcpy(target.attribute_names[i].get(), source.attribute_names[i].get(), source.attributes[i].name_size);
+    target.attributes[i].name = target.attribute_names[i].get();
+  }
+}
+
+void header_copy(const internal_header_t &source, internal_header_t &target)
+{
+  target.name = source.name;
+  target.point_count = source.point_count;
+  memcpy(target.offset, source.offset, sizeof(target.offset));
+  memcpy(target.scale, source.scale, sizeof(target.scale));
+  memcpy(target.min, source.min, sizeof(target.min));
+  memcpy(target.max, source.max, sizeof(target.max));
+  memcpy(&target.morton_min, &source.morton_min, sizeof(target.morton_min));
+  memcpy(&target.morton_max, &source.morton_max, sizeof(target.morton_max));
+  attributes_copy(source.attributes, target.attributes);
+}
+void attribute_buffers_initialize(const std::vector<attribute_t> &attributes, attribute_buffers_t &buffers, uint64_t point_count)
+{
+  buffers.data.reserve(attributes.size());
+  buffers.buffers.reserve(attributes.size());
+  for (auto &attribute : attributes)
+  {
+    uint64_t buffer_size = size_for_format(attribute.format) * uint64_t(attribute.components) * point_count;
+    buffers.data.emplace_back(new uint8_t[buffer_size]);
+    buffers.buffers.push_back({buffers.data.back().get(), buffer_size});
+  }
+}
+
+void attribute_buffers_adjust_buffers_to_size(const std::vector<attribute_t> &attributes, attribute_buffers_t &buffers, uint64_t point_count)
+{
+  assert(attributes.size() == buffers.buffers.size());
+
+  for (int i = 0; i < attributes.size(); i++)
+  {
+    auto &attribute = attributes[i];
+    auto &buffer = buffers.buffers[i];
+    buffer.size = size_for_format(attribute.format) * uint64_t(attribute.components) * point_count;
+  }
 }
 
 }

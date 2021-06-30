@@ -12,19 +12,25 @@ set(public_headers
 
 set(private_headers
   processor_p.h
-  sorter_p.h 
+  "reader_p.h" 
   threaded_event_loop_p.h
   conversion_types_p.h
   event_pipe_p.h
   processor_p.h
-  converter_p.h "worker_p.h" "input_header_p.h" "morton_p.h")
+  converter_p.h
+  worker_p.h
+  input_header_p.h
+  morton_p.h
+   "sorter_p.h" "memcpy_array_p.h" "tree_p.h")
 
 set(sources
   converter.cpp 
   processor.cpp
-  sorter.cpp
-  
-   "worker.cpp" "input_header.cpp" "laszip_file_convert_callbacks.cpp")
+  "reader.cpp"
+  worker.cpp
+  input_header.cpp
+  laszip_file_convert_callbacks.cpp
+   "sorter.cpp" "tree.cpp")
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources}  )
 target_link_libraries(converter_objects PRIVATE fmt glm)

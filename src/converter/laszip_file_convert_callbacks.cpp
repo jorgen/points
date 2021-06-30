@@ -203,15 +203,20 @@ static void laszip_converter_file_init(const char *filename, size_t filename_siz
   }
 
   laszip_handle->point_count = (lasheader->number_of_point_records ? lasheader->number_of_point_records : lasheader->extended_number_of_point_records);
-  header_set_point_count(header, laszip_handle->point_count);
-  double offset[3] = {lasheader->x_offset, lasheader->y_offset, lasheader->z_offset};
-  double scale[3] = {lasheader->x_scale_factor, lasheader->y_scale_factor, lasheader->z_scale_factor};
-  header_set_coordinate_offset(header, offset);  
-  header_set_coordinate_scale(header, scale);
- 
-  double min[3] = {lasheader->min_x, lasheader->min_y, lasheader->min_z};
-  double max[3] = {lasheader->max_x, lasheader->max_y, lasheader->max_z};
-  header_set_aabb(header, min, max);
+  header->point_count = laszip_handle->point_count;
+  header->offset[0] = lasheader->x_offset;
+  header->offset[1] = lasheader->y_offset;
+  header->offset[2] = lasheader->z_offset;
+  header->scale[0] = lasheader->x_scale_factor;
+  header->scale[1] = lasheader->y_scale_factor;
+  header->scale[2] = lasheader->z_scale_factor;
+
+  header->min[0] = lasheader->min_x;
+  header->min[1] = lasheader->min_y;
+  header->min[2] = lasheader->min_z;
+  header->max[0] = lasheader->max_x;
+  header->max[1] = lasheader->max_y;
+  header->max[2] = lasheader->max_z;
 
   laszip_handle->las_format = lasheader->point_data_format;
   switch (lasheader->point_data_format)
@@ -286,47 +291,54 @@ static void copy_point_for_format(buffer_t *buffers, uint64_t i, laszip_point *p
   //default should never be instansiated
 }
 
+void assert_copy(buffer_t &buffer, uint64_t i, size_t size, void *source)
+{
+  assert(static_cast<uint8_t *>(buffer.data) + i * size < static_cast<uint8_t *>(buffer.data) + buffer.size); \
+  assert(static_cast<uint8_t *>(buffer.data) + i * size + size <= static_cast<uint8_t *>(buffer.data) + buffer.size); \
+  memcpy(static_cast<uint8_t *>(buffer.data) + i * size, source, size);
+}
+
 template<>
 inline void copy_point_for_format<0>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
-  memcpy(static_cast<uint8_t *>(buffers[0].data) + i * sizeof(uint32_t[3]), &point->X, sizeof(uint32_t[3]));
-  memcpy(static_cast<uint8_t *>(buffers[1].data) + i * sizeof(uint16_t), &point->intensity, sizeof(uint16_t));
+  assert_copy(buffers[0], i, sizeof(uint32_t[3]), &point->X);
+  assert_copy(buffers[1], i, sizeof(uint16_t), &point->intensity);
   *(static_cast<uint8_t *>(buffers[2].data) + i * sizeof(uint8_t)) = make_las_composite_0(point);
   *(static_cast<uint8_t *>(buffers[3].data) + i * sizeof(uint8_t)) = make_classification(point);
-  memcpy(static_cast<uint8_t *>(buffers[4].data) + i * sizeof(int8_t), &point->scan_angle_rank, sizeof(int8_t));
-  memcpy(static_cast<uint8_t *>(buffers[5].data) + i * sizeof(uint8_t), &point->user_data, sizeof(uint8_t));
-  memcpy(static_cast<uint8_t *>(buffers[6].data) + i * sizeof(uint16_t), &point->point_source_ID, sizeof(uint16_t));
+  assert_copy(buffers[4], i, sizeof(int8_t), &point->scan_angle_rank);
+  assert_copy(buffers[5], i, sizeof(uint8_t), &point->user_data);
+  assert_copy(buffers[6], i, sizeof(uint16_t), &point->point_source_ID);
 }
 
 template<>
 inline void copy_point_for_format<1>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<0>(buffers, i, point);
-  memcpy(static_cast<uint8_t *>(buffers[7].data) + i * sizeof(double), &point->gps_time, sizeof(double));
+  assert_copy(buffers[7], i, sizeof(double), &point->gps_time);
 }
 
 template<>
 inline void copy_point_for_format<2>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<0>(buffers, i, point);
-  memcpy(static_cast<uint8_t *>(buffers[7].data) + i * sizeof(uint16_t[3]), &point->rgb, sizeof(uint16_t[3]));
+  assert_copy(buffers[7], i, sizeof(uint16_t[3]), point->rgb);
 }
 
 template<>
 inline void copy_point_for_format<3>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<1>(buffers, i, point);
-  memcpy(static_cast<uint8_t *>(buffers[8].data) + i * sizeof(uint16_t[3]), &point->rgb, sizeof(uint16_t[3]));
+  assert_copy(buffers[8], i, sizeof(uint16_t[3]), &point->rgb);
 }
 
 template<size_t OFFSET>
 inline void copy_wave_packet(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
-  memcpy(static_cast<uint8_t *>(buffers[OFFSET].data) + i * sizeof(uint8_t), &point->wave_packet, sizeof(uint8_t));
-  memcpy(static_cast<uint8_t *>(buffers[OFFSET+1].data) + i * sizeof(uint64_t), point->wave_packet + sizeof(uint8_t), sizeof(uint64_t));
-  memcpy(static_cast<uint8_t *>(buffers[OFFSET+2].data) + i * sizeof(uint32_t), point->wave_packet + sizeof(uint8_t) + sizeof(uint64_t), sizeof(uint32_t));
-  memcpy(static_cast<uint8_t *>(buffers[OFFSET+3].data) + i * sizeof(float), point->wave_packet + sizeof(uint8_t) + sizeof(uint64_t) + sizeof(uint32_t), sizeof(float));
-  memcpy(static_cast<uint8_t *>(buffers[OFFSET+4].data) + i * sizeof(float[3]), point->wave_packet + sizeof(uint8_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(float), sizeof(float[3]));
+  assert_copy(buffers[OFFSET], i, sizeof(uint8_t), &point->wave_packet);
+  assert_copy(buffers[OFFSET + 1], i, sizeof(uint64_t), &point->wave_packet + sizeof(uint8_t));
+  assert_copy(buffers[OFFSET + 2], i, sizeof(uint32_t), &point->wave_packet + sizeof(uint8_t) + sizeof(uint64_t));
+  assert_copy(buffers[OFFSET + 3], i, sizeof(float), &point->wave_packet + sizeof(uint8_t) + sizeof(uint64_t) + sizeof(uint32_t));
+  assert_copy(buffers[OFFSET + 4], i, sizeof(float[3]), &point->wave_packet + sizeof(uint8_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(float));
 }
 
 template<>
@@ -346,29 +358,30 @@ inline void copy_point_for_format<5>(buffer_t *buffers, uint64_t i, laszip_point
 template<>
 inline void copy_point_for_format<6>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
-  memcpy(static_cast<uint8_t *>(buffers[0].data) + i * sizeof(uint32_t[3]), &point->X, sizeof(uint32_t[3]));
-  memcpy(static_cast<uint8_t *>(buffers[1].data) + i * sizeof(uint16_t), &point->intensity, sizeof(uint16_t));
+  assert_copy(buffers[0], i, sizeof(uint32_t[3]), &point->X);
+  assert_copy(buffers[1], i, sizeof(uint16_t), &point->intensity);
   *(static_cast<uint8_t *>(buffers[2].data) + i * sizeof(uint8_t)) = make_las_composite_1(point);
   *(static_cast<uint8_t *>(buffers[3].data) + i * sizeof(uint8_t)) = make_las_composite_2(point);
-  memcpy(static_cast<uint8_t *>(buffers[4].data) + i * sizeof(int8_t), &point->extended_classification, sizeof(int8_t));
-  memcpy(static_cast<uint8_t *>(buffers[5].data) + i * sizeof(uint8_t), &point->user_data, sizeof(uint8_t));
-  memcpy(static_cast<uint8_t *>(buffers[6].data) + i * sizeof(uint16_t), &point->extended_scan_angle, sizeof(uint16_t));
-  memcpy(static_cast<uint8_t *>(buffers[7].data) + i * sizeof(uint16_t), &point->point_source_ID, sizeof(uint16_t));
-  memcpy(static_cast<uint8_t *>(buffers[8].data) + i * sizeof(double), &point->gps_time, sizeof(double));
+  assert_copy(buffers[4], i, sizeof(int8_t), &point->extended_classification);
+  assert_copy(buffers[5], i, sizeof(uint8_t), &point->user_data);
+  assert_copy(buffers[6], i, sizeof(uint16_t), &point->extended_scan_angle);
+  assert_copy(buffers[7], i, sizeof(uint16_t), &point->point_source_ID);
+  assert_copy(buffers[8], i, sizeof(double), &point->gps_time);
 }
 
 template<>
 inline void copy_point_for_format<7>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<6>(buffers, i, point);
-  memcpy(static_cast<uint8_t *>(buffers[9].data) + i * sizeof(uint16_t[3]), &point->rgb, sizeof(uint16_t[3]));
+  assert_copy(buffers[9], i, sizeof(uint16_t[3]), &point->rgb);
 }
 
 template<>
 inline void copy_point_for_format<8>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<7>(buffers, i, point);
-  memcpy(static_cast<uint8_t *>(buffers[10].data) + i * sizeof(uint16_t), &point->rgb[3], sizeof(uint16_t));
+  assert_copy(buffers[10], i, sizeof(uint16_t[3]), &point->rgb);
+
 }
 
 template<>
@@ -389,8 +402,10 @@ template<size_t FORMAT>
 void copy_points_for_format(laszip_handle_t *laszip_handle, uint64_t point_count_to_stop_at, buffer_t *buffers, uint64_t buffers_size, struct error_t **error)
 {
   (void)buffers_size;
+  (void)buffers;
   auto point = laszip_handle->point;
-  for (uint64_t i = 0; laszip_handle->point_read < point_count_to_stop_at; laszip_handle->point_read, i++)
+  (void)point;
+  for (uint64_t i = 0; laszip_handle->point_read < point_count_to_stop_at; laszip_handle->point_read++, i++)
   {
     if (laszip_read_point(laszip_handle->reader))
     {
@@ -404,13 +419,24 @@ void copy_points_for_format(laszip_handle_t *laszip_handle, uint64_t point_count
   }
 }
 
-static uint64_t laszip_converter_file_convert_data(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, buffer_t *buffers, uint64_t buffers_size, uint64_t max_points_to_convert, struct error_t **error)
+static uint64_t laszip_converter_file_convert_data(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, buffer_t *buffers, uint64_t buffers_size, uint64_t max_points_to_convert, uint8_t *done, struct error_t **error)
 {
   (void)header;
   (void)attributes;
   (void)attributes_size;
   laszip_handle_t *laszip_handle = static_cast<laszip_handle_t *>(user_ptr);
-  uint64_t points_to_read = std::min(max_points_to_convert, laszip_handle->point_count - laszip_handle->point_read);
+  uint64_t points_to_read;
+  uint64_t points_left = laszip_handle->point_count - laszip_handle->point_read;
+  if (points_left < max_points_to_convert)
+  {
+    points_to_read = points_left;
+    *done = 1;
+  }
+  else
+  {
+    points_to_read = max_points_to_convert;
+    *done = 0;
+  }
   uint64_t point_count_to_stop_at = laszip_handle->point_read + points_to_read;
   switch (laszip_handle->las_format)
   {

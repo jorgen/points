@@ -48,18 +48,23 @@ enum format_t
 
 enum components_t
 {
-  components_1,
-  components_2,
-  components_3,
-  components_4
+  components_1 = 1,
+  components_2 = 2,
+  components_3 = 3,
+  components_4 = 4
 };
 
-struct header_t;
-POINTS_CONVERTER_EXPORT void header_set_point_count(header_t *header, uint64_t count);
-POINTS_CONVERTER_EXPORT void header_set_coordinate_offset(header_t *header, double offset[3]);
-POINTS_CONVERTER_EXPORT void header_set_coordinate_scale(header_t *header, double scale[3]);
-POINTS_CONVERTER_EXPORT void header_set_aabb(header_t *header, double min[3], double max[3]);
-POINTS_CONVERTER_EXPORT void header_add_attribute(header_t *header, const char *name, uint64_t name_size, format_t format, components_t components, int group = 0);
+struct header_t
+{
+  uint64_t point_count;
+  double offset[3];
+  double scale[3];
+  double min[3];
+  double max[3];
+};
+POINTS_CONVERTER_EXPORT void header_set_name(header_t *header, const char *name, uint64_t name_size);
+POINTS_CONVERTER_EXPORT const char *header_get_name(header_t *header);
+POINTS_CONVERTER_EXPORT void header_add_attribute(struct header_t *header, const char *name, uint64_t name_size, enum format_t format, enum components_t components, int group = 0);
 
 struct attribute_t
 {
@@ -77,7 +82,7 @@ struct buffer_t
 };
 
 typedef void (*converter_file_init_callback_t)(const char *filename, size_t filename_size, header_t *header, void **user_ptr, struct error_t **error);
-typedef uint64_t (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, buffer_t *buffers, uint64_t buffers_size, uint64_t max_points_to_convert, struct error_t **error);
+typedef uint64_t (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, buffer_t *buffers, uint64_t buffers_size, uint64_t max_points_to_convert, uint8_t *done, struct error_t **error);
 typedef void (*converter_file_destroy_user_ptr_t)(void *user_ptr);
 
 struct converter_file_convert_callbacks_t
@@ -96,6 +101,12 @@ struct converter_runtime_callbacks_t
   converter_progress_callback_t progress;
   converter_error_callback_t error;
   converter_done_callback_t done;
+};
+
+
+struct converter_buffer_callbacks_t
+{
+
 };
 
 struct str_buffer

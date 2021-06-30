@@ -64,6 +64,13 @@ public:
     uv_async_send(&pipe);
   }
 
+  void post_event(T &&t)
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    events.push_back(std::move(t));
+    uv_async_send(&pipe);
+  }
+
   void swap_events(std::vector<T> &to_swap)
   {
     std::unique_lock<std::mutex> lock(mutex);

@@ -22,32 +22,45 @@
 #include <limits>
 #include <vector>
 #include <memory>
+#include <string>
 
 #include <points/converter/converter.h>
+
+#include "conversion_types_p.h"
 
 namespace points
 {
 namespace converter
 {
-struct header_t
+inline uint64_t size_for_format(format_t format)
 {
-  uint64_t point_count = 0;
-  uint64_t data_start = 0;
-  double offset[3] = {};
-  double scale[3] = {};
-  double min[3] = {-std::numeric_limits<double>::max(), -std::numeric_limits<double>::max(), -std::numeric_limits<double>::max()};
-  double max[3] = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()};
+  switch (format)
+  {
+  case format_u8:
+  case format_i8:
+    return 1;
+  case format_u16:
+  case format_i16:
+    return 2;
+  case format_u32:
+  case format_i32:
+    return 4;
+  case format_u64:
+  case format_i64:
+    return 8;
+  case format_r32:
+    return 4;
+  case format_r64:
+    return 8;
+  }
+  return 0;
+}
 
-  uint64_t morton_min[3] = {};
-  uint64_t morton_max[3] = {~uint64_t(0), ~uint64_t(0), ~uint64_t(0)};
-
-  std::vector<attribute_t> attributes;
-  std::vector<std::unique_ptr<char[]>> attribute_names;
-
-  void *user_ptr;
-};
-
-void header_p_calculate_morton_aabb(header_t &header);
+void header_p_calculate_morton_aabb(internal_header_t &header);
+void attribute_buffers_initialize(const std::vector<attribute_t> &attributes, attribute_buffers_t &buffers, uint64_t point_count);
+void attribute_buffers_adjust_buffers_to_size(const std::vector<attribute_t> &attributes, attribute_buffers_t &buffers, uint64_t point_count);
+void attributes_copy(const attributes_t &source, attributes_t &target);
+void header_copy(const internal_header_t &source, internal_header_t &target);
 }
 }
 

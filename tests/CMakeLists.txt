@@ -4,12 +4,16 @@ target_link_libraries(catch_main Catch2::Catch2)
 add_executable(public_interface_unit_tests "public/renderer_base.cpp")
 target_link_libraries(public_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt points_render)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
-	target_precompile_headers(public_interface_unit_tests PRIVATE <catch2/catch.hpp>)
+	#target_precompile_headers(public_interface_unit_tests PRIVATE <catch2/catch.hpp>)
 endif()
 
-add_executable(private_interface_unit_tests "private/basic_camera.cpp")
-target_link_libraries(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm points_render_objects)
-target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render)
+add_executable(private_interface_unit_tests
+	private/basic_camera.cpp
+	private/morton_tests.cpp
+	 "private/tree_tests.cpp")
+BuildExternalTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm points_render_objects converter_objects)
+target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR})
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
-	target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)
+	#target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)
 endif()
+copy_dll_for_target(private_interface_unit_tests points_render converter)

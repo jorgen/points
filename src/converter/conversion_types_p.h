@@ -18,18 +18,67 @@
 #pragma once
 
 #include <points/converter/converter.h>
+
+#include "morton_p.h"
+
 #include <vector>
 #include <memory>
+#include <string>
 
 namespace points
 {
 namespace converter
 {
-struct points_t
+
+struct attributes_t
 {
   std::vector<attribute_t> attributes;
-  std::vector<std::unique_ptr<uint8_t>> buffers;
-  std::vector<uint64_t> buffer_sizes;
+  std::vector<std::unique_ptr<char[]>> attribute_names;
 };
+
+struct attribute_buffers_t
+{
+  std::vector<buffer_t> buffers;
+  std::vector<std::unique_ptr<uint8_t[]>> data;
+};
+
+struct internal_header_t : header_t
+{
+  std::string name;
+  morton::morton64_t morton_min;
+  morton::morton64_t morton_max;
+  int lod_span;
+  
+  attributes_t attributes;
+
+};
+
+inline void internal_header_initialize(internal_header_t &header)
+{
+  header.point_count = 0;
+  header.offset[0] = 0.0;
+  header.offset[1] = 0.0;
+  header.offset[2] = 0.0;
+  header.scale[0] = 0.0;
+  header.scale[1] = 0.0;
+  header.scale[2] = 0.0;
+  header.min[0] = -std::numeric_limits<double>::max();
+  header.min[1] = -std::numeric_limits<double>::max();
+  header.min[2] = -std::numeric_limits<double>::max();
+  header.max[0] = std::numeric_limits<double>::max();
+  header.max[1] = std::numeric_limits<double>::max();
+  header.max[2] = std::numeric_limits<double>::max();
+
+  morton::morton_init_min(header.morton_min);
+  morton::morton_init_max(header.morton_max);
+  lod_span = 0;
+}
+
+struct points_t
+{
+  internal_header_t header;
+  attribute_buffers_t buffers;
+};
+
 } // namespace converter
 } // namespace points

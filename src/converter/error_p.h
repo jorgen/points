@@ -28,5 +28,11 @@ struct error_t
   int code;
   std::string msg;
 };
+
+struct file_error_t
+{
+  std::string filename;
+  error_t error;
+};
 }
 } // namespace points

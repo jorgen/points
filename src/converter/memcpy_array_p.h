@@ -17,45 +17,14 @@
 ************************************************************************/
 #pragma once
 
-#include <uv.h>
-#include <vector>
-#include <memory>
-#include <string>
-#include <thread>
-#include <mutex>
-
-#include <points/converter/converter.h>
-
-#include "conversion_types_p.h"
-#include "event_pipe_p.h"
-#include "reader_p.h"
-#include "threaded_event_loop_p.h"
-
-#include "tree_p.h"
-
 namespace points
 {
 namespace converter
 {
-class processor_t
+template<typename T, int SIZE>
+void memcpy_array(T (&dest)[SIZE], const T (&source)[SIZE])
 {
-public:
-  processor_t(converter_t &converter);
-  void add_files(const std::vector<std::string> &files);
-  //void add_data(const void *data, size_t data_size);
-
-private:
-  converter_t &converter;
-  threaded_event_loop_t event_loop;
-  event_pipe_t<points_t> sorted_points;
-  event_pipe_t<file_error_t> file_errors;
-  point_reader_t sorter;
-
-  tree_t tree;
-  bool tree_initialized;
-
-  void handle_sorted_points(std::vector<points_t> &&sorted_points);
-  void handle_file_errors(std::vector<file_error_t> &&errors);
-};
+  memcpy(dest, source, sizeof(dest));
+}
 }
 } // namespace points
