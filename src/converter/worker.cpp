@@ -26,6 +26,7 @@ namespace converter
   
 void worker_t::enqueue(threaded_event_loop_t &loop)
 {
+  (void)event_loop;
   _worker_request.data = this;
   uv_queue_work(
     loop.loop, &_worker_request,

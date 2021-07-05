@@ -12,10 +12,12 @@ macro(Build3rdParty)
   Find_Package(libuv REQUIRED)
   BuildExternalCMake(libuv_build ${libuv_VERSION} ${libuv_SOURCE_DIR} "" "libuv::libuv")
 
+if (WIN32)
   list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/CURL)
   GetPackageInstallDir(CURL_INSTALL_DIR curl_build ${curl_VERSION})
   Find_Package(CURL REQUIRED)
   BuildExternalCMake(curl_build ${curl_VERSION} ${curl_SOURCE_DIR} "-DBUILD_CURL_EXE=OFF;-DHTTP_ONLY=ON" "CURL::libcurl")
+endif()
 
   list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/laszip)
   GetPackageInstallDir(LASZIP_INSTALL_DIR laszip_build ${laszip_VERSION})

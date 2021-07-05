@@ -1,10 +1,22 @@
 set(LIBUV_INCLUDE_DIRECTORIES ${LIBUV_INSTALL_DIR}/include)
 
-set(LIBUV_IMPL_LIB_RELEASE ${LIBUV_INSTALL_DIR}/lib/Release/uv.lib)
-set(LIBUV_IMPL_LIB_DEBUG ${LIBUV_INSTALL_DIR}/lib/Debug/uv.lib)
+if (WIN32)
+  set(LIBUV_IMPL_LIB_RELEASE ${LIBUV_INSTALL_DIR}/lib/Release/uv.lib)
+  set(LIBUV_IMPL_LIB_DEBUG ${LIBUV_INSTALL_DIR}/lib/Debug/uv.lib)
 
-set(LIBUV_LOCATION_RELEASE ${LIBUV_INSTALL_DIR}/lib/Release/uv.dll)
-set(LIBUV_LOCATION_DEBUG ${LIBUV_INSTALL_DIR}/lib/Debug/uv.dll)
+  set(LIBUV_LOCATION_RELEASE ${LIBUV_INSTALL_DIR}/lib/Release/uv.dll)
+  set(LIBUV_LOCATION_DEBUG ${LIBUV_INSTALL_DIR}/lib/Debug/uv.dll)
+elseif(APPLE)
+  set(LIBUV_LOCATION_RELEASE ${LIBUV_INSTALL_DIR}/lib/libuv.1.0.0.dylib)
+  set(LIBUV_LOCATION_DEBUG ${LIBUV_INSTALL_DIR}/lib/libuv.1.0.0.dylib)
+else()
+  set(LIBUV_IMPL_LIB_RELEASE ${LIBUV_INSTALL_DIR}/lib/Release/uv.lib)
+  set(LIBUV_IMPL_LIB_DEBUG ${LIBUV_INSTALL_DIR}/lib/Debug/uv.lib)
+
+  set(LIBUV_LOCATION_RELEASE ${LIBUV_INSTALL_DIR}/lib/Release/uv.dll)
+  set(LIBUV_LOCATION_DEBUG ${LIBUV_INSTALL_DIR}/lib/Debug/uv.dll)
+endif()
+
 
 if (NOT TARGET libuv::libuv)
   add_library(libuv::libuv SHARED IMPORTED)

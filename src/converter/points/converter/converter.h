@@ -106,7 +106,7 @@ struct converter_runtime_callbacks_t
 
 struct converter_buffer_callbacks_t
 {
-
+ int tmp;
 };
 
 struct str_buffer

@@ -74,7 +74,7 @@ void attributes_copy(const attributes_t &source, attributes_t &target)
   assert(target.attributes.empty());
   assert(target.attribute_names.empty());
   target.attributes = source.attributes;
-  for (int i = 0; i < source.attributes.size(); i++)
+  for (int i = 0; i < int(source.attributes.size()); i++)
   {
     target.attribute_names.emplace_back(new char[source.attributes[i].name_size]); 
     memcpy(target.attribute_names[i].get(), source.attribute_names[i].get(), source.attributes[i].name_size);
@@ -110,7 +110,7 @@ void attribute_buffers_adjust_buffers_to_size(const std::vector<attribute_t> &at
 {
   assert(attributes.size() == buffers.buffers.size());
 
-  for (int i = 0; i < attributes.size(); i++)
+  for (int i = 0; i < int(attributes.size()); i++)
   {
     auto &attribute = attributes[i];
     auto &buffer = buffers.buffers[i];

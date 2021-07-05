@@ -15,8 +15,11 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wsign-compare"
+# define STB_IMAGE_IMPLEMENTATION
+# include <stb_image.h>
+#pragma clang diagnostic pop
 
 #include "image_decoder_p.h"
 

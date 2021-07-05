@@ -63,6 +63,11 @@ flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbac
     fprintf(stderr, "DLL ERROR: opening laszip reader for '%s'\n", url.c_str());
   }
 
+  if (!laszip_reader)
+  {
+    return;
+  }
+
   laszip_header *header;
 
   if (laszip_get_header_pointer(laszip_reader, &header))
@@ -72,7 +77,7 @@ flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbac
 
   int64_t npoints = (header->number_of_point_records ? header->number_of_point_records : header->extended_number_of_point_records);
 
-  fprintf(stderr, "file '%s' contains %I64d points\n", url.c_str(), npoints);
+  fmt::print(stderr, "file '{}' contains {} points\n", url.c_str(), npoints);
 
   // get a pointer to the points that will be read
 

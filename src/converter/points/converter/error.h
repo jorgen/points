@@ -18,6 +18,8 @@
 #ifndef POINTS_CONVERTER_ERROR_H
 #define POINTS_CONVERTER_ERROR_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

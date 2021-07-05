@@ -43,7 +43,7 @@ public:
   threaded_event_loop_t()
     : loop(nullptr)
     , add_pipe([this] (std::vector<std::function<uv_handle_t *(uv_loop_t*)>> &&events) { add_event_pipe_cb(std::move(events)); })
-    , run_in_loop([this](std::vector<std::function<void()>> &&events) { for (auto &to_run : events) to_run(); })
+    , run_in_loop([](std::vector<std::function<void()>> &&events) { for (auto &to_run : events) to_run(); })
   {
     to_close_handles.reserve(16);
     barrier_t barrier;
@@ -80,7 +80,7 @@ public:
     barrier.wait.wait(lock);
   }
 
-  threaded_event_loop_t::~threaded_event_loop_t()
+  ~threaded_event_loop_t()
   {
     uv_async_send(&async_stop);
     thread->join();

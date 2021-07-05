@@ -71,7 +71,7 @@ inline void internal_header_initialize(internal_header_t &header)
 
   morton::morton_init_min(header.morton_min);
   morton::morton_init_max(header.morton_max);
-  lod_span = 0;
+  header.lod_span = 0;
 }
 
 struct points_t

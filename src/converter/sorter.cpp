@@ -51,7 +51,7 @@ struct morton_sort_t
 template <typename T>
 void convert_and_sort(buffer_t &buffer, internal_header_t &header)
 {
-  using uT = std::make_unsigned<T>::type;
+  using uT = typename std::make_unsigned<T>::type;
   T *data = (T *)buffer.data;
   T *end = data + (header.point_count * 3);
   if (std::isnan(header.min[0]) || std::isnan(header.min[1]) || std::isnan(header.min[2]))

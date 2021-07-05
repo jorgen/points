@@ -2,6 +2,7 @@
 
 #include <fmt/printf.h>
 
+#define CMRC_NO_EXCEPTIONS 1
 #include <cmrc/cmrc.hpp>
 
 #pragma warning(push)
@@ -217,9 +218,9 @@ void gl_aabb_handler::draw(points::render::draw_group_t &group)
 }
 
 gl_flat_points_handler::gl_flat_points_handler()
-  : is_initialized(false)
+  : vao(0)
   , program(0)
-  , vao(0)
+  , is_initialized(false)
 {
 }
 
@@ -345,7 +346,7 @@ void gl_skybox_handler::draw(points::render::draw_group_t &group)
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::aabb_mesh_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points::render::skybox_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
     case points::render::skybox_bm_vertex: {
@@ -744,7 +745,7 @@ void gl_renderer::modify_texture(struct points::render::buffer_t *buffer, void *
   GLenum bind_target;
   GLenum image_target;
 
-  if (gl_texture->format == points::render::texture_type_2d)
+  if (gl_texture->format == points::render::format_t(points::render::texture_type_2d))
   {
     if (buffer_texture_type != points::render::texture_type_2d)
     {

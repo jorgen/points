@@ -88,27 +88,31 @@ void tree_initialize(tree_t &tree, int node_limit, points_t &&points)
 //}
 //
 
+
 static void sub_tree_alloc_children(tree_t &tree, int level, int skip, int count)
 {
-  tree.nodes[level].insert(tree.nodes[level].begin() + skip, count, uint8_t(0));
-  tree.skips[level].insert(tree.skips[level].begin() + skip, count, uint16_t(0));
-  tree.data[level].insert(tree.data[level].begin() + skip, count, {});
+  for (int i = 0; i < count; i++)
+  {
+    tree.nodes[level].emplace(tree.nodes[level].begin() + skip);
+    tree.skips[level].emplace(tree.skips[level].begin() + skip);
+    tree.data[level].emplace(tree.data[level].begin() + skip);
+  }
 }
 
 static void sub_tree_increase_skips(tree_t &tree, int level, int skip, int count)
 {
   auto &skips = tree.skips[level];
   auto skips_size = skips.size();
-  for (int i = skip + 1; i < skips_size; i++)
+  for (int i = skip + 1; i < int(skips_size); i++)
   {
     skips[i] += count;
   }
 }
 
-static void sub_tree_insert_points_handle_children(tree_t &tree, int level, int skip, std::vector<points_t> &points)
-{
-
-}
+//static void sub_tree_insert_points_handle_children(tree_t &tree, int level, int skip, std::vector<points_t> &points)
+//{
+//
+//}
 
 static int sub_tree_count_skips(uint8_t node, int index)
 {
@@ -118,12 +122,13 @@ static int sub_tree_count_skips(uint8_t node, int index)
     if (node & (1 << i))
       node_skips++;
   }
+  return 0;
 }
-
 
 static void sub_tree_insert_points(tree_t &tree, int level, int skip, points_t &&points)
 {
   int node = tree.nodes[level][skip];
+  (void)node;
   int lod = morton::morton_tree_lod_to_lod(tree.level, level);
   auto child_mask = morton::morton_get_child_mask(lod, points.header.morton_max);
   assert(child_mask < 8);
@@ -154,7 +159,7 @@ static void sub_tree_insert_points(tree_t &tree, int level, int skip, points_t &
   {
     std::vector<points_t> children_data[8];
     int children_count = 0;
-    int child_skip = tree.skips[level][skip];
+    //int child_skip = tree.skips[level][skip];
     sub_tree_alloc_children(tree, level + 1, tree.skips[level][skip], children_count);
     sub_tree_increase_skips(tree, level, skip, children_count);
     for (int i= 0; i < 8; i++)
@@ -168,7 +173,7 @@ static void sub_tree_insert_points(tree_t &tree, int level, int skip, points_t &
         sub_tree_insert_points(tree, level + 1, tree.skips[level][skip] + i, std::move(child_points));
       }
     }
-  } 
+  }
 }
 
 void tree_add_points(tree_t &tree, points_t &&points)

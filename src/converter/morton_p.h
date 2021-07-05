@@ -115,9 +115,6 @@ inline void encode(const double (&pos)[3], const double (&scale)[3], morton64_t 
 
 inline void decode(const morton64_t &morton, uint64_t (&pos)[3])
 {
-  constexpr uint32_t mask21 = (uint32_t(1) << 21) - 1;
-  constexpr uint32_t mask22 = (uint32_t(1) << 22) - 1;
-
   uint32_t lower[3];
   uint32_t mid[3];
   uint32_t high[3];

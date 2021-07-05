@@ -75,7 +75,7 @@ void get_data_worker_t::work()
   if (local_error)
     error.reset(local_error);
   attribute_buffers_adjust_buffers_to_size(input_file.header.attributes.attributes, buffers, points_read);
-  if (input_file.user_ptr && (input_file.done || (error && error->code) && convert_callbacks.destroy_user_ptr))
+  if ((input_file.user_ptr && (input_file.done || (error && error->code)) && convert_callbacks.destroy_user_ptr))
   {
     convert_callbacks.destroy_user_ptr(input_file.user_ptr); 
     input_file.user_ptr = nullptr;
@@ -126,7 +126,7 @@ void point_reader_t::add_files(const std::vector<std::string> &files)
 static int get_next_nonactive_input_file(const std::vector<std::unique_ptr<input_file_t>> &input_files)
 {
   int i;
-  for (i = 0; i < input_files.size(); i++)
+  for (i = 0; i < int(input_files.size()); i++)
   {
     if (!input_files[i]->active_worker)
       return i;
@@ -212,7 +212,7 @@ void point_reader_t::about_to_block()
   for (uint32_t i = active_converters; i < max_converters; i++)
   {
     auto nonactive_index = get_next_nonactive_input_file(input_files);
-    if (nonactive_index == input_files.size())
+    if (nonactive_index == int(input_files.size()))
       break;
     auto &next = input_files[nonactive_index];
     next->active_worker.reset(new get_data_worker_t(convert_callbacks, *next, finished_get_workers));

@@ -20,7 +20,9 @@ struct thread_count_env_setter_t
 #if (WIN32)
     _putenv(fmt::format("UV_THREADPOOL_SIZE={}", count.c_str()).c_str()); 
 #else
-    putenv(fmt::format("UV_THREADPOOL_SIZE={}", count.c_str()).c_str()); 
+    std::string env_name = fmt::format("UV_THREADPOOL_SIZE={}", count.c_str());
+    char *env_name_c = &env_name[0];
+    putenv(env_name_c);
 #endif
   }
 };
@@ -33,6 +35,7 @@ processor_t::processor_t(converter_t &converter)
   , sorter(sorted_points, file_errors, converter.convert_callbacks)
   , tree_initialized(false)
 {
+  (void) this->converter;
 }
 
 void processor_t::add_files(const std::vector<std::string> &files)
@@ -52,7 +55,7 @@ void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_eve
     i++;
   }
 
-  for (; i < sorted_points_event.size(); i++)
+  for (; i < int(sorted_points_event.size()); i++)
   {
     tree_add_points(tree, std::move(sorted_points_event[i]));
   }

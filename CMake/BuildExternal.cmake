@@ -39,7 +39,7 @@ function(BuildExternalCMake name version source_dir cmake_args build_targets)
     CMAKE_GENERATOR ${CMAKE_GENERATOR}
     CMAKE_GENERATOR_PLATFORM ${CMAKE_GENERATOR_PLATFORM}
     CMAKE_ARGS ${cmake_arg_complete}
-    BUILD_COMMAND cmake --build . --config $<$<NOT:$<CONFIG:Debug>>:Release>$<$<CONFIG:Debug>:Debug>
+    BUILD_COMMAND ${CMAKE_COMMAND} --build . --config $<$<NOT:$<CONFIG:Debug>>:Release>$<$<CONFIG:Debug>:Debug>
     BUILD_BYPRODUCTS ${build_byproducts})
 endfunction()
  
