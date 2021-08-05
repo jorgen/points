@@ -51,6 +51,7 @@ private:
   event_pipe_t<file_error_t> file_errors;
   point_reader_t sorter;
 
+  tree_global_state_t tree_global_state;
   tree_t tree;
   bool tree_initialized;
 

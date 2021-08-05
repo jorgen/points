@@ -26,6 +26,23 @@ bool operator==(const morton_t<T> &a, const morton_t<T> &b)
 }
 
 template<typename T>
+bool operator<(const morton_t<T> &a, const morton_t<T> &b)
+{
+  if (a.data[2] == b.data[2])
+  {
+    if (a.data[1] == b.data[1])
+    {
+      return a.data[0] < b.data[0];
+    }
+    else
+    {
+      return a.data[1] < b.data[1];
+    }
+  }
+  return a.data[2] < b.data[2];
+}
+
+template<typename T>
 void morton_init_min(morton_t<T> &a)
 {
   a.data[0] = 0;
@@ -53,6 +70,10 @@ inline void encode(const uint32_t (&pos)[3], uint32_t (&morton)[3])
   uint64_t high = libmorton::morton3D_64_encode(pos[0] >> 22, pos[1] >> 21, pos[2] >> 21);
   memcpy(morton, &low, sizeof(low));
   morton[2] = uint32_t(high);
+}
+inline void encode(const uint32_t (&pos)[3], morton_t<uint32_t> &morton)
+{
+  encode(pos, morton.data);
 }
 
 inline void decode(uint32_t *morton)
@@ -104,12 +125,15 @@ inline void encode(const uint64_t (&pos)[3], morton64_t &morton)
   morton.data[1] = libmorton::morton3D_64_encode(x_mid, y_mid, z_mid);
   morton.data[2] = libmorton::morton3D_64_encode(x_high, y_high, z_high);
 }
-inline void encode(const double (&pos)[3], const double (&scale)[3], morton64_t &morton)
+
+template<typename T>
+inline void encode(const double (&pos)[3], const double (&scale)[3], morton_t<T> &morton)
 {
-  uint64_t ipos[3];
-  ipos[0] = uint64_t(pos[0] * scale[0]);
-  ipos[1] = uint64_t(pos[1] * scale[1]);
-  ipos[2] = uint64_t(pos[2] * scale[2]);
+  using uint_t = std::remove_reference<decltype(morton.data[0])>::type;
+  uint_t ipos[3];
+  ipos[0] = uint_t(pos[0] / scale[0]);
+  ipos[1] = uint_t(pos[1] / scale[1]);
+  ipos[2] = uint_t(pos[2] / scale[2]);
   encode(ipos, morton);
 }
 
@@ -283,12 +307,43 @@ inline uint8_t morton_get_child_mask(int lod, const morton64_t &morton)
     uint32_t ret = (morton.data[1] >> index) & 0x7;
     if (index == 62)
     {
-      ret |= (morton.data[1] & 0x1) << 2;
+      ret |= (morton.data[2] & 0x1) << 2;
     }
     return uint8_t(ret);
   }
   index -= 64 * 2;
   return uint8_t((morton.data[2] >> index) & 0x7);
+}
+
+inline void morton_set_child_mask(int lod, uint8_t mask, morton64_t &morton)
+{
+  int index = lod * 3;
+  if (index < 64)
+  {
+    morton.data[0] &= ~(uint64_t(0x7) << index);
+    morton.data[0] |= uint64_t(mask) << index;
+    if (index == 63)
+    {
+      morton.data[1] &= ~uint64_t(0x3);
+      morton.data[1] |= uint64_t(mask) >> 1;
+    }
+    return;
+  }
+  else if (index < 64 * 2)
+  {
+    index -= 64;
+    morton.data[1] &= ~(uint64_t(0x7) << index);
+    morton.data[1] |= uint64_t(mask) << index;
+    if (index == 62)
+    {
+      morton.data[2] &= ~uint64_t(0x1);
+      morton.data[2] |= uint64_t(mask>>2);
+    }
+    return;
+  }
+  index -= 64 * 2;
+  morton.data[2] &= ~(uint64_t(0x7) <<  index);
+  morton.data[2] |= uint64_t(mask) << index;
 }
 
 inline morton64_t morton_mask_create(int lod)

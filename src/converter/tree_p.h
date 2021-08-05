@@ -31,6 +31,47 @@ struct points_data_t
 {
   uint64_t point_count = 0;
   std::vector<points_t> data;
+  morton::morton64_t morton_min;
+  morton::morton64_t morton_max;
+  int lod_span;
+};
+
+static void points_data_initialize(points_data_t &to_init, points_t &&p)
+{
+  to_init.morton_max = p.header.morton_max;
+  to_init.morton_min = p.header.morton_min;
+  to_init.lod_span = p.header.lod_span;
+  to_init.point_count = p.header.point_count;
+  to_init.data.emplace_back(std::move(p));
+}
+
+static void points_data_add(points_data_t &dest, points_data_t &&to_add)
+{
+  if (to_add.morton_min < dest.morton_min)
+    dest.morton_min = to_add.morton_min;
+  if (dest.morton_max < to_add.morton_max)
+    dest.morton_max = to_add.morton_max;
+  dest.lod_span = morton::morton_lod(dest.morton_min, dest.morton_max);
+  for (auto &p : to_add.data)
+    dest.data.emplace_back(std::move(p));
+  dest.point_count += to_add.point_count;
+}
+
+static void points_data_add(points_data_t &dest, points_t &&to_add)
+{
+  if (to_add.header.morton_min < dest.morton_min)
+    dest.morton_min = to_add.header.morton_min;
+  if (dest.morton_max < to_add.header.morton_max)
+    dest.morton_max = to_add.header.morton_max;
+  dest.lod_span = morton::morton_lod(dest.morton_min, dest.morton_max);
+  dest.point_count += to_add.header.point_count;
+  dest.data.emplace_back(std::move(to_add));
+}
+
+struct tree_global_state_t
+{
+  uint32_t node_limit;
+  double tree_scale[3];
 };
 
 struct tree_t
@@ -41,12 +82,11 @@ struct tree_t
   std::vector<int16_t> skips[5];
   std::vector<points_data_t> data[5];
   std::vector<tree_t> sub_trees;
-  uint32_t node_limit;
   uint8_t level;
 };
 
-void tree_initialize(tree_t &tree, int node_limit, points_t &&points);
-void tree_add_points(tree_t &tree, points_t &&points);
+void tree_initialize(const tree_global_state_t &state, tree_t &tree, points_t &&points);
+void tree_add_points(const tree_global_state_t &state, tree_t &tree, points_t &&points);
 }
 }
 
