@@ -93,12 +93,14 @@ struct converter_file_convert_callbacks_t
 };
 
 typedef void (*converter_progress_callback_t)(float progress);
+typedef void (*converter_warning_callback_t)(const char *message);
 typedef void (*converter_error_callback_t)(const struct error_t *error);
 typedef void (*converter_done_callback_t)();
 
 struct converter_runtime_callbacks_t
 {
   converter_progress_callback_t progress;
+  converter_warning_callback_t warning;
   converter_error_callback_t error;
   converter_done_callback_t done;
 };

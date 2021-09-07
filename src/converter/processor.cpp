@@ -32,15 +32,57 @@ processor_t::processor_t(converter_t &converter)
   : converter(converter)
   , sorted_points(event_loop, [this](std::vector<points::converter::points_t> &&events) { this->handle_sorted_points(std::move(events)); })
   , file_errors(event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
-  , sorter(sorted_points, file_errors, converter.convert_callbacks)
+  , sorter(converter.tree_state, sorted_points, file_errors, converter.convert_callbacks)
   , tree_initialized(false)
+  , tree_state_initialized(false)
 {
   (void) this->converter;
 }
 
 void processor_t::add_files(const std::vector<std::string> &files)
 {
-  sorter.add_files(files);
+  if (!tree_state_initialized)
+  {
+    if (std::isnan(converter.tree_state.scale[0]) || std::isnan(converter.tree_state.scale[1]) || std::isnan(converter.tree_state.scale[2]))
+    {
+      if (converter.convert_callbacks.init && files.size())
+      {
+        internal_header_t header;
+        error_t *local_error = nullptr;
+        void *user_ptr;
+        converter.convert_callbacks.init(files[0].c_str(), files[0].size(), &header, &user_ptr, &local_error);
+        if (local_error)
+        {
+          file_error_t file_error;
+          file_error.filename = files[0];
+          file_error.error = *local_error;
+          file_errors.post_event(std::move(file_error));
+        }
+        if (converter.convert_callbacks.destroy_user_ptr)
+        {
+          converter.convert_callbacks.destroy_user_ptr(user_ptr);
+          user_ptr = nullptr;
+        }
+        static_assert(std::is_same<decltype(converter.tree_state.scale), decltype(header.scale)>::value, "Scale types are not equal size");
+        memcpy(converter.tree_state.scale, header.scale, sizeof(header.scale));
+      }
+    }
+    if (std::isnan(converter.tree_state.scale[0]) || std::isnan(converter.tree_state.scale[1]) || std::isnan(converter.tree_state.scale[2]))
+    {
+      converter.tree_state.scale[0] = 0.01;
+      converter.tree_state.scale[1] = 0.01;
+      converter.tree_state.scale[2] = 0.01;
+      if (converter.runtime_callbacks.warning)
+        converter.runtime_callbacks.warning("Failed to initialize tree scale factor, falling back to 0.001");
+    }
+    if (std::isnan(converter.tree_state.offset[0]) || std::isnan(converter.tree_state.offset[1]) || std::isnan(converter.tree_state.offset[2]))
+    {
+      converter.tree_state.offset[0] = -double(uint32_t(1) << 31);
+      converter.tree_state.offset[1] = -double(uint32_t(1) << 31);
+      converter.tree_state.offset[2] = -double(uint32_t(1) << 31);
+    }
+    tree_state_initialized = true;
+  }
 }
 
 void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_event)
@@ -50,17 +92,14 @@ void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_eve
   int i = 0;
   if (!tree_initialized)
   {
-    tree_global_state.node_limit = 1000;
-    static_assert(std::is_same<decltype(tree_global_state.tree_scale), decltype(sorted_points_event[0].header.scale)>::value, "Scale types are not equal size");
-    memcpy(tree_global_state.tree_scale, sorted_points_event[0].header.scale, sizeof(tree_global_state.tree_scale));
-    tree_initialize(tree_global_state, tree, std::move(sorted_points_event[0]));
+    tree_initialize(converter.tree_state, tree, std::move(sorted_points_event[0]));
     tree_initialized = true;
     i++;
   }
 
   for (; i < int(sorted_points_event.size()); i++)
   {
-    tree_add_points(tree_global_state, tree, std::move(sorted_points_event[i]));
+    tree_add_points(converter.tree_state, tree, std::move(sorted_points_event[i]));
   }
 }
 

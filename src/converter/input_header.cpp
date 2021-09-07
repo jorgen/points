@@ -47,23 +47,23 @@ const char *header_get_name(header_t *h)
 
 }
 
-void header_p_calculate_morton_aabb(internal_header_t &header)
+void header_p_set_morton_aabb(const tree_global_state_t &tree_state, internal_header_t &header)
 {
   double inv_scale[3];
-  inv_scale[0] = 1 / header.scale[0];
-  inv_scale[1] = 1 / header.scale[1];
-  inv_scale[2] = 1 / header.scale[2];
+  inv_scale[0] = 1 / tree_state.scale[0];
+  inv_scale[1] = 1 / tree_state.scale[1];
+  inv_scale[2] = 1 / tree_state.scale[2];
 
   uint64_t min[3];
-  min[0] = uint64_t((header.min[0] + header.offset[0]) * inv_scale[0]);
-  min[1] = uint64_t((header.min[1] + header.offset[1]) * inv_scale[1]);
-  min[2] = uint64_t((header.min[2] + header.offset[2]) * inv_scale[2]);
+  min[0] = uint64_t((header.min[0] + tree_state.offset[0]) * inv_scale[0]);
+  min[1] = uint64_t((header.min[1] + tree_state.offset[1]) * inv_scale[1]);
+  min[2] = uint64_t((header.min[2] + tree_state.offset[2]) * inv_scale[2]);
   morton::encode(min, header.morton_min);
 
   uint64_t max[3];
-  max[0] = uint64_t((header.max[0] + header.offset[0]) * inv_scale[0]);
-  max[1] = uint64_t((header.max[1] + header.offset[1]) * inv_scale[1]);
-  max[2] = uint64_t((header.max[2] + header.offset[2]) * inv_scale[2]);
+  max[0] = uint64_t((header.max[0] + tree_state.offset[0]) * inv_scale[0]);
+  max[1] = uint64_t((header.max[1] + tree_state.offset[1]) * inv_scale[1]);
+  max[2] = uint64_t((header.max[2] + tree_state.offset[2]) * inv_scale[2]);
   morton::encode(max, header.morton_max);
 
   header.lod_span = morton::morton_lod(header.morton_min, header.morton_max);
@@ -94,6 +94,7 @@ void header_copy(const internal_header_t &source, internal_header_t &target)
   memcpy(&target.morton_max, &source.morton_max, sizeof(target.morton_max));
   attributes_copy(source.attributes, target.attributes);
 }
+
 void attribute_buffers_initialize(const std::vector<attribute_t> &attributes, attribute_buffers_t &buffers, uint64_t point_count)
 {
   buffers.data.reserve(attributes.size());

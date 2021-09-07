@@ -88,8 +88,9 @@ void get_data_worker_t::after_work(completion_t completion)
   done_list.push_back(this);
 }
   
-sort_worker_t::sort_worker_t(const internal_header_t &header, attribute_buffers_t &&buffers, uint64_t point_count, std::vector<sort_worker_t *> &done_list)
-  : done_list(done_list)
+sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, const internal_header_t &header, attribute_buffers_t &&buffers, uint64_t point_count, std::vector<sort_worker_t *> &done_list)
+  : tree_state(tree_state)
+  , done_list(done_list)
 {
   header_copy(header, points.header);
   points.header.point_count = point_count;
@@ -98,7 +99,7 @@ sort_worker_t::sort_worker_t(const internal_header_t &header, attribute_buffers_
 
 void sort_worker_t::work()
 {
-  sort_points(points); 
+  sort_points(tree_state, points); 
 }
 
 void sort_worker_t::after_work(completion_t completion)
@@ -107,14 +108,16 @@ void sort_worker_t::after_work(completion_t completion)
   done_list.push_back(this);
 }
 
-point_reader_t::point_reader_t(event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<file_error_t> &file_errors, converter_file_convert_callbacks_t &convert_callbacks)
-  : sorted_points_pipe(sorted_points_pipe)
+point_reader_t::point_reader_t(const tree_global_state_t &tree_state, event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<file_error_t> &file_errors, converter_file_convert_callbacks_t &convert_callbacks)
+  : tree_state(tree_state)
+  , sorted_points_pipe(sorted_points_pipe)
   , file_errors(file_errors)
   , new_files_pipe(event_loop, [this](std::vector<std::vector<std::string>> &&new_files) { handle_new_files(std::move(new_files));})
   , convert_callbacks(convert_callbacks)
   , active_converters(0)
   , max_converters(4)
 {
+  input_files.reserve(100);
   event_loop.add_about_to_block_listener(this);
 }
 
@@ -147,8 +150,7 @@ void point_reader_t::about_to_block()
       auto &batch = *it;
       if (batch->completed == batch->get_headers.size())
       {
-        input_files.reserve(input_files.capacity() + batch->get_headers.size());
-        files_inserted += uint32_t(input_files.capacity());
+        files_inserted += uint32_t(batch->get_headers.size());
         for (auto &header : batch->get_headers)
         {
           if (header.error && header.error->code)
@@ -190,7 +192,7 @@ void point_reader_t::about_to_block()
     }
     else
     {
-      sort_workers.emplace_back(new sort_worker_t(finished->input_file.header, std::move(finished->buffers), finished->points_read, finished_sort_workers));
+      sort_workers.emplace_back(new sort_worker_t(tree_state, finished->input_file.header, std::move(finished->buffers), finished->points_read, finished_sort_workers));
       sort_workers.back()->enqueue(event_loop);
       if (finished->input_file.done)
         done_input_files.push_back(&finished->input_file);

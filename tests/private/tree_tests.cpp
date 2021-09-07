@@ -7,7 +7,7 @@
 
 namespace {
 
-static points::converter::points_t create_points(uint64_t min, uint64_t max, int data_offset)
+static points::converter::points_t create_points(const points::converter::tree_global_state_t &tree_state, uint64_t min, uint64_t max, int data_offset)
 {
   points::converter::points_t points;
   points.header.morton_min.data[0] = min;
@@ -17,16 +17,16 @@ static points::converter::points_t create_points(uint64_t min, uint64_t max, int
   points.header.morton_max.data[1] = 0;
   points.header.morton_max.data[2] = 0;
   points.header.point_count = 256;
-  points.header.scale[0] = 0.2;
-  points.header.scale[1] = 0.2;
-  points.header.scale[2] = 0.2;
+  points.header.scale[0] = tree_state.scale[0];
+  points.header.scale[1] = tree_state.scale[1];
+  points.header.scale[2] = tree_state.scale[2];
   points.header.offset[0] = 0.0;
   points.header.offset[1] = 0.0;
   points.header.offset[2] = 0.0;
   points::converter::morton::decode(points.header.morton_min, points.header.scale, points.header.min);
   points::converter::morton::decode(points.header.morton_max, points.header.scale, points.header.max);
   points::converter::header_add_attribute(&points.header, POINTS_ATTRIBUTE_XYZ, sizeof(POINTS_ATTRIBUTE_XYZ), points::converter::format_i32, points::converter::components_3);
-  points::converter::header_p_calculate_morton_aabb(points.header);
+  points::converter::header_p_set_morton_aabb(tree_state, points.header);
 
   points.buffers.data.emplace_back(new uint8_t[256 * 3 * 4]);
   auto databuffer = points.buffers.data.back().get();
@@ -44,11 +44,16 @@ static points::converter::points_t create_points(uint64_t min, uint64_t max, int
   return points;
 }
   
-static points::converter::tree_global_state_t create_tree_global_state(const points::converter::points_t &points, int node_limit)
+static points::converter::tree_global_state_t create_tree_global_state(int node_limit, double scale)
 {
   points::converter::tree_global_state_t ret;
   ret.node_limit = node_limit;
-  memcpy(ret.tree_scale, points.header.scale, sizeof(ret.tree_scale));
+  ret.scale[0] = scale;
+  ret.scale[1] = scale;
+  ret.scale[2] = scale;
+  ret.offset[0] = 100000.0;
+  ret.offset[1] = 100000.0;
+  ret.offset[2] = 100000.0;
   return ret;
 }
 
@@ -56,10 +61,10 @@ static points::converter::tree_global_state_t create_tree_global_state(const poi
 TEST_CASE("Initialize Empty tree", "[converter, tree_t]")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
-  auto points = create_points(0, morton_max, 0);
+  auto tree_gs = create_tree_global_state(1000, 0.001);
+  auto points = create_points(tree_gs, 0, morton_max, 0);
   void *buffer_ptr = points.buffers.buffers.back().data;
   
-  auto tree_gs = create_tree_global_state(points, 1000);
   points::converter::tree_t tree;
   points::converter::tree_initialize(tree_gs, tree, std::move(points));
   REQUIRE(tree.morton_max.data[0] == morton_max);
@@ -76,12 +81,12 @@ TEST_CASE("Initialize Empty tree", "[converter, tree_t]")
 TEST_CASE("Add inclusion", "[converter, tree_t]")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
-  auto points = create_points(0, morton_max, 0);
-  auto tree_gs = create_tree_global_state(points, 1000);
+  auto tree_gs = create_tree_global_state(1000, 0.001);
+  auto points = create_points(tree_gs, 0, morton_max, 0);
   points::converter::tree_t tree;
   points::converter::tree_initialize(tree_gs, tree, std::move(points));
 
-  auto second_points = create_points(0, morton_max, 256);
+  auto second_points = create_points(tree_gs, 0, morton_max, 256);
   void *buffer_ptr = second_points.buffers.buffers.back().data;
 
   points::converter::tree_add_points(tree_gs, tree, std::move(second_points));
@@ -101,13 +106,13 @@ TEST_CASE("Add inclusion", "[converter, tree_t]")
 
 TEST_CASE("Add_new_node", "[converter, tree_t]")
 {
-  uint64_t morton_max = ((uint64_t(1) << (3 * 3)) - 1);
-  auto points = create_points(0, morton_max, 0);
-  auto tree_gs = create_tree_global_state(points, 256);
+  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
+  auto tree_gs = create_tree_global_state(256, 0.001);
+  auto points = create_points(tree_gs, 0, morton_max, 0);
   points::converter::tree_t tree;
   points::converter::tree_initialize(tree_gs, tree, std::move(points));
 
-  auto second_points = create_points(0, morton_max, 256);
+  auto second_points = create_points(tree_gs, 0, morton_max, 256);
   void *buffer_ptr = second_points.buffers.buffers.back().data;
   points::converter::tree_add_points(tree_gs, tree, std::move(second_points));
 

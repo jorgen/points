@@ -80,5 +80,11 @@ struct points_t
   attribute_buffers_t buffers;
 };
 
+struct tree_global_state_t
+{
+  uint32_t node_limit = 100000;
+  double scale[3];
+  double offset[3];
+};
 } // namespace converter
 } // namespace points

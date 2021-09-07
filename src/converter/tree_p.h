@@ -33,10 +33,10 @@ struct points_data_t
   std::vector<points_t> data;
   morton::morton64_t morton_min;
   morton::morton64_t morton_max;
-  int lod_span;
+  int lod_span = 0;
 };
 
-static void points_data_initialize(points_data_t &to_init, points_t &&p)
+inline void points_data_initialize(points_data_t &to_init, points_t &&p)
 {
   to_init.morton_max = p.header.morton_max;
   to_init.morton_min = p.header.morton_min;
@@ -45,8 +45,13 @@ static void points_data_initialize(points_data_t &to_init, points_t &&p)
   to_init.data.emplace_back(std::move(p));
 }
 
-static void points_data_add(points_data_t &dest, points_data_t &&to_add)
+inline void points_data_add(points_data_t &dest, points_data_t &&to_add)
 {
+  if (dest.point_count == 0)
+  {
+    dest = std::move(to_add);
+    return;
+  }
   if (to_add.morton_min < dest.morton_min)
     dest.morton_min = to_add.morton_min;
   if (dest.morton_max < to_add.morton_max)
@@ -57,22 +62,26 @@ static void points_data_add(points_data_t &dest, points_data_t &&to_add)
   dest.point_count += to_add.point_count;
 }
 
-static void points_data_add(points_data_t &dest, points_t &&to_add)
+inline void points_data_adjust_to_points(points_data_t &dest, const points_t &adjust_to)
 {
-  if (to_add.header.morton_min < dest.morton_min)
-    dest.morton_min = to_add.header.morton_min;
-  if (dest.morton_max < to_add.header.morton_max)
-    dest.morton_max = to_add.header.morton_max;
+  if (adjust_to.header.morton_min < dest.morton_min)
+    dest.morton_min = adjust_to.header.morton_min;
+  if (dest.morton_max < adjust_to.header.morton_max)
+    dest.morton_max = adjust_to.header.morton_max;
   dest.lod_span = morton::morton_lod(dest.morton_min, dest.morton_max);
-  dest.point_count += to_add.header.point_count;
-  dest.data.emplace_back(std::move(to_add));
+  dest.point_count += adjust_to.header.point_count;
 }
 
-struct tree_global_state_t
+inline void points_data_add(points_data_t &dest, points_t &&to_add)
 {
-  uint32_t node_limit;
-  double tree_scale[3];
-};
+  if (dest.point_count == 0)
+  {
+    points_data_initialize(dest, std::move(to_add));
+    return;
+  }
+  points_data_adjust_to_points(dest, to_add);
+  dest.data.emplace_back(std::move(to_add));
+}
 
 struct tree_t
 {

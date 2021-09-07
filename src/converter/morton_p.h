@@ -348,7 +348,7 @@ inline void morton_set_child_mask(int lod, uint8_t mask, morton64_t &morton)
 
 inline morton64_t morton_mask_create(int lod)
 {
-  int index = lod * 3 + 3;
+  int index = lod * 3;
   morton64_t a;
   memset(&a, 0, sizeof(a));
   if (index > 63)

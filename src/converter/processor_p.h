@@ -51,9 +51,9 @@ private:
   event_pipe_t<file_error_t> file_errors;
   point_reader_t sorter;
 
-  tree_global_state_t tree_global_state;
   tree_t tree;
   bool tree_initialized;
+  bool tree_state_initialized;
 
   void handle_sorted_points(std::vector<points_t> &&sorted_points);
   void handle_file_errors(std::vector<file_error_t> &&errors);

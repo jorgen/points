@@ -38,8 +38,15 @@ struct converter_t
     , convert_callbacks(laszip_callbacks())
     , runtime_callbacks{}
   {
+    tree_state.scale[0] = std::nan("1");
+    tree_state.scale[1] = std::nan("1");
+    tree_state.scale[2] = std::nan("1");
+    tree_state.offset[0] = std::nan("1");
+    tree_state.offset[1] = std::nan("1");
+    tree_state.offset[2] = std::nan("1");
   }
   std::string cache_filename;
+  tree_global_state_t tree_state;
   processor_t processor;
   converter_file_convert_callbacks_t convert_callbacks;
   converter_runtime_callbacks_t runtime_callbacks;

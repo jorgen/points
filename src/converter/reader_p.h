@@ -81,10 +81,11 @@ public:
 class sort_worker_t : public worker_t
 {
 public:
-  sort_worker_t(const internal_header_t &header, attribute_buffers_t &&buffers, uint64_t point_count, std::vector<sort_worker_t *> &done_list);
+  sort_worker_t(const tree_global_state_t &tree_state, const internal_header_t &header, attribute_buffers_t &&buffers, uint64_t point_count, std::vector<sort_worker_t *> &done_list);
   void work() override;
   void after_work(completion_t completion) override;
 
+  const tree_global_state_t &tree_state;
   std::vector<sort_worker_t *> &done_list;
   points_t points;
 };
@@ -108,7 +109,7 @@ struct input_file_t
 class point_reader_t : public about_to_block_t
 {
 public:
-  point_reader_t(event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<file_error_t> &file_errors, converter_file_convert_callbacks_t &convert_callbacks);
+  point_reader_t(const tree_global_state_t &tree_state, event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<file_error_t> &file_errors, converter_file_convert_callbacks_t &convert_callbacks);
   void add_files(const std::vector<std::string> &files);
   // void add_data(const void *data, size_t data_size);
 
@@ -116,6 +117,8 @@ public:
 
 private:
   void handle_new_files(std::vector<std::vector<std::string>> &&new_files);
+
+  const tree_global_state_t &tree_state;
 
   threaded_event_loop_t event_loop;
   event_pipe_t<points_t> &sorted_points_pipe;
@@ -133,7 +136,6 @@ private:
 
   std::vector<std::unique_ptr<sort_worker_t>> sort_workers;
   std::vector<sort_worker_t *> finished_sort_workers;
-
 
   uint32_t active_converters;
   uint32_t max_converters;
