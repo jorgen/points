@@ -55,20 +55,33 @@ void find_offsets(const tree_global_state_t &state, const points_t &points, cons
   memset(offsets, 0, sizeof(offsets));
   for (int i = 0; i < 7; i++)
   {
-    double pos[3];
-    morton::decode(search_offsets[i + 1], state.scale, pos);
-    pos[0] -= state.offset[0];
-    pos[1] -= state.offset[1];
-    pos[2] -= state.offset[2];
-    morton::encode(pos, points.header.scale, morton_limit);
-    morton_codes = std::lower_bound(morton_codes, morton_end, morton_limit);
-    offsets[i] = uint32_t(morton_codes - morton_begin);
+    if (morton_codes == morton_end)
+    {
+      offsets[i] = uint32_t(morton_end - morton_begin);
+    }
+    else
+    {
+      double pos[3];
+      morton::decode(search_offsets[i + 1], state.scale, pos);
+      pos[0] -= state.offset[0];
+      pos[1] -= state.offset[1];
+      pos[2] -= state.offset[2];
+      morton::encode(pos, points.header.scale, morton_limit);
+      morton_codes = std::lower_bound(morton_codes, morton_end, morton_limit);
+      offsets[i] = uint32_t(morton_codes - morton_begin);
+    }
   }
   offsets[7] = uint32_t(morton_end - morton_begin);
 }
 
 void point_buffer_get_child_offsets(const tree_global_state_t &state, const points_t &points, int lod, uint32_t (&offsets)[8])
 {
+  uint64_t zero[3];
+  zero[0] = uint64_t(state.offset[0] / state.scale[0]);
+  zero[1] = uint64_t(state.offset[1] / state.scale[1]);
+  zero[2] = uint64_t(state.offset[2] / state.scale[2]);
+  morton::morton64_t morton_code;
+  morton::encode(zero, morton_code);
   auto mask = morton::morton_negate(morton::morton_mask_create(lod));
   morton::morton64_t morton_indices[8];
   memset(morton_indices, 0, sizeof(morton_indices));

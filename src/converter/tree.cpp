@@ -194,27 +194,27 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_t &tre
       points_data_add(tree.data[level][skip], std::move(points));
       return;
     }
-    else if (lod > points.lod_span)
-    {
-      int node_skips = sub_tree_count_skips(node, child_mask);
-      sub_tree_increase_skips(tree, level, skip, 1);
-      tree.nodes[level][skip] |= uint8_t(1) << child_mask;
-      auto data = std::move(tree.data[level][skip]);
-      points_data_add(data, std::move(points));
-      if (level == 4)
-      {
-        tree.sub_trees.emplace(tree.sub_trees.begin() + skip + node_skips);
-        auto &sub_tree = tree.sub_trees[skip + node_skips];
-        tree_initialize_sub(tree, points.morton_min, sub_tree);
-        sub_tree_insert_points(state, sub_tree, 0, 0, std::move(data));
-      }
-      else
-      {
-        sub_tree_alloc_children(tree, level + 1, tree.skips[level][skip] + node_skips, 1);
-        sub_tree_insert_points(state, tree, level + 1, tree.skips[level][skip] + node_skips, std::move(data));
-      }
-      return;
-    }
+//    else if (lod > points.lod_span)
+//    {
+//      int node_skips = sub_tree_count_skips(node, child_mask);
+//      sub_tree_increase_skips(tree, level, skip, 1);
+//      tree.nodes[level][skip] |= uint8_t(1) << child_mask;
+//      auto data = std::move(tree.data[level][skip]);
+//      points_data_add(data, std::move(points));
+//      if (level == 4)
+//      {
+//        tree.sub_trees.emplace(tree.sub_trees.begin() + skip + node_skips);
+//        auto &sub_tree = tree.sub_trees[skip + node_skips];
+//        tree_initialize_sub(tree, points.morton_min, sub_tree);
+//        sub_tree_insert_points(state, sub_tree, 0, 0, std::move(data));
+//      }
+//      else
+//      {
+//        sub_tree_alloc_children(tree, level + 1, tree.skips[level][skip] + node_skips, 1);
+//        sub_tree_insert_points(state, tree, level + 1, tree.skips[level][skip] + node_skips, std::move(data));
+//      }
+//      return;
+//    }
   }
 
   {
