@@ -33,14 +33,14 @@ struct points_data_t
   std::vector<points_t> data;
   morton::morton64_t morton_min;
   morton::morton64_t morton_max;
-  int lod_span = 0;
+  int min_lod = 0;
 };
 
 inline void points_data_initialize(points_data_t &to_init, points_t &&p)
 {
   to_init.morton_max = p.header.morton_max;
   to_init.morton_min = p.header.morton_min;
-  to_init.lod_span = p.header.lod_span;
+  to_init.min_lod = p.header.lod_span;
   to_init.point_count = p.header.point_count;
   to_init.data.emplace_back(std::move(p));
 }
@@ -56,7 +56,7 @@ inline void points_data_add(points_data_t &dest, points_data_t &&to_add)
     dest.morton_min = to_add.morton_min;
   if (dest.morton_max < to_add.morton_max)
     dest.morton_max = to_add.morton_max;
-  dest.lod_span = morton::morton_lod(dest.morton_min, dest.morton_max);
+  dest.min_lod = morton::morton_lod(dest.morton_min, dest.morton_max);
   for (auto &p : to_add.data)
     dest.data.emplace_back(std::move(p));
   dest.point_count += to_add.point_count;
@@ -68,7 +68,7 @@ inline void points_data_adjust_to_points(points_data_t &dest, const points_t &ad
     dest.morton_min = adjust_to.header.morton_min;
   if (dest.morton_max < adjust_to.header.morton_max)
     dest.morton_max = adjust_to.header.morton_max;
-  dest.lod_span = morton::morton_lod(dest.morton_min, dest.morton_max);
+  dest.min_lod = morton::morton_lod(dest.morton_min, dest.morton_max);
   dest.point_count += adjust_to.header.point_count;
 }
 

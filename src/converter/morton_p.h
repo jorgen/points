@@ -1,6 +1,7 @@
 #pragma once
 
 #include <libmorton/morton.h>
+#include <math.h>
 
 #include <assert.h>
 
@@ -131,9 +132,9 @@ inline void encode(const double (&pos)[3], const double (&scale)[3], morton_t<T>
 {
   using uint_t = std::remove_reference<decltype(morton.data[0])>::type;
   uint_t ipos[3];
-  ipos[0] = uint_t(pos[0] / scale[0]);
-  ipos[1] = uint_t(pos[1] / scale[1]);
-  ipos[2] = uint_t(pos[2] / scale[2]);
+  ipos[0] = uint32_t(round(pos[0] / scale[0]));
+  ipos[1] = uint32_t(round(pos[1] / scale[1]));
+  ipos[2] = uint32_t(round(pos[2] / scale[2]));
   encode(ipos, morton);
 }
 
@@ -232,6 +233,24 @@ inline morton64_t morton_and(const morton64_t &a, const morton64_t &b)
   c.data[1] = a.data[1] & b.data[1];
   c.data[2] = a.data[2] & b.data[2];
   return c;
+}
+
+inline void morton_add_one(morton64_t &a)
+{
+  if (a.data[0] == (~uint64_t(0)))
+  {
+    a.data[0] = 0;
+    if (a.data[1] == (~uint64_t(0)))
+    {
+      a.data[1] = 0;
+      a.data[2]++; 
+    }
+    else
+    {
+      a.data[1]++;
+    }
+  }
+  a.data[0]++;
 }
 
 static inline int bit_scan_reverse(uint64_t a)
@@ -348,7 +367,7 @@ inline void morton_set_child_mask(int lod, uint8_t mask, morton64_t &morton)
 
 inline morton64_t morton_mask_create(int lod)
 {
-  int index = lod * 3;
+  int index = lod * 3 + 3;
   morton64_t a;
   memset(&a, 0, sizeof(a));
   if (index > 63)
@@ -368,11 +387,7 @@ inline int morton_lod(const morton64_t &a, const morton64_t &b)
 
 inline morton64_t morton_mask_create(const morton64_t &a, const morton64_t &b)
 {
-  morton64_t c;
-  c = morton_xor(a, b);
-  int lod = morton_lod(morton_msb(c));
-  c = morton_mask_create(lod);
-  return c;
+  return morton_mask_create(morton_lod(a,b));
 }
 
 } // namespace morton
