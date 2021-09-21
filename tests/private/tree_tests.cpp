@@ -46,7 +46,7 @@ static points::converter::points_t create_points(const points::converter::tree_g
   return points;
 }
   
-static points::converter::tree_global_state_t create_tree_global_state(int node_limit, double scale)
+static points::converter::tree_global_state_t create_tree_global_state(int node_limit, double scale, double offset = double(uint64_t(1) << 17))
 {
   points::converter::tree_global_state_t ret;
   ret.node_limit = node_limit;
@@ -54,9 +54,9 @@ static points::converter::tree_global_state_t create_tree_global_state(int node_
   ret.scale[1] = scale;
   ret.scale[2] = scale;
 
-  ret.offset[0] = uint64_t(1) << 17;
-  ret.offset[1] = uint64_t(1) << 17;
-  ret.offset[2] = uint64_t(1) << 17;
+  ret.offset[0] = offset;
+  ret.offset[1] = offset;
+  ret.offset[2] = offset;
   return ret;
 }
 
@@ -64,7 +64,7 @@ static points::converter::tree_global_state_t create_tree_global_state(int node_
 TEST_CASE("Initialize Empty tree", "[converter, tree_t]")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
-  auto tree_gs = create_tree_global_state(1000, 0.001);
+  auto tree_gs = create_tree_global_state(1000, 0.001, 0.0);
   auto points = create_points(tree_gs, 0, morton_max);
   void *buffer_ptr = points.buffers.buffers.back().data;
   
@@ -84,7 +84,7 @@ TEST_CASE("Initialize Empty tree", "[converter, tree_t]")
 TEST_CASE("Add inclusion", "[converter, tree_t]")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
-  auto tree_gs = create_tree_global_state(1000, 0.001);
+  auto tree_gs = create_tree_global_state(1000, 0.001, 0.0);
   auto points = create_points(tree_gs, 0, morton_max);
   points::converter::tree_t tree;
   points::converter::tree_initialize(tree_gs, tree, std::move(points));
@@ -140,6 +140,10 @@ TEST_CASE("Add_new_subtree", "[converter, tree_t]")
   auto second_points = create_points(tree_gs, 0, morton_max);
   void *buffer_ptr = second_points.buffers.buffers.back().data;
   points::converter::tree_add_points(tree_gs, tree, std::move(second_points));
+
+  REQUIRE(tree.sub_trees.size() == 1);
+  REQUIRE(tree.nodes[0].size() == 1);
+  REQUIRE(tree.nodes[1].size() == 8);
 
 }
 }

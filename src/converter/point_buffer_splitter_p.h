@@ -21,8 +21,10 @@
 #include "conversion_types_p.h"
 #include "tree_p.h"
 #include "input_header_p.h"
+#include "morton_tree_coordinate_transform_p.h"
 
 #include <points/converter/default_attribute_names.h>
+
 
 namespace points
 {
@@ -48,13 +50,8 @@ void verify_points_less_than(const tree_global_state_t &state, const points_t &p
 {
   using morton_u =  morton::morton_t<typename std::make_unsigned<T>::type>;
   const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.buffers.buffers[0].data);
-  double pos[3];
-  morton::decode(max, state.scale, pos);
-  pos[0] -= state.offset[0];
-  pos[1] -= state.offset[1];
-  pos[2] -= state.offset[2];
   morton_u morton_limit;
-  morton::encode(pos, points.header.scale, morton_limit);
+  convert_world_morton_to_local(state, max, points, morton_limit);
   int count = 0;
   for (int i = start_index; i < end_index; i++)
   {
@@ -91,12 +88,7 @@ void find_offsets(const tree_global_state_t &state, const points_t &points, int 
     {
       morton::morton64_t node_mask = node_min;
       morton::morton_set_child_mask(lod, uint8_t(i + 1), node_mask); 
-      double pos[3];
-      morton::decode(node_mask, state.scale, pos);
-      pos[0] -= state.offset[0];
-      pos[1] -= state.offset[1];
-      pos[2] -= state.offset[2];
-      morton::encode(pos, points.header.scale, morton_limit);
+      convert_world_morton_to_local(state, node_mask, points, morton_limit);
       morton_codes = std::lower_bound(morton_codes, morton_end, morton_limit);
       offsets[i] = uint32_t(morton_codes - morton_begin);
       verify_points_less_than<T>(state, points, int(morton_codes - morton_begin), offsets[i], node_mask);

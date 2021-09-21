@@ -20,6 +20,7 @@
 #include "threaded_event_loop_p.h"
 #include "morton_p.h"
 #include "sorter_p.h"
+#include "morton_tree_coordinate_transform_p.h"
 
 #include <fmt/printf.h>
 

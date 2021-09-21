@@ -77,6 +77,17 @@ inline void encode(const uint32_t (&pos)[3], morton_t<uint32_t> &morton)
   encode(pos, morton.data);
 }
 
+template<typename T>
+inline void encode(const double (&pos)[3], const double (&scale)[3], morton_t<T> &morton)
+{
+  using uint_t = std::remove_reference<decltype(morton.data[0])>::type;
+  uint_t ipos[3];
+  ipos[0] = uint_t(pos[0] / scale[0]);
+  ipos[1] = uint_t(pos[1] / scale[1]);
+  ipos[2] = uint_t(pos[2] / scale[2]);
+  encode(ipos, morton);
+}
+
 inline void decode(uint32_t *morton)
 {
   uint64_t low;
@@ -125,17 +136,6 @@ inline void encode(const uint64_t (&pos)[3], morton64_t &morton)
   morton.data[0] = libmorton::morton3D_64_encode(x_lower, y_lower, z_lower);
   morton.data[1] = libmorton::morton3D_64_encode(x_mid, y_mid, z_mid);
   morton.data[2] = libmorton::morton3D_64_encode(x_high, y_high, z_high);
-}
-
-template<typename T>
-inline void encode(const double (&pos)[3], const double (&scale)[3], morton_t<T> &morton)
-{
-  using uint_t = std::remove_reference<decltype(morton.data[0])>::type;
-  uint_t ipos[3];
-  ipos[0] = uint32_t(round(pos[0] / scale[0]));
-  ipos[1] = uint32_t(round(pos[1] / scale[1]));
-  ipos[2] = uint32_t(round(pos[2] / scale[2]));
-  encode(ipos, morton);
 }
 
 inline void decode(const morton64_t &morton, uint64_t (&pos)[3])

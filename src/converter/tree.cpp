@@ -208,7 +208,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_t &tre
       }
       return;
     }
-    else if (tree.data[current_level][skip].point_count + points.point_count < state.node_limit)
+    else if (tree.data[current_level][skip].point_count + points.point_count <= state.node_limit)
     {
       points_data_add(tree.data[current_level][skip], std::move(points));
       return;
