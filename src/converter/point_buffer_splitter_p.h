@@ -25,6 +25,7 @@
 
 #include <points/converter/default_attribute_names.h>
 
+#include <fmt/printf.h>
 
 namespace points
 {
@@ -46,19 +47,65 @@ void get_first_and_last_point(const tree_global_state_t &state, const points_t &
 }
 
 template<typename T>
+void verify_points_range(const tree_global_state_t &state, const points_t &points, int start_index, int end_index, const morton::morton64_t &min, const morton::morton64_t &max)
+{
+  using morton_u =  morton::morton_t<typename std::make_unsigned<T>::type>;
+  const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.buffers.buffers[0].data);
+  morton_u morton_current;
+  int count_less = 0;
+  int count_greater = 0;
+  double max_pos[3];
+  convert_morton_to_pos(state.scale, state.offset, max, max_pos);
+  for (int i = start_index; i < end_index; i++)
+  {
+    morton_current = morton_begin[i];
+    morton::morton64_t current_world;
+    convert_local_morton_to_world(points, morton_current, state, current_world);
+    if (current_world < min)
+      count_less++;
+    if (!(current_world < max))
+      count_greater++;
+  }
+  assert(count_less == 0);
+  assert(count_greater == 0);
+}
+
+template<typename T>
 void verify_points_less_than(const tree_global_state_t &state, const points_t &points, int start_index, int end_index, const morton::morton64_t &max)
 {
   using morton_u =  morton::morton_t<typename std::make_unsigned<T>::type>;
   const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.buffers.buffers[0].data);
-  morton_u morton_limit;
-  convert_world_morton_to_local(state, max, points, morton_limit);
+  morton::morton64_t current;
   int count = 0;
+
   for (int i = start_index; i < end_index; i++)
   {
-    if (!(morton_begin[i] < morton_limit))
+    convert_local_morton_to_world(points, morton_begin[i], state, current);
+    if (!(current < max))
       count++;
   }
   assert(count == 0);
+}
+
+template<class ForwardIt, class Compare>
+ForwardIt inhouse_lower_bound(ForwardIt first, ForwardIt last, Compare comp)
+{
+    ForwardIt it;
+    typename std::iterator_traits<ForwardIt>::difference_type count, step;
+    count = std::distance(first, last);
+ 
+    while (count > 0) {
+        it = first;
+        step = count / 2;
+        std::advance(it, step);
+        if (comp(*it)) {
+            first = ++it;
+            count -= step + 1;
+        }
+        else
+            count = step;
+    }
+    return first;
 }
 
 template<typename T>
@@ -72,12 +119,7 @@ void find_offsets(const tree_global_state_t &state, const points_t &points, int 
   const morton_u *morton_codes = morton_begin;
   memset(offsets, 0, sizeof(offsets));
 
-  const morton_u *morton_prev = morton_begin;
-  for(const morton_u *current_code = morton_begin; current_code < morton_end; current_code++)
-  {
-    assert(!(*current_code < *morton_prev));
-    morton_prev = current_code;
-  }
+  assert(!(points.header.morton_min < node_min)); // less or equal
   for (int i = 0; i < 7; i++)
   {
     if (morton_codes == morton_end)
@@ -88,10 +130,31 @@ void find_offsets(const tree_global_state_t &state, const points_t &points, int 
     {
       morton::morton64_t node_mask = node_min;
       morton::morton_set_child_mask(lod, uint8_t(i + 1), node_mask); 
-      convert_world_morton_to_local(state, node_mask, points, morton_limit);
-      morton_codes = std::lower_bound(morton_codes, morton_end, morton_limit);
+      double pos[3];
+      convert_morton_to_pos(state.scale, state.offset, node_mask, pos);
+      if (!(node_mask < points.header.morton_min))
+      {
+        if (convert_world_morton_to_local(state, node_mask, points, morton_limit))
+        {
+          morton_codes = std::lower_bound(morton_codes, morton_end, morton_limit);
+        }
+        else
+        {
+          morton_codes = inhouse_lower_bound(morton_codes, morton_end, [&node_mask, &points, &state](const morton_u &value) {
+            morton::morton64_t value_world;
+            convert_local_morton_to_world(points, value, state, value_world);
+            return value_world < node_mask;
+          });
+        }
+      }
+      else if (points.header.morton_max < node_mask)
+      {
+        morton_codes = morton_end; 
+      }
       offsets[i] = uint32_t(morton_codes - morton_begin);
-      verify_points_less_than<T>(state, points, int(morton_codes - morton_begin), offsets[i], node_mask);
+      morton::morton64_t child_min = node_min;
+      morton::morton_set_child_mask(lod, uint8_t(i), child_min); 
+      verify_points_range<T>(state, points, int(morton_codes - morton_begin), offsets[i], child_min, node_mask);
     }
   }
   offsets[7] = uint32_t(morton_end - morton_begin);
@@ -100,7 +163,9 @@ void find_offsets(const tree_global_state_t &state, const points_t &points, int 
     morton::morton64_t node_max = morton::morton_or(node_min, morton::morton_mask_create(lod));
     morton::morton64_t node_mask = node_max;
     morton::morton_add_one(node_mask);
-    verify_points_less_than<T>(state, points, int(morton_end - morton_codes), int(points.header.point_count), node_mask);
+    morton::morton64_t child_min = node_min;
+    morton::morton_set_child_mask(lod, uint8_t(7), child_min); 
+    verify_points_range<T>(state, points, int( morton_codes - morton_begin), int(points.header.point_count), child_min, node_mask);
   }
 }
 
@@ -177,6 +242,11 @@ void point_buffer_split_buffers_to_children(const tree_global_state_t &state, po
         assert(false);
         break;
       }
+      assert(!(dest_points.header.morton_min < p.header.morton_min));
+      assert(!(p.header.morton_max < dest_points.header.morton_max));
+
+
+      assert(dest_points.header.lod_span <= p.header.lod_span);
       if (child.point_count == 0)
       {
         memcpy(child.morton_min.data, dest_points.header.morton_min.data, sizeof(child.morton_min)); 

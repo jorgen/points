@@ -162,8 +162,8 @@ void point_reader_t::about_to_block()
             file_errors.post_event(std::move(file_error));
           } else
           {
-            morton::encode(header.header.min, header.header.scale, header.header.morton_min);
-            morton::encode(header.header.max, header.header.scale, header.header.morton_max);
+            convert_pos_to_morton(header.header.scale, header.header.offset, header.header.min, header.header.morton_min);
+            convert_pos_to_morton(header.header.scale, header.header.offset, header.header.max, header.header.morton_max);
             input_files.emplace_back(new input_file_t());
             input_files.back()->header = std::move(header.header);
             input_files.back()->user_ptr = header.user_ptr;

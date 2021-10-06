@@ -91,7 +91,7 @@ struct tree_t
   std::vector<int16_t> skips[5];
   std::vector<points_data_t> data[5];
   std::vector<tree_t> sub_trees;
-  uint8_t level;
+  uint8_t magnitude;
 };
 
 void tree_initialize(const tree_global_state_t &state, tree_t &tree, points_t &&points);

@@ -66,13 +66,13 @@ void header_p_set_min_max(internal_header_t &header, const T *begin, const T *en
   memcpy(final_max, end - 3, sizeof(final_max));
   morton::decode(final_min);
   morton::decode(final_max);
-  header.min[0] = final_min[0] * header.scale[0] - header.offset[0];
-  header.min[1] = final_min[1] * header.scale[1] - header.offset[1];
-  header.min[2] = final_min[2] * header.scale[2] - header.offset[2];
+  header.min[0] = final_min[0] * header.scale[0] + header.offset[0];
+  header.min[1] = final_min[1] * header.scale[1] + header.offset[1];
+  header.min[2] = final_min[2] * header.scale[2] + header.offset[2];
   
-  header.max[0] = final_max[0] * header.scale[0] - header.offset[0];
-  header.max[1] = final_max[1] * header.scale[1] - header.offset[1];
-  header.max[2] = final_max[2] * header.scale[2] - header.offset[2];
+  header.max[0] = final_max[0] * header.scale[0] + header.offset[0];
+  header.max[1] = final_max[1] * header.scale[1] + header.offset[1];
+  header.max[2] = final_max[2] * header.scale[2] + header.offset[2];
 }
 
 void header_p_set_morton_aabb(const tree_global_state_t &state, internal_header_t &header);

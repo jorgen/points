@@ -2,6 +2,7 @@
 #include <fmt/printf.h>
 
 #include <morton_p.h>
+#include <morton_tree_coordinate_transform_p.h>
 
 
 TEST_CASE("SimpleMorton", "[converter]")
@@ -9,11 +10,12 @@ TEST_CASE("SimpleMorton", "[converter]")
   double half[] = {0.51200000001699664, 0.0, 0.0};
   double quarter[] = {0.256, 0.0, 0.0};
   double scale[] = {0.001, 0.001, 0.001};
-  
-  points::converter::morton::morton_t<uint32_t> half_morton;
-  points::converter::morton::encode(half, scale, half_morton);
-  points::converter::morton::morton_t<uint32_t> quarter_morton;
-  points::converter::morton::encode(quarter, scale, quarter_morton);
+  double offset[] = {0.0, 0.0, 0.0}; 
+
+  points::converter::morton::morton_t<uint64_t> half_morton;
+  points::converter::convert_pos_to_morton(scale, offset, half, half_morton);
+  points::converter::morton::morton_t<uint64_t> quarter_morton;
+  points::converter::convert_pos_to_morton(scale, offset, quarter, quarter_morton);
   //  points::converter::morton::morton64_t a;
 //  a = points::converter::morton::morton_mask_create(0);
 //  REQUIRE(a.data[0] == 0b111);

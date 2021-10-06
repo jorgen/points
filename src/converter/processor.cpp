@@ -77,9 +77,9 @@ void processor_t::add_files(const std::vector<std::string> &files)
     }
     if (std::isnan(converter.tree_state.offset[0]) || std::isnan(converter.tree_state.offset[1]) || std::isnan(converter.tree_state.offset[2]))
     {
-      converter.tree_state.offset[0] = -double(uint32_t(1) << 31);
-      converter.tree_state.offset[1] = -double(uint32_t(1) << 31);
-      converter.tree_state.offset[2] = -double(uint32_t(1) << 31);
+      converter.tree_state.offset[0] = -double(uint32_t(1) << 17);
+      converter.tree_state.offset[1] = -double(uint32_t(1) << 17);
+      converter.tree_state.offset[2] = -double(uint32_t(1) << 17);
     }
     tree_state_initialized = true;
   }

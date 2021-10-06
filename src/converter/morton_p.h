@@ -77,17 +77,6 @@ inline void encode(const uint32_t (&pos)[3], morton_t<uint32_t> &morton)
   encode(pos, morton.data);
 }
 
-template<typename T>
-inline void encode(const double (&pos)[3], const double (&scale)[3], morton_t<T> &morton)
-{
-  using uint_t = std::remove_reference<decltype(morton.data[0])>::type;
-  uint_t ipos[3];
-  ipos[0] = uint_t(pos[0] / scale[0]);
-  ipos[1] = uint_t(pos[1] / scale[1]);
-  ipos[2] = uint_t(pos[2] / scale[2]);
-  encode(ipos, morton);
-}
-
 inline void decode(uint32_t *morton)
 {
   uint64_t low;
@@ -115,6 +104,27 @@ inline void decode(const uint32_t (&morton)[3], uint32_t (&pos)[3])
   pos[2] |= high_pos[2] << 21;
 }
 
+inline void decode(const morton_t<uint32_t> &morton, uint32_t (&pos)[3])
+{
+  decode(morton.data, pos);
+}
+
+inline void decode(const morton64_t &morton, uint64_t (&pos)[3])
+{
+  uint32_t lower[3];
+  uint32_t mid[3];
+  uint32_t high[3];
+
+  libmorton::morton3D_64_decode(morton.data[0], lower[0], lower[1], lower[2]);
+  libmorton::morton3D_64_decode(morton.data[1], mid[0], mid[1], mid[2]);
+  libmorton::morton3D_64_decode(morton.data[2], high[0], high[1], high[2]);
+
+  pos[0] = uint64_t(lower[0]) | uint64_t(mid[0]) << 22 | uint64_t(high[0]) << (22 + 21);
+  pos[1] = uint64_t(lower[1]) | uint64_t(mid[1]) << 21 | uint64_t(high[1]) << (21 + 22);
+  pos[2] = uint64_t(lower[2]) | uint64_t(mid[2]) << 21 | uint64_t(high[1]) << (21 + 21);
+}
+
+
 inline void encode(const uint64_t (&pos)[3], morton64_t &morton)
 {
   constexpr uint32_t mask21 = (uint32_t(1) << 21) - 1;
@@ -136,30 +146,6 @@ inline void encode(const uint64_t (&pos)[3], morton64_t &morton)
   morton.data[0] = libmorton::morton3D_64_encode(x_lower, y_lower, z_lower);
   morton.data[1] = libmorton::morton3D_64_encode(x_mid, y_mid, z_mid);
   morton.data[2] = libmorton::morton3D_64_encode(x_high, y_high, z_high);
-}
-
-inline void decode(const morton64_t &morton, uint64_t (&pos)[3])
-{
-  uint32_t lower[3];
-  uint32_t mid[3];
-  uint32_t high[3];
-
-  libmorton::morton3D_64_decode(morton.data[0], lower[0], lower[1], lower[2]);
-  libmorton::morton3D_64_decode(morton.data[1], mid[0], mid[1], mid[2]);
-  libmorton::morton3D_64_decode(morton.data[2], high[0], high[1], high[2]);
-
-  pos[0] = uint64_t(lower[0]) | uint64_t(mid[0]) << 22 | uint64_t(high[0]) << (22 + 21);
-  pos[1] = uint64_t(lower[1]) | uint64_t(mid[1]) << 21 | uint64_t(high[1]) << (21 + 22);
-  pos[2] = uint64_t(lower[2]) | uint64_t(mid[2]) << 21 | uint64_t(high[1]) << (21 + 21);
-}
-
-inline void decode(const morton64_t &morton, const double (&scale)[3], double(&pos)[3])
-{
-  uint64_t ipos[3];
-  decode(morton, ipos);
-  pos[0] = double(ipos[0]) * scale[0];
-  pos[1] = double(ipos[1]) * scale[1];
-  pos[2] = double(ipos[2]) * scale[2];
 }
 
 inline bool morton_lt(const morton64_t &a, const morton64_t &b)
@@ -253,6 +239,24 @@ inline void morton_add_one(morton64_t &a)
   a.data[0]++;
 }
 
+template<typename T>
+inline morton_t<T> morton_add(const morton_t<T> &a, const morton_t<T> &b)
+{
+  morton_t<T> ret;
+  ret.data[0] = a.data[0] + b.data[0];
+  int carry = ret.data[0] < a.data[0]? 1 : 0;
+  ret.data[1] = a.data[1] + b.data[1] + carry;
+  carry = ret.data[1] < a.data[1]? 1 : 0;
+  ret.data[2] = a.data[2] + b.data[2] + carry;
+  return ret;
+}
+
+template<typename T>
+inline bool morton_is_set(const morton_t<T> &a)
+{
+  return a.data[0] || a.data[1] || a.data[2];
+}
+
 static inline int bit_scan_reverse(uint64_t a)
 {
 #ifdef _MSC_VER
@@ -289,25 +293,25 @@ inline int morton_msb(const morton64_t &a)
   return 0;
 }
 
-inline int morton_lod(int index)
+inline int morton_lod_from_bit_index(int index)
 {
   return index / 3;
 }
 
-inline int morton_tree_lod(int index)
+inline int morton_magnitude_from_bit_index(int index)
 {
-  return morton_lod(index) / 5;
+  return morton_lod_from_bit_index(index) / 5;
 }
 
-inline int morton_tree_lod_top_lod(int tree_lod)
+inline int morton_magnitude_to_lod(int magnitude)
 {
-  return tree_lod * 5 + 4;
+  return magnitude * 5 + 4;
 }
 
-inline int morton_tree_lod_to_lod(int tree_lod, int level_in_tree)
+inline int morton_tree_level_to_lod(int magnitude, int level_in_tree)
 {
   assert(level_in_tree < 5);
-  return morton_tree_lod_top_lod(tree_lod) - level_in_tree;
+  return morton_magnitude_to_lod(magnitude) - level_in_tree;
 }
 
 inline uint8_t morton_get_child_mask(int lod, const morton64_t &morton)
@@ -382,7 +386,7 @@ inline morton64_t morton_mask_create(int lod)
 
 inline int morton_lod(const morton64_t &a, const morton64_t &b)
 {
-  return morton_lod(morton_msb(morton_xor(a, b)));
+  return morton_lod_from_bit_index(morton_msb(morton_xor(a, b)));
 }
 
 inline morton64_t morton_mask_create(const morton64_t &a, const morton64_t &b)
