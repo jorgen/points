@@ -302,7 +302,10 @@ inline int morton_magnitude_from_bit_index(int index)
 {
   return morton_lod_from_bit_index(index) / 5;
 }
-
+inline int morton_magnitude_from_lod(int lod)
+{
+  return lod / 5;
+}
 inline int morton_magnitude_to_lod(int magnitude)
 {
   return magnitude * 5 + 4;

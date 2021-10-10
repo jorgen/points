@@ -35,7 +35,7 @@ namespace converter
 template<typename T>
 void get_first_and_last_point(const tree_global_state_t &state, const points_t &points, double (&pos_min), double (&pos_max), morton::morton64_t &morton_min, morton::morton64_t &morton_max)
 {
-  using uint_t = std::make_unsigned<T>::type;
+  using uint_t = typename std::make_unsigned<T>::type;
   using morton_u =  morton::morton_t<uint_t>;
   const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.buffers.buffers[0].data);
   const morton_u *morton_last = morton_begin + (points.header.point_count -1);
@@ -185,7 +185,7 @@ void point_buffer_get_child_offsets(const tree_global_state_t &state, const poin
 
 static void point_buffer_split_copy_buffers(const points_t &source, points_t &destination, int begin, int size)
 {
-  for (int i = 0; i < source.buffers.data.size(); i++)
+  for (int i = 0; i < int(source.buffers.data.size()); i++)
   {
     auto components = source.header.attributes.attributes[i].components;
     auto format_size = size_for_format(source.header.attributes.attributes[i].format);
@@ -217,7 +217,7 @@ void point_buffer_split_buffers_to_children(const tree_global_state_t &state, po
   {
     int prev_offset = i == 0 ? 0 : offsets[i - 1];
     int curr_offset = offsets[i];
-    int diff_offset = curr_offset - prev_offset;
+    uint64_t diff_offset = uint64_t(curr_offset - prev_offset);
     if (diff_offset == 0)
       continue;
     auto &child = children[i];

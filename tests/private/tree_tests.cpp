@@ -169,4 +169,22 @@ TEST_CASE("Add_new_subtree_offsets", "[converter, tree_t]")
     REQUIRE(tree.nodes[1].size() == 8);
   }
 }
+TEST_CASE("Reparent", "[converter, tree_t]")
+{
+  auto tree_gs = create_tree_global_state(256, 0.001);
+
+  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
+
+  auto first_points = create_points(tree_gs, 0, morton_max, 0.001);
+  points::converter::tree_t tree;
+  points::converter::tree_initialize(tree_gs, tree, std::move(first_points));
+
+  morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
+  auto second_points = create_points(tree_gs, 0, morton_max, 0.001);
+  points::converter::tree_add_points(tree_gs, tree, std::move(second_points));
+
+  REQUIRE(tree.nodes[0][0] == 0);
+  REQUIRE(tree.data[0][0].data.size() == 1);
+
+}
 }

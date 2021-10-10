@@ -28,8 +28,8 @@ namespace converter
 template<typename T>
 inline void convert_morton_to_pos(const double (&scale)[3], const double (&offset)[3], const morton::morton_t<T> &morton, double (&pos)[3])
 {
-  using c_uint_t = std::remove_reference<decltype(morton.data[0])>::type;
-  using uint_t = std::remove_const<c_uint_t>::type;
+  using c_uint_t = typename std::remove_reference<decltype(morton.data[0])>::type;
+  using uint_t = typename std::remove_const<c_uint_t>::type;
   uint_t ipos[3];
   morton::decode(morton, ipos);
   pos[0] = double(ipos[0]) * scale[0] + offset[0];
@@ -40,8 +40,8 @@ inline void convert_morton_to_pos(const double (&scale)[3], const double (&offse
 template<typename T>
 inline void convert_pos_to_morton(const double (&scale)[3], const double (&offset)[3], const double(&pos)[3], morton::morton_t<T> &morton)
 {
-  using c_uint_t = std::remove_reference<decltype(morton.data[0])>::type;
-  using uint_t = std::remove_const<c_uint_t>::type;
+  using c_uint_t = typename std::remove_reference<decltype(morton.data[0])>::type;
+  using uint_t = typename std::remove_const<c_uint_t>::type;
   uint_t ipos[3];
   ipos[0] = uint_t(round((pos[0] - offset[0]) / scale[0]));
   ipos[1] = uint_t(round((pos[1] - offset[1]) / scale[1]));
@@ -62,8 +62,8 @@ inline bool convert_world_morton_to_local(const tree_global_state_t &state, cons
     return false;
   }
   
-  using c_uint_t = std::remove_reference<decltype(morton.data[0])>::type;
-  using uint_t = std::remove_const<c_uint_t>::type;
+  using c_uint_t = typename std::remove_reference<decltype(morton.data[0])>::type;
+  using uint_t = typename std::remove_const<c_uint_t>::type;
   uint_t ipos[3];
   ipos[0] = uint_t(round(pos[0] / p.header.scale[0]));
   ipos[1] = uint_t(round(pos[1] / p.header.scale[1]));
