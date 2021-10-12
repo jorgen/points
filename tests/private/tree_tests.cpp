@@ -183,8 +183,24 @@ TEST_CASE("Reparent", "[converter, tree_t]")
   auto second_points = create_points(tree_gs, 0, morton_max, 0.001);
   points::converter::tree_add_points(tree_gs, tree, std::move(second_points));
 
-  REQUIRE(tree.nodes[0][0] == 0);
-  REQUIRE(tree.data[0][0].data.size() == 1);
+  REQUIRE(tree.data[0][0].data.size() == 0);
 
+  REQUIRE(tree.sub_trees.size() == 1);
+  auto third_points = create_points(tree_gs, 1, morton_max, 0.001);
+  points::converter::tree_add_points(tree_gs, tree, std::move(third_points));
+  REQUIRE(tree.sub_trees.size() == 1);
+
+  uint64_t splitting_max = morton_max + morton_max / 2;
+  uint64_t splitting_min = morton_max / 2;
+  auto fourth_points = create_points(tree_gs, splitting_min, splitting_max, 0.001);
+  points::converter::tree_add_points(tree_gs, tree, std::move(fourth_points));
+  REQUIRE(tree.sub_trees.size() == 2);
+  REQUIRE(tree.magnitude == 2);
+
+  uint64_t very_large_max = morton_max / 2;
+  auto fifth_points = create_points(tree_gs, 0, very_large_max, 0.001, -(tree_gs.offset[0] * 4));
+  points::converter::tree_add_points(tree_gs, tree, std::move(fifth_points));
+  REQUIRE(tree.sub_trees.size() == 2);
+  REQUIRE(tree.magnitude == 6);
 }
 }

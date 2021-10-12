@@ -230,7 +230,7 @@ void point_buffer_split_buffers_to_children(const tree_global_state_t &state, po
     {
       child.data.emplace_back();
       auto &dest_points = children[i].data.back();
-      point_buffer_split_copy_buffers(p, dest_points, prev_offset, diff_offset);
+      point_buffer_split_copy_buffers(p, dest_points, prev_offset, int(diff_offset));
       header_copy(p.header, dest_points.header);
       dest_points.header.point_count = diff_offset;
       switch (dest_points.header.attributes.attributes[0].format)
