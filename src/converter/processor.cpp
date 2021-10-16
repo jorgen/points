@@ -83,6 +83,7 @@ void processor_t::add_files(const std::vector<std::string> &files)
     }
     tree_state_initialized = true;
   }
+  sorter.add_files(files);
 }
 
 void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_event)

@@ -77,8 +77,9 @@ void attributes_copy(const attributes_t &source, attributes_t &target)
   target.attributes = source.attributes;
   for (int i = 0; i < int(source.attributes.size()); i++)
   {
-    target.attribute_names.emplace_back(new char[source.attributes[i].name_size]); 
+    target.attribute_names.emplace_back(new char[source.attributes[i].name_size + 1]); 
     memcpy(target.attribute_names[i].get(), source.attribute_names[i].get(), source.attributes[i].name_size);
+    target.attribute_names[i].get()[source.attributes[i].name_size] = 0;
     target.attributes[i].name = target.attribute_names[i].get();
   }
 }

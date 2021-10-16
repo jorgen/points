@@ -90,39 +90,30 @@ void tree_initialize_new_parent(const tree_t &some_child, const morton::morton64
 }
 
 
-static void sub_tree_alloc_children(tree_t &tree, int level, int skip, int count)
+static void sub_tree_alloc_children(tree_t &tree, int level, int skip)
 {
-  for (int i = 0; i < count; i++)
-  {
-    tree.nodes[level].emplace(tree.nodes[level].begin() + skip);
-    tree.skips[level].emplace(tree.skips[level].begin() + skip);
-    tree.data[level].emplace(tree.data[level].begin() + skip);
-    if (level == 4)
-      tree.sub_trees.emplace(tree.sub_trees.begin() + skip);
-  }
+  tree.nodes[level].emplace(tree.nodes[level].begin() + skip);
+  uint16_t old_skip = skip >= tree.skips[level].size() ? 0 : tree.skips[level][skip];
+  tree.skips[level].emplace(tree.skips[level].begin() + skip, old_skip);
+  tree.data[level].emplace(tree.data[level].begin() + skip);
 }
 
-static void sub_tree_increase_skips(tree_t &tree, int level, int skip, int count)
+static void sub_tree_increase_skips(tree_t &tree, int level, int skip)
 {
   auto &skips = tree.skips[level];
   auto skips_size = skips.size();
   for (int i = skip + 1; i < int(skips_size); i++)
   {
-    skips[i] += int16_t(count);
+    skips[i]++;
   }
 }
-
-//static void sub_tree_insert_points_handle_children(tree_t &tree, int level, int skip, std::vector<points_t> &points)
-//{
-//
-//}
 
 static int sub_tree_count_skips(uint8_t node, int index)
 {
   int node_skips = 0;
-  for (int i = 1; i < index; i<<=1)
+  for (int i = 0; i < index; i++)
   {
-    if (node & uint8_t(i))
+    if (node & uint8_t(1 << i))
       node_skips++;
   }
   return node_skips;
@@ -135,32 +126,40 @@ static void sub_tree_split_points_to_children(const tree_global_state_t &state, 
     assert(p.header.attributes.attributes.size());
     assert(strcmp(p.header.attributes.attributes[0].name, POINTS_ATTRIBUTE_XYZ) == 0);
     uint32_t offsets[8];
+    morton::morton64_t max_values[8];
 
-    point_buffer_get_child_offsets(state, p, lod, node_min, offsets);
+    point_buffer_get_child_offsets(state, p, lod, node_min, offsets, max_values);
     point_buffer_split_buffers_to_children(state, p, offsets, children);
   }
   points = points_data_t();
 }
 
-static void sub_tree_insert_points(const tree_global_state_t &state, tree_t &tree, int current_level, int skip, points_data_t &&points)
+static void sub_tree_insert_points(const tree_global_state_t &state, tree_t &tree, const morton::morton64_t &min, int current_level, int skip, points_data_t &&points)
 {
+  assert(current_level != 0 || tree.morton_min == min);
   auto &node = tree.nodes[current_level][skip];
   int lod = morton::morton_tree_level_to_lod(tree.magnitude, current_level);
   auto child_mask = morton::morton_get_child_mask(lod, points.morton_min);
   assert(child_mask < 8);
+  morton::morton64_t max = morton::morton_or(min, morton::morton_mask_create(lod));
+  assert(!(points.morton_min < min));
+  assert(!(max < points.morton_max));
   if (lod > points.min_lod)
   {
+    morton::morton64_t new_min = min;
+    morton::morton_set_child_mask(lod, child_mask, new_min);
     if (node & (1 << child_mask))
     {
       int node_skips = sub_tree_count_skips(node, child_mask);
       if (current_level == 4)
       {
-        auto &sub_tree = tree.sub_trees[skip + node_skips];
-        sub_tree_insert_points(state, sub_tree, 0, 0, std::move(points)); 
+        int sub_tree_skip = tree.skips[4][skip] + node_skips;
+        auto &sub_tree = tree.sub_trees[sub_tree_skip];
+        sub_tree_insert_points(state, sub_tree, new_min, 0, 0, std::move(points)); 
       } 
       else
       {
-        sub_tree_insert_points(state, tree, current_level + 1, tree.skips[current_level][skip] + node_skips, std::move(points));
+        sub_tree_insert_points(state, tree, new_min, current_level + 1, tree.skips[current_level][skip] + node_skips, std::move(points));
       }
       return;
     }
@@ -168,26 +167,30 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_t &tre
     {
       int node_skips = sub_tree_count_skips(node, child_mask);
 
-      sub_tree_increase_skips(tree, current_level, skip, 1);
-      tree.nodes[current_level][skip] |= 1 << child_mask;
+      node |= 1 << child_mask;
      
       if (current_level == 4)
       {
-        tree.sub_trees.emplace(tree.sub_trees.begin() + skip + node_skips);
-        auto &sub_tree = tree.sub_trees[skip + node_skips];
+        int sub_tree_skip = tree.skips[4][skip] + node_skips;
+        tree.sub_trees.emplace(tree.sub_trees.begin() + sub_tree_skip);
+        sub_tree_increase_skips(tree, current_level, skip);
+        auto &sub_tree = tree.sub_trees[sub_tree_skip];
         tree_initialize_sub(tree, points.morton_min, sub_tree);
-        sub_tree_insert_points(state, sub_tree, 0, 0, std::move(points));
+        sub_tree_insert_points(state, sub_tree, new_min, 0, 0, std::move(points));
       }
       else
       {
-        sub_tree_alloc_children(tree, current_level + 1, tree.skips[current_level][skip] + node_skips, 1);
-        sub_tree_insert_points(state, tree, current_level + 1, tree.skips[current_level][skip] + node_skips, std::move(points));
+        sub_tree_alloc_children(tree, current_level + 1, tree.skips[current_level][skip] + node_skips);
+        sub_tree_increase_skips(tree, current_level, skip);
+        sub_tree_insert_points(state, tree, new_min, current_level + 1, tree.skips[current_level][skip] + node_skips, std::move(points));
       }
       return;
     }
   }
+
   if (node == 0 && tree.data[current_level][skip].point_count + points.point_count <= state.node_limit)
   {
+    assert(!(points.morton_min < min));
     points_data_add(tree.data[current_level][skip], std::move(points));
     return;
   }
@@ -195,6 +198,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_t &tre
   assert(tree.magnitude > 0 || current_level < 4);
   {
     morton::morton64_t node_min = morton::morton_and(morton::morton_negate(morton::morton_mask_create(lod)), points.morton_min);
+    assert(node_min == min);
     points_data_t children_data[8];
     if (!node && tree.data[current_level][skip].point_count)
     {
@@ -214,37 +218,35 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_t &tre
           child_count++;
         continue;
       }
-
+      morton::morton64_t new_min = min;
+      morton::morton_set_child_mask(lod, uint8_t(i), new_min);
       assert(child_data.min_lod <= lod);
 
       if (current_level == 4)
       {
-        if (node & (1 << i))
+        int sub_tree_skip = tree.skips[4][skip] + child_count;
+        if ((node & (1 << i)) == 0)
         {
-          sub_tree_insert_points(state, tree.sub_trees[skip + child_count], 0, 0, std::move(child_data)); 
-        }
-        else
-        {
-          sub_tree_increase_skips(tree, current_level, skip, 1);
+
+          tree.sub_trees.emplace(tree.sub_trees.begin() + sub_tree_skip);
+          sub_tree_increase_skips(tree, current_level, skip);
           tree.nodes[current_level][skip] |= uint8_t(1) << i;
-          tree.sub_trees.emplace(tree.sub_trees.begin() + skip + child_count);
-          auto &sub_tree = tree.sub_trees[skip + child_count];
-          tree_initialize_sub(tree, child_data.morton_min, sub_tree);
-          sub_tree_insert_points(state, sub_tree, 0, 0, std::move(child_data));
+          tree_initialize_sub(tree, child_data.morton_min, tree.sub_trees[sub_tree_skip]);
         }
+        sub_tree_insert_points(state, tree.sub_trees[sub_tree_skip], new_min, 0, 0, std::move(child_data)); 
       }
       else
       {
         if (node & (1 << i))
         {
-          sub_tree_insert_points(state, tree, current_level + 1, tree.skips[current_level][skip] + child_count, std::move(child_data));
+          sub_tree_insert_points(state, tree, new_min, current_level + 1, tree.skips[current_level][skip] + child_count, std::move(child_data));
         }
         else
         {
-          sub_tree_increase_skips(tree, current_level, skip, 1);
           tree.nodes[current_level][skip] |= uint8_t(1) << i;
-          sub_tree_alloc_children(tree, current_level + 1, tree.skips[current_level][skip] + child_count, 1);
-          sub_tree_insert_points(state, tree, current_level + 1, tree.skips[current_level][skip] + child_count, std::move(child_data));
+          sub_tree_alloc_children(tree, current_level + 1, tree.skips[current_level][skip] + child_count);
+          sub_tree_increase_skips(tree, current_level, skip);
+          sub_tree_insert_points(state, tree, new_min, current_level + 1, tree.skips[current_level][skip] + child_count, std::move(child_data));
         }
       }
       child_count++;
@@ -295,8 +297,8 @@ static void insert_tree_in_tree(tree_t &parent, tree_t &&child)
     else
     {
       node |= 1 << child_mask;
-      sub_tree_increase_skips(parent, i, current_skip, 1);
-      sub_tree_alloc_children(parent, i + 1, parent.skips[i][current_skip] + node_skips, 1);
+      sub_tree_alloc_children(parent, i + 1, parent.skips[i][current_skip] + node_skips);
+      sub_tree_increase_skips(parent, i, current_skip);
       current_skip = parent.skips[i][current_skip] + node_skips;
     }
   }
@@ -313,6 +315,8 @@ static void insert_tree_in_tree(tree_t &parent, tree_t &&child)
   else
   {
     node |= 1 << child_mask;
+    parent.sub_trees.emplace(parent.sub_trees.begin() + current_skip_and_node);
+    sub_tree_increase_skips(parent, 4, current_skip);
     auto &sub_tree = parent.sub_trees[current_skip_and_node];
     if (parent.magnitude - 1 == child.magnitude)
     {
@@ -346,7 +350,7 @@ void tree_add_points(const tree_global_state_t &state, tree_t &tree, points_t &&
 
   points_data_t points_data;
   points_data_initialize(points_data, std::move(points));
-  sub_tree_insert_points(state, tree, 0, 0, std::move(points_data));
+  sub_tree_insert_points(state, tree, tree.morton_min, 0, 0, std::move(points_data));
 }
 }
 } // namespace points

@@ -109,10 +109,10 @@ ForwardIt inhouse_lower_bound(ForwardIt first, ForwardIt last, Compare comp)
 }
 
 template<typename T>
-void find_offsets(const tree_global_state_t &state, const points_t &points, int lod, const morton::morton64_t &node_min, uint32_t (&offsets)[8])
+void find_offsets(const tree_global_state_t &state, const points_t &points, int lod, const morton::morton64_t &node_min, uint32_t (&offsets)[8], morton::morton64_t (&max_values)[8])
 {
   using morton_u =  morton::morton_t<typename std::make_unsigned<T>::type>;
-  morton_u morton_limit;
+  //morton_u morton_limit;
   assert(points.buffers.buffers[0].size / sizeof(morton_u) == points.header.point_count);
   const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.buffers.buffers[0].data);
   const morton_u *morton_end = morton_begin + points.header.point_count;
@@ -122,23 +122,26 @@ void find_offsets(const tree_global_state_t &state, const points_t &points, int 
   assert(!(points.header.morton_min < node_min)); // less or equal
   for (int i = 0; i < 7; i++)
   {
+    morton::morton64_t node_mask = node_min;
+    morton::morton_set_child_mask(lod, uint8_t(i + 1), node_mask); 
+    max_values[i] = node_mask;
     if (morton_codes == morton_end)
     {
       offsets[i] = uint32_t(morton_end - morton_begin);
     }
     else
     {
-      morton::morton64_t node_mask = node_min;
-      morton::morton_set_child_mask(lod, uint8_t(i + 1), node_mask); 
-      double pos[3];
-      convert_morton_to_pos(state.scale, state.offset, node_mask, pos);
-      if (!(node_mask < points.header.morton_min))
+      if (points.header.morton_max < node_mask)
       {
-        if (convert_world_morton_to_local(state, node_mask, points, morton_limit))
-        {
-          morton_codes = std::lower_bound(morton_codes, morton_end, morton_limit);
-        }
-        else
+        morton_codes = morton_end; 
+      }
+      else if (!(node_mask < points.header.morton_min))
+      {
+      //  if (convert_world_morton_to_local(state, node_mask, points, morton_limit))
+      //  {
+      //    morton_codes = std::lower_bound(morton_codes, morton_end, morton_limit);
+      //  }
+      //  else
         {
           morton_codes = inhouse_lower_bound(morton_codes, morton_end, [&node_mask, &points, &state](const morton_u &value) {
             morton::morton64_t value_world;
@@ -147,10 +150,6 @@ void find_offsets(const tree_global_state_t &state, const points_t &points, int 
           });
         }
       }
-      else if (points.header.morton_max < node_mask)
-      {
-        morton_codes = morton_end; 
-      }
       offsets[i] = uint32_t(morton_codes - morton_begin);
       morton::morton64_t child_min = node_min;
       morton::morton_set_child_mask(lod, uint8_t(i), child_min); 
@@ -158,24 +157,26 @@ void find_offsets(const tree_global_state_t &state, const points_t &points, int 
     }
   }
   offsets[7] = uint32_t(morton_end - morton_begin);
+  {
+  morton::morton64_t node_max = morton::morton_or(node_min, morton::morton_mask_create(lod));
+  morton::morton_add_one(node_max);
+  max_values[7] = node_max;
   if (morton_codes != morton_end)
   {
-    morton::morton64_t node_max = morton::morton_or(node_min, morton::morton_mask_create(lod));
-    morton::morton64_t node_mask = node_max;
-    morton::morton_add_one(node_mask);
     morton::morton64_t child_min = node_min;
     morton::morton_set_child_mask(lod, uint8_t(7), child_min); 
-    verify_points_range<T>(state, points, int( morton_codes - morton_begin), int(points.header.point_count), child_min, node_mask);
+    verify_points_range<T>(state, points, int( morton_codes - morton_begin), int(points.header.point_count), child_min, node_max);
+  }
   }
 }
 
-void point_buffer_get_child_offsets(const tree_global_state_t &state, const points_t &points, int lod, const morton::morton64_t &node_min, uint32_t (&offsets)[8])
+void point_buffer_get_child_offsets(const tree_global_state_t &state, const points_t &points, int lod, const morton::morton64_t &node_min, uint32_t (&offsets)[8], morton::morton64_t (&max_values)[8])
 {
   assert(strcmp(points.header.attributes.attributes[0].name, POINTS_ATTRIBUTE_XYZ) == 0);
   switch(points.header.attributes.attributes[0].format)
   {
   case format_i32:
-    find_offsets<int32_t>(state, points, lod, node_min, offsets);
+    find_offsets<int32_t>(state, points, lod, node_min, offsets, max_values);
     break;
   default:
     assert(false);
