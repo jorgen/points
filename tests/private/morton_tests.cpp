@@ -1,8 +1,8 @@
 #include <catch2/catch.hpp>
 #include <fmt/printf.h>
 
-#include <morton_p.h>
-#include <morton_tree_coordinate_transform_p.h>
+#include <morton.hpp>
+#include <morton_tree_coordinate_transform.hpp>
 
 
 TEST_CASE("SimpleMorton", "[converter]")

@@ -15,11 +15,10 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef POINTS_AABB_P_H
-#define POINTS_AABB_P_H
+#pragma once
 
 #include <points/render/aabb.h>
-#include "glm_include.h"
+#include "glm_include.hpp"
 
 namespace points
 {
@@ -35,4 +34,3 @@ inline glm::dvec3 aabb_center(const aabb_t &aabb)
 
 } // namespace render
 } // namespace points
-#endif // POINTS_AABB_P_H

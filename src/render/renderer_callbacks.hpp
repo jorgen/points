@@ -15,13 +15,12 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef POINTS_RENDERER_CALLBACKS_P_H
-#define POINTS_RENDERER_CALLBACKS_P_H
+#pragma once
 
 #include <mutex>
 
 #include <points/render/renderer.h>
-#include "buffer_p.h"
+#include "buffer.hpp"
 
 namespace points
 {
@@ -113,4 +112,3 @@ private:
 } // namespace render
 } // namespace points
 
-#endif

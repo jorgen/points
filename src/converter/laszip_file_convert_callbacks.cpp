@@ -19,7 +19,7 @@
 #include <points/converter/default_attribute_names.h>
 #include <points/converter/converter.h>
 
-#include "error_p.h"
+#include "error.hpp"
 
 #include <fmt/format.h>
 #include <laszip/laszip_api.h>

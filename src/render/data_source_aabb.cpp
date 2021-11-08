@@ -15,11 +15,11 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "data_source_aabb_p.h"
+#include "data_source_aabb.hpp"
 #include <points/render/aabb_data_source.h>
 #include <points/render/buffer.h>
 
-#include "renderer_p.h"
+#include "renderer.hpp"
 
 namespace points
 {

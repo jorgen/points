@@ -24,7 +24,7 @@
 #include <mutex>
 #include <utility>
 
-#include "event_pipe_p.h"
+#include "event_pipe.hpp"
 
 namespace points
 {

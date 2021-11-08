@@ -17,41 +17,12 @@
 ************************************************************************/
 #pragma once
 
-#include <points/converter/converter.h>
-#include <points/converter/error.h>
-#include <points/converter/laszip_file_convert_callbacks.h>
-
-#include <string>
-
-#include "processor_p.h"
+#include "conversion_types.hpp"
 
 namespace points
 {
 namespace converter
 {
-
-struct converter_t
-{
-  converter_t(const char *cache_filename, uint64_t cache_filename_size)
-    : cache_filename(cache_filename, cache_filename_size)
-    , processor(*this)
-    , convert_callbacks(laszip_callbacks())
-    , runtime_callbacks{}
-  {
-    tree_state.scale[0] = std::nan("1");
-    tree_state.scale[1] = std::nan("1");
-    tree_state.scale[2] = std::nan("1");
-    tree_state.offset[0] = std::nan("1");
-    tree_state.offset[1] = std::nan("1");
-    tree_state.offset[2] = std::nan("1");
-  }
-  std::string cache_filename;
-  tree_global_state_t tree_state;
-  processor_t processor;
-  converter_file_convert_callbacks_t convert_callbacks;
-  converter_runtime_callbacks_t runtime_callbacks;
-  converter_conversion_status_t status;
-};
-
-} // namespace converter
+void sort_points(const tree_global_state_t &tree_state, points_t &points);
+}
 } // namespace points

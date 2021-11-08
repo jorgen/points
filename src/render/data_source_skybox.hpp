@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2020  Jørgen Lind
+** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -15,52 +15,53 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <aabb_p.h>
+#pragma once
+
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
-#include "data_source_p.h"
-#include "glm_include.h"
-#include "buffer_p.h"
-#include "renderer_callbacks_p.h"
+#include <points/render/skybox_data_source.h>
+#include "data_source.hpp"
+#include "buffer.hpp"
+#include "renderer_callbacks.hpp"
+
+#include "glm_include.hpp"
 #include <vector>
 #include <memory>
-
 namespace points
 {
 namespace render
 {
 
-struct aabb_buffer_t
+struct skybox_texture_t
 {
-  aabb_t aabb;
-  std::vector<glm::vec3> vertices;
-  buffer_t vertices_buffer;
-
-  draw_buffer_t render_list[4];
+  std::unique_ptr<uint8_t, decltype(&free)> image = {nullptr, &free};
+  int width = 0;
+  int height = 0;
+  int components = 0;
 };
 
-
-struct aabb_data_source_t : public data_source_t
+struct skybox_data_source_t : public data_source_t
 {
-  aabb_data_source_t(callback_manager_t &callback_manager);
+  skybox_data_source_t(callback_manager_t &callbacks, skybox_data_t skybox_data);
 
   void add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render) override;
 
   callback_manager_t &callbacks;
 
-  std::vector<std::unique_ptr<aabb_buffer_t>> aabbs;
+  buffer_t inverse_vp_buffer;
+  glm::mat4 inverse_vp;
 
-  std::vector<uint32_t> aabbs_ids;
+  buffer_t camera_pos_buffer;
+  glm::vec3 camera_pos;
 
-  buffer_t project_view_buffer;
-  glm::mat4 project_view;
+  buffer_t vertex_buffer;
+  std::vector<glm::vec2> vertices;
 
-  buffer_t index_buffer;
-  std::vector<uint16_t> indecies;
+  buffer_t cube_texture;
 
-  buffer_t color_buffer;
-  std::vector<glm::u8vec3> colors;
+  skybox_texture_t textures[6];
 
+  draw_buffer_t draw_buffers[4];
 };
 } // namespace render
 } // namespace points

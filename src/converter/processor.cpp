@@ -1,9 +1,9 @@
-#include "processor_p.h"
+#include "processor.hpp"
 
-#include "conversion_types_p.h"
-#include "converter_p.h"
+#include "conversion_types.hpp"
+#include "converter.hpp"
 
-#include "threaded_event_loop_p.h"
+#include "threaded_event_loop.hpp"
 
 #include <stdlib.h>
 namespace points
@@ -30,62 +30,49 @@ static thread_count_env_setter_t thread_pool_size_setter;
 
 processor_t::processor_t(converter_t &converter)
   : converter(converter)
+  , headers_for_files(event_loop, [this](std::vector<internal_header_t> &&headers) { this->handle_headers(std::move(headers)); })
+  , file_errors_headers(event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors_headers(std::move(events)); })
   , sorted_points(event_loop, [this](std::vector<points::converter::points_t> &&events) { this->handle_sorted_points(std::move(events)); })
   , file_errors(event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
-  , sorter(converter.tree_state, sorted_points, file_errors, converter.convert_callbacks)
+  , point_reader_done_with_file(event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
+  , header_reader(input_event_loop, headers_for_files, file_errors)
+  //, point_reader(converter.tree_state, sorted_points, point_reader_done_with_file, file_errors, converter.convert_callbacks)
   , tree_initialized(false)
   , tree_state_initialized(false)
 {
   (void) this->converter;
 }
 
-void processor_t::add_files(const std::vector<std::string> &files)
+void processor_t::add_files(std::vector<input_data_source_t> &&files)
 {
-  if (!tree_state_initialized)
+  size_t end_index = input_sources.size();
+  input_sources.insert(input_sources.end(), std::make_move_iterator(files.begin()), std::make_move_iterator(files.end()));
+  std::vector<get_header_files_t> get_header_files;
+  get_header_files.reserve(files.size());
+  for (size_t i = end_index; i < input_sources.size(); i++)
   {
-    if (std::isnan(converter.tree_state.scale[0]) || std::isnan(converter.tree_state.scale[1]) || std::isnan(converter.tree_state.scale[2]))
-    {
-      if (converter.convert_callbacks.init && files.size())
-      {
-        internal_header_t header;
-        error_t *local_error = nullptr;
-        void *user_ptr;
-        converter.convert_callbacks.init(files[0].c_str(), files[0].size(), &header, &user_ptr, &local_error);
-        if (local_error)
-        {
-          file_error_t file_error;
-          file_error.filename = files[0];
-          file_error.error = *local_error;
-          file_errors.post_event(std::move(file_error));
-        }
-        if (converter.convert_callbacks.destroy_user_ptr)
-        {
-          converter.convert_callbacks.destroy_user_ptr(user_ptr);
-          user_ptr = nullptr;
-        }
-        static_assert(std::is_same<decltype(converter.tree_state.scale), decltype(header.scale)>::value, "Scale types are not equal size");
-        memcpy(converter.tree_state.scale, header.scale, sizeof(header.scale));
-      }
-    }
-    if (std::isnan(converter.tree_state.scale[0]) || std::isnan(converter.tree_state.scale[1]) || std::isnan(converter.tree_state.scale[2]))
-    {
-      converter.tree_state.scale[0] = 0.01;
-      converter.tree_state.scale[1] = 0.01;
-      converter.tree_state.scale[2] = 0.01;
-      if (converter.runtime_callbacks.warning)
-        converter.runtime_callbacks.warning("Failed to initialize tree scale factor, falling back to 0.001");
-    }
-    if (std::isnan(converter.tree_state.offset[0]) || std::isnan(converter.tree_state.offset[1]) || std::isnan(converter.tree_state.offset[2]))
-    {
-      converter.tree_state.offset[0] = -double(uint32_t(1) << 17);
-      converter.tree_state.offset[1] = -double(uint32_t(1) << 17);
-      converter.tree_state.offset[2] = -double(uint32_t(1) << 17);
-    }
-    tree_state_initialized = true;
+    using id_type = decltype(input_data_id_t::data);
+    input_sources[i].input_id.data = id_type(i); 
+    get_header_files.push_back(get_header_files_from_input_data_source(input_sources[i]));
   }
-  sorter.add_files(files);
+  header_reader.add_files(get_header_files, converter.convert_callbacks);
 }
 
+void processor_t::handle_headers(std::vector<internal_header_t> &&headers)
+{
+  (void)headers;
+  if (!tree_state_initialized)
+  {
+    tree_state_initialized = true;
+    //_tr
+  }
+  //point_reader.add_files(files);
+}
+
+void processor_t::handle_file_errors_headers(std::vector<file_error_t> &&errors)
+{
+  (void)errors;
+}
 void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_event)
 {
   if (sorted_points_event.empty())
@@ -107,6 +94,14 @@ void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_eve
 void processor_t::handle_file_errors(std::vector<file_error_t> &&errors)
 {
   (void)errors;
+}
+
+void processor_t::handle_file_reading_done(std::vector<input_data_id_t> &&files)
+{
+  for (auto &file : files)
+  {
+    fmt::print(stderr, "Done processing inputfile {}\n", file.data);
+  }
 }
 
 }

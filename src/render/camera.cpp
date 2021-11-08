@@ -1,8 +1,8 @@
 #include <points/render/camera.h>
 #include <points/render/aabb.h>
-#include "camera_p.h"
+#include "camera.hpp"
 
-#include "glm_include.h"
+#include "glm_include.hpp"
 
 #include <cmath>
 

@@ -19,7 +19,7 @@
 
 #include <points/converter/converter.h>
 
-#include "morton_p.h"
+#include "morton.hpp"
 
 #include <vector>
 #include <memory>
@@ -29,6 +29,30 @@ namespace points
 {
 namespace converter
 {
+
+struct input_data_id_t
+{
+  uint32_t data;
+};
+
+struct input_name_ref_t
+{
+  const char *name;
+  uint32_t name_length;
+};
+
+struct input_data_source_t
+{
+  input_data_id_t input_id;
+  std::unique_ptr<char[]> name;
+  uint32_t name_length;
+  uint32_t buffer_count = 0;
+};
+inline input_name_ref_t input_name_ref_from_input_data_source(const input_data_source_t &source)
+{
+  return {source.name.get(), source.name_length};
+}
+
 
 struct attributes_t
 {
@@ -44,13 +68,12 @@ struct attribute_buffers_t
 
 struct internal_header_t : header_t
 {
-  std::string name;
+  input_data_id_t input_id;
   morton::morton64_t morton_min;
   morton::morton64_t morton_max;
   int lod_span;
   
   attributes_t attributes;
-
 };
 
 inline void internal_header_initialize(internal_header_t &header)

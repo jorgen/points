@@ -17,46 +17,41 @@
 ************************************************************************/
 #pragma once
 
-#include <uv.h>
-#include <vector>
-#include <memory>
-#include <string>
-#include <thread>
-#include <mutex>
-
 #include <points/converter/converter.h>
+#include <points/converter/error.h>
+#include <points/converter/laszip_file_convert_callbacks.h>
 
-#include "conversion_types_p.h"
-#include "event_pipe_p.h"
-#include "reader_p.h"
-#include "threaded_event_loop_p.h"
+#include <string>
 
-#include "tree_p.h"
+#include "processor.hpp"
 
 namespace points
 {
 namespace converter
 {
-class processor_t
+
+struct converter_t
 {
-public:
-  processor_t(converter_t &converter);
-  void add_files(const std::vector<std::string> &files);
-  //void add_data(const void *data, size_t data_size);
-
-private:
-  converter_t &converter;
-  threaded_event_loop_t event_loop;
-  event_pipe_t<points_t> sorted_points;
-  event_pipe_t<file_error_t> file_errors;
-  point_reader_t sorter;
-
-  tree_t tree;
-  bool tree_initialized;
-  bool tree_state_initialized;
-
-  void handle_sorted_points(std::vector<points_t> &&sorted_points);
-  void handle_file_errors(std::vector<file_error_t> &&errors);
+  converter_t(const char *cache_filename, uint64_t cache_filename_size)
+    : cache_filename(cache_filename, cache_filename_size)
+    , processor(*this)
+    , convert_callbacks(laszip_callbacks())
+    , runtime_callbacks{}
+  {
+    tree_state.scale[0] = std::nan("1");
+    tree_state.scale[1] = std::nan("1");
+    tree_state.scale[2] = std::nan("1");
+    tree_state.offset[0] = std::nan("1");
+    tree_state.offset[1] = std::nan("1");
+    tree_state.offset[2] = std::nan("1");
+  }
+  std::string cache_filename;
+  tree_global_state_t tree_state;
+  processor_t processor;
+  converter_file_convert_callbacks_t convert_callbacks;
+  converter_runtime_callbacks_t runtime_callbacks;
+  converter_conversion_status_t status;
 };
-}
+
+} // namespace converter
 } // namespace points

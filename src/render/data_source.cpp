@@ -15,7 +15,7 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <data_source_p.h>
+#include <data_source.hpp>
 
 namespace points
 {

@@ -17,9 +17,9 @@
 ************************************************************************/
 #include <points/render/flat_points_data_source.h>
 
-#include "data_source_flat_points_p.h"
+#include "data_source_flat_points.hpp"
 
-#include "renderer_p.h"
+#include "renderer.hpp"
 
 #include <fmt/printf.h>
 

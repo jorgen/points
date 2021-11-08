@@ -16,10 +16,11 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include <points/converter/converter.h>
-#include "converter_p.h"
+#include "converter.hpp"
+#include "conversion_types.hpp"
 
-#include "error_p.h"
-#include "processor_p.h"
+#include "error.hpp"
+#include "processor.hpp"
 
 #include <vector>
 #include <string>
@@ -73,12 +74,17 @@ void converter_add_runtime_callbacks(converter_t *converter, converter_runtime_c
 
 void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count)
 {
-  std::vector<std::string> input_files;
+  std::vector<input_data_source_t> input_files;
   for (uint32_t i = 0; i < buffer_count; i++)
   {
-    input_files.push_back(std::string(buffers[i].data, buffers[i].size)); 
+    input_files.emplace_back();
+    auto &input_data_source = input_files.back();
+    input_data_source.name.reset(new char[buffers[i].size + 1]);
+    memcpy(input_data_source.name.get(), buffers[i].data, buffers[i].size);
+    input_data_source.name_length = buffers[i].size;
+    input_data_source.name[buffers[i].size] = 0;
   }
-  converter->processor.add_files(input_files);
+  converter->processor.add_files(std::move(input_files));
 }
 
 void converter_wait_finish(converter_t *converter)

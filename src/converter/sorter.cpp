@@ -15,10 +15,10 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "sorter_p.h"
-#include "input_header_p.h"
-#include "morton_p.h"
-#include "memcpy_array_p.h"
+#include "sorter.hpp"
+#include "input_header.hpp"
+#include "morton.hpp"
+#include "memcpy_array.hpp"
 
 #include <points/converter/default_attribute_names.h>
 #include <vector>

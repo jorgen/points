@@ -15,9 +15,9 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "input_header_p.h"
+#include "input_header.hpp"
 
-#include "morton_p.h"
+#include "morton.hpp"
 
 #include <assert.h>
 
@@ -25,26 +25,13 @@ namespace points
 {
 namespace converter
 {
-void header_add_attribute(struct header_t *h, const char *name, uint64_t name_size, enum format_t format, enum components_t components, int group)
+void header_add_attribute(struct header_t *h, const char *name, uint32_t name_size, enum format_t format, enum components_t components, int group)
 {
   internal_header_t *header = static_cast<internal_header_t *>(h);
   header->attributes.attribute_names.emplace_back(new char[name_size + 1]);
   memcpy(header->attributes.attribute_names.back().get(), name, name_size);
   header->attributes.attribute_names.back().get()[name_size] = 0;
   header->attributes.attributes.push_back({header->attributes.attribute_names.back().get(), name_size, format, components, group});
-}
-
-void header_set_name(header_t *h, const char *name, uint64_t name_size)
-{
-  internal_header_t *header = static_cast<internal_header_t *>(h);
-  header->name = std::string(name, name_size);
-}
-
-const char *header_get_name(header_t *h)
-{
-  internal_header_t *header = static_cast<internal_header_t *>(h);
-  return header->name.c_str();
-
 }
 
 void header_p_set_morton_aabb(const tree_global_state_t &tree_state, internal_header_t &header)
@@ -86,7 +73,7 @@ void attributes_copy(const attributes_t &source, attributes_t &target)
 
 void header_copy(const internal_header_t &source, internal_header_t &target)
 {
-  target.name = source.name;
+  target.input_id = source.input_id;
   target.point_count = source.point_count;
   memcpy(target.offset, source.offset, sizeof(target.offset));
   memcpy(target.scale, source.scale, sizeof(target.scale));

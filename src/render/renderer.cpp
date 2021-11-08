@@ -1,14 +1,14 @@
 //#include <points/render/renderer.h>
 //#include <points/render/camera.h>
 
-#include "renderer_p.h"
+#include "renderer.hpp"
 
 #include <vector>
 #include <fmt/printf.h>
 
-#include "camera_p.h"
-#include "data_source_p.h"
-#include "renderer_callbacks_p.h"
+#include "camera.hpp"
+#include "data_source.hpp"
+#include "renderer_callbacks.hpp"
 
 namespace points
 {

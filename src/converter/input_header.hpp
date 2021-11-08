@@ -26,7 +26,7 @@
 
 #include <points/converter/converter.h>
 
-#include "conversion_types_p.h"
+#include "conversion_types.hpp"
 
 namespace points
 {

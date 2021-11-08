@@ -17,7 +17,7 @@
 ************************************************************************/
 #include <points/render/renderer.h>
 #include <points/render/buffer.h>
-#include "buffer_p.h"
+#include "buffer.hpp"
 
 namespace points
 {

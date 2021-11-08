@@ -3,10 +3,10 @@
 #include <points/render/renderer.h>
 #include <points/render/camera.h>
 #include <points/render/aabb.h>
-#include <camera_p.h>
-#include <frustum_p.h>
-#include <aabb_p.h>
-#include <glm_include.h>
+#include <camera.hpp>
+#include <frustum.hpp>
+#include <aabb.hpp>
+#include <glm_include.hpp>
 
 TEST_CASE("Verify_Perspective", "[render]")
 {

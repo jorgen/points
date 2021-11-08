@@ -15,11 +15,11 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "data_source_skybox_p.h"
+#include "data_source_skybox.hpp"
 
-#include "renderer_p.h"
-#include "renderer_callbacks_p.h"
-#include "image_decoder_p.h"
+#include "renderer.hpp"
+#include "renderer_callbacks.hpp"
+#include "image_decoder.hpp"
 
 namespace points
 {

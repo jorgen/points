@@ -17,45 +17,24 @@
 ************************************************************************/
 #pragma once
 
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
-#include <points/render/flat_points_data_source.h>
-#include "data_source_p.h"
-#include "buffer_p.h"
-#include "renderer_callbacks_p.h"
+#include <string>
 
-#include "glm_include.h"
-
-#include <vector>
-#include <memory>
-#include <stdint.h>
+#include "conversion_types.hpp"
 
 namespace points
 {
-namespace render
+namespace converter
 {
-struct flat_points_data_source_t : public data_source_t
+struct error_t 
 {
-  flat_points_data_source_t(callback_manager_t &callbacks, std::string url);
-
-  void add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render) override;
-  
-  callback_manager_t &callbacks;
-
-  std::vector<glm::vec3> vertices;
-  buffer_t vertex_buffer;
-
-  std::vector<glm::u8vec3> colors;
-  buffer_t color_buffer;
-  
-  aabb_t aabb;
-
-  buffer_t project_view_buffer;
-  glm::mat4 project_view;
-
-  draw_buffer_t render_list[3];
+  int code;
+  std::string msg;
 };
 
-} // namespace render
+struct file_error_t
+{
+  input_data_id_t input_id;
+  error_t error;
+};
 }
-
+} // namespace points

@@ -15,9 +15,9 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "worker_p.h"
+#include "worker.hpp"
 
-#include "threaded_event_loop_p.h"
+#include "threaded_event_loop.hpp"
 
 namespace points
 {
@@ -26,20 +26,23 @@ namespace converter
   
 void worker_t::enqueue(threaded_event_loop_t &loop)
 {
-  (void)event_loop;
+  //(void)event_loop;
   _worker_request.data = this;
   uv_queue_work(
     loop.loop, &_worker_request,
     [](uv_work_t *req) { static_cast<worker_t *>(req->data)->work(); },
     [](uv_work_t *req, int status) {
       completion_t completion = status == UV_ECANCELED ? cancelled : completed;
-      static_cast<worker_t *>(req->data)->after_work(completion);
+      auto worker = static_cast<worker_t *>(req->data);
+      worker->_done = true;
+      worker->after_work(completion);
     });
 }
 void worker_t::cancel()
 {
   uv_cancel((uv_req_t*)&_worker_request);
 }
+
 
 }
 } // namespace points

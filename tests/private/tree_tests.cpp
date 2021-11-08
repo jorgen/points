@@ -1,11 +1,11 @@
 #include <catch2/catch.hpp>
 #include <fmt/printf.h>
 
-#include <tree_p.h>
-#include <input_header_p.h>
+#include <tree.hpp>
+#include <input_header.hpp>
 #include <points/converter/default_attribute_names.h>
-#include <morton_tree_coordinate_transform_p.h>
-#include <morton_p.h>
+#include <morton_tree_coordinate_transform.hpp>
+#include <morton.hpp>
 
 namespace {
 

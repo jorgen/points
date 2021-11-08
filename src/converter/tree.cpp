@@ -15,10 +15,10 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "tree_p.h"
+#include "tree.hpp"
 #include <assert.h>
 #include <points/converter/default_attribute_names.h>
-#include "point_buffer_splitter_p.h"
+#include "point_buffer_splitter.hpp"
 
 namespace points
 {

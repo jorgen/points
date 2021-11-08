@@ -62,14 +62,12 @@ struct header_t
   double min[3];
   double max[3];
 };
-POINTS_CONVERTER_EXPORT void header_set_name(header_t *header, const char *name, uint64_t name_size);
-POINTS_CONVERTER_EXPORT const char *header_get_name(header_t *header);
-POINTS_CONVERTER_EXPORT void header_add_attribute(struct header_t *header, const char *name, uint64_t name_size, enum format_t format, enum components_t components, int group = 0);
+POINTS_CONVERTER_EXPORT void header_add_attribute(struct header_t *header, const char *name, uint32_t name_size, enum format_t format, enum components_t components, int group = 0);
 
 struct attribute_t
 {
   const char *name;
-  uint64_t name_size;
+  uint32_t name_size;
   format_t format;
   components_t components;
   int group;

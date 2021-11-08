@@ -17,22 +17,36 @@
 ************************************************************************/
 #pragma once
 
-#include <string>
+#include <uv.h>
 
 namespace points
 {
 namespace converter
 {
-struct error_t 
+class threaded_event_loop_t;
+class worker_t
 {
-  int code;
-  std::string msg;
-};
+public:
+  enum completion_t
+  {
+    cancelled,
+    completed 
+  };
+  virtual ~worker_t() {}
+  virtual void work() = 0;
+  virtual void after_work(completion_t completion) = 0;
 
-struct file_error_t
-{
-  std::string filename;
-  error_t error;
+  void enqueue(threaded_event_loop_t &loop);
+  void cancel();
+  bool done() const
+  {
+    return _done;
+  }
+
+private:
+  uv_work_t _worker_request;
+  threaded_event_loop_t *_event_loop;
+  bool _done;
 };
 }
 } // namespace points

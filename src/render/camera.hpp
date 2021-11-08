@@ -1,8 +1,7 @@
-#ifndef POINTS_CAMERA_P_H
-#define POINTS_CAMERA_P_H
+#pragma once
 
-#include "glm_include.h"
-#include "frustum_p.h"
+#include "glm_include.hpp"
+#include "frustum.hpp"
 
 #ifdef _MSC_VER
 #define M_PI 3.14159265358979323846
@@ -100,5 +99,3 @@ struct fps_t
 } // namespace camera_manipulator
 } // namespace render
 } // namespace points
-
-#endif

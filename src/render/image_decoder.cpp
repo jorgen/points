@@ -25,7 +25,7 @@
 #pragma clang diagnostic pop
 #endif
 
-#include "image_decoder_p.h"
+#include "image_decoder.hpp"
 
 std::unique_ptr<uint8_t, decltype(&free)> load_image(const void *data, int data_size, int &x, int &h, int &channels)
 {

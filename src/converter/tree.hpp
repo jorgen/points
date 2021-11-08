@@ -20,8 +20,8 @@
 #include <vector>
 #include <list>
 
-#include "conversion_types_p.h"
-#include "morton_p.h"
+#include "conversion_types.hpp"
+#include "morton.hpp"
 
 namespace points
 {

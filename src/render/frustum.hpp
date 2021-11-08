@@ -20,7 +20,7 @@
 
 #include <points/render/aabb.h>
 
-#include "glm_include.h"
+#include "glm_include.hpp"
 
 namespace points
 {

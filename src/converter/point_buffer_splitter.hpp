@@ -15,13 +15,12 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef POINT_BUFFER_SPLITTER_H
-#define POINT_BUFFER_SPLITTER_H
+#pragma once
 
-#include "conversion_types_p.h"
-#include "tree_p.h"
-#include "input_header_p.h"
-#include "morton_tree_coordinate_transform_p.h"
+#include "conversion_types.hpp"
+#include "tree.hpp"
+#include "input_header.hpp"
+#include "morton_tree_coordinate_transform.hpp"
 
 #include <points/converter/default_attribute_names.h>
 
@@ -265,4 +264,3 @@ void point_buffer_split_buffers_to_children(const tree_global_state_t &state, po
 
 }
 }
-#endif // POINT_BUFFER_SPLITTER_H

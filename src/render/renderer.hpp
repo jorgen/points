@@ -15,31 +15,28 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
-#include "glm_include.h"
-#include <vector>
+#pragma once
 
+#include <points/render/renderer.h>
+
+#include "renderer_callbacks.hpp"
+#include "camera.hpp"
+#include "data_source.hpp"
 namespace points
 {
 namespace render
 {
-struct frame_camera_t
+
+struct renderer_t
 {
-  glm::dmat4 view;
-  glm::dmat4 projection;
-  glm::dmat4 view_projection;
-  glm::dmat4 inverse_view;
-  glm::dmat4 inverse_projection;
-  glm::dmat4 inverse_view_projection;
+  renderer_t()
+    : callbacks(this)
+  {}
+  std::vector<camera_t*> cameras;
+  std::vector<data_source_t *> data_sources;
+  std::vector<draw_group_t> to_render;
+  callback_manager_t callbacks;
 };
 
-struct data_source_t
-{
-  virtual ~data_source_t();
-  virtual void add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render) = 0;
-};
-} // namespace render
-} // namespace points
-
-#endif
+}
+}

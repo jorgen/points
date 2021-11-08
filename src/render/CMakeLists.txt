@@ -12,15 +12,15 @@ set(public_headers
   points/render/flat_points_data_source.h)
 
 set(private_headers
-  camera_p.h
-  aabb_p.h
-  data_source_aabb_p.h
-  frustum_p.h
-  glm_include.h
-  data_source_p.h
-  buffer_p.h
-  image_decoder_p.h
-  data_source_flat_points_p.h)
+  camera.hpp
+  aabb.hpp
+  data_source_aabb.hpp
+  frustum.hpp
+  glm_include.hpp
+  data_source.hpp
+  buffer.hpp
+  image_decoder.hpp
+  data_source_flat_points.hpp)
 
 set(sources
   renderer.cpp 
