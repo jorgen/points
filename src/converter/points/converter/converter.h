@@ -79,12 +79,23 @@ struct buffer_t
   uint64_t size;
 };
 
+struct converter_file_pre_init_info_t
+{
+  double aabb_min[3];
+  uint64_t approximate_point_count;
+  uint8_t found_aabb_min;
+  uint8_t approximate_point_size_bytes;
+  bool found_point_count;
+};
+
+typedef converter_file_pre_init_info_t (*converter_file_pre_init_callback_t)(const char *filename, size_t filename_size, struct error_t **error);
 typedef void (*converter_file_init_callback_t)(const char *filename, size_t filename_size, header_t *header, void **user_ptr, struct error_t **error);
-typedef uint64_t (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, buffer_t *buffers, uint64_t buffers_size, uint64_t max_points_to_convert, uint8_t *done, struct error_t **error);
+typedef void (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, uint64_t max_points_to_convert, buffer_t *buffers, uint64_t buffers_size, uint64_t *points_read, uint8_t *done, struct error_t **error);
 typedef void (*converter_file_destroy_user_ptr_t)(void *user_ptr);
 
 struct converter_file_convert_callbacks_t
 {
+  converter_file_pre_init_callback_t pre_init;
   converter_file_init_callback_t init;
   converter_file_convert_data_callback_t convert_data;
   converter_file_destroy_user_ptr_t destroy_user_ptr;

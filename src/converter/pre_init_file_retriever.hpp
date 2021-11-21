@@ -28,52 +28,62 @@ namespace points
 {
 namespace converter
 {
-struct get_header_files_t
+struct get_file_pre_init_t
 {
   input_data_id_t id;
   input_name_ref_t filename;
 };
 
-inline get_header_files_t get_header_files_from_input_data_source(const input_data_source_t &a)
+inline get_file_pre_init_t get_file_pre_init_from_input_data_source(const input_data_source_t &a)
 {
-  get_header_files_t ret;
+  get_file_pre_init_t ret;
   ret.id = a.input_id;
   ret.filename = input_name_ref_from_input_data_source(a);
   return ret;
 }
 
-struct get_header_files_batch_t
+struct pre_init_info_file_t
 {
-  get_header_files_batch_t(converter_file_convert_callbacks_t &convert_callbacks, event_pipe_t<internal_header_t> &headers_for_files, event_pipe_t<file_error_t> &file_errors)
+  input_data_id_t id;
+  double min[3];
+  uint64_t approximate_point_count;
+  uint8_t approximate_point_size_bytes;
+  bool found_min;
+};
+
+struct get_pre_init_file_batch_t
+{
+  get_pre_init_file_batch_t(converter_file_convert_callbacks_t &convert_callbacks, event_pipe_t<pre_init_info_file_t> &aabb_min_event_pipe, event_pipe_t<file_error_t> &file_errors)
     : convert_callbacks(convert_callbacks)
-    , headers_for_files(headers_for_files)
+    , pre_init_file_event_pipe(aabb_min_event_pipe)
     , file_errors(file_errors)
     , input_done(0)
   {
   }
-  std::vector<get_header_files_t> input;
+  std::vector<get_file_pre_init_t> input;
   converter_file_convert_callbacks_t &convert_callbacks;
-  event_pipe_t<internal_header_t> &headers_for_files;
+  event_pipe_t<pre_init_info_file_t> &pre_init_file_event_pipe;
   event_pipe_t<file_error_t> &file_errors;
   std::vector<std::unique_ptr<worker_t>> workers;
   uint32_t input_done;
 };
 
-class header_retriever_t : public about_to_block_t
+class pre_init_file_retriever_t : public about_to_block_t
 {
 public:
-  header_retriever_t(threaded_event_loop_t &event_loop, event_pipe_t<internal_header_t> &headers_for_files, event_pipe_t<file_error_t> &file_errors);
-  void add_files(std::vector<get_header_files_t> files, converter_file_convert_callbacks_t &convert_callbacks);
+  pre_init_file_retriever_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, event_pipe_t<pre_init_info_file_t> &pre_init_for_file, event_pipe_t<file_error_t> &file_errors);
+  void add_files(std::vector<get_file_pre_init_t> files, converter_file_convert_callbacks_t &convert_callbacks);
   void about_to_block() override;
 
 private:
-  void handle_new_files(std::vector<get_header_files_batch_t> &&input_files_batch);
+  void handle_new_files(std::vector<get_pre_init_file_batch_t> &&input_files_batch);
+  const tree_global_state_t &_tree_state;
   threaded_event_loop_t &_event_loop;
 
-  std::vector<std::unique_ptr<get_header_files_batch_t>> _input_batches;
-  event_pipe_t<get_header_files_batch_t> _add_files_pipe;
+  std::vector<std::unique_ptr<get_pre_init_file_batch_t>> _input_batches;
+  event_pipe_t<get_pre_init_file_batch_t> _add_files_pipe;
 
-  event_pipe_t<internal_header_t> &_headers_for_files;
+  event_pipe_t<pre_init_info_file_t> &_pre_init_for_file;
   event_pipe_t<file_error_t> &_file_errors;
 
 };

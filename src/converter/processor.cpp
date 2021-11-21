@@ -5,7 +5,11 @@
 
 #include "threaded_event_loop.hpp"
 
+#include "morton_tree_coordinate_transform.hpp"
+
 #include <stdlib.h>
+#include <algorithm>
+
 namespace points
 {
 namespace converter
@@ -29,44 +33,109 @@ struct thread_count_env_setter_t
 static thread_count_env_setter_t thread_pool_size_setter;
 
 processor_t::processor_t(converter_t &converter)
-  : converter(converter)
-  , headers_for_files(event_loop, [this](std::vector<internal_header_t> &&headers) { this->handle_headers(std::move(headers)); })
-  , file_errors_headers(event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors_headers(std::move(events)); })
-  , sorted_points(event_loop, [this](std::vector<points::converter::points_t> &&events) { this->handle_sorted_points(std::move(events)); })
-  , file_errors(event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
-  , point_reader_done_with_file(event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
-  , header_reader(input_event_loop, headers_for_files, file_errors)
-  //, point_reader(converter.tree_state, sorted_points, point_reader_done_with_file, file_errors, converter.convert_callbacks)
-  , tree_initialized(false)
-  , tree_state_initialized(false)
+  : _converter(converter)
+  , _files_added(_event_loop, [this](std::vector<std::vector<input_data_source_t>> &&new_files) { this->handle_new_files(std::move(new_files)); })
+  , _pre_init_for_files(_event_loop, [this](std::vector<pre_init_info_file_t> &&aabb_min_for_files) { this->handle_pre_init_info_for_files(std::move(aabb_min_for_files)); })
+  , _pre_init_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors_headers(std::move(events)); })
+  , _sorted_points(_event_loop, [this](std::vector<points::converter::points_t> &&events) { this->handle_sorted_points(std::move(events)); })
+  , _file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
+  , _point_reader_done_with_file(_event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
+  , _pre_init_file_retriever(_converter.tree_state, _input_event_loop, _pre_init_for_files, _file_errors)
+  , _point_reader(_converter.tree_state, _input_event_loop, _sorted_points, _point_reader_done_with_file, _file_errors)
+  , _pending_pre_init_files(0)
+  , _pre_init_files_with_aabb_min_read_index(0)
+  , _pre_init_files_with_no_aabb_min_read_index(0)
+  , _read_sort_pending(0)
+  , _read_sort_budget(uint64_t(1) << 20)
+  , _tree_initialized(false)
+  , _tree_state_initialized(false)
 {
-  (void) this->converter;
+  (void) _converter;
+  _event_loop.add_about_to_block_listener(this);
 }
 
 void processor_t::add_files(std::vector<input_data_source_t> &&files)
 {
-  size_t end_index = input_sources.size();
-  input_sources.insert(input_sources.end(), std::make_move_iterator(files.begin()), std::make_move_iterator(files.end()));
-  std::vector<get_header_files_t> get_header_files;
-  get_header_files.reserve(files.size());
-  for (size_t i = end_index; i < input_sources.size(); i++)
-  {
-    using id_type = decltype(input_data_id_t::data);
-    input_sources[i].input_id.data = id_type(i); 
-    get_header_files.push_back(get_header_files_from_input_data_source(input_sources[i]));
-  }
-  header_reader.add_files(get_header_files, converter.convert_callbacks);
+  _files_added.post_event(std::move(files));
 }
 
-void processor_t::handle_headers(std::vector<internal_header_t> &&headers)
+void processor_t::about_to_block()
 {
-  (void)headers;
-  if (!tree_state_initialized)
-  {
-    tree_state_initialized = true;
-    //_tr
+  if (_pending_pre_init_files == 0)
+  { 
+    //&& _aabb_min_read_index < _aabb_min_read.size())
+    for (; _pre_init_files_with_no_aabb_min_read_index < _pre_init_no_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_no_aabb_min_read_index++)
+    {
+      auto &input_file = _input_sources[_pre_init_no_aabb_min[_pre_init_files_with_no_aabb_min_read_index].data]; 
+      if (input_file.read_started)
+        continue;
+      auto approximate_input_size = input_file.approximate_point_count * input_file.approximate_point_size_bytes;
+      _read_sort_budget -= int64_t(approximate_input_size);
+      //_read
+    }
+//    for (; _headers_read_index<_headers_read.size() && _read_sort_budget> 0; _headers_read_index++)
+//    {
+//      auto &input_file = _input_sources[_headers_read[_headers_read_index].id.data]; 
+//      assert(input_file.header_started && input_file.header_finished);
+//      if (input_file.read_started)
+//        continue;
+//      auto expected_input_size = header_expected_input_size(input_file.header);
+//      _read_sort_budget -= int64_t(expected_input_size);
+//    }
   }
-  //point_reader.add_files(files);
+}
+
+void processor_t::handle_new_files(std::vector<std::vector<input_data_source_t>> &&new_files_collection)
+{
+  for (auto &new_files : new_files_collection)
+  {
+    auto new_files_size = new_files.size();
+    //_headers_read_pending += uint32_t(new_files_size);
+    size_t end_index = _input_sources.size();
+    _input_sources.insert(_input_sources.end(), std::make_move_iterator(new_files.begin()), std::make_move_iterator(new_files.end()));
+    std::vector<get_file_pre_init_t> get_pre_init_files;
+    get_pre_init_files.reserve(new_files_size);
+    for (size_t i = end_index; i < _input_sources.size(); i++)
+    {
+      using id_type = decltype(input_data_id_t::data);
+      auto &source = _input_sources[i];
+      source.input_id.data = id_type(i);
+      source.read_started = false;
+      source.read_finished = false;
+      source.approximate_point_count = 0;
+      source.approximate_point_size_bytes = 0;
+      get_pre_init_files.push_back(get_file_pre_init_from_input_data_source(source));
+    }
+    _pre_init_file_retriever.add_files(get_pre_init_files, _converter.convert_callbacks);
+  }
+}
+
+void processor_t::handle_pre_init_info_for_files(std::vector<pre_init_info_file_t> &&pre_init_for_files)
+{
+  _pending_pre_init_files -= uint32_t(pre_init_for_files.size());
+  for (auto &&pre_init_for_file : pre_init_for_files)
+  {
+    auto &source = _input_sources[pre_init_for_file.id.data];
+    source.approximate_point_count = pre_init_for_file.approximate_point_count;
+    source.approximate_point_size_bytes = pre_init_for_file.approximate_point_size_bytes;
+    if (pre_init_for_file.found_min)
+    {
+      _pre_init_files_with_aabb_min.emplace_back();
+      auto &back = _pre_init_files_with_aabb_min.back();
+      back.id = pre_init_for_file.id;
+      convert_pos_to_morton(_converter.tree_state.scale, _converter.tree_state.offset, pre_init_for_file.min, back.aabb_min);
+
+    }
+    else
+    {
+      _pre_init_no_aabb_min.emplace_back(pre_init_for_file.id);
+    }
+  }
+  if (_pending_pre_init_files == 0)
+  {
+    std::sort(_pre_init_files_with_aabb_min.begin(), _pre_init_files_with_aabb_min.end());
+    _pre_init_files_with_aabb_min_read_index = 0;
+  }
 }
 
 void processor_t::handle_file_errors_headers(std::vector<file_error_t> &&errors)
@@ -78,16 +147,16 @@ void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_eve
   if (sorted_points_event.empty())
     return;
   int i = 0;
-  if (!tree_initialized)
+  if (!_tree_initialized)
   {
-    tree_initialize(converter.tree_state, tree, std::move(sorted_points_event[0]));
-    tree_initialized = true;
+    tree_initialize(_converter.tree_state, _tree, std::move(sorted_points_event[0]));
+    _tree_initialized = true;
     i++;
   }
 
   for (; i < int(sorted_points_event.size()); i++)
   {
-    tree_add_points(converter.tree_state, tree, std::move(sorted_points_event[i]));
+    tree_add_points(_converter.tree_state, _tree, std::move(sorted_points_event[i]));
   }
 }
 

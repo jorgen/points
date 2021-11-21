@@ -42,21 +42,6 @@ namespace points
 namespace converter
 {
 
-struct input_file_t;
-class get_data_worker_t : public worker_t
-{
-public:
-  get_data_worker_t(converter_file_convert_callbacks_t &convert_callbacks, input_file_t &input_file, std::vector<get_data_worker_t *> &done_list);
-  void work() override;
-  void after_work(completion_t completion) override;
-
-  std::unique_ptr<error_t> error;
-  attribute_buffers_t buffers;
-  converter_file_convert_callbacks_t &convert_callbacks;
-  input_file_t &input_file;
-  uint64_t points_read;
-  std::vector<get_data_worker_t *> &done_list;
-};
 //class sort_worker_t : public worker_t
 //{
 //public:
@@ -88,30 +73,55 @@ public:
 //  uint32_t sort_batches_finished;
 //};
 //
-//class point_reader_t : public about_to_block_t
-//{
-//public:
-//  point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors, converter_file_convert_callbacks_t &convert_callbacks);
-//  void add_files(const std::vector<std::string> &files);
-//  // void add_data(const void *data, size_t data_size);
+
+struct get_points_files_t
+{
+  input_data_id_t id;
+  input_name_ref_t filename;
+  internal_header_t &header;
+};
+
+struct get_points_files_with_callbacks_t
+{
+  std::vector<get_points_files_t> files;
+  converter_file_convert_callbacks_t &callbacks;
+};
+
+class get_data_worker_t : public worker_t
+{
+public:
+  get_data_worker_t(const converter_file_convert_callbacks_t &convert_callbacks, get_points_files_t file);
+  void work() override;
+  void after_work(completion_t completion) override;
+
+  std::unique_ptr<error_t> error;
+  attribute_buffers_t buffers;
+  converter_file_convert_callbacks_t convert_callbacks;
+  get_points_files_t file;
+  uint64_t points_read;
+  bool done;
+};
+
+class point_reader_t : public about_to_block_t
+{
+public:
+  point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors);
+  void add_file(std::vector<get_points_files_t> &&new_files, converter_file_convert_callbacks_t &convert_callbacks);
 //
-//  void about_to_block() override;
+  void about_to_block() override;
 //
-//private:
-//  void handle_new_files(std::vector<std::vector<std::string>> &&new_files);
+private:
+  void handle_new_files(std::vector<get_points_files_with_callbacks_t> &&new_files);
 //
-//  const tree_global_state_t &tree_state;
-//
-//  threaded_event_loop_t &event_loop;
-//  event_pipe_t<points_t> &sorted_points_pipe;
-//  event_pipe_t<input_data_id_t> &done_with_file;
-//  event_pipe_t<file_error_t> &file_errors;
-//  event_pipe_t<std::vector<std::string>> new_files_pipe;
-//  
-//  converter_file_convert_callbacks_t &convert_callbacks;
-//
-//  std::unordered_set<std::string> all_input_filenames;
-//  std::vector<std::unique_ptr<input_file_t>> input_files;
+  const tree_global_state_t &_tree_state;
+  threaded_event_loop_t &_event_loop;
+  event_pipe_t<points_t> &_sorted_points_pipe;
+  event_pipe_t<input_data_id_t> &_done_with_file;
+  event_pipe_t<file_error_t> &_file_errors;
+  event_pipe_t<get_points_files_with_callbacks_t> _new_files_pipe;
+  //event_pipt_t<points_read> _points_read;
+  //  std::unordered_set<std::string> all_input_filenames;
+  //  std::vector<std::unique_ptr<input_file_t>> input_files;
 //
 //  std::vector<std::unique_ptr<batch_get_headers_t>> get_headers_batch_jobs;
 //
@@ -122,6 +132,6 @@ public:
 //
 //  uint32_t active_converters;
 //  uint32_t max_converters;
-//};
+};
 } // namespace converter
 }

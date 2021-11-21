@@ -32,36 +32,63 @@ namespace points
 {
 namespace converter
 {
-//get_data_worker_t::get_data_worker_t(converter_file_convert_callbacks_t &convert_callbacks, input_file_t &input_file, std::vector<get_data_worker_t *> &done_list)
-//  : convert_callbacks(convert_callbacks)
-//  , input_file(input_file)
-//  , points_read(0)
-//  , done_list(done_list)
-//{
-//}
-//
-//void get_data_worker_t::work()
-//{
-//  int convert_size = 20000;
-//  attribute_buffers_initialize(input_file.header.attributes.attributes, buffers, convert_size);
-//  error_t *local_error = nullptr;
-//  points_read = convert_callbacks.convert_data(input_file.user_ptr, &input_file.header, input_file.header.attributes.attributes.data(), input_file.header.attributes.attributes.size(), buffers.buffers.data(), buffers.buffers.size(), convert_size, &input_file.done_read_file, &local_error);
-//  if (local_error)
-//    error.reset(local_error);
+get_data_worker_t::get_data_worker_t(const converter_file_convert_callbacks_t &convert_callbacks, get_points_files_t file)
+  : convert_callbacks(convert_callbacks)
+  , file(file)
+  , points_read(0)
+  , done(false)
+{
+}
+
+void get_data_worker_t::work()
+{
+  internal_header_t reloaded_header;
+  internal_header_initialize(reloaded_header);
+  error_t *local_error = nullptr;
+  void *user_ptr;
+  convert_callbacks.init(file.filename.name, file.filename.name_length, &reloaded_header, &user_ptr, &local_error);
+  error.reset(local_error);
+  if (local_error)
+  {
+    if (convert_callbacks.destroy_user_ptr && user_ptr)
+    {
+      convert_callbacks.destroy_user_ptr(user_ptr);
+      user_ptr = nullptr;
+    }
+    error.reset(local_error);
+    done = true;
+    return;
+  }
+
+  int convert_size = 20000;
+  uint8_t done_read_file = false;
+  attribute_buffers_initialize(file.header.attributes.attributes, buffers, convert_size);
+  convert_callbacks.convert_data(user_ptr, &reloaded_header, reloaded_header.attributes.attributes.data(), reloaded_header.attributes.attributes.size(), convert_size, buffers.buffers.data(), buffers.buffers.size(), &points_read, &done_read_file, &local_error);
+  if (local_error)
+  {
+    if (convert_callbacks.destroy_user_ptr && user_ptr)
+    {
+      convert_callbacks.destroy_user_ptr(user_ptr);
+      user_ptr = nullptr;
+    }
+    error.reset(local_error);
+    done = true;
+    return;
+  }
+
 //  attribute_buffers_adjust_buffers_to_size(input_file.header.attributes.attributes, buffers, points_read);
 //  if ((input_file.user_ptr && (input_file.done_read_file || (error && error->code)) && convert_callbacks.destroy_user_ptr))
 //  {
 //    convert_callbacks.destroy_user_ptr(input_file.user_ptr); 
 //    input_file.user_ptr = nullptr;
 //  }
-//}
-//
-//void get_data_worker_t::after_work(completion_t completion)
-//{
-//  (void)completion;
-//  done_list.push_back(this);
-//}
-//  
+}
+
+void get_data_worker_t::after_work(completion_t completion)
+{
+  (void)completion;
+}
+  
 //sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, input_file_t &input_file, attribute_buffers_t &&buffers, uint64_t point_count, std::vector<sort_worker_t *> &done_list)
 //  : tree_state(tree_state)
 //  , input_file(input_file)
@@ -83,26 +110,25 @@ namespace converter
 //  done_list.push_back(this);
 //}
 //
-//point_reader_t::point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors, converter_file_convert_callbacks_t &convert_callbacks)
-//  : tree_state(tree_state)
-//  , event_loop(event_loop)
-//  , sorted_points_pipe(sorted_points_pipe)
-//  , done_with_file(done_with_file)
-//  , file_errors(file_errors)
-//  , new_files_pipe(event_loop, [this](std::vector<std::vector<std::string>> &&new_files) { handle_new_files(std::move(new_files));})
+point_reader_t::point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors)
+  : _tree_state(tree_state)
+  , _event_loop(event_loop)
+  , _sorted_points_pipe(sorted_points_pipe)
+  , _done_with_file(done_with_file)
+  , _file_errors(file_errors)
+  , _new_files_pipe(event_loop, [this](std::vector<get_points_files_with_callbacks_t> &&new_files) { handle_new_files(std::move(new_files));})
 //  , convert_callbacks(convert_callbacks)
 //  , active_converters(0)
 //  , max_converters(4)
-//{
-//  input_files.reserve(100);
-//  event_loop.add_about_to_block_listener(this);
-//}
-//
-//void point_reader_t::add_files(const std::vector<std::string> &files)
-//{
-//  new_files_pipe.post_event(files);
-//}
-//
+{
+  event_loop.add_about_to_block_listener(this);
+}
+
+void point_reader_t::add_file(std::vector<get_points_files_t> &&new_files, converter_file_convert_callbacks_t &callbacks)
+{
+  get_points_files_with_callbacks_t get_points = {std::move(new_files), callbacks};
+  _new_files_pipe.post_event(std::move(get_points));
+}
 //static int get_next_nonactive_input_file(const std::vector<std::unique_ptr<input_file_t>> &input_files)
 //{
 //  int i;
@@ -114,8 +140,9 @@ namespace converter
 //  return i;
 //}
 //
-//void point_reader_t::about_to_block()
-//{
+void point_reader_t::about_to_block()
+{
+}
 //  uint32_t files_inserted = 0;
 //  auto to_remove_begin =
 //    std::remove_if(get_headers_batch_jobs.begin(), get_headers_batch_jobs.end(),
@@ -217,39 +244,42 @@ namespace converter
 //
 //}
 //
-//void point_reader_t::handle_new_files(std::vector<std::vector<std::string>> &&new_files)
-//{
-//  if (convert_callbacks.init == nullptr || convert_callbacks.convert_data == nullptr)
-//  {
-//    file_error_t error;
-//    error.error = {-1, std::string("Conversion callbacks has nullptr for init or convert_data functions. Its therefor not possible to convert the data")};
-//    file_errors.post_event(std::move(error));
-//    return;
-//  }
-//  std::vector<std::string> collapsed_new_files;
-//  for (auto &files : new_files)
-//  {
-//    collapsed_new_files.insert(collapsed_new_files.end(), files.begin(), files.end());
-//  }
-//  get_headers_batch_jobs.emplace_back(new batch_get_headers_t());
-//  auto &batch_headers = get_headers_batch_jobs.back();
-//  batch_headers->convert_callbacks = convert_callbacks;
-//  batch_headers->get_headers.reserve(collapsed_new_files.size());
-//  for (auto &file : collapsed_new_files)
-//  {
-//    auto inserted = all_input_filenames.insert(file);
-//    if (inserted.second)
-//    {
-//      batch_headers->get_headers.emplace_back(*batch_headers.get(), file, collapsed_new_files.size() > 100);
-//      batch_headers->get_headers.back().enqueue(event_loop);
-//    }
-//  }
-//  if (batch_headers->get_headers.empty())
-//    get_headers_batch_jobs.pop_back();
-//
-//  fmt::print(stderr, "handle_new_files size: {} first {}\n", collapsed_new_files.size(), collapsed_new_files[0]);
-//}
-//
+void point_reader_t::handle_new_files(std::vector<get_points_files_with_callbacks_t> &&new_files)
+{
+  for (auto &new_file : new_files)
+  {
+    if (new_file.callbacks.convert_data == nullptr)
+    {
+      file_error_t error;
+      error.error = {-1, std::string("Conversion callbacks has nullptr for init or convert_data functions. Its therefor not possible to convert the data")};
+      _file_errors.post_event(std::move(error));
+      return;
+    }
+    std::vector<std::string> collapsed_new_files;
+    for (auto &files : new_files)
+    {
+      collapsed_new_files.insert(collapsed_new_files.end(), files.files.begin(), files.files.end());
+    }
+    get_headers_batch_jobs.emplace_back(new batch_get_headers_t());
+    auto &batch_headers = get_headers_batch_jobs.back();
+    batch_headers->convert_callbacks = convert_callbacks;
+    batch_headers->get_headers.reserve(collapsed_new_files.size());
+    for (auto &file : collapsed_new_files)
+    {
+      auto inserted = all_input_filenames.insert(file);
+      if (inserted.second)
+      {
+        batch_headers->get_headers.emplace_back(*batch_headers.get(), file, collapsed_new_files.size() > 100);
+        batch_headers->get_headers.back().enqueue(event_loop);
+      }
+    }
+    if (batch_headers->get_headers.empty())
+      get_headers_batch_jobs.pop_back();
+
+    fmt::print(stderr, "handle_new_files size: {} first {}\n", collapsed_new_files.size(), collapsed_new_files[0]);
+  }
+}
+
   
 }
 } // namespace points

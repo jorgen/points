@@ -25,7 +25,7 @@ set(private_headers
   memcpy_array.hpp
   tree.hpp
   point_buffer_splitter.hpp
-  header_reader.hpp
+  "pre_init_file_retriever.hpp"
    )
 
 set(sources
@@ -37,7 +37,7 @@ set(sources
   laszip_file_convert_callbacks.cpp
   sorter.cpp
   tree.cpp
-  header_reader.cpp
+  "pre_init_file_retriever.cpp"
   )
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources}  )

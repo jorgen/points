@@ -41,18 +41,6 @@ struct input_name_ref_t
   uint32_t name_length;
 };
 
-struct input_data_source_t
-{
-  input_data_id_t input_id;
-  std::unique_ptr<char[]> name;
-  uint32_t name_length;
-  uint32_t buffer_count = 0;
-};
-inline input_name_ref_t input_name_ref_from_input_data_source(const input_data_source_t &source)
-{
-  return {source.name.get(), source.name_length};
-}
-
 
 struct attributes_t
 {
@@ -94,8 +82,26 @@ inline void internal_header_initialize(internal_header_t &header)
 
   morton::morton_init_min(header.morton_min);
   morton::morton_init_max(header.morton_max);
-  header.lod_span = 0;
+  header.lod_span = 255;
 }
+
+struct input_data_source_t
+{
+  input_data_id_t input_id;
+  std::unique_ptr<char[]> name;
+  uint32_t name_length;
+  internal_header_t header;
+  bool read_started;
+  bool read_finished;
+  uint8_t approximate_point_size_bytes;
+  uint64_t approximate_point_count;
+};
+
+inline input_name_ref_t input_name_ref_from_input_data_source(const input_data_source_t &source)
+{
+  return {source.name.get(), source.name_length};
+}
+
 
 struct points_t
 {

@@ -88,6 +88,7 @@ void attribute_buffers_initialize(const std::vector<attribute_t> &attributes, at
 void attribute_buffers_adjust_buffers_to_size(const std::vector<attribute_t> &attributes, attribute_buffers_t &buffers, uint64_t point_count);
 void attributes_copy(const attributes_t &source, attributes_t &target);
 void header_copy(const internal_header_t &source, internal_header_t &target);
+uint64_t header_expected_input_size(const internal_header_t &header);
 }
 }
 

@@ -33,30 +33,22 @@ namespace converter
 struct laszip_handle_t
 {
   std::string filename;
-  laszip_POINTER reader;
+  laszip_POINTER reader = nullptr;
   laszip_point *point = nullptr;
   uint64_t point_count = 0;
   uint64_t point_read = 0;
   uint8_t las_format;
-};
 
-struct laszip_POINTER_DELETER
-{
-  laszip_POINTER ptr;
-  laszip_POINTER_DELETER(laszip_POINTER ptr)
-    : ptr(ptr)
+  ~laszip_handle_t()
   {
-  }
-  ~laszip_POINTER_DELETER()
-  {
-    if (ptr)
+    if (reader)
     {
-      if (laszip_close_reader(ptr))
+      if (laszip_close_reader(reader))
       {
         fprintf(stderr, "Failed to close laszip reader\n");
       }
 
-      if (laszip_destroy(ptr))
+      if (laszip_destroy(reader))
       {
         fprintf(stderr, "Failed to destroy laszip reader\n");
       }
@@ -157,6 +149,58 @@ static void add_attributes_format_10(header_t *header)
   add_wave_packets(header);
 }
 
+static converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(const char *filename, size_t filename_size, struct error_t **error)
+{
+  (void)filename;
+  (void)filename_size;
+  (void)error;
+  converter_file_pre_init_info_t ret;
+  ret.found_aabb_min = false;
+  ret.found_point_count = false;
+  std::unique_ptr<laszip_handle_t> laszip_handle(new laszip_handle_t());
+  if (laszip_create(&laszip_handle->reader))
+  {
+    *error = new error_t();
+    auto e = *error;
+    e->code = -1;
+    e->msg = "Failed to create laszip reader.";
+    return ret;
+  }
+  
+  laszip_BOOL is_compressed = 0;
+  std::string filename_str(filename, filename_size);
+  laszip_handle->filename = filename_str;
+  if (laszip_open_reader(laszip_handle->reader, filename_str.c_str(), &is_compressed))
+  {
+    *error = new error_t();
+    auto e = *error;
+    e->code = -1;
+    e->msg = fmt::format("Failed opening laszip reader for '{}'.", filename_str);
+    return ret;
+  }
+
+  laszip_header_struct *lasheader;
+  if (laszip_get_header_pointer(laszip_handle->reader, &lasheader))
+  {
+    *error = new error_t();
+    auto e = *error;
+    e->code = -1;
+    e->msg = fmt::format("Failed to read laszip header for '{}'.", filename_str);
+    return ret;
+  }
+
+  laszip_handle->point_count = (lasheader->number_of_point_records ? lasheader->number_of_point_records : lasheader->extended_number_of_point_records);
+
+  ret.aabb_min[0] = lasheader->min_x;
+  ret.aabb_min[1] = lasheader->min_y;
+  ret.aabb_min[2] = lasheader->min_z;
+  ret.approximate_point_count = laszip_handle->point_count;
+  ret.approximate_point_size_bytes = (uint8_t)lasheader->point_data_record_length;
+  ret.found_aabb_min = true;
+  ret.found_point_count = true;
+  return ret;
+}
+
 static void laszip_converter_file_init(const char *filename, size_t filename_size, header_t *header, void **user_ptr, struct error_t **error)
 {
   std::unique_ptr<laszip_handle_t> laszip_handle(new laszip_handle_t());
@@ -168,8 +212,6 @@ static void laszip_converter_file_init(const char *filename, size_t filename_siz
     e->msg = "Failed to create laszip reader.";
     return;
   }
-
-  laszip_POINTER_DELETER deleter(laszip_handle.get());
 
   laszip_BOOL is_compressed = 0;
   std::string filename_str(filename, filename_size);
@@ -260,7 +302,6 @@ static void laszip_converter_file_init(const char *filename, size_t filename_siz
 
 
   *user_ptr = laszip_handle.get();
-  deleter.ptr = nullptr;
   laszip_handle.release();
 }
 
@@ -419,7 +460,7 @@ void copy_points_for_format(laszip_handle_t *laszip_handle, uint64_t point_count
   }
 }
 
-static uint64_t laszip_converter_file_convert_data(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, buffer_t *buffers, uint64_t buffers_size, uint64_t max_points_to_convert, uint8_t *done, struct error_t **error)
+static void laszip_converter_file_convert_data(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, uint64_t max_points_to_convert, buffer_t *buffers, uint64_t buffers_size, uint64_t *points_read, uint8_t *done, struct error_t **error)
 {
   (void)header;
   (void)attributes;
@@ -476,7 +517,7 @@ static uint64_t laszip_converter_file_convert_data(void *user_ptr, const header_
   default:
     assert(false);
   }
-  return points_to_read;
+  *points_read = points_to_read;
 }
 
 static void laszip_converter_file_destroy_user_ptr(void *user_ptr)
@@ -488,6 +529,7 @@ static void laszip_converter_file_destroy_user_ptr(void *user_ptr)
 struct converter_file_convert_callbacks_t laszip_callbacks()
 {
   converter_file_convert_callbacks_t ret;
+  ret.pre_init = &laszip_converter_file_get_aabb_min;
   ret.init = &laszip_converter_file_init;
   ret.convert_data = &laszip_converter_file_convert_data;
   ret.destroy_user_ptr = &laszip_converter_file_destroy_user_ptr;
