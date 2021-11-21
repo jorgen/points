@@ -45,7 +45,6 @@ public:
 
 private:
   uv_work_t _worker_request;
-  threaded_event_loop_t *_event_loop;
   bool _done;
 };
 }

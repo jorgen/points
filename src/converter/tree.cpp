@@ -93,7 +93,7 @@ void tree_initialize_new_parent(const tree_t &some_child, const morton::morton64
 static void sub_tree_alloc_children(tree_t &tree, int level, int skip)
 {
   tree.nodes[level].emplace(tree.nodes[level].begin() + skip);
-  uint16_t old_skip = skip >= tree.skips[level].size() ? 0 : tree.skips[level][skip];
+  uint16_t old_skip = size_t(skip) >= tree.skips[level].size() ? 0 : tree.skips[level][skip];
   tree.skips[level].emplace(tree.skips[level].begin() + skip, old_skip);
   tree.data[level].emplace(tree.data[level].begin() + skip);
 }

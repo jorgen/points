@@ -91,7 +91,6 @@ private:
   std::vector<sorted_input_id_t> _points_processed;
   tree_t _tree;
   bool _tree_initialized;
-  bool _tree_state_initialized;
 
   void handle_new_files(std::vector<std::vector<input_data_source_t>> &&new_files);
 

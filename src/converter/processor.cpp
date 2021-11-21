@@ -48,7 +48,6 @@ processor_t::processor_t(converter_t &converter)
   , _read_sort_pending(0)
   , _read_sort_budget(uint64_t(1) << 20)
   , _tree_initialized(false)
-  , _tree_state_initialized(false)
 {
   (void) _converter;
   _event_loop.add_about_to_block_listener(this);
@@ -64,14 +63,22 @@ void processor_t::about_to_block()
   if (_pending_pre_init_files == 0)
   { 
     //&& _aabb_min_read_index < _aabb_min_read.size())
-    for (; _pre_init_files_with_no_aabb_min_read_index < _pre_init_no_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_no_aabb_min_read_index++)
+    bool no_more_input_files = false;
+    for (;!no_more_input_files && _pre_init_files_with_no_aabb_min_read_index < _pre_init_no_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_no_aabb_min_read_index++)
     {
       auto &input_file = _input_sources[_pre_init_no_aabb_min[_pre_init_files_with_no_aabb_min_read_index].data]; 
       if (input_file.read_started)
         continue;
+      if (input_file.approximate_point_count == 0 || input_file.approximate_point_size_bytes)
+      {
+        no_more_input_files = true;
+        if (_read_sort_pending > 0)
+          break;
+      }
       auto approximate_input_size = input_file.approximate_point_count * input_file.approximate_point_size_bytes;
       _read_sort_budget -= int64_t(approximate_input_size);
-      //_read
+      _read_sort_pending++;
+      //_point_reader.add_file()
     }
 //    for (; _headers_read_index<_headers_read.size() && _read_sort_budget> 0; _headers_read_index++)
 //    {

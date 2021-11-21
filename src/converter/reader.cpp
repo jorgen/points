@@ -32,251 +32,135 @@ namespace points
 {
 namespace converter
 {
-get_data_worker_t::get_data_worker_t(const converter_file_convert_callbacks_t &convert_callbacks, get_points_files_t file)
-  : convert_callbacks(convert_callbacks)
+get_data_worker_t::get_data_worker_t(point_reader_file_t &point_reader_file, const get_points_file_t &file, event_pipe_t<unsorted_points_event_t> &unsorted_points_queue)
+  : point_reader_file(point_reader_file)
+  , unsorted_points_queue(unsorted_points_queue)
   , file(file)
   , points_read(0)
-  , done(false)
+  , split(0)
 {
 }
 
+struct callback_closer
+{
+  callback_closer(converter_file_convert_callbacks_t &callbacks, void *user_ptr)
+    : callbacks(callbacks)
+    , user_ptr(user_ptr)
+  {}
+  ~callback_closer()
+  {
+    if (callbacks.destroy_user_ptr && user_ptr)
+    {
+      callbacks.destroy_user_ptr(user_ptr);
+    }
+  }
+
+  converter_file_convert_callbacks_t &callbacks;
+  void *user_ptr;
+};
+
 void get_data_worker_t::work()
 {
-  internal_header_t reloaded_header;
-  internal_header_initialize(reloaded_header);
+  internal_header_initialize(header);
   error_t *local_error = nullptr;
   void *user_ptr;
-  convert_callbacks.init(file.filename.name, file.filename.name_length, &reloaded_header, &user_ptr, &local_error);
-  error.reset(local_error);
+  file.callbacks.init(file.filename.name, file.filename.name_length, &header, &user_ptr, &local_error);
+  callback_closer closer(file.callbacks, user_ptr);
   if (local_error)
   {
-    if (convert_callbacks.destroy_user_ptr && user_ptr)
-    {
-      convert_callbacks.destroy_user_ptr(user_ptr);
-      user_ptr = nullptr;
-    }
     error.reset(local_error);
-    done = true;
     return;
   }
 
   int convert_size = 20000;
   uint8_t done_read_file = false;
-  attribute_buffers_initialize(file.header.attributes.attributes, buffers, convert_size);
-  convert_callbacks.convert_data(user_ptr, &reloaded_header, reloaded_header.attributes.attributes.data(), reloaded_header.attributes.attributes.size(), convert_size, buffers.buffers.data(), buffers.buffers.size(), &points_read, &done_read_file, &local_error);
-  if (local_error)
+  uint64_t local_points_read;
+  while(!done_read_file)
   {
-    if (convert_callbacks.destroy_user_ptr && user_ptr)
+    points_t points;
+    attribute_buffers_t buffers;
+    attribute_buffers_initialize(header.attributes.attributes, buffers, convert_size);
+    file.callbacks.convert_data(user_ptr, &header, header.attributes.attributes.data(), header.attributes.attributes.size(), convert_size, buffers.buffers.data(), buffers.buffers.size(), &local_points_read, &done_read_file, &local_error);
+    if (local_error)
     {
-      convert_callbacks.destroy_user_ptr(user_ptr);
-      user_ptr = nullptr;
+      error.reset(local_error);
+      return;
     }
-    error.reset(local_error);
-    done = true;
-    return;
+    attribute_buffers_adjust_buffers_to_size(header.attributes.attributes, buffers, points_read);
+    points_read += local_points_read;
+    split++;
+    unsorted_points_event_t event(std::move(points), point_reader_file);
+    unsorted_points_queue.post_event(std::move(event));
   }
-
-//  attribute_buffers_adjust_buffers_to_size(input_file.header.attributes.attributes, buffers, points_read);
-//  if ((input_file.user_ptr && (input_file.done_read_file || (error && error->code)) && convert_callbacks.destroy_user_ptr))
-//  {
-//    convert_callbacks.destroy_user_ptr(input_file.user_ptr); 
-//    input_file.user_ptr = nullptr;
-//  }
 }
 
 void get_data_worker_t::after_work(completion_t completion)
 {
   (void)completion;
+  point_reader_file.input_split = split;
 }
   
-//sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, input_file_t &input_file, attribute_buffers_t &&buffers, uint64_t point_count, std::vector<sort_worker_t *> &done_list)
-//  : tree_state(tree_state)
-//  , input_file(input_file)
-//  , done_list(done_list)
-//{
-//  header_copy(input_file.header, points.header);
-//  points.header.point_count = point_count;
-//  points.buffers = std::move(buffers);
-//}
-//
-//void sort_worker_t::work()
-//{
-//  sort_points(tree_state, points); 
-//}
-//
-//void sort_worker_t::after_work(completion_t completion)
-//{
-//  (void)completion;
-//  done_list.push_back(this);
-//}
-//
+sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, point_reader_file_t &reader_file, points_t &&points)
+  : tree_state(tree_state)
+  , reader_file(reader_file)
+  , points(std::move(points))
+{
+}
+
+void sort_worker_t::work()
+{
+  sort_points(tree_state, points);
+}
+
+void sort_worker_t::after_work(completion_t completion)
+{
+  (void)completion;
+  reader_file.sort_done++;
+  reader_file.sorted_points_pipe.post_event(std::move(points));
+}
+
 point_reader_t::point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors)
   : _tree_state(tree_state)
   , _event_loop(event_loop)
   , _sorted_points_pipe(sorted_points_pipe)
   , _done_with_file(done_with_file)
   , _file_errors(file_errors)
-  , _new_files_pipe(event_loop, [this](std::vector<get_points_files_with_callbacks_t> &&new_files) { handle_new_files(std::move(new_files));})
-//  , convert_callbacks(convert_callbacks)
-//  , active_converters(0)
-//  , max_converters(4)
+  , _new_files_pipe(event_loop, [this](std::vector<get_points_file_t> &&new_files) { handle_new_files(std::move(new_files));})
+  , _unsorted_points(event_loop, [this](std::vector<unsorted_points_event_t> &&unsorted_points) { handle_unsorted_points(std::move(unsorted_points));})
 {
+(void) _file_errors;
   event_loop.add_about_to_block_listener(this);
 }
 
-void point_reader_t::add_file(std::vector<get_points_files_t> &&new_files, converter_file_convert_callbacks_t &callbacks)
+void point_reader_t::add_file(get_points_file_t &&new_file)
 {
-  get_points_files_with_callbacks_t get_points = {std::move(new_files), callbacks};
-  _new_files_pipe.post_event(std::move(get_points));
+  _new_files_pipe.post_event(std::move(new_file));
 }
-//static int get_next_nonactive_input_file(const std::vector<std::unique_ptr<input_file_t>> &input_files)
-//{
-//  int i;
-//  for (i = 0; i < int(input_files.size()); i++)
-//  {
-//    if (!input_files[i]->active_worker && !input_files[i]->done_read_file)
-//      return i;
-//  }
-//  return i;
-//}
-//
+
 void point_reader_t::about_to_block()
 {
+  auto finished = std::partition(_point_reader_files.begin(), _point_reader_files.end(), [](const std::unique_ptr<point_reader_file_t> &a) { return a->input_split == a->sort_done;});
+  for (auto it = finished; it != _point_reader_files.end(); ++it)
+  {
+    _done_with_file.post_event(it->get()->input_reader->header.input_id);
+  }
 }
-//  uint32_t files_inserted = 0;
-//  auto to_remove_begin =
-//    std::remove_if(get_headers_batch_jobs.begin(), get_headers_batch_jobs.end(),
-//      [](const std::unique_ptr<batch_get_headers_t> &batch) { return batch->completed == uint32_t(batch->get_headers.size()); });
-//  bool needs_sort = false;
-//  if (to_remove_begin != get_headers_batch_jobs.end())
-//  {
-//    for (auto it = to_remove_begin; it != get_headers_batch_jobs.end(); ++it)
-//    {
-//      auto &batch = *it;
-//      if (batch->completed == batch->get_headers.size())
-//      {
-//        files_inserted += uint32_t(batch->get_headers.size());
-//        for (auto &header : batch->get_headers)
-//        {
-//          if (header.error && header.error->code)
-//          {
-//            file_error_t file_error;
-//            file_error.input_id = header.header.input_id;
-//            file_error.error = *header.error;
-//            file_errors.post_event(std::move(file_error));
-//          } else
-//          {
-//            convert_pos_to_morton(header.header.scale, header.header.offset, header.header.min, header.header.morton_min);
-//            convert_pos_to_morton(header.header.scale, header.header.offset, header.header.max, header.header.morton_max);
-//            input_files.emplace_back(new input_file_t());
-//            input_files.back()->header = std::move(header.header);
-//            input_files.back()->user_ptr = header.user_ptr;
-//            input_files.back()->done_read_file = false;
-//            input_files.back()->sort_batches_queued = 0;
-//            input_files.back()->sort_batches_finished = 0;
-//          }
-//        }
-//      }
-//    }
-//    get_headers_batch_jobs.erase(to_remove_begin, get_headers_batch_jobs.end());
-//    needs_sort = true;
-//  }
-//   
-//  if (needs_sort)
-//    std::sort(input_files.begin(), input_files.end(), [](const std::unique_ptr<input_file_t> &a, const std::unique_ptr<input_file_t> &b) { return morton::morton_lt(a->header.morton_max, b->header.morton_max); });
-//
-//  std::vector<input_file_t *> done_input_files;
-//  for (auto &finished : finished_get_workers)
-//  {
-//    if (finished->error && finished->error->code)
-//    {
-//      file_error_t error;
-//      error.input_id = finished->input_file.header.input_id;
-//      error.error = std::move(*finished->error);
-//      file_errors.post_event(std::move(error));
-//      if (finished->input_file.sort_batches_finished == finished->input_file.sort_batches_queued)
-//        done_input_files.push_back(&finished->input_file);
-//      finished->input_file.active_worker.reset();
-//    }
-//    else
-//    {
-//      sort_workers.emplace_back(new sort_worker_t(tree_state, finished->input_file, std::move(finished->buffers), finished->points_read, finished_sort_workers));
-//      sort_workers.back()->enqueue(event_loop);
-//      finished->input_file.sort_batches_queued++;
-//      finished->input_file.active_worker.reset();
-//    }
-//  }
-//
-//  active_converters -= uint32_t(finished_get_workers.size());
-//  finished_get_workers.clear();
-//
-//  for (uint32_t i = active_converters; i < max_converters; i++)
-//  {
-//    auto nonactive_index = get_next_nonactive_input_file(input_files);
-//    if (nonactive_index == int(input_files.size()))
-//      break;
-//    auto &next = input_files[nonactive_index];
-//    next->active_worker.reset(new get_data_worker_t(convert_callbacks, *next, finished_get_workers));
-//    next->active_worker->enqueue(event_loop);
-//    active_converters++;
-//  }
-//
-//  for (auto finished_sort : finished_sort_workers)
-//  {
-//    sorted_points_pipe.post_event(std::move(finished_sort->points));
-//    auto to_erase =
-//      std::find_if(sort_workers.begin(), sort_workers.end(),
-//        [finished_sort](const std::unique_ptr<sort_worker_t> &a) { return a.get() == finished_sort; });
-//    auto &input_file = finished_sort->input_file;
-//    input_file.sort_batches_finished++;
-//    if (input_file.done_read_file && input_file.sort_batches_queued == input_file.sort_batches_finished)
-//      done_input_files.emplace_back(&input_file);
-//    sort_workers.erase(to_erase);
-//  }
-//  finished_sort_workers.clear();
-//  
-//  for (auto done_input_file : done_input_files)
-//  {
-//    auto it = std::find_if(input_files.begin(), input_files.end(), [done_input_file](const std::unique_ptr<input_file_t> &a) { return a.get() == done_input_file; });
-//    done_with_file.post_event(std::move(it->get()->header.input_id));
-//    input_files.erase(it); 
-//  }
-//
-//}
-//
-void point_reader_t::handle_new_files(std::vector<get_points_files_with_callbacks_t> &&new_files)
+
+void point_reader_t::handle_new_files(std::vector<get_points_file_t> &&new_files)
 {
   for (auto &new_file : new_files)
   {
-    if (new_file.callbacks.convert_data == nullptr)
-    {
-      file_error_t error;
-      error.error = {-1, std::string("Conversion callbacks has nullptr for init or convert_data functions. Its therefor not possible to convert the data")};
-      _file_errors.post_event(std::move(error));
-      return;
-    }
-    std::vector<std::string> collapsed_new_files;
-    for (auto &files : new_files)
-    {
-      collapsed_new_files.insert(collapsed_new_files.end(), files.files.begin(), files.files.end());
-    }
-    get_headers_batch_jobs.emplace_back(new batch_get_headers_t());
-    auto &batch_headers = get_headers_batch_jobs.back();
-    batch_headers->convert_callbacks = convert_callbacks;
-    batch_headers->get_headers.reserve(collapsed_new_files.size());
-    for (auto &file : collapsed_new_files)
-    {
-      auto inserted = all_input_filenames.insert(file);
-      if (inserted.second)
-      {
-        batch_headers->get_headers.emplace_back(*batch_headers.get(), file, collapsed_new_files.size() > 100);
-        batch_headers->get_headers.back().enqueue(event_loop);
-      }
-    }
-    if (batch_headers->get_headers.empty())
-      get_headers_batch_jobs.pop_back();
+    _point_reader_files.emplace_back(new point_reader_file_t(_tree_state, _event_loop, new_file, _unsorted_points, _sorted_points_pipe));
+  }
+}
 
-    fmt::print(stderr, "handle_new_files size: {} first {}\n", collapsed_new_files.size(), collapsed_new_files[0]);
+void point_reader_t::handle_unsorted_points(std::vector<unsorted_points_event_t> &&unsorted_points)
+{
+  for (auto &unsorted_point_event : unsorted_points)
+  {
+    auto &tree_state = unsorted_point_event.reader_file.tree_state;
+    auto &reader_file = unsorted_point_event.reader_file;
+    unsorted_point_event.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_state, reader_file, std::move(unsorted_point_event.points)));
   }
 }
 
