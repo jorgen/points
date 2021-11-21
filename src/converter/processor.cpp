@@ -78,7 +78,11 @@ void processor_t::about_to_block()
       auto approximate_input_size = input_file.approximate_point_count * input_file.approximate_point_size_bytes;
       _read_sort_budget -= int64_t(approximate_input_size);
       _read_sort_pending++;
-      //_point_reader.add_file()
+      get_points_file_t file;
+      file.callbacks = _converter.convert_callbacks;
+      file.id = input_file.input_id;
+      file.filename = input_name_ref_from_input_data_source(input_file);
+      _point_reader.add_file(std::move(file));
     }
 //    for (; _headers_read_index<_headers_read.size() && _read_sort_budget> 0; _headers_read_index++)
 //    {

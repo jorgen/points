@@ -45,7 +45,7 @@ struct get_points_file_t
 {
   input_data_id_t id;
   input_name_ref_t filename;
-  converter_file_convert_callbacks_t &callbacks;
+  converter_file_convert_callbacks_t callbacks;
 };
 
 struct point_reader_file_t;
