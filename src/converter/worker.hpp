@@ -32,7 +32,8 @@ public:
     cancelled,
     completed 
   };
-  virtual ~worker_t() {}
+  worker_t();
+  virtual ~worker_t();
   virtual void work() = 0;
   virtual void after_work(completion_t completion) = 0;
 

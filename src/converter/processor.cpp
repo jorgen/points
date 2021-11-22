@@ -62,21 +62,30 @@ void processor_t::about_to_block()
 {
   if (_pending_pre_init_files == 0)
   { 
+    bool can_process_more = true;
     //&& _aabb_min_read_index < _aabb_min_read.size())
-    bool no_more_input_files = false;
-    for (;!no_more_input_files && _pre_init_files_with_no_aabb_min_read_index < _pre_init_no_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_no_aabb_min_read_index++)
+    for (;can_process_more && _pre_init_files_with_no_aabb_min_read_index < _pre_init_no_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_no_aabb_min_read_index++)
     {
       auto &input_file = _input_sources[_pre_init_no_aabb_min[_pre_init_files_with_no_aabb_min_read_index].data]; 
       if (input_file.read_started)
         continue;
-      if (input_file.approximate_point_count == 0 || input_file.approximate_point_size_bytes)
+      if (input_file.approximate_point_count == 0 || input_file.approximate_point_size_bytes == 0)
       {
-        no_more_input_files = true;
         if (_read_sort_pending > 0)
+        {
+          can_process_more = false;
           break;
+        }
+        input_file.assigned_memory_usage = uint64_t(1) << 50;
       }
-      auto approximate_input_size = input_file.approximate_point_count * input_file.approximate_point_size_bytes;
-      _read_sort_budget -= int64_t(approximate_input_size);
+      else
+      {
+        auto approximate_input_size = input_file.approximate_point_count * input_file.approximate_point_size_bytes;
+        input_file.assigned_memory_usage = approximate_input_size;
+      }
+
+      input_file.read_started = true;
+      _read_sort_budget -= input_file.assigned_memory_usage;
       _read_sort_pending++;
       get_points_file_t file;
       file.callbacks = _converter.convert_callbacks;
@@ -84,15 +93,23 @@ void processor_t::about_to_block()
       file.filename = input_name_ref_from_input_data_source(input_file);
       _point_reader.add_file(std::move(file));
     }
-//    for (; _headers_read_index<_headers_read.size() && _read_sort_budget> 0; _headers_read_index++)
-//    {
-//      auto &input_file = _input_sources[_headers_read[_headers_read_index].id.data]; 
-//      assert(input_file.header_started && input_file.header_finished);
-//      if (input_file.read_started)
-//        continue;
-//      auto expected_input_size = header_expected_input_size(input_file.header);
-//      _read_sort_budget -= int64_t(expected_input_size);
-//    }
+
+    for (; can_process_more && _pre_init_files_with_aabb_min_read_index < _pre_init_files_with_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_aabb_min_read_index)
+    {
+      auto &input_file = _input_sources[_pre_init_files_with_aabb_min[_pre_init_files_with_aabb_min_read_index].id.data]; 
+      if (input_file.read_started)
+        continue;
+      auto approximate_input_size = input_file.approximate_point_count * input_file.approximate_point_size_bytes;
+      input_file.assigned_memory_usage = approximate_input_size;
+      input_file.read_started = true;
+      _read_sort_budget -= input_file.assigned_memory_usage;
+      _read_sort_pending++;
+      get_points_file_t file;
+      file.callbacks = _converter.convert_callbacks;
+      file.id = input_file.input_id;
+      file.filename = input_name_ref_from_input_data_source(input_file);
+      _point_reader.add_file(std::move(file));
+    }
   }
 }
 
@@ -100,6 +117,7 @@ void processor_t::handle_new_files(std::vector<std::vector<input_data_source_t>>
 {
   for (auto &new_files : new_files_collection)
   {
+    _pending_pre_init_files += uint32_t(new_files.size());
     auto new_files_size = new_files.size();
     //_headers_read_pending += uint32_t(new_files_size);
     size_t end_index = _input_sources.size();
@@ -180,7 +198,8 @@ void processor_t::handle_file_reading_done(std::vector<input_data_id_t> &&files)
 {
   for (auto &file : files)
   {
-    fmt::print(stderr, "Done processing inputfile {}\n", file.data);
+    auto &source = _input_sources[file.data];
+    fmt::print(stderr, "Done processing inputfile {}\n", source.name.get());
   }
 }
 

@@ -46,6 +46,7 @@ struct get_pre_init_info_worker_t : worker_t
     else
     {
       pre_init_info_file_t pre_init_file;
+      pre_init_file.id = input_id;
       pre_init_file.found_min = pre_init_info.found_aabb_min;
       memcpy(pre_init_file.min, pre_init_info.aabb_min, sizeof(pre_init_file.min));
       pre_init_file.approximate_point_count = pre_init_info.approximate_point_count;

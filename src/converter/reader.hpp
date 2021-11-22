@@ -95,7 +95,12 @@ struct point_reader_file_t
     , event_loop(event_loop)
     , input_reader(new get_data_worker_t(*this, file, unsorted_points))
     , sorted_points_pipe(sorted_points_pipe)
-  {}
+  {
+    input_reader->enqueue(event_loop);
+  }
+  ~point_reader_file_t()
+  {
+  }
 
   const tree_global_state_t &tree_state;
   threaded_event_loop_t &event_loop;

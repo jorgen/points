@@ -19,11 +19,22 @@
 
 #include "threaded_event_loop.hpp"
 
+#include <assert.h>
+
 namespace points
 {
 namespace converter
 {
   
+worker_t::worker_t()
+  : _done(false)
+{
+}
+
+worker_t::~worker_t()
+{
+  assert(_done);
+}
 void worker_t::enqueue(threaded_event_loop_t &loop)
 {
   //(void)event_loop;

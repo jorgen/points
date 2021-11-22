@@ -38,9 +38,9 @@ struct converter_t
     , convert_callbacks(laszip_callbacks())
     , runtime_callbacks{}
   {
-    tree_state.scale[0] = 0.0001;
-    tree_state.scale[1] = 0.0001;
-    tree_state.scale[2] = 0.0001;
+    tree_state.scale[0] = 0.001;
+    tree_state.scale[1] = 0.001;
+    tree_state.scale[2] = 0.001;
     tree_state.offset[0] = -double(uint64_t(1) << 17);
     tree_state.offset[1] = -double(uint64_t(1) << 17);
     tree_state.offset[2] = -double(uint64_t(1) << 17);

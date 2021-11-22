@@ -72,22 +72,26 @@ void get_data_worker_t::work()
     return;
   }
 
+  header.input_id = file.id;
+
   int convert_size = 20000;
   uint8_t done_read_file = false;
   uint64_t local_points_read;
   while(!done_read_file)
   {
     points_t points;
-    attribute_buffers_t buffers;
-    attribute_buffers_initialize(header.attributes.attributes, buffers, convert_size);
-    file.callbacks.convert_data(user_ptr, &header, header.attributes.attributes.data(), header.attributes.attributes.size(), convert_size, buffers.buffers.data(), buffers.buffers.size(), &local_points_read, &done_read_file, &local_error);
+    header_copy(header, points.header);
+    points.header.point_count = convert_size;
+    attribute_buffers_initialize(points.header.attributes.attributes, points.buffers, convert_size);
+    file.callbacks.convert_data(user_ptr, &header, header.attributes.attributes.data(), header.attributes.attributes.size(), convert_size, points.buffers.buffers.data(), points.buffers.buffers.size(), &local_points_read, &done_read_file, &local_error);
     if (local_error)
     {
       error.reset(local_error);
       return;
     }
-    attribute_buffers_adjust_buffers_to_size(header.attributes.attributes, buffers, points_read);
+    attribute_buffers_adjust_buffers_to_size(points.header.attributes.attributes, points.buffers, local_points_read);
     points_read += local_points_read;
+    points.header.point_count = local_points_read;
     split++;
     unsorted_points_event_t event(std::move(points), point_reader_file);
     unsorted_points_queue.post_event(std::move(event));
@@ -128,7 +132,6 @@ point_reader_t::point_reader_t(const tree_global_state_t &tree_state, threaded_e
   , _new_files_pipe(event_loop, [this](std::vector<get_points_file_t> &&new_files) { handle_new_files(std::move(new_files));})
   , _unsorted_points(event_loop, [this](std::vector<unsorted_points_event_t> &&unsorted_points) { handle_unsorted_points(std::move(unsorted_points));})
 {
-(void) _file_errors;
   event_loop.add_about_to_block_listener(this);
 }
 
@@ -139,11 +142,21 @@ void point_reader_t::add_file(get_points_file_t &&new_file)
 
 void point_reader_t::about_to_block()
 {
-  auto finished = std::partition(_point_reader_files.begin(), _point_reader_files.end(), [](const std::unique_ptr<point_reader_file_t> &a) { return a->input_split == a->sort_done;});
+  auto finished = std::partition(_point_reader_files.begin(), _point_reader_files.end(), [](const std::unique_ptr<point_reader_file_t> &a) { return !a->input_reader->done() || a->input_split != a->sort_done;});
   for (auto it = finished; it != _point_reader_files.end(); ++it)
   {
+    auto &input_reader = it->get()->input_reader;
+    assert(input_reader->done());
+    if (input_reader->error)
+    {
+      file_error_t file_error;
+      file_error.error = std::move(*input_reader->error);
+      file_error.input_id = input_reader->file.id;
+      _file_errors.post_event(std::move(file_error));
+    }
     _done_with_file.post_event(it->get()->input_reader->header.input_id);
   }
+  _point_reader_files.erase(finished, _point_reader_files.end());
 }
 
 void point_reader_t::handle_new_files(std::vector<get_points_file_t> &&new_files)
@@ -161,6 +174,7 @@ void point_reader_t::handle_unsorted_points(std::vector<unsorted_points_event_t>
     auto &tree_state = unsorted_point_event.reader_file.tree_state;
     auto &reader_file = unsorted_point_event.reader_file;
     unsorted_point_event.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_state, reader_file, std::move(unsorted_point_event.points)));
+    unsorted_point_event.reader_file.sort_workers.back()->enqueue(unsorted_point_event.reader_file.event_loop);
   }
 }
 
