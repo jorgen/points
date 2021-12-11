@@ -84,6 +84,44 @@ private:
   uv_async_t pipe;
   std::mutex mutex;
 };
+template <>
+class event_pipe_t<void>
+{
+public:
+  template<typename EventLoop>
+  event_pipe_t(EventLoop &eventLoop, std::function<void()> event_callback)
+    : event_callback(event_callback)
+  {
+    pipe.data = this;
+    eventLoop.add_event_pipe(*this);
+  }
+  
+  event_pipe_t(std::function<void()> event_callback)
+    : event_callback(event_callback)
+  {
+    pipe.data = this;
+  }
+
+  uv_handle_t *initialize_in_loop(uv_loop_t *loop)
+  {
+    auto on_event = [](uv_async_t *handle) {
+      event_pipe_t *event_pipe = static_cast<event_pipe_t*>(handle->data);
+      event_pipe->event_callback();
+    };
+    uv_async_init(loop, &pipe, on_event);
+
+    return (uv_handle_t *)&pipe;
+  }
+
+  void post_event()
+  {
+    uv_async_send(&pipe);
+  }
+
+private:
+  std::function<void()> event_callback;
+  uv_async_t pipe;
+};
 }
 } // namespace points
 

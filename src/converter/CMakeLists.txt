@@ -26,7 +26,7 @@ set(private_headers
   tree.hpp
   point_buffer_splitter.hpp
   "pre_init_file_retriever.hpp"
-   )
+    "cache_file_handler.hpp")
 
 set(sources
   converter.cpp 
@@ -38,7 +38,7 @@ set(sources
   sorter.cpp
   tree.cpp
   "pre_init_file_retriever.cpp"
-  )
+   "cache_file_handler.cpp")
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources}  )
 target_link_libraries(converter_objects PRIVATE fmt glm)

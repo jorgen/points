@@ -38,10 +38,12 @@ processor_t::processor_t(converter_t &converter)
   , _pre_init_for_files(_event_loop, [this](std::vector<pre_init_info_file_t> &&aabb_min_for_files) { this->handle_pre_init_info_for_files(std::move(aabb_min_for_files)); })
   , _pre_init_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors_headers(std::move(events)); })
   , _sorted_points(_event_loop, [this](std::vector<points::converter::points_t> &&events) { this->handle_sorted_points(std::move(events)); })
-  , _file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
+  , _point_reader_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
   , _point_reader_done_with_file(_event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
-  , _pre_init_file_retriever(_converter.tree_state, _input_event_loop, _pre_init_for_files, _file_errors)
-  , _point_reader(_converter.tree_state, _input_event_loop, _sorted_points, _point_reader_done_with_file, _file_errors)
+  , _cache_file_error(_event_loop, [this](std::vector<error_t> &&errors) { this->handle_cache_file_error(std::move(errors));})
+  , _pre_init_file_retriever(_converter.tree_state, _input_event_loop, _pre_init_for_files, _point_reader_file_errors)
+  , _point_reader(_converter.tree_state, _input_event_loop, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
+  , _cache_file_handler(converter.cache_filename, _cache_file_error)
   , _pending_pre_init_files(0)
   , _pre_init_files_with_aabb_min_read_index(0)
   , _pre_init_files_with_no_aabb_min_read_index(0)
@@ -200,6 +202,14 @@ void processor_t::handle_file_reading_done(std::vector<input_data_id_t> &&files)
   {
     auto &source = _input_sources[file.data];
     fmt::print(stderr, "Done processing inputfile {}\n", source.name.get());
+  }
+}
+
+void processor_t::handle_cache_file_error(std::vector<error_t> &&errors)
+{
+  for (auto &error : errors)
+  {
+    fmt::print(stderr, "Cache file error {} {}\n", error.code, error.msg); 
   }
 }
 

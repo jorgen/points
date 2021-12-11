@@ -40,7 +40,7 @@ void worker_t::enqueue(threaded_event_loop_t &loop)
   //(void)event_loop;
   _worker_request.data = this;
   uv_queue_work(
-    loop.loop, &_worker_request,
+    loop._loop, &_worker_request,
     [](uv_work_t *req) { static_cast<worker_t *>(req->data)->work(); },
     [](uv_work_t *req, int status) {
       completion_t completion = status == UV_ECANCELED ? cancelled : completed;

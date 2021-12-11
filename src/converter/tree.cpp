@@ -227,7 +227,6 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_t &tre
         int sub_tree_skip = tree.skips[4][skip] + child_count;
         if ((node & (1 << i)) == 0)
         {
-
           tree.sub_trees.emplace(tree.sub_trees.begin() + sub_tree_skip);
           sub_tree_increase_skips(tree, current_level, skip);
           tree.nodes[current_level][skip] |= uint8_t(1) << i;
