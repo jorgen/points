@@ -81,9 +81,13 @@ public:
 
   void handle_open_cache_file(uv_fs_t *request);
 private:
-  std::string _cache_file;
+  std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
 
+  uv_file _file_handle;
+  bool _file_opened;
+
+  uv_fs_t _open_request;
   event_pipe_t<error_t> &_cache_file_error;
 
 };

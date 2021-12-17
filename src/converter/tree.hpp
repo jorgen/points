@@ -94,8 +94,8 @@ struct tree_t
   uint8_t magnitude;
 };
 
-void tree_initialize(const tree_global_state_t &state, tree_t &tree, points_t &&points);
-void tree_add_points(const tree_global_state_t &state, tree_t &tree, points_t &&points);
+void tree_initialize(const tree_global_state_t &state, tree_t &tree, const points_t &points);
+void tree_add_points(const tree_global_state_t &state, tree_t &tree, const points_t &points);
 }
 }
 

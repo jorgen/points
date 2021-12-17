@@ -25,7 +25,7 @@ namespace points
 namespace converter
 {
 
-void tree_initialize(const tree_global_state_t &global_state, tree_t &tree, points_t &&points)
+void tree_initialize(const tree_global_state_t &global_state, tree_t &tree, const points_t &points)
 {
   morton::morton64_t mask = morton::morton_xor(points.header.morton_min, points.header.morton_max);
   int magnitude = morton::morton_magnitude_from_bit_index(morton::morton_msb(mask));
@@ -338,7 +338,7 @@ static void reparent_tree(tree_t &new_parent, tree_t &&tree, const morton::morto
 }
 
 
-void tree_add_points(const tree_global_state_t &state, tree_t &tree, points_t &&points)
+void tree_add_points(const tree_global_state_t &state, tree_t &tree, const points_t &points)
 {
   assert(validate_points_offset(points));
   if (points.header.morton_min < tree.morton_min || tree.morton_max < points.header.morton_max )

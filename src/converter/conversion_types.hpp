@@ -33,6 +33,7 @@ namespace converter
 struct input_data_id_t
 {
   uint32_t data;
+  uint32_t sub;
 };
 
 struct input_name_ref_t
@@ -85,6 +86,18 @@ inline void internal_header_initialize(internal_header_t &header)
   header.lod_span = 255;
 }
 
+struct points_t
+{
+  internal_header_t header;
+  attribute_buffers_t buffers;
+};
+
+struct input_points_t
+{
+  int ref = 0;
+  points_t points;
+};
+
 struct input_data_source_t
 {
   input_data_id_t input_id;
@@ -93,6 +106,7 @@ struct input_data_source_t
   internal_header_t header;
   bool read_started;
   bool read_finished;
+  std::vector<input_points_t> points;
   uint8_t approximate_point_size_bytes;
   uint64_t approximate_point_count;
   uint64_t assigned_memory_usage;
@@ -103,12 +117,6 @@ inline input_name_ref_t input_name_ref_from_input_data_source(const input_data_s
   return {source.name.get(), source.name_length};
 }
 
-
-struct points_t
-{
-  internal_header_t header;
-  attribute_buffers_t buffers;
-};
 
 struct tree_global_state_t
 {

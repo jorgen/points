@@ -77,10 +77,12 @@ void get_data_worker_t::work()
   int convert_size = 20000;
   uint8_t done_read_file = false;
   uint64_t local_points_read;
+  uint32_t sub_part = 0;
   while(!done_read_file)
   {
     points_t points;
     header_copy(header, points.header);
+    points.header.input_id.sub = sub_part++;
     points.header.point_count = convert_size;
     attribute_buffers_initialize(points.header.attributes.attributes, points.buffers, convert_size);
     file.callbacks.convert_data(user_ptr, &header, header.attributes.attributes.data(), header.attributes.attributes.size(), convert_size, points.buffers.buffers.data(), points.buffers.buffers.size(), &local_points_read, &done_read_file, &local_error);

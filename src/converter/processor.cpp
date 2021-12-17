@@ -96,7 +96,7 @@ void processor_t::about_to_block()
       _point_reader.add_file(std::move(file));
     }
 
-    for (; can_process_more && _pre_init_files_with_aabb_min_read_index < _pre_init_files_with_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_aabb_min_read_index)
+    for (; can_process_more && _pre_init_files_with_aabb_min_read_index < _pre_init_files_with_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_aabb_min_read_index++)
     {
       auto &input_file = _input_sources[_pre_init_files_with_aabb_min[_pre_init_files_with_aabb_min_read_index].id.data]; 
       if (input_file.read_started)
@@ -131,6 +131,7 @@ void processor_t::handle_new_files(std::vector<std::vector<input_data_source_t>>
       using id_type = decltype(input_data_id_t::data);
       auto &source = _input_sources[i];
       source.input_id.data = id_type(i);
+      source.input_id.sub = 0;
       source.read_started = false;
       source.read_finished = false;
       source.approximate_point_count = 0;
@@ -180,7 +181,11 @@ void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_eve
   int i = 0;
   if (!_tree_initialized)
   {
-    tree_initialize(_converter.tree_state, _tree, std::move(sorted_points_event[0]));
+    auto &input_source = _input_sources[sorted_points_event[i].header.input_id.data];
+    input_source.points.emplace_back(std::move(sorted_points_event[i]));
+    input_source.points.back().ref = 2;
+    //fixme
+    tree_initialize(_converter.tree_state, _tree, input_source.points.back().points);
     _tree_initialized = true;
     i++;
   }
