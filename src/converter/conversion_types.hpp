@@ -35,6 +35,10 @@ struct input_data_id_t
   uint32_t data;
   uint32_t sub;
 };
+struct attribute_id_t
+{
+  uint32_t data;
+};
 
 struct input_name_ref_t
 {
@@ -61,8 +65,6 @@ struct internal_header_t : header_t
   morton::morton64_t morton_min;
   morton::morton64_t morton_max;
   int lod_span;
-  
-  attributes_t attributes;
 };
 
 inline void internal_header_initialize(internal_header_t &header)
@@ -101,6 +103,7 @@ struct input_points_t
 struct input_data_source_t
 {
   input_data_id_t input_id;
+  attribute_id_t attribute_id;
   std::unique_ptr<char[]> name;
   uint32_t name_length;
   internal_header_t header;

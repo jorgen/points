@@ -18,6 +18,7 @@
 #include "input_header.hpp"
 
 #include "morton.hpp"
+#include "reader.hpp"
 
 #include <assert.h>
 
@@ -25,13 +26,12 @@ namespace points
 {
 namespace converter
 {
-void header_add_attribute(struct header_t *h, const char *name, uint32_t name_size, enum format_t format, enum components_t components, int group)
+void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum format_t format, enum components_t components, int group)
 {
-  internal_header_t *header = static_cast<internal_header_t *>(h);
-  header->attributes.attribute_names.emplace_back(new char[name_size + 1]);
-  memcpy(header->attributes.attribute_names.back().get(), name, name_size);
-  header->attributes.attribute_names.back().get()[name_size] = 0;
-  header->attributes.attributes.push_back({header->attributes.attribute_names.back().get(), name_size, format, components, group});
+  attributes->attribute_names.emplace_back(new char[name_size + 1]);
+  memcpy(attributes->attribute_names.back().get(), name, name_size);
+  attributes->attribute_names.back().get()[name_size] = 0;
+  attributes->attributes.push_back({attributes->attribute_names.back().get(), name_size, format, components, group});
 }
 
 void header_p_set_morton_aabb(const tree_global_state_t &tree_state, internal_header_t &header)
@@ -81,40 +81,29 @@ void header_copy(const internal_header_t &source, internal_header_t &target)
   memcpy(target.max, source.max, sizeof(target.max));
   memcpy(&target.morton_min, &source.morton_min, sizeof(target.morton_min));
   memcpy(&target.morton_max, &source.morton_max, sizeof(target.morton_max));
-  attributes_copy(source.attributes, target.attributes);
 }
 
-void attribute_buffers_initialize(const std::vector<attribute_t> &attributes, attribute_buffers_t &buffers, uint64_t point_count)
+void attribute_buffers_initialize(const std::vector<std::pair<format_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
 {
-  buffers.data.reserve(attributes.size());
-  buffers.buffers.reserve(attributes.size());
-  for (auto &attribute : attributes)
+  buffers.data.reserve(attributes_def.size());
+  buffers.buffers.reserve(attributes_def.size());
+  for (auto &attribute : attributes_def)
   {
-    uint64_t buffer_size = size_for_format(attribute.format) * uint64_t(attribute.components) * point_count;
+    uint64_t buffer_size = size_for_format(attribute.first) * uint64_t(attribute.second) * point_count;
     buffers.data.emplace_back(new uint8_t[buffer_size]);
     buffers.buffers.push_back({buffers.data.back().get(), buffer_size});
   }
 }
 
-void attribute_buffers_adjust_buffers_to_size(const std::vector<attribute_t> &attributes, attribute_buffers_t &buffers, uint64_t point_count)
+void attribute_buffers_adjust_buffers_to_size(const std::vector<std::pair<format_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
 {
-  assert(attributes.size() == buffers.buffers.size());
+  assert(attributes_def.size() == buffers.buffers.size());
 
-  for (int i = 0; i < int(attributes.size()); i++)
+  for (int i = 0; i < int(attributes_def.size()); i++)
   {
-    auto &attribute = attributes[i];
     auto &buffer = buffers.buffers[i];
-    buffer.size = size_for_format(attribute.format) * uint64_t(attribute.components) * point_count;
+    buffer.size = size_for_format(attributes_def[i].first) * uint64_t(attributes_def[i].second) * point_count;
   }
-}
-uint64_t header_expected_input_size(const internal_header_t &header)
-{
-  uint64_t format_size = 0;
-  for (auto &attribute : header.attributes.attributes)
-  {
-    format_size += size_for_format(attribute.format) * uint64_t(attribute.components);
-  }
-  return format_size * header.point_count;
 }
 }
 } // namespace points

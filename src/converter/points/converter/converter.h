@@ -62,7 +62,7 @@ struct header_t
   double min[3];
   double max[3];
 };
-POINTS_CONVERTER_EXPORT void header_add_attribute(struct header_t *header, const char *name, uint32_t name_size, enum format_t format, enum components_t components, int group = 0);
+POINTS_CONVERTER_EXPORT void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum format_t format, enum components_t components, int group = 0);
 
 struct attribute_t
 {
@@ -89,7 +89,7 @@ struct converter_file_pre_init_info_t
 };
 
 typedef converter_file_pre_init_info_t (*converter_file_pre_init_callback_t)(const char *filename, size_t filename_size, struct error_t **error);
-typedef void (*converter_file_init_callback_t)(const char *filename, size_t filename_size, header_t *header, void **user_ptr, struct error_t **error);
+typedef void (*converter_file_init_callback_t)(const char *filename, size_t filename_size, header_t *header, attributes_t *attributes, void **user_ptr, struct error_t **error);
 typedef void (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, uint64_t max_points_to_convert, buffer_t *buffers, uint64_t buffers_size, uint64_t *points_read, uint8_t *done, struct error_t **error);
 typedef void (*converter_file_destroy_user_ptr_t)(void *user_ptr);
 

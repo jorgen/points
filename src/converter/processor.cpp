@@ -37,6 +37,7 @@ processor_t::processor_t(converter_t &converter)
   , _files_added(_event_loop, [this](std::vector<std::vector<input_data_source_t>> &&new_files) { this->handle_new_files(std::move(new_files)); })
   , _pre_init_for_files(_event_loop, [this](std::vector<pre_init_info_file_t> &&aabb_min_for_files) { this->handle_pre_init_info_for_files(std::move(aabb_min_for_files)); })
   , _pre_init_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors_headers(std::move(events)); })
+  , _attributes_for_source(_event_loop, [this](std::vector<std::pair<input_data_id_t, attributes_t>> &&events) { this->handle_attribute_event(std::move(events)); })
   , _sorted_points(_event_loop, [this](std::vector<points::converter::points_t> &&events) { this->handle_sorted_points(std::move(events)); })
   , _point_reader_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
   , _point_reader_done_with_file(_event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
@@ -173,6 +174,52 @@ void processor_t::handle_pre_init_info_for_files(std::vector<pre_init_info_file_
 void processor_t::handle_file_errors_headers(std::vector<file_error_t> &&errors)
 {
   (void)errors;
+}
+
+static bool compare_attribute(const attribute_t &a, const attribute_t &b)
+{
+  if (a.name_size != b.name_size)
+    return false;
+  if (a.format != b.format)
+    return false;
+  if (a.group != b.group)
+    return false;
+  if (a.components != b.components)
+    return false;
+  return memcmp(a.name, b.name, a.name_size) == 0;
+}
+static bool compare_attributes(const attributes_t &a, const attributes_t &b)
+{
+  if (a.attributes.size() != b.attributes.size())
+    return false;
+  for (int i = 0; i < int(a.attributes.size()); i++)
+  {
+    if (!compare_attribute(a.attributes[i], b.attributes[i]))
+      return false;
+  }
+  return true;
+}
+
+static int get_attribute_config_index(std::vector<std::unique_ptr<attributes_t>> &attribute_configs, attributes_t &&find)
+{
+  for (int i = 0; i < int(attribute_configs.size()); i++)
+  {
+    auto &source = attribute_configs[i];
+    if (compare_attributes(*source, find))
+      return i;
+  }
+
+  int ret = int(attribute_configs.size());
+  attribute_configs.emplace_back(std::move(find));
+  return ret;
+}
+
+void processor_t::handle_attribute_event(std::vector<std::pair<input_data_id_t, attributes_t>> &&attribute_events)
+{
+  for (auto &event : attribute_events)
+  {
+    _input_sources[event.first.data].attribute_id.data = get_attribute_config_index(_attributes_configs, std::move(event.second));
+  }
 }
 void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_event)
 {

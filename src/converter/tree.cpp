@@ -40,7 +40,7 @@ void tree_initialize(const tree_global_state_t &global_state, tree_t &tree, cons
   tree.data[0].emplace_back();
   tree.data[0][0].point_count += points.header.point_count;
 
-  points_data_initialize(tree.data[0][0], std::move(points));
+  points_data_initialize(tree.data[0][0], points);
 
   {
     morton::morton64_t node_mask = tree.morton_max;

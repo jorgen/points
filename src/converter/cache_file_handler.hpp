@@ -80,6 +80,10 @@ public:
   void about_to_block();
 
   void handle_open_cache_file(uv_fs_t *request);
+
+  void add_input_data_id(input_data_id_t id, internal_header_t &header);
+  void write(input_data_id_t id, attribute_buffers_t &&buffers);
+  void read(input_data_id_t id, attribute_buffers_t &buffers);
 private:
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;

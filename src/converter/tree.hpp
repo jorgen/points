@@ -27,16 +27,24 @@ namespace points
 {
 namespace converter
 {
+
+struct points_subset_t
+{
+  internal_header_t header;
+  uint32_t size;
+  uint64_t offset;
+};
+
 struct points_data_t
 {
   uint64_t point_count = 0;
-  std::vector<points_t> data;
+  std::vector<points_subset_t> data;
   morton::morton64_t morton_min;
   morton::morton64_t morton_max;
   int min_lod = 0;
 };
 
-inline void points_data_initialize(points_data_t &to_init, points_t &&p)
+inline void points_data_initialize(points_data_t &to_init, const points_t p)
 {
   to_init.morton_max = p.header.morton_max;
   to_init.morton_min = p.header.morton_min;
