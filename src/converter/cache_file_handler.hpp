@@ -72,6 +72,14 @@ struct cache_file_read_request_t
   std::function<void(std::unique_ptr<uint8_t[]> &&, error_t &&)> callback;
 };
 
+struct cache_item_t
+{
+  format_t format;
+  components_t components;
+  uint8_t *points;
+  uint64_t size;
+};
+
 class cache_file_handler_t : public about_to_block_t
 {
 public:
@@ -81,9 +89,13 @@ public:
 
   void handle_open_cache_file(uv_fs_t *request);
 
-  void add_input_data_id(input_data_id_t id, internal_header_t &header);
+  void register_input(input_data_id_t id, const internal_header_t &header);
+
   void write(input_data_id_t id, attribute_buffers_t &&buffers);
-  void read(input_data_id_t id, attribute_buffers_t &buffers);
+
+  cache_item_t ref(input_data_id_t id, int attribute);
+  void deref(input_data_id_t id);
+
 private:
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;

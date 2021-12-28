@@ -67,15 +67,9 @@ void convert_and_sort(const tree_global_state_t &tree_state, buffer_t &buffer, i
   header_p_adjust_to_sorted_data(tree_state, header, begin, end);
 }
 
-void sort_points(const tree_global_state_t &tree_state, points_t &points)
+void sort_points(const tree_global_state_t &tree_state, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &points)
 {
-  assert(points.header.attributes.attributes[0].name_size == strlen(POINTS_ATTRIBUTE_XYZ));
-  assert(memcmp(points.header.attributes.attributes[0].name, POINTS_ATTRIBUTE_XYZ, points.header.attributes.attributes[0].name_size) == 0);
-
-  uint64_t expected_points_buffer_size = size_for_format(points.header.attributes.attributes[0].format) * 3 * points.header.point_count;
-  assert(points.buffers.buffers[0].size == expected_points_buffer_size);
-
-  switch (points.header.attributes.attributes[0].format)
+  switch (attributes_def.front().first)
   {
   case format_i32:
     convert_and_sort<int32_t>(tree_state, points.buffers.buffers[0], points.header);

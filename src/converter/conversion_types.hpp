@@ -94,12 +94,6 @@ struct points_t
   attribute_buffers_t buffers;
 };
 
-struct input_points_t
-{
-  int ref = 0;
-  points_t points;
-};
-
 struct input_data_source_t
 {
   input_data_id_t input_id;
@@ -109,7 +103,6 @@ struct input_data_source_t
   internal_header_t header;
   bool read_started;
   bool read_finished;
-  std::vector<input_points_t> points;
   uint8_t approximate_point_size_bytes;
   uint64_t approximate_point_count;
   uint64_t assigned_memory_usage;

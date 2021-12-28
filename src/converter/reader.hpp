@@ -57,11 +57,13 @@ struct get_points_file_t
 struct point_reader_file_t;
 struct unsorted_points_event_t
 {
-  unsorted_points_event_t(points_t &&points, point_reader_file_t &reader_file)
-    : points(std::move(points))
+  unsorted_points_event_t(std::vector<std::pair<format_t, components_t>> attributes_def, points_t &&points, point_reader_file_t &reader_file)
+    : attributes_def(attributes_def)
+    , points(std::move(points))
     , reader_file(reader_file)
   {}
 
+  std::vector<std::pair<format_t, components_t>> attributes_def;
   points_t points;
   point_reader_file_t &reader_file;
 };
@@ -86,12 +88,13 @@ public:
 class sort_worker_t : public worker_t
 {
 public:
-  sort_worker_t(const tree_global_state_t &tree_state, point_reader_file_t &reader_file, points_t &&points);
+  sort_worker_t(const tree_global_state_t &tree_state, point_reader_file_t &reader_file, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &&points);
   void work() override;
   void after_work(completion_t completion) override;
 
   const tree_global_state_t &tree_state;
   point_reader_file_t &reader_file;
+  std::vector<std::pair<format_t, components_t>> attributes_def;
   points_t points;
 };
 

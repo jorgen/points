@@ -25,8 +25,10 @@ set(private_headers
   memcpy_array.hpp
   tree.hpp
   point_buffer_splitter.hpp
-  "pre_init_file_retriever.hpp"
-    "cache_file_handler.hpp")
+  pre_init_file_retriever.hpp
+  cache_file_handler.hpp
+  data_provider.hpp
+  )
 
 set(sources
   converter.cpp 
@@ -37,8 +39,10 @@ set(sources
   laszip_file_convert_callbacks.cpp
   sorter.cpp
   tree.cpp
-  "pre_init_file_retriever.cpp"
-   "cache_file_handler.cpp")
+  pre_init_file_retriever.cpp
+  cache_file_handler.cpp
+  data_provider.cpp
+  )
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources}  )
 target_link_libraries(converter_objects PRIVATE fmt glm)

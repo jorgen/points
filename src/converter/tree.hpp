@@ -30,12 +30,12 @@ namespace converter
 
 struct points_subset_t
 {
-  internal_header_t header;
+  input_data_id_t input_id;
   uint32_t size;
   uint64_t offset;
 };
 
-struct points_data_t
+struct points_collection_t
 {
   uint64_t point_count = 0;
   std::vector<points_subset_t> data;
@@ -44,51 +44,59 @@ struct points_data_t
   int min_lod = 0;
 };
 
-inline void points_data_initialize(points_data_t &to_init, const points_t p)
+inline void points_data_initialize(points_collection_t &to_init, const points_t &p)
 {
-  to_init.morton_max = p.header.morton_max;
-  to_init.morton_min = p.header.morton_min;
-  to_init.min_lod = p.header.lod_span;
-  to_init.point_count = p.header.point_count;
-  to_init.data.emplace_back(std::move(p));
+  (void) to_init;
+  (void) p;
+  //to_init.morton_max = p.header.morton_max;
+  //to_init.morton_min = p.header.morton_min;
+  //to_init.min_lod = p.header.lod_span;
+  //to_init.point_count = p.header.point_count;
+  //to_init.data.emplace_back(std::move(p));
 }
 
-inline void points_data_add(points_data_t &dest, points_data_t &&to_add)
+inline void points_data_add(points_collection_t &dest, points_collection_t &&to_add)
 {
-  if (dest.point_count == 0)
-  {
-    dest = std::move(to_add);
-    return;
-  }
-  if (to_add.morton_min < dest.morton_min)
-    dest.morton_min = to_add.morton_min;
-  if (dest.morton_max < to_add.morton_max)
-    dest.morton_max = to_add.morton_max;
-  dest.min_lod = morton::morton_lod(dest.morton_min, dest.morton_max);
-  for (auto &p : to_add.data)
-    dest.data.emplace_back(std::move(p));
-  dest.point_count += to_add.point_count;
+  (void) dest;
+  (void) to_add;
+  //if (dest.point_count == 0)
+  //{
+  //  dest = std::move(to_add);
+  //  return;
+  //}
+  //if (to_add.morton_min < dest.morton_min)
+  //  dest.morton_min = to_add.morton_min;
+  //if (dest.morton_max < to_add.morton_max)
+  //  dest.morton_max = to_add.morton_max;
+  //dest.min_lod = morton::morton_lod(dest.morton_min, dest.morton_max);
+  //for (auto &p : to_add.data)
+  //  dest.data.emplace_back(std::move(p));
+  //dest.point_count += to_add.point_count;
 }
 
-inline void points_data_adjust_to_points(points_data_t &dest, const points_t &adjust_to)
+inline void points_data_adjust_to_points(points_collection_t &dest, const points_t &adjust_to)
 {
-  if (adjust_to.header.morton_min < dest.morton_min)
-    dest.morton_min = adjust_to.header.morton_min;
-  if (dest.morton_max < adjust_to.header.morton_max)
-    dest.morton_max = adjust_to.header.morton_max;
-  dest.min_lod = morton::morton_lod(dest.morton_min, dest.morton_max);
-  dest.point_count += adjust_to.header.point_count;
+  (void) dest;
+  (void) adjust_to;
+  //if (adjust_to.header.morton_min < dest.morton_min)
+  //  dest.morton_min = adjust_to.header.morton_min;
+  //if (dest.morton_max < adjust_to.header.morton_max)
+  //  dest.morton_max = adjust_to.header.morton_max;
+  //dest.min_lod = morton::morton_lod(dest.morton_min, dest.morton_max);
+  //dest.point_count += adjust_to.header.point_count;
 }
 
-inline void points_data_add(points_data_t &dest, points_t &&to_add)
+inline void points_data_add(points_collection_t &dest, points_t &&to_add)
 {
-  if (dest.point_count == 0)
-  {
-    points_data_initialize(dest, std::move(to_add));
-    return;
-  }
-  points_data_adjust_to_points(dest, to_add);
-  dest.data.emplace_back(std::move(to_add));
+  (void) dest;
+  (void) to_add;
+  //if (dest.point_count == 0)
+  //{
+  //  points_data_initialize(dest, std::move(to_add));
+  //  return;
+  //}
+  //points_data_adjust_to_points(dest, to_add);
+  //dest.data.emplace_back(std::move(to_add));
 }
 
 struct tree_t
@@ -97,7 +105,7 @@ struct tree_t
   morton::morton64_t morton_max;
   std::vector<uint8_t> nodes[5];
   std::vector<int16_t> skips[5];
-  std::vector<points_data_t> data[5];
+  std::vector<points_collection_t> data[5];
   std::vector<tree_t> sub_trees;
   uint8_t magnitude;
 };

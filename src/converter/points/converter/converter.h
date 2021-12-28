@@ -36,14 +36,21 @@ enum format_t
 {
   format_u8,
   format_i8,
+  format_m8,
   format_u16,
   format_i16,
+  format_m16,
   format_u32,
   format_i32,
+  format_m32,
   format_u64,
   format_i64,
+  format_m64,
   format_r32,
-  format_r64
+  format_r64,
+  format_m96,
+  format_m128,
+  format_m192,
 };
 
 enum components_t

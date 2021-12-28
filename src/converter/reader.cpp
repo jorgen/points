@@ -85,6 +85,15 @@ void get_data_worker_t::work()
     return;
   }
 
+  if (attributes.attributes[0].name_size != strlen(POINTS_ATTRIBUTE_XYZ)
+      || memcmp(attributes.attributes[0].name, POINTS_ATTRIBUTE_XYZ, attributes.attributes[0].name_size) != 0)
+  {
+    error.reset(new error_t());
+    error->code = -1;
+    error->msg = "First attribute has to be " POINTS_ATTRIBUTE_XYZ;
+    return;
+  }
+
   auto attribute_info = create_attribute_info(attributes);
 
   header.input_id = file.id;
@@ -111,7 +120,7 @@ void get_data_worker_t::work()
     points_read += local_points_read;
     points.header.point_count = local_points_read;
     split++;
-    unsorted_points_event_t event(std::move(points), point_reader_file);
+    unsorted_points_event_t event(attribute_info, std::move(points), point_reader_file);
     unsorted_points_queue.post_event(std::move(event));
   }
 }
@@ -122,16 +131,17 @@ void get_data_worker_t::after_work(completion_t completion)
   point_reader_file.input_split = split;
 }
   
-sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, point_reader_file_t &reader_file, points_t &&points)
+sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, point_reader_file_t &reader_file, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &&points)
   : tree_state(tree_state)
   , reader_file(reader_file)
+  , attributes_def(attributes_def)
   , points(std::move(points))
 {
 }
 
 void sort_worker_t::work()
 {
-  sort_points(tree_state, points);
+  sort_points(tree_state, attributes_def, points);
 }
 
 void sort_worker_t::after_work(completion_t completion)
@@ -192,7 +202,7 @@ void point_reader_t::handle_unsorted_points(std::vector<unsorted_points_event_t>
   {
     auto &tree_state = unsorted_point_event.reader_file.tree_state;
     auto &reader_file = unsorted_point_event.reader_file;
-    unsorted_point_event.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_state, reader_file, std::move(unsorted_point_event.points)));
+    unsorted_point_event.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_state, reader_file, unsorted_point_event.attributes_def, std::move(unsorted_point_event.points)));
     unsorted_point_event.reader_file.sort_workers.back()->enqueue(unsorted_point_event.reader_file.event_loop);
   }
 }

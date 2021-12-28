@@ -43,7 +43,7 @@ processor_t::processor_t(converter_t &converter)
   , _point_reader_done_with_file(_event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
   , _cache_file_error(_event_loop, [this](std::vector<error_t> &&errors) { this->handle_cache_file_error(std::move(errors));})
   , _pre_init_file_retriever(_converter.tree_state, _input_event_loop, _pre_init_for_files, _point_reader_file_errors)
-  , _point_reader(_converter.tree_state, _input_event_loop, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
+  , _point_reader(_converter.tree_state, _input_event_loop, _attributes_for_source, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _cache_file_handler(converter.cache_filename, _cache_file_error)
   , _pending_pre_init_files(0)
   , _pre_init_files_with_aabb_min_read_index(0)
@@ -210,7 +210,10 @@ static int get_attribute_config_index(std::vector<std::unique_ptr<attributes_t>>
   }
 
   int ret = int(attribute_configs.size());
-  attribute_configs.emplace_back(std::move(find));
+  //attribute_configs.emplace_back(std::move(find));
+  attribute_configs.emplace_back(new attributes_t());
+  auto &back = attribute_configs.back();
+  *back = std::move(find);
   return ret;
 }
 
@@ -228,11 +231,9 @@ void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_eve
   int i = 0;
   if (!_tree_initialized)
   {
-    auto &input_source = _input_sources[sorted_points_event[i].header.input_id.data];
-    input_source.points.emplace_back(std::move(sorted_points_event[i]));
-    input_source.points.back().ref = 2;
+    //auto &input_source = _input_sources[sorted_points_event[i].header.input_id.data];
     //fixme
-    tree_initialize(_converter.tree_state, _tree, input_source.points.back().points);
+    //tree_initialize(_converter.tree_state, _tree, input_source.points.back().points);
     _tree_initialized = true;
     i++;
   }

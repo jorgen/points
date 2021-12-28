@@ -15,14 +15,13 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#pragma once
+#include "data_provider.hpp"
 
-#include "conversion_types.hpp"
+#include "cache_file_handler.hpp"
 
 namespace points
 {
 namespace converter
 {
-void sort_points(const tree_global_state_t &tree_state, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &pointss);
 }
-} // namespace points
+}
