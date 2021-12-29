@@ -75,6 +75,7 @@ private:
   event_pipe_t<input_data_id_t> _point_reader_done_with_file;
 
   event_pipe_t<error_t> _cache_file_error;
+  event_pipe_t<std::pair<internal_header_t, buffer_t>> _points_written;
 
   threaded_event_loop_t _input_event_loop;
   pre_init_file_retriever_t _pre_init_file_retriever;
@@ -110,6 +111,7 @@ private:
   void handle_file_reading_done(std::vector<input_data_id_t> &&files);
 
   void handle_cache_file_error(std::vector<error_t> &&errors);
+  void handle_points_written(std::vector<std::pair<internal_header_t, buffer_t>> &&events);
 
 };
 }

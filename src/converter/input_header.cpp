@@ -53,7 +53,7 @@ void header_p_set_morton_aabb(const tree_global_state_t &tree_state, internal_he
   max[2] = uint64_t(round((header.max[2] - tree_state.offset[2]) * inv_scale[2]));
   morton::encode(max, header.morton_max);
 
-  assert(!(header.morton_max < header.morton_min));
+  //assert(!(header.morton_max < header.morton_min));
   header.lod_span = morton::morton_lod(header.morton_min, header.morton_max);
 }
 

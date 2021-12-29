@@ -52,17 +52,47 @@ struct morton_sort_t
 template <typename T>
 void convert_and_sort(const tree_global_state_t &tree_state, buffer_t &buffer, internal_header_t &header)
 {
+  double new_min[3];
+  new_min[0] = std::floor(header.min[0]);
+  new_min[1] = std::floor(header.min[1]);
+  new_min[2] = std::floor(header.min[2]);
+  double adjust[3];
+  adjust[0] = header.offset[0] - new_min[0];
+  adjust[1] = header.offset[1] - new_min[1];
+  adjust[2] = header.offset[2] - new_min[2];
+  header.offset[0] -= adjust[0];
+  header.offset[1] -= adjust[1];
+  header.offset[2] -= adjust[2];
+  int adjust_int[3];
+  adjust_int[0] = int(adjust[0]);
+  adjust_int[1] = int(adjust[1]);
+  adjust_int[2] = int(adjust[2]);
+  adjust_int[0] /= header.scale[0];
+  adjust_int[1] /= header.scale[1];
+  adjust_int[2] /= header.scale[2];
+
   using uT = typename std::make_unsigned<T>::type;
   T *begin = (T *)buffer.data;
   T *end = begin + (header.point_count * 3);
   for (T *p = begin; p < end; p += 3)
   {
+    p[0] += adjust_int[0];
+    p[1] += adjust_int[1];
+    p[2] += adjust_int[2];
+    p[2] += adjust_int[2];
+    assert(p[0] > 0 && p[1] > 0 && p[2] > 0);
+
     morton::encode((uT *)p);
   }
 
   morton_sort_t<uT> *morton_begin = (morton_sort_t<uT> *)begin;
   morton_sort_t<uT> *morton_end = (morton_sort_t<uT> *)end;
   std::sort(morton_begin, morton_end);
+
+  morton_sort_t<uT> first = *morton_begin;
+  morton_sort_t<uT> last = *(morton_end - 1);
+  assert(first < last);
+
 
   header_p_adjust_to_sorted_data(tree_state, header, begin, end);
 }

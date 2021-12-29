@@ -204,5 +204,7 @@ namespace {
 //  REQUIRE(tree.magnitude == 6);
 //}
 TEST_CASE("Empty", "[none]")
-{}
+{
+
+}
 }

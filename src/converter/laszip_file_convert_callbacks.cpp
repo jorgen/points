@@ -30,6 +30,16 @@ namespace points
 namespace converter
 {
 
+struct load_dll_t
+{
+  load_dll_t()
+  {
+    laszip_load_dll();
+  }
+};
+
+load_dll_t load_dll;
+
 struct laszip_handle_t
 {
   std::string filename;

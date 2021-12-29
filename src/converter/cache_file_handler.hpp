@@ -23,6 +23,9 @@
 #include "threaded_event_loop.hpp"
 #include "worker.hpp"
 
+#include <memory>
+#include <unordered_map>
+
 namespace points
 {
 namespace converter
@@ -83,20 +86,19 @@ struct cache_item_t
 class cache_file_handler_t : public about_to_block_t
 {
 public:
-  cache_file_handler_t(const std::string &cache_file, event_pipe_t<error_t> &cache_file_error);
+  cache_file_handler_t(const std::string &cache_file, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::pair<internal_header_t, buffer_t>> &write_done);
 
   void about_to_block();
 
   void handle_open_cache_file(uv_fs_t *request);
 
-  void register_input(input_data_id_t id, const internal_header_t &header);
-
-  void write(input_data_id_t id, attribute_buffers_t &&buffers);
+  void write(const internal_header_t &header, attribute_buffers_t &&buffers);
 
   cache_item_t ref(input_data_id_t id, int attribute);
   void deref(input_data_id_t id);
 
 private:
+  void handle_write_events(std::vector<std::pair<internal_header_t, attribute_buffers_t>> &&events);
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
 
@@ -105,7 +107,27 @@ private:
 
   uv_fs_t _open_request;
   event_pipe_t<error_t> &_cache_file_error;
+  event_pipe_t<std::pair<internal_header_t, buffer_t>> &_write_done;
+  event_pipe_t<std::pair<internal_header_t, attribute_buffers_t>> _write_event_pipe;
 
+  struct hash_input_data_id_t
+  {
+    size_t operator()(const input_data_id_t &a) const
+    {
+      uint64_t b;
+      static_assert(sizeof(a) == sizeof(b), "hash function is invalid");
+      memcpy(&b, &a, sizeof(b));
+      return std::hash<decltype (b)>()(b);
+    }
+  };
+  struct cache_item_impl_t
+  {
+    internal_header_t header;
+    attribute_buffers_t buffers;
+  };
+
+  std::mutex _cache_map_mutex;
+  std::unordered_map<input_data_id_t, cache_item_impl_t, hash_input_data_id_t> _cache_map;
 };
 }
 } // namespace points

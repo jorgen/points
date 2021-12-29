@@ -35,6 +35,15 @@ struct input_data_id_t
   uint32_t data;
   uint32_t sub;
 };
+inline bool operator<(const input_data_id_t &a, const input_data_id_t &b)
+{
+  return a.data < b.data || (a.data == b.data && a.sub < b.sub);
+}
+inline bool operator==(const input_data_id_t &a, const input_data_id_t &b)
+{
+  return a.data == b.data && a.sub == b.sub;
+}
+
 struct attribute_id_t
 {
   uint32_t data;

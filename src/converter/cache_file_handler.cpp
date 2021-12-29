@@ -27,11 +27,13 @@ namespace points
 {
 namespace converter
 {
-cache_file_handler_t::cache_file_handler_t(const std::string &cache_file, event_pipe_t<error_t> &cache_file_error)
+cache_file_handler_t::cache_file_handler_t(const std::string &cache_file, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::pair<internal_header_t, buffer_t>> &write_done)
   : _cache_file_name(cache_file)
   , _file_handle(0)
   , _file_opened(false)
   , _cache_file_error(cache_file_error)
+  , _write_done(write_done)
+  , _write_event_pipe(_event_loop, [this](std::vector<std::pair<internal_header_t, attribute_buffers_t>> &&events){this->handle_write_events(std::move(events));})
 {
   _open_request.data = this;
   _event_loop.add_about_to_block_listener(this);
@@ -61,6 +63,23 @@ void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
     error.code = (int)_file_handle;
     error.msg = uv_strerror(_file_handle);
     _cache_file_error.post_event(error);
+  }
+}
+
+void cache_file_handler_t::write(const internal_header_t &header, attribute_buffers_t &&buffers)
+{
+  _write_event_pipe.post_event(std::make_pair(header, std::move(buffers)));
+}
+
+void cache_file_handler_t::handle_write_events(std::vector<std::pair<internal_header_t, attribute_buffers_t>> &&events)
+{
+  std::unique_lock<std::mutex> lock(_cache_map_mutex);
+  for (auto &event : events)
+  {
+    auto &cache_item = _cache_map[event.first.input_id];
+    cache_item.header = std::move(event.first);
+    cache_item.buffers = std::move(event.second);
+    _write_done.post_event(std::make_pair(cache_item.header, cache_item.buffers.buffers[0]));
   }
 }
 
