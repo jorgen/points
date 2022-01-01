@@ -30,6 +30,11 @@ namespace converter
 
 struct points_subset_t
 {
+  points_subset_t(input_data_id_t id, uint32_t size, uint64_t offset)
+    : input_id(id)
+    , size(size)
+    , offset(offset)
+  {}
   input_data_id_t input_id;
   uint32_t size;
   uint64_t offset;

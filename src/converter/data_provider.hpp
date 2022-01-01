@@ -27,40 +27,5 @@ namespace points
 {
 namespace converter
 {
-class cache_file_handler_t;
-class points_data_provider_t;
-struct points_data_t
-{
-  points_data_t(cache_file_handler_t &cache_file, input_data_id_t &input_id, format_t format, uint8_t *points, uint64_t size)
-    : cache_file(cache_file)
-    , input_id(input_id)
-    , format(format)
-    , points(points)
-    , size(size)
-  {}
-  ~points_data_t()
-  {
-    cache_file.deref(input_id);
-  }
-  points_data_t(const points_data_t &) = delete;
-  points_data_t(points_data_t &&) = delete;
-  points_data_t &operator=(const points_data_t &) = delete;
-  cache_file_handler_t &cache_file;
-  input_data_id_t input_id;
-  format_t format;
-  uint8_t *points;
-  uint64_t size;
-};
-
-class points_data_provider_t
-{
-public:
-  points_data_provider_t(cache_file_handler_t &cache_file_handler);
-
-  points_data_t read_input_id(input_data_id_t id);
-
-private:
-  cache_file_handler_t &_cache_file_handler;
-};
 }
 }

@@ -21,6 +21,7 @@
 #include "tree.hpp"
 #include "input_header.hpp"
 #include "morton_tree_coordinate_transform.hpp"
+#include "cache_file_handler.hpp"
 
 #include <points/converter/default_attribute_names.h>
 
@@ -46,10 +47,10 @@ void get_first_and_last_point(const tree_global_state_t &state, const points_t &
 }
 
 template<typename T>
-void verify_points_range(const tree_global_state_t &state, const points_t &points, int start_index, int end_index, const morton::morton64_t &min, const morton::morton64_t &max)
+void verify_points_range(const tree_global_state_t &state, const read_points_t &points, int start_index, int end_index, const morton::morton64_t &min, const morton::morton64_t &max)
 {
   using morton_u =  morton::morton_t<typename std::make_unsigned<T>::type>;
-  const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.buffers.buffers[0].data);
+  const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.data.data);
   morton_u morton_current;
   int count_less = 0;
   int count_greater = 0;

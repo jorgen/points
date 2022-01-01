@@ -75,12 +75,12 @@ struct cache_file_read_request_t
   std::function<void(std::unique_ptr<uint8_t[]> &&, error_t &&)> callback;
 };
 
-struct cache_item_t
+struct points_cache_item_t
 {
+  internal_header_t header;
   format_t format;
   components_t components;
-  uint8_t *points;
-  uint64_t size;
+  buffer_t data;
 };
 
 class cache_file_handler_t : public about_to_block_t
@@ -94,8 +94,8 @@ public:
 
   void write(const internal_header_t &header, attribute_buffers_t &&buffers);
 
-  cache_item_t ref(input_data_id_t id, int attribute);
-  void deref(input_data_id_t id);
+  points_cache_item_t ref_points(input_data_id_t id);
+  void deref_points(input_data_id_t id);
 
 private:
   void handle_write_events(std::vector<std::pair<internal_header_t, attribute_buffers_t>> &&events);
@@ -122,12 +122,37 @@ private:
   };
   struct cache_item_impl_t
   {
+    int ref;
     internal_header_t header;
     attribute_buffers_t buffers;
   };
 
   std::mutex _cache_map_mutex;
   std::unordered_map<input_data_id_t, cache_item_impl_t, hash_input_data_id_t> _cache_map;
+};
+
+struct read_points_t
+{
+  read_points_t(cache_file_handler_t &cache_file_handler, input_data_id_t id)
+    : cache_file_handler(cache_file_handler)
+    , id(id)
+    , cache_item(cache_file_handler.ref_points(id))
+    , header(cache_item.header)
+    , data(cache_item.data)
+    , format(cache_item.format)
+    , components(cache_item.components)
+  {}
+  ~read_points_t()
+  {
+    cache_file_handler.deref_points(id);
+  }
+  cache_file_handler_t &cache_file_handler;
+  input_data_id_t id;
+  points_cache_item_t cache_item;
+  internal_header_t &header;
+  buffer_t &data;
+  format_t &format;
+  components_t &components;
 };
 }
 } // namespace points

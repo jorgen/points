@@ -73,10 +73,10 @@ inline bool convert_world_morton_to_local(const tree_global_state_t &state, cons
 }
 
 template<typename T>
-inline void convert_local_morton_to_world(const points_t &p, const morton::morton_t<T> &local, const tree_global_state_t &state, morton::morton64_t &world)
+inline void convert_local_morton_to_world(const internal_header_t &header, const morton::morton_t<T> &local, const tree_global_state_t &state, morton::morton64_t &world)
 {
   double pos[3];
-  convert_morton_to_pos(p.header.scale, p.header.offset, local, pos);
+  convert_morton_to_pos(header.scale, header.offset, local, pos);
   assert(pos[0] >= 0.0 && pos[1] >= 0.0 && pos[2] >= 0.0);
   convert_pos_to_morton(state.scale, state.offset, pos, world);
 }

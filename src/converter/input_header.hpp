@@ -38,28 +38,18 @@ inline int size_for_format(format_t format)
   {
   case format_u8:
   case format_i8:
-  case format_m8:
     return 1;
   case format_u16:
   case format_i16:
-  case format_m16:
     return 2;
   case format_u32:
   case format_i32:
-  case format_m32:
   case format_r32:
     return 4;
   case format_u64:
   case format_i64:
-  case format_m64:
   case format_r64:
     return 8;
-  case format_m96:
-    return 12;
-  case format_m128:
-    return 16;
-  case format_m192:
-    return 24;
   }
   return 0;
 }

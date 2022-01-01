@@ -71,18 +71,6 @@ void attributes_copy(const attributes_t &source, attributes_t &target)
   }
 }
 
-void header_copy(const internal_header_t &source, internal_header_t &target)
-{
-  target.input_id = source.input_id;
-  target.point_count = source.point_count;
-  memcpy(target.offset, source.offset, sizeof(target.offset));
-  memcpy(target.scale, source.scale, sizeof(target.scale));
-  memcpy(target.min, source.min, sizeof(target.min));
-  memcpy(target.max, source.max, sizeof(target.max));
-  memcpy(&target.morton_min, &source.morton_min, sizeof(target.morton_min));
-  memcpy(&target.morton_max, &source.morton_max, sizeof(target.morton_max));
-}
-
 void attribute_buffers_initialize(const std::vector<std::pair<format_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
 {
   buffers.data.reserve(attributes_def.size());

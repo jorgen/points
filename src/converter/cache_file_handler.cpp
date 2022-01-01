@@ -77,10 +77,30 @@ void cache_file_handler_t::handle_write_events(std::vector<std::pair<internal_he
   for (auto &event : events)
   {
     auto &cache_item = _cache_map[event.first.input_id];
+    cache_item.ref = 1;
     cache_item.header = std::move(event.first);
     cache_item.buffers = std::move(event.second);
     _write_done.post_event(std::make_pair(cache_item.header, cache_item.buffers.buffers[0]));
   }
+}
+
+points_cache_item_t cache_file_handler_t::ref_points(input_data_id_t id)
+{
+  std::unique_lock<std::mutex> lock(_cache_map_mutex);
+  auto it = _cache_map.find(id);
+  assert(it != _cache_map.end());
+  it->second.ref++;
+  points_cache_item_t ret;
+  ret.header = it->second.header;
+  ret.data = it->second.buffers.buffers[0];
+  return ret;
+}
+void cache_file_handler_t::deref_points(input_data_id_t id)
+{
+  std::unique_lock<std::mutex> lock(_cache_map_mutex);
+  auto it = _cache_map.find(id);
+  assert(it != _cache_map.end());
+  it->second.ref--;
 }
 
 }
