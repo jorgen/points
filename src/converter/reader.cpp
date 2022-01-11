@@ -106,7 +106,7 @@ void get_data_worker_t::work()
   while(!done_read_file)
   {
     points_t points;
-    header_copy(header, points.header);
+    points.header = header;
     points.header.input_id.sub = sub_part++;
     points.header.point_count = convert_size;
     attribute_buffers_initialize(attribute_info, points.buffers, convert_size);

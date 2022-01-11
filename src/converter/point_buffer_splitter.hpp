@@ -60,7 +60,7 @@ void verify_points_range(const tree_global_state_t &state, const read_points_t &
   {
     morton_current = morton_begin[i];
     morton::morton64_t current_world;
-    convert_local_morton_to_world(points, morton_current, state, current_world);
+    convert_local_morton_to_world(points.header, morton_current, state, current_world);
     if (current_world < min)
       count_less++;
     if (!(current_world < max))
@@ -71,16 +71,16 @@ void verify_points_range(const tree_global_state_t &state, const read_points_t &
 }
 
 template<typename T>
-void verify_points_less_than(const tree_global_state_t &state, const points_t &points, int start_index, int end_index, const morton::morton64_t &max)
+void verify_points_less_than(const tree_global_state_t &state, const read_points_t &points, int start_index, int end_index, const morton::morton64_t &max)
 {
   using morton_u =  morton::morton_t<typename std::make_unsigned<T>::type>;
-  const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.buffers.buffers[0].data);
+  const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.data.data);
   morton::morton64_t current;
   int count = 0;
 
   for (int i = start_index; i < end_index; i++)
   {
-    convert_local_morton_to_world(points, morton_begin[i], state, current);
+    convert_local_morton_to_world(points.header, morton_begin[i], state, current);
     if (!(current < max))
       count++;
   }
@@ -109,168 +109,86 @@ ForwardIt inhouse_lower_bound(ForwardIt first, ForwardIt last, Compare comp)
 }
 
 template<typename T>
-void find_offsets(const tree_global_state_t &state, const points_t &points, int lod, const morton::morton64_t &node_min, uint32_t (&offsets)[8], morton::morton64_t (&max_values)[8])
+void point_buffer_subdivide_type(const tree_global_state_t &state, const read_points_t &points, const points_subset_t &subset, int lod, const morton::morton64_t &node_min, points_collection_t (&children)[8])
 {
   using morton_u =  morton::morton_t<typename std::make_unsigned<T>::type>;
   //morton_u morton_limit;
-  assert(points.buffers.buffers[0].size / sizeof(morton_u) == points.header.point_count);
-  const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.buffers.buffers[0].data);
-  const morton_u *morton_end = morton_begin + points.header.point_count;
-  const morton_u *morton_codes = morton_begin;
-  memset(offsets, 0, sizeof(offsets));
+  assert(points.data.size / sizeof(morton_u) == points.header.point_count);
+  const morton_u *morton_begin = reinterpret_cast<const morton_u *>(points.data.data) + subset.offset;
+  const morton_u *morton_end = morton_begin + points.data.size;
+  const morton_u *morton_current_start = morton_begin;
+  const morton_u *morton_current_end = nullptr;
 
   assert(!(points.header.morton_min < node_min)); // less or equal
-  for (int i = 0; i < 7; i++)
+  for (int i = 0; i < 8 && morton_current_start != morton_end; i++)
   {
     morton::morton64_t node_mask = node_min;
     morton::morton_set_child_mask(lod, uint8_t(i + 1), node_mask); 
-    max_values[i] = node_mask;
-    if (morton_codes == morton_end)
+
+    if (points.header.morton_max < node_mask)
     {
-      offsets[i] = uint32_t(morton_end - morton_begin);
+      morton_current_end = morton_end;
     }
-    else
+    else if (!(node_mask < points.header.morton_min))
     {
-      if (points.header.morton_max < node_mask)
-      {
-        morton_codes = morton_end; 
-      }
-      else if (!(node_mask < points.header.morton_min))
-      {
       //  if (convert_world_morton_to_local(state, node_mask, points, morton_limit))
       //  {
       //    morton_codes = std::lower_bound(morton_codes, morton_end, morton_limit);
       //  }
       //  else
-        {
-          morton_codes = inhouse_lower_bound(morton_codes, morton_end, [&node_mask, &points, &state](const morton_u &value) {
-            morton::morton64_t value_world;
-            convert_local_morton_to_world(points, value, state, value_world);
-            return value_world < node_mask;
-          });
-        }
+      {
+        morton_current_end = inhouse_lower_bound(morton_current_start, morton_end, [&node_mask, &points, &state](const morton_u &value) {
+          morton::morton64_t value_world;
+          convert_local_morton_to_world(points.header, value, state, value_world);
+          return value_world < node_mask;
+        });
       }
-      offsets[i] = uint32_t(morton_codes - morton_begin);
-      morton::morton64_t child_min = node_min;
-      morton::morton_set_child_mask(lod, uint8_t(i), child_min); 
-      verify_points_range<T>(state, points, int(morton_codes - morton_begin), offsets[i], child_min, node_mask);
     }
+
+    auto new_offset = morton_current_start - morton_begin + subset.offset;
+    auto new_size = morton_current_end - morton_current_start;
+    children[i].data.emplace_back(subset.input_id, new_offset, new_size);
+
+    children[i].point_count += new_size;
+
+    morton::morton64_t global_start;
+    convert_local_morton_to_world(points.header, *morton_current_start, state, global_start);
+    morton::morton64_t global_end;
+    convert_local_morton_to_world(points.header, *morton_current_end, state, global_end);
+    bool modified = false;
+    if (global_start < children[i].min)
+    {
+      children[i].min = global_start;
+      modified = true;
+    }
+    if (children[i].max < global_end)
+    {
+      children[i].max = global_end;
+      modified = true;
+    }
+
+    if (modified)
+    {
+      children[i].min_lod = morton::morton_lod(children[i].min, children[i].max);
+    }
+    //morton::morton_set_child_mask(lod, uint8_t(i), child_min);
+    //verify_points_range<T>(state, points, int(morton_codes - morton_begin), offsets[i], child_min, node_mask);
+    morton_current_start = morton_current_end;
   }
-  offsets[7] = uint32_t(morton_end - morton_begin);
-  {
-  morton::morton64_t node_max = morton::morton_or(node_min, morton::morton_mask_create(lod));
-  morton::morton_add_one(node_max);
-  max_values[7] = node_max;
-  if (morton_codes != morton_end)
-  {
-    morton::morton64_t child_min = node_min;
-    morton::morton_set_child_mask(lod, uint8_t(7), child_min); 
-    verify_points_range<T>(state, points, int( morton_codes - morton_begin), int(points.header.point_count), child_min, node_max);
-  }
-  }
+  assert(morton_current_start == morton_end);
 }
 
-void point_buffer_get_child_offsets(const tree_global_state_t &state, const points_t &points, int lod, const morton::morton64_t &node_min, uint32_t (&offsets)[8], morton::morton64_t (&max_values)[8])
+void point_buffer_subdivide(const tree_global_state_t &state, const read_points_t &points, const points_subset_t &subset, int lod, const morton::morton64_t &node_min, points_collection_t (&children)[8])
 {
-  (void)state;
-  (void)points;
-  (void)lod;
-  (void)node_min;
-  (void)offsets;
-  (void)max_values;
-  //assert(strcmp(points.header.attributes.attributes[0].name, POINTS_ATTRIBUTE_XYZ) == 0);
-  //switch(points.header.attributes.attributes[0].format)
-  //{
-  //case format_i32:
-  //  find_offsets<int32_t>(state, points, lod, node_min, offsets, max_values);
-  //  break;
-  //default:
-  //  assert(false);
-  //  break;
-  //}
-}
-
-//static void point_buffer_split_copy_buffers(const points_t &source, points_t &destination, int begin, int size)
-//{
-//  for (int i = 0; i < int(source.buffers.data.size()); i++)
-//  {
-//    auto components = source.header.attributes.attributes[i].components;
-//    auto format_size = size_for_format(source.header.attributes.attributes[i].format);
-//    int element_size = components * format_size;
-//    int copy_size = element_size * size;
-//    int byte_offset = begin * element_size;
-//    destination.buffers.data.emplace_back(new uint8_t[copy_size]);
-//    destination.buffers.buffers.emplace_back();
-//    destination.buffers.buffers.back().data = destination.buffers.data.back().get();
-//    destination.buffers.buffers.back().size = copy_size;
-//    memcpy(destination.buffers.buffers.back().data, source.buffers.data[i].get() + byte_offset, copy_size);
-//  }
-//}
-//
-//
-//template<typename T>
-//void point_buffer_split_set_min_max_header_values(const tree_global_state_t &state, points_t &points)
-//{
-//  using uT = typename std::make_unsigned<T>::type;
-//  uT *begin = (uT *)points.buffers.buffers[0].data;
-//  uT *end = begin + (points.header.point_count * 3);
-//  header_p_adjust_to_sorted_data(state, points.header, begin, end);
-//}
-
-
-void point_buffer_split_buffers_to_children(const tree_global_state_t &state, points_t &p, uint32_t (&offsets)[8], points_collection_t (&children)[8])
-{
-  (void)state;
-  (void)p;
-  (void)offsets;
-  (void)children;
-//  for (int i = 0; i < 8; i++)
-//  {
-//    int prev_offset = i == 0 ? 0 : offsets[i - 1];
-//    int curr_offset = offsets[i];
-//    uint64_t diff_offset = uint64_t(curr_offset - prev_offset);
-//    if (diff_offset == 0)
-//      continue;
-//    auto &child = children[i];
-//    if (diff_offset == p.header.point_count)
-//    {
-//      points_data_add(child, std::move(p));
-//      return;
-//    }
-//    else
-//    {
-//      child.data.emplace_back();
-//      auto &dest_points = children[i].data.back();
-//      point_buffer_split_copy_buffers(p, dest_points, prev_offset, int(diff_offset));
-//      header_copy(p.header, dest_points.header);
-//      dest_points.header.point_count = diff_offset;
-//      switch (dest_points.header.attributes.attributes[0].format)
-//      {
-//      case format_i32:
-//        point_buffer_split_set_min_max_header_values<int32_t>(state, dest_points);
-//        break;
-//      default:
-//        assert(false);
-//        break;
-//      }
-//      assert(!(dest_points.header.morton_min < p.header.morton_min));
-//      assert(!(p.header.morton_max < dest_points.header.morton_max));
-//
-//
-//      assert(dest_points.header.lod_span <= p.header.lod_span);
-//      if (child.point_count == 0)
-//      {
-//        memcpy(child.morton_min.data, dest_points.header.morton_min.data, sizeof(child.morton_min));
-//        memcpy(child.morton_max.data, dest_points.header.morton_max.data, sizeof(child.morton_max));
-//        child.min_lod = dest_points.header.lod_span;
-//        child.point_count = dest_points.header.point_count;
-//      }
-//      else
-//      {
-//        points_data_adjust_to_points(child, dest_points);
-//      }
-//    }
-//  }
+  switch(points.format)
+  {
+  case format_i32:
+    point_buffer_subdivide_type<int32_t>(state, points, subset, lod, node_min, children);
+    break;
+  default:
+    assert(false);
+    break;
+  }
 }
 
 }
