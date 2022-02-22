@@ -27,10 +27,10 @@ namespace converter
 
 void tree_initialize(const tree_global_state_t &global_state, cache_file_handler_t &cache, tree_t &tree, const internal_header_t &header)
 {
-  morton::morton64_t mask = morton::morton_xor(header.morton_min, header.morton_max);
+  morton::morton192_t mask = morton::morton_xor(header.morton_min, header.morton_max);
   int magnitude = morton::morton_magnitude_from_bit_index(morton::morton_msb(mask));
-  morton::morton64_t new_tree_mask = morton::morton_mask_create(morton::morton_magnitude_to_lod(magnitude));
-  morton::morton64_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
+  morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t, 3>(morton::morton_magnitude_to_lod(magnitude));
+  morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
   tree.morton_min = morton::morton_and(header.morton_min, new_tree_mask_inv);
   tree.morton_max = morton::morton_or(header.morton_min, new_tree_mask);
   tree.magnitude = uint8_t(magnitude);
@@ -43,15 +43,25 @@ void tree_initialize(const tree_global_state_t &global_state, cache_file_handler
   points_data_initialize(tree.data[0][0], header);
 
   {
-    morton::morton64_t node_mask = tree.morton_max;
+    morton::morton192_t node_mask = tree.morton_max;
     morton::morton_add_one(node_mask);
     for (auto &p : tree.data[0][0].data)
     {
       read_points_t read_points(cache, p.input_id);
       switch (read_points.format)
       {
-      case format_i32:
-        verify_points_less_than<int32_t>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
+      case format_m32:
+        verify_points_less_than<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
+        break;
+        //  case format_m64:
+        //    point_buffer_subdivide_type<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(state, points, subset, lod, node_min, children);
+        //verify_points_less_than<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
+        //    break;
+      case format_m128:
+        verify_points_less_than<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
+        break;
+      case format_m192:
+        verify_points_less_than<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
         break;
       default:
         assert(false);
@@ -61,11 +71,11 @@ void tree_initialize(const tree_global_state_t &global_state, cache_file_handler
   }
 }
 
-void tree_initialize_sub(const tree_t &parent_tree, const morton::morton64_t &morton, tree_t &sub_tree)
+void tree_initialize_sub(const tree_t &parent_tree, const morton::morton192_t &morton, tree_t &sub_tree)
 {
   sub_tree.magnitude = parent_tree.magnitude - 1;
-  morton::morton64_t new_tree_mask = morton::morton_mask_create(sub_tree.magnitude * 5 + 4);
-  morton::morton64_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
+  morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t, 3>(sub_tree.magnitude * 5 + 4);
+  morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
   sub_tree.morton_min = morton::morton_and(morton, new_tree_mask_inv);
   sub_tree.morton_max = morton::morton_or(morton, new_tree_mask);
   sub_tree.nodes[0].push_back(0);
@@ -73,15 +83,15 @@ void tree_initialize_sub(const tree_t &parent_tree, const morton::morton64_t &mo
   sub_tree.data[0].emplace_back();
 }
 
-void tree_initialize_new_parent(const tree_t &some_child, const morton::morton64_t possible_min, const morton::morton64_t possible_max, tree_t &new_parent)
+void tree_initialize_new_parent(const tree_t &some_child, const morton::morton192_t possible_min, const morton::morton192_t possible_max, tree_t &new_parent)
 {
-  morton::morton64_t new_min = some_child.morton_min < possible_min ? some_child.morton_min : possible_min;
-  morton::morton64_t new_max = some_child.morton_max < possible_max ? possible_max : some_child.morton_max;
+  morton::morton192_t new_min = some_child.morton_min < possible_min ? some_child.morton_min : possible_min;
+  morton::morton192_t new_max = some_child.morton_max < possible_max ? possible_max : some_child.morton_max;
 
   int lod = morton::morton_lod(new_min, new_max);
   new_parent.magnitude = uint8_t(morton::morton_magnitude_from_lod(uint8_t(lod)));
-  morton::morton64_t new_tree_mask = morton::morton_mask_create(lod);
-  morton::morton64_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
+  morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t,3>(lod);
+  morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
   new_parent.morton_min = morton::morton_and(new_tree_mask_inv, new_min);
   new_parent.morton_max = morton::morton_or(new_parent.morton_min, new_tree_mask);
   new_parent.nodes[0].push_back(0);
@@ -119,7 +129,7 @@ static int sub_tree_count_skips(uint8_t node, int index)
   return node_skips;
 }
 
-static void sub_tree_split_points_to_children(const tree_global_state_t &state, cache_file_handler_t &cache, points_collection_t &&points, int lod, const morton::morton64_t &node_min, points_collection_t (&children)[8])
+static void sub_tree_split_points_to_children(const tree_global_state_t &state, cache_file_handler_t &cache, points_collection_t &&points, int lod, const morton::morton192_t &node_min, points_collection_t (&children)[8])
 {
   for (auto &p : points.data)
   {
@@ -131,19 +141,19 @@ static void sub_tree_split_points_to_children(const tree_global_state_t &state, 
   points = points_collection_t();
 }
 
-static void sub_tree_insert_points(const tree_global_state_t &state, cache_file_handler_t &cache, tree_t &tree, const morton::morton64_t &min, int current_level, int skip, points_collection_t &&points)
+static void sub_tree_insert_points(const tree_global_state_t &state, cache_file_handler_t &cache, tree_t &tree, const morton::morton192_t &min, int current_level, int skip, points_collection_t &&points)
 {
   assert(current_level != 0 || tree.morton_min == min);
   auto &node = tree.nodes[current_level][skip];
   int lod = morton::morton_tree_level_to_lod(tree.magnitude, current_level);
-  auto child_mask = morton::morton_get_child_mask(lod, min);
+  auto child_mask = morton::morton_get_child_mask(lod, points.min);
   assert(child_mask < 8);
-  morton::morton64_t max = morton::morton_or(min, morton::morton_mask_create(lod));
+  morton::morton192_t max = morton::morton_or(min, morton::morton_mask_create<uint64_t, 3>(lod));
   assert(!(points.min < min));
   assert(!(max < points.max));
   if (lod > points.min_lod)
   {
-    morton::morton64_t new_min = min;
+    morton::morton192_t new_min = min;
     morton::morton_set_child_mask(lod, child_mask, new_min);
     if (node & (1 << child_mask))
     {
@@ -194,7 +204,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, cache_file_
   assert(points.point_count);
   assert(tree.magnitude > 0 || current_level < 4);
   {
-    morton::morton64_t node_min = morton::morton_and(morton::morton_negate(morton::morton_mask_create(lod)), points.min);
+    morton::morton192_t node_min = morton::morton_and(morton::morton_negate(morton::morton_mask_create<uint64_t, 3>(lod)), points.min);
     assert(node_min == min);
     points_collection_t children_data[8];
     if (!node && tree.data[current_level][skip].point_count)
@@ -215,7 +225,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, cache_file_
           child_count++;
         continue;
       }
-      morton::morton64_t new_min = min;
+      morton::morton192_t new_min = min;
       morton::morton_set_child_mask(lod, uint8_t(i), new_min);
       assert(child_data.min_lod <= lod);
 
@@ -255,8 +265,8 @@ static bool validate_min_offset(uint64_t min_offset, uint64_t scaled_offset)
 {
   if (scaled_offset == 0)
     return true;
-  if (scaled_offset % min_offset != 0)
-    return false;
+//  if (scaled_offset % min_offset != 0)
+//    return false;
   return min_offset <= scaled_offset;
 }
 
@@ -326,7 +336,7 @@ static void insert_tree_in_tree(tree_t &parent, tree_t &&child)
   }
 }
 
-static void reparent_tree(tree_t &new_parent, tree_t &&tree, const morton::morton64_t &possible_min, const morton::morton64_t &possible_max)
+static void reparent_tree(tree_t &new_parent, tree_t &&tree, const morton::morton192_t &possible_min, const morton::morton192_t &possible_max)
 {
   tree_initialize_new_parent(tree, possible_min, possible_max, new_parent);
   assert(new_parent.magnitude != tree.magnitude);
@@ -337,7 +347,7 @@ static void reparent_tree(tree_t &new_parent, tree_t &&tree, const morton::morto
 
 void tree_add_points(const tree_global_state_t &state, cache_file_handler_t &cache, tree_t &tree, const internal_header_t &header)
 {
-  assert(validate_points_offset(header));
+  validate_points_offset(header);
   if (header.morton_min < tree.morton_min || tree.morton_max < header.morton_max )
   {
     tree_t old_tree = std::move(tree);

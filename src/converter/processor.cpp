@@ -42,10 +42,10 @@ processor_t::processor_t(converter_t &converter)
   , _point_reader_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
   , _point_reader_done_with_file(_event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
   , _cache_file_error(_event_loop, [this](std::vector<error_t> &&errors) { this->handle_cache_file_error(std::move(errors));})
-  , _points_written(_event_loop, [this](std::vector<std::pair<internal_header_t, buffer_t>> &&events) {this->handle_points_written(std::move(events)); })
+  , _points_written(_event_loop, [this](std::vector<internal_header_t> &&events) {this->handle_points_written(std::move(events)); })
   , _pre_init_file_retriever(_converter.tree_state, _input_event_loop, _pre_init_for_files, _point_reader_file_errors)
   , _point_reader(_converter.tree_state, _input_event_loop, _attributes_for_source, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
-  , _cache_file_handler(converter.cache_filename, _cache_file_error, _points_written)
+  , _cache_file_handler(_converter.tree_state, converter.cache_filename, _cache_file_error, _points_written)
   , _pending_pre_init_files(0)
   , _pre_init_files_with_aabb_min_read_index(0)
   , _pre_init_files_with_no_aabb_min_read_index(0)
@@ -227,22 +227,10 @@ void processor_t::handle_attribute_event(std::vector<std::pair<input_data_id_t, 
 }
 void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_event)
 {
-  if (sorted_points_event.empty())
-    return;
-  int i = 0;
-  if (!_tree_initialized)
+  for(auto &event : sorted_points_event)
   {
-    //auto &input_source = _input_sources[sorted_points_event[i].header.input_id.data];
-    //fixme
-    //tree_initialize(_converter.tree_state, _tree, input_source.points.back().points);
-    _tree_initialized = true;
-    i++;
-  }
-
-  for (; i < int(sorted_points_event.size()); i++)
-  {
-    //tree_add_points(_converter.tree_state, _tree, std::move(sorted_points_event[i]));
-    _cache_file_handler.write(sorted_points_event[i].header, std::move(sorted_points_event[i].buffers));
+    auto attributes = _attributes_configs[_input_sources[event.header.input_id.data].attribute_id.data].get();
+    _cache_file_handler.write(event.header, std::move(event.buffers), attributes);
   }
 }
 
@@ -268,11 +256,20 @@ void processor_t::handle_cache_file_error(std::vector<error_t> &&errors)
   }
 }
 
-void processor_t::handle_points_written(std::vector<std::pair<internal_header_t, buffer_t>> &&events)
+void processor_t::handle_points_written(std::vector<internal_header_t> &&events)
 {
   for (auto &event : events)
   {
-    fmt::print(stderr, "written {} {}\n", event.first.input_id.data, event.first.input_id.sub);
+    if (!_tree_initialized)
+    {
+      _tree_initialized = true;
+      tree_initialize(_converter.tree_state, _cache_file_handler, _tree, event);
+    }
+    else
+    {
+      tree_add_points(_converter.tree_state, _cache_file_handler, _tree, event);
+    }
+    fmt::print(stderr, "written {} {}\n", event.input_id.data, event.input_id.sub);
   }
 }
 

@@ -71,8 +71,8 @@ struct attribute_buffers_t
 struct internal_header_t : header_t
 {
   input_data_id_t input_id;
-  morton::morton64_t morton_min;
-  morton::morton64_t morton_max;
+  morton::morton192_t morton_min;
+  morton::morton192_t morton_max;
   int lod_span;
 };
 
@@ -126,7 +126,8 @@ inline input_name_ref_t input_name_ref_from_input_data_source(const input_data_s
 struct tree_global_state_t
 {
   uint32_t node_limit = 100000;
-  double scale[3];
+  double scale;
+  double inv_scale;
   double offset[3];
 };
 } // namespace converter

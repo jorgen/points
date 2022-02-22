@@ -12,10 +12,10 @@ TEST_CASE("SimpleMorton", "[converter]")
   double scale[] = {0.001, 0.001, 0.001};
   double offset[] = {0.0, 0.0, 0.0}; 
 
-  points::converter::morton::morton_t<uint64_t> half_morton;
-  points::converter::convert_pos_to_morton(scale, offset, half, half_morton);
-  points::converter::morton::morton_t<uint64_t> quarter_morton;
-  points::converter::convert_pos_to_morton(scale, offset, quarter, quarter_morton);
+//  points::converter::morton::morton_t<uint64_t, 3> half_morton;
+//  points::converter::convert_pos_to_morton(scale, offset, half, half_morton);
+//  points::converter::morton::morton_t<uint64_t, 3> quarter_morton;
+//  points::converter::convert_pos_to_morton(scale, offset, quarter, quarter_morton);
   //  points::converter::morton::morton64_t a;
 //  a = points::converter::morton::morton_mask_create(0);
 //  REQUIRE(a.data[0] == 0b111);
@@ -40,4 +40,33 @@ TEST_CASE("SimpleMorton", "[converter]")
 //  REQUIRE(a.data[2] == 1);
 //  REQUIRE(a.data[1] == ~uint64_t(0));
 //  REQUIRE(a.data[0] == ~uint64_t(0));
+}
+
+TEST_CASE("Morton order", "[converter]")
+{
+  using namespace  points::converter;
+  morton::morton_t<uint32_t, 3> first = {};
+  first.data[0] = 64425663;
+  first.data[1] = 4959871;
+  morton::morton_t<uint32_t, 3> second = {};
+  second.data[0] = 2009337122;
+  second.data[1] = 4959942;
+  REQUIRE(first < second);
+  double local_scale[3] = {0.00025, 0.00025, 0.00025};
+  double local_offset[3] = {6483393,  5589339, 220};
+  double world_scale[3] = {0.00025, 0.00025, 0.00025};
+  double world_offset[3] = {-2097152, -2097152, -2097152};
+
+//  morton::morton64_t world_first;
+//
+//  morton::morton64_t world_second;
+//  double pos_first[3];
+//  double pos_second[3];
+//  uint64_t ipos_first1[3];
+//  uint64_t ipos_second1[3];
+//  convert_morton_to_pos(local_scale, local_offset, first, pos_first);
+//  convert_morton_to_pos(local_scale, local_offset, second, pos_second);
+//  convert_pos_to_morton(world_scale, world_offset, pos_first, world_first);
+//  convert_pos_to_morton(world_scale, world_offset, pos_second, world_second);
+//  REQUIRE(world_first < world_second);
 }

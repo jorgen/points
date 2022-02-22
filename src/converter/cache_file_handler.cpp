@@ -16,7 +16,7 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "cache_file_handler.hpp"
-
+#include "point_buffer_splitter.hpp"
 #include <uv.h>
 
 #include <fmt/printf.h>
@@ -27,14 +27,16 @@ namespace points
 {
 namespace converter
 {
-cache_file_handler_t::cache_file_handler_t(const std::string &cache_file, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::pair<internal_header_t, buffer_t>> &write_done)
+cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, event_pipe_t<error_t> &cache_file_error, event_pipe_t<internal_header_t> &write_done)
   : _cache_file_name(cache_file)
+  , _state(state)
   , _file_handle(0)
   , _file_opened(false)
   , _cache_file_error(cache_file_error)
   , _write_done(write_done)
-  , _write_event_pipe(_event_loop, [this](std::vector<std::pair<internal_header_t, attribute_buffers_t>> &&events){this->handle_write_events(std::move(events));})
+  , _write_event_pipe(_event_loop, [this](std::vector<std::tuple<internal_header_t, attribute_buffers_t, attributes_t *>> &&events){this->handle_write_events(std::move(events));})
 {
+  (void) _state;
   _open_request.data = this;
   _event_loop.add_about_to_block_listener(this);
 #ifdef WIN32
@@ -66,21 +68,25 @@ void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
   }
 }
 
-void cache_file_handler_t::write(const internal_header_t &header, attribute_buffers_t &&buffers)
+void cache_file_handler_t::write(const internal_header_t &header, attribute_buffers_t &&buffers, attributes_t *attributes)
 {
-  _write_event_pipe.post_event(std::make_pair(header, std::move(buffers)));
+  _write_event_pipe.post_event(std::make_tuple(header, std::move(buffers), attributes));
 }
 
-void cache_file_handler_t::handle_write_events(std::vector<std::pair<internal_header_t, attribute_buffers_t>> &&events)
+void cache_file_handler_t::handle_write_events(std::vector<std::tuple<internal_header_t, attribute_buffers_t, attributes_t *>> &&events)
 {
   std::unique_lock<std::mutex> lock(_cache_map_mutex);
   for (auto &event : events)
   {
-    auto &cache_item = _cache_map[event.first.input_id];
+    auto &cache_item = _cache_map[std::get<0>(event).input_id];
     cache_item.ref = 1;
-    cache_item.header = std::move(event.first);
-    cache_item.buffers = std::move(event.second);
-    _write_done.post_event(std::make_pair(cache_item.header, cache_item.buffers.buffers[0]));
+    cache_item.header = std::move(std::get<0>(event));
+    cache_item.buffers = std::move(std::get<1>(event));
+    auto attributes = std::get<2>(event);
+    cache_item.format = attributes->attributes[0].format;
+    cache_item.components = attributes->attributes[0].components;
+
+    _write_done.post_event(cache_item.header);
   }
 }
 
@@ -93,6 +99,8 @@ points_cache_item_t cache_file_handler_t::ref_points(input_data_id_t id)
   points_cache_item_t ret;
   ret.header = it->second.header;
   ret.data = it->second.buffers.buffers[0];
+  ret.format = it->second.format;
+  ret.components = it->second.components;
   return ret;
 }
 void cache_file_handler_t::deref_points(input_data_id_t id)

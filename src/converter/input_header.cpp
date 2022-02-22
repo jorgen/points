@@ -36,21 +36,17 @@ void attributes_add_attribute(struct attributes_t *attributes, const char *name,
 
 void header_p_set_morton_aabb(const tree_global_state_t &tree_state, internal_header_t &header)
 {
-  double inv_scale[3];
-  inv_scale[0] = 1 / tree_state.scale[0];
-  inv_scale[1] = 1 / tree_state.scale[1];
-  inv_scale[2] = 1 / tree_state.scale[2];
+  double inv_scale = tree_state.inv_scale;
 
   uint64_t min[3];
-  min[0] = uint64_t(round((header.min[0] - tree_state.offset[0]) * inv_scale[0]));
-  min[1] = uint64_t(round((header.min[1] - tree_state.offset[1]) * inv_scale[1]));
-  min[2] = uint64_t(round((header.min[2] - tree_state.offset[2]) * inv_scale[2]));
+  min[0] = uint64_t(round((header.min[0] - tree_state.offset[0]) * inv_scale));
+  min[1] = uint64_t(round((header.min[1] - tree_state.offset[1]) * inv_scale));
+  min[2] = uint64_t(round((header.min[2] - tree_state.offset[2]) * inv_scale));
   morton::encode(min, header.morton_min);
-
   uint64_t max[3];
-  max[0] = uint64_t(round((header.max[0] - tree_state.offset[0]) * inv_scale[0]));
-  max[1] = uint64_t(round((header.max[1] - tree_state.offset[1]) * inv_scale[1]));
-  max[2] = uint64_t(round((header.max[2] - tree_state.offset[2]) * inv_scale[2]));
+  max[0] = uint64_t(round((header.max[0] - tree_state.offset[0]) * inv_scale));
+  max[1] = uint64_t(round((header.max[1] - tree_state.offset[1]) * inv_scale));
+  max[2] = uint64_t(round((header.max[2] - tree_state.offset[2]) * inv_scale));
   morton::encode(max, header.morton_max);
 
   //assert(!(header.morton_max < header.morton_min));

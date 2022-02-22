@@ -45,8 +45,8 @@ struct points_subset_t
 struct points_collection_t
 {
   uint64_t point_count = 0;
-  morton::morton64_t min;
-  morton::morton64_t max;
+  morton::morton192_t min;
+  morton::morton192_t max;
   int min_lod;
   std::vector<points_subset_t> data;
 };
@@ -58,6 +58,7 @@ inline void points_data_initialize(points_collection_t &to_init, const internal_
   to_init.max = header.morton_max;
   to_init.min = header.morton_min;
   to_init.min_lod = header.lod_span;
+  assert(morton::morton_lod(to_init.min, to_init.max) == to_init.min_lod);
 }
 
 inline void points_data_add(points_collection_t &dest, points_collection_t &&to_add)
@@ -95,8 +96,8 @@ inline void points_data_add(points_collection_t &dest, const internal_header_t &
 
 struct tree_t
 {
-  morton::morton64_t morton_min;
-  morton::morton64_t morton_max;
+  morton::morton192_t morton_min;
+  morton::morton192_t morton_max;
   std::vector<uint8_t> nodes[5];
   std::vector<int16_t> skips[5];
   std::vector<points_collection_t> data[5];
@@ -104,7 +105,7 @@ struct tree_t
   uint8_t magnitude;
 };
 
-void tree_initialize(const tree_global_state_t &state, tree_t &tree, const points_t &points);
+void tree_initialize(const tree_global_state_t &global_state, cache_file_handler_t &cache, tree_t &tree, const internal_header_t &header);
 void tree_add_points(const tree_global_state_t &state, cache_file_handler_t &cache, tree_t &tree, const internal_header_t &header);
 }
 }

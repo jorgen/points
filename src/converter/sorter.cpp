@@ -32,69 +32,60 @@ namespace converter
 {
 
 template<typename T>
-struct morton_sort_t 
+struct vec_t
 {
   T data[3];
-  bool operator<(const morton_sort_t& other) const
-  {
-    if (data[2] == other.data[2])
-    {
-      if (data[1] == other.data[1])
-      {
-        return data[0] < other.data[0];
-      }
-      return data[1] < other.data[1];
-    }
-    return data[2] < other.data[2];
-  }
 };
 
 template <typename T>
-void convert_and_sort(const tree_global_state_t &tree_state, buffer_t &buffer, internal_header_t &header)
+void convert_and_sort(const tree_global_state_t &tree_state, points_t &points)
 {
-  double new_min[3];
-  new_min[0] = std::floor(header.min[0]);
-  new_min[1] = std::floor(header.min[1]);
-  new_min[2] = std::floor(header.min[2]);
-  double adjust[3];
-  adjust[0] = header.offset[0] - new_min[0];
-  adjust[1] = header.offset[1] - new_min[1];
-  adjust[2] = header.offset[2] - new_min[2];
-  header.offset[0] -= adjust[0];
-  header.offset[1] -= adjust[1];
-  header.offset[2] -= adjust[2];
-  int adjust_int[3];
-  adjust_int[0] = int(adjust[0]);
-  adjust_int[1] = int(adjust[1]);
-  adjust_int[2] = int(adjust[2]);
-  adjust_int[0] /= header.scale[0];
-  adjust_int[1] /= header.scale[1];
-  adjust_int[2] /= header.scale[2];
+  auto &header = points.header;
 
-  using uT = typename std::make_unsigned<T>::type;
-  T *begin = (T *)buffer.data;
-  T *end = begin + (header.point_count * 3);
-  for (T *p = begin; p < end; p += 3)
+  double smallest_scale = std::min(std::min(std::min(header.scale[0], header.scale[1]), header.scale[2]), tree_state.scale);
+
+  std::unique_ptr<morton::morton192_t[]> world_morton(new morton::morton192_t[header.point_count]);
+
+  uint64_t tmp[3];
+  double pos[3];
+  uint64_t count = header.point_count;
+  const vec_t<T> *point_data = reinterpret_cast<const vec_t<T>*>(points.buffers.buffers[0].data);
+  double inv_scale = 1/smallest_scale;
+  for (uint64_t i = 0; i < count; i++)
   {
-    p[0] += adjust_int[0];
-    p[1] += adjust_int[1];
-    p[2] += adjust_int[2];
-    p[2] += adjust_int[2];
-    assert(p[0] > 0 && p[1] > 0 && p[2] > 0);
-
-    morton::encode((uT *)p);
+    auto &point = point_data[i];
+    pos[0] = point.data[0] * header.scale[0] + header.offset[0];
+    pos[1] = point.data[1] * header.scale[1] + header.offset[1];
+    pos[2] = point.data[2] * header.scale[2] + header.offset[2];
+    tmp[0] = pos[0] - tree_state.offset[0] * inv_scale;
+    tmp[1] = pos[1] - tree_state.offset[1] * inv_scale;
+    tmp[2] = pos[2] - tree_state.offset[2] * inv_scale;
+    morton::encode(tmp, world_morton[i]);
   }
-
-  morton_sort_t<uT> *morton_begin = (morton_sort_t<uT> *)begin;
-  morton_sort_t<uT> *morton_end = (morton_sort_t<uT> *)end;
+  morton::morton192_t *morton_begin = world_morton.get();
+  morton::morton192_t *morton_end = morton_begin + count;
   std::sort(morton_begin, morton_end);
 
-  morton_sort_t<uT> first = *morton_begin;
-  morton_sort_t<uT> last = *(morton_end - 1);
+  morton::morton192_t first = *morton_begin;
+  morton::morton192_t last = *(morton_end - 1);
   assert(first < last);
+  int msb = morton::morton_lod(first, last) * 3 + 3;
+  if (msb < 32)
+  {
 
+  }
+  else if (msb < 64)
+  {
 
-  header_p_adjust_to_sorted_data(tree_state, header, begin, end);
+  }
+  else if (msb < 128)
+  {
+
+  }
+  else
+  {
+
+  }
 }
 
 void sort_points(const tree_global_state_t &tree_state, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &points)
@@ -102,7 +93,7 @@ void sort_points(const tree_global_state_t &tree_state, const std::vector<std::p
   switch (attributes_def.front().first)
   {
   case format_i32:
-    convert_and_sort<int32_t>(tree_state, points.buffers.buffers[0], points.header);
+    convert_and_sort<int32_t>(tree_state, points);
     break;
   default:
     assert(false);

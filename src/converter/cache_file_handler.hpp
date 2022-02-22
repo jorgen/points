@@ -86,29 +86,30 @@ struct points_cache_item_t
 class cache_file_handler_t : public about_to_block_t
 {
 public:
-  cache_file_handler_t(const std::string &cache_file, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::pair<internal_header_t, buffer_t>> &write_done);
+  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, event_pipe_t<error_t> &cache_file_error, event_pipe_t<internal_header_t> &write_done);
 
   void about_to_block();
 
   void handle_open_cache_file(uv_fs_t *request);
 
-  void write(const internal_header_t &header, attribute_buffers_t &&buffers);
+  void write(const internal_header_t &header, attribute_buffers_t &&buffers, attributes_t *attributes);
 
   points_cache_item_t ref_points(input_data_id_t id);
   void deref_points(input_data_id_t id);
 
 private:
-  void handle_write_events(std::vector<std::pair<internal_header_t, attribute_buffers_t>> &&events);
+  void handle_write_events(std::vector<std::tuple<internal_header_t, attribute_buffers_t, attributes_t *>> &&events);
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
 
+  const tree_global_state_t &_state;
   uv_file _file_handle;
   bool _file_opened;
 
   uv_fs_t _open_request;
   event_pipe_t<error_t> &_cache_file_error;
-  event_pipe_t<std::pair<internal_header_t, buffer_t>> &_write_done;
-  event_pipe_t<std::pair<internal_header_t, attribute_buffers_t>> _write_event_pipe;
+  event_pipe_t<internal_header_t> &_write_done;
+  event_pipe_t<std::tuple<internal_header_t, attribute_buffers_t, attributes_t *>> _write_event_pipe;
 
   struct hash_input_data_id_t
   {
@@ -125,6 +126,8 @@ private:
     int ref;
     internal_header_t header;
     attribute_buffers_t buffers;
+    format_t format;
+    components_t components;
   };
 
   std::mutex _cache_map_mutex;

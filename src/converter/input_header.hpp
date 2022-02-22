@@ -45,25 +45,28 @@ inline int size_for_format(format_t format)
   case format_u32:
   case format_i32:
   case format_r32:
+  case format_m32:
     return 4;
   case format_u64:
   case format_i64:
   case format_r64:
+  case format_m64:
     return 8;
+  case format_m128:
+    return 16;
+  case format_m192:
+    return 24;
   }
   return 0;
 }
 
-template<typename T>
-void header_p_set_min_max(internal_header_t &header, const T *begin, const T *end)
+template<typename T, size_t C>
+void header_p_set_min_max(internal_header_t &header, const morton::morton_t<T, C> *begin, const morton::morton_t<T, C> *end)
 {
-  using uT = typename std::make_unsigned<T>::type;
-  uT final_min[3];
-  memcpy(final_min, begin, sizeof(final_min));
-  uT final_max[3];
-  memcpy(final_max, end - 3, sizeof(final_max));
-  morton::decode(final_min);
-  morton::decode(final_max);
+  uint64_t final_min[3];
+  uint64_t final_max[3];
+  morton::decode(*begin, final_min);
+  morton::decode(*(end - 1),final_max);
   header.min[0] = final_min[0] * header.scale[0] + header.offset[0];
   header.min[1] = final_min[1] * header.scale[1] + header.offset[1];
   header.min[2] = final_min[2] * header.scale[2] + header.offset[2];
@@ -75,8 +78,8 @@ void header_p_set_min_max(internal_header_t &header, const T *begin, const T *en
 
 void header_p_set_morton_aabb(const tree_global_state_t &state, internal_header_t &header);
 
-template<typename T>
-void header_p_adjust_to_sorted_data(const tree_global_state_t &state, internal_header_t &header, const T *begin, const T *end)
+template<typename T, size_t C>
+void header_p_adjust_to_sorted_data(const tree_global_state_t &state, internal_header_t &header, const morton::morton_t<T, C> *begin, const morton::morton_t<T,C> *end)
 {
   header_p_set_min_max(header, begin, end);
   header_p_set_morton_aabb(state, header);
