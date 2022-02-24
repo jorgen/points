@@ -48,15 +48,14 @@ void tree_initialize(const tree_global_state_t &global_state, cache_file_handler
     for (auto &p : tree.data[0][0].data)
     {
       read_points_t read_points(cache, p.input_id);
-      switch (read_points.format)
+      switch (read_points.header.point_format)
       {
       case format_m32:
         verify_points_less_than<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
         break;
-        //  case format_m64:
-        //    point_buffer_subdivide_type<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(state, points, subset, lod, node_min, children);
-        //verify_points_less_than<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
-        //    break;
+      case format_m64:
+        verify_points_less_than<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
+        break;
       case format_m128:
         verify_points_less_than<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
         break;
@@ -133,6 +132,10 @@ static void sub_tree_split_points_to_children(const tree_global_state_t &state, 
 {
   for (auto &p : points.data)
   {
+    if (p.size < 2)
+    {
+      continue;
+    }
     read_points_t p_read(cache, p.input_id);
     assert(p_read.data.size);
 

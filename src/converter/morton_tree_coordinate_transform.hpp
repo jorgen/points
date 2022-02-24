@@ -46,18 +46,15 @@ inline void convert_pos_to_morton(const double scale, const double (&offset)[3],
 }
 
 template<typename T, size_t C>
-inline void convert_world_morton_to_local(const morton::morton192_t &world, int lod, morton::morton_t<T, C> &morton)
+inline void convert_world_morton_to_local(const morton::morton192_t &world, morton::morton_t<T, C> &morton)
 {
-  morton::morton_t<T,C> world_downcast;
-  morton::morton_downcast(world, world_downcast);
-  morton = morton::morton_and(world_downcast, morton::morton_mask_create<T, C>(lod));
+  morton::morton_downcast(world, morton);
 }
 
 template<typename T, size_t C>
 inline void convert_local_morton_to_world(const morton::morton_t<T, C> &local, const morton::morton192_t &min, morton::morton192_t &world)
 {
-  morton::morton_upcast(local, world);
-  world = morton::morton_or(world, min);
+  morton::morton_upcast(local, min, world);
 }
 }
 } // namespace points

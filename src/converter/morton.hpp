@@ -399,20 +399,24 @@ inline void morton_downcast(const morton_t<T1, C1> &a, morton_t<T2, C2> &b)
 }
 
 template<typename T1, size_t C1, typename T2, size_t C2>
-inline void morton_upcast(const morton_t<T1, C1> &a, morton_t<T2, C2> &b)
+inline void morton_upcast(const morton_t<T1, C1> &a, const morton_t<T2, C2> &min, morton_t<T2, C2> &b)
 {
   static_assert(sizeof(T1) <= sizeof(T2), "invalid size");
   static_assert(C1 <= C2, "invalid size");
   static_assert(C1 > 0 && C2 > 0, "invalid size");
   static_assert(std::is_same<T1, uint32_t>::value ? C1 == 1 : true, "Only support one component 32 morton");
   b.data[0] = a.data[0];
+  if (std::is_same<T1, uint32_t>::value && std::is_same<T2, uint64_t>::value)
+  {
+    b.data[0] |= (min.data[0] & (~T2(0) << (sizeof(T2) * 4)));
+  }
   if (C1 > 1)
   {
     b.data[1] = a.data[1];
   }
   else
   {
-    b.data[1] = 0;
+    b.data[1] = min.data[1];
   }
   if (C1 > 2)
   {
@@ -420,7 +424,7 @@ inline void morton_upcast(const morton_t<T1, C1> &a, morton_t<T2, C2> &b)
   }
   else
   {
-    b.data[2] = 0;
+    b.data[2] = min.data[2];
   }
 }
 

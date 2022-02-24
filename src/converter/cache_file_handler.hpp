@@ -78,8 +78,6 @@ struct cache_file_read_request_t
 struct points_cache_item_t
 {
   internal_header_t header;
-  format_t format;
-  components_t components;
   buffer_t data;
 };
 
@@ -126,8 +124,6 @@ private:
     int ref;
     internal_header_t header;
     attribute_buffers_t buffers;
-    format_t format;
-    components_t components;
   };
 
   std::mutex _cache_map_mutex;
@@ -142,8 +138,6 @@ struct read_points_t
     , cache_item(cache_file_handler.ref_points(id))
     , header(cache_item.header)
     , data(cache_item.data)
-    , format(cache_item.format)
-    , components(cache_item.components)
   {}
   ~read_points_t()
   {
@@ -154,8 +148,6 @@ struct read_points_t
   points_cache_item_t cache_item;
   internal_header_t &header;
   buffer_t &data;
-  format_t &format;
-  components_t &components;
 };
 }
 } // namespace points

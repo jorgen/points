@@ -65,7 +65,7 @@ template<typename T, size_t C>
 void verify_points_less_than(const tree_global_state_t &state, const read_points_t &points, int start_index, int end_index, const morton::morton192_t &max)
 {
   morton::morton_t<T,C> local_max;
-  convert_world_morton_to_local(max, points.header.lod_span, local_max);
+  convert_world_morton_to_local(max, local_max);
   const morton::morton_t<T,C> *morton_begin = static_cast<const morton::morton_t<T,C> *>(points.data.data);
   int count = 0;
 
@@ -108,10 +108,8 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
   const morton::morton_t<T,C>*morton_current_end = nullptr;
   assert(*morton_begin < *(morton_end - 1));
 
-  assert(!(points.header.morton_min < node_min)); // less or equal
-
   morton::morton_t<T,C> local_node_min;
-  convert_world_morton_to_local(node_min, points.header.lod_span, local_node_min);
+  convert_world_morton_to_local(node_min, local_node_min);
   morton::morton_t<T,C> node_mask;
   //morton::morton_t<T,C> node_max;
   //morton::morton_add_one(node_max);
@@ -134,9 +132,15 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
       continue;
 
     morton_current_end = std::lower_bound(morton_current_start, morton_end, node_mask);
+    if (morton_current_end == morton_current_start)
+      continue;
 
     auto new_offset = morton_current_start - morton_begin;
     auto new_size = morton_current_end - morton_current_start;
+    if (new_size == 0)
+    {
+      fmt::print(stderr, "wtf\n");
+    }
     morton::morton192_t global_current_start;
     convert_local_morton_to_world(*morton_current_start, node_min, global_current_start);
     morton::morton192_t global_current_end;
@@ -183,14 +187,14 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
 
 inline void point_buffer_subdivide(const tree_global_state_t &state, const read_points_t &points, const points_subset_t &subset, int lod, const morton::morton192_t &node_min, points_collection_t (&children)[8])
 {
-  switch(points.format)
+  switch(points.header.point_format)
   {
   case format_m32:
     point_buffer_subdivide_type<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(state, points, subset, lod, node_min, children);
     break;
-//  case format_m64:
-//    point_buffer_subdivide_type<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(state, points, subset, lod, node_min, children);
-//    break;
+  case format_m64:
+    point_buffer_subdivide_type<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(state, points, subset, lod, node_min, children);
+    break;
   case format_m128:
     point_buffer_subdivide_type<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(state, points, subset, lod, node_min, children);
     break;

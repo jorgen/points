@@ -44,11 +44,15 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points)
 
   double smallest_scale = std::min(std::min(std::min(header.scale[0], header.scale[1]), header.scale[2]), tree_state.scale);
 
-  std::unique_ptr<morton::morton192_t[]> world_morton(new morton::morton192_t[header.point_count]);
 
+
+  uint64_t count = header.point_count;
+  uint64_t buffer_size = sizeof(morton::morton192_t) * count;
+  std::unique_ptr<uint8_t[]> world_morton_unique_ptr(new uint8_t[buffer_size]);
+  morton::morton192_t *morton_begin = reinterpret_cast<morton::morton192_t *>(world_morton_unique_ptr.get());
+  morton::morton192_t *morton_end = morton_begin + count;
   uint64_t tmp[3];
   double pos[3];
-  uint64_t count = header.point_count;
   const vec_t<T> *point_data = reinterpret_cast<const vec_t<T>*>(points.buffers.buffers[0].data);
   double inv_scale = 1/smallest_scale;
   for (uint64_t i = 0; i < count; i++)
@@ -60,32 +64,39 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points)
     tmp[0] = pos[0] - tree_state.offset[0] * inv_scale;
     tmp[1] = pos[1] - tree_state.offset[1] * inv_scale;
     tmp[2] = pos[2] - tree_state.offset[2] * inv_scale;
-    morton::encode(tmp, world_morton[i]);
+    morton::encode(tmp, morton_begin[i]);
   }
-  morton::morton192_t *morton_begin = world_morton.get();
-  morton::morton192_t *morton_end = morton_begin + count;
   std::sort(morton_begin, morton_end);
 
   morton::morton192_t first = *morton_begin;
   morton::morton192_t last = *(morton_end - 1);
   assert(first < last);
-  int msb = morton::morton_lod(first, last) * 3 + 3;
-  if (msb < 32)
-  {
+  points.buffers.data[0] = std::move(world_morton_unique_ptr);
+  points.buffers.buffers[0].data = points.buffers.data[0].get();
+  points.buffers.buffers[0].size = buffer_size;
+  points.header.point_format = format_t::format_m192;
+  points.header.morton_min = first;
+  points.header.morton_max = last;
+  points.header.lod_span = morton::morton_lod(first, last);
 
-  }
-  else if (msb < 64)
-  {
+  //int msb = morton::morton_lod(first, last) * 3 + 3;
+  //points.buffers.buffers[0]
+  //if (msb < 32)
+  //{
 
-  }
-  else if (msb < 128)
-  {
+  //}
+  //else if (msb < 64)
+  //{
 
-  }
-  else
-  {
+  //}
+  //else if (msb < 128)
+  //{
 
-  }
+  //}
+  //else
+  //{
+
+  //}
 }
 
 void sort_points(const tree_global_state_t &tree_state, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &points)

@@ -82,9 +82,6 @@ void cache_file_handler_t::handle_write_events(std::vector<std::tuple<internal_h
     cache_item.ref = 1;
     cache_item.header = std::move(std::get<0>(event));
     cache_item.buffers = std::move(std::get<1>(event));
-    auto attributes = std::get<2>(event);
-    cache_item.format = attributes->attributes[0].format;
-    cache_item.components = attributes->attributes[0].components;
 
     _write_done.post_event(cache_item.header);
   }
@@ -99,8 +96,6 @@ points_cache_item_t cache_file_handler_t::ref_points(input_data_id_t id)
   points_cache_item_t ret;
   ret.header = it->second.header;
   ret.data = it->second.buffers.buffers[0];
-  ret.format = it->second.format;
-  ret.components = it->second.components;
   return ret;
 }
 void cache_file_handler_t::deref_points(input_data_id_t id)

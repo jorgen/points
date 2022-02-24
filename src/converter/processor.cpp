@@ -193,7 +193,7 @@ static bool compare_attributes(const attributes_t &a, const attributes_t &b)
 {
   if (a.attributes.size() != b.attributes.size())
     return false;
-  for (int i = 0; i < int(a.attributes.size()); i++)
+  for (int i = 1; i < int(a.attributes.size()); i++)
   {
     if (!compare_attribute(a.attributes[i], b.attributes[i]))
       return false;
