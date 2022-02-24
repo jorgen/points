@@ -137,10 +137,6 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
 
     auto new_offset = morton_current_start - morton_begin;
     auto new_size = morton_current_end - morton_current_start;
-    if (new_size == 0)
-    {
-      fmt::print(stderr, "wtf\n");
-    }
     morton::morton192_t global_current_start;
     convert_local_morton_to_world(*morton_current_start, node_min, global_current_start);
     morton::morton192_t global_current_end;
@@ -172,6 +168,7 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
     }
     }
 
+    assert(new_size != 0);
     child.data.emplace_back(subset.input_id, new_offset, new_size);
     child.point_count += new_size;
 

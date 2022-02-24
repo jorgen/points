@@ -132,10 +132,6 @@ static void sub_tree_split_points_to_children(const tree_global_state_t &state, 
 {
   for (auto &p : points.data)
   {
-    if (p.size < 2)
-    {
-      continue;
-    }
     read_points_t p_read(cache, p.input_id);
     assert(p_read.data.size);
 

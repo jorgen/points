@@ -32,7 +32,7 @@ class cache_file_handler_t;
 
 struct points_subset_t
 {
-  points_subset_t(input_data_id_t id, uint32_t size, uint64_t offset)
+  points_subset_t(input_data_id_t id, uint64_t offset, uint32_t size)
     : input_id(id)
     , size(size)
     , offset(offset)
