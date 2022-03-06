@@ -158,9 +158,9 @@ int main(int, char **)
   points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
 
 
-  //auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size),
-  //                                 &points::render::flat_points_data_source_destroy);
-  //points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
+  auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size),
+                                   &points::render::flat_points_data_source_destroy);
+  points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
 
 
   //points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);

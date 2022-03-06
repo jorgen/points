@@ -30,16 +30,27 @@ namespace converter
 
 class cache_file_handler_t;
 
+struct offset_t
+{
+  explicit offset_t(uint64_t data) : data(data){}
+  uint64_t data;
+};
+struct point_count_t
+{
+  explicit point_count_t(uint32_t data) : data(data){}
+  uint32_t data;
+};
+
 struct points_subset_t
 {
-  points_subset_t(input_data_id_t id, uint64_t offset, uint32_t size)
+  points_subset_t(input_data_id_t id, offset_t offset, point_count_t count)
     : input_id(id)
-    , size(size)
     , offset(offset)
+    , count(count)
   {}
   input_data_id_t input_id;
-  uint32_t size;
-  uint64_t offset;
+  offset_t offset;
+  point_count_t count;
 };
 
 struct points_collection_t
@@ -54,7 +65,7 @@ struct points_collection_t
 inline void points_data_initialize(points_collection_t &to_init, const internal_header_t &header)
 {
   to_init.point_count = header.point_count;
-  to_init.data.emplace_back(header.input_id, header.point_count, 0);
+  to_init.data.emplace_back(header.input_id, offset_t(0), point_count_t(header.point_count));
   to_init.max = header.morton_max;
   to_init.min = header.morton_min;
   to_init.min_lod = header.lod_span;
@@ -85,7 +96,7 @@ inline void points_data_add(points_collection_t &dest, const internal_header_t &
     points_data_initialize(dest, to_add);
     return;
   }
-  dest.data.emplace_back(to_add.input_id, to_add.point_count, 0);
+  dest.data.emplace_back(to_add.input_id, offset_t(0), point_count_t(to_add.point_count));
   dest.point_count += to_add.point_count;
   if (to_add.morton_min < dest.min)
     dest.min = to_add.morton_min;
@@ -102,6 +113,7 @@ struct tree_t
   std::vector<int16_t> skips[5];
   std::vector<points_collection_t> data[5];
   std::vector<tree_t> sub_trees;
+  std::vector<morton::morton192_t> mins[5];
   uint8_t magnitude;
 };
 

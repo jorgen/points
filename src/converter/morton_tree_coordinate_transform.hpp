@@ -26,13 +26,13 @@ namespace converter
 {
 
 template<typename T, size_t C>
-inline void convert_morton_to_pos(const double (&scale)[3], const double (&offset)[3], const morton::morton_t<T,C> &morton, double (&pos)[3])
+inline void convert_morton_to_pos(const double scale, const double (&offset)[3], const morton::morton_t<T,C> &morton, double (&pos)[3])
 {
   uint64_t ipos[3];
   morton::decode(morton, ipos);
-  pos[0] = double(ipos[0]) * scale[0] + offset[0];
-  pos[1] = double(ipos[1]) * scale[1] + offset[1];
-  pos[2] = double(ipos[2]) * scale[2] + offset[2];
+  pos[0] = double(ipos[0]) * scale + offset[0];
+  pos[1] = double(ipos[1]) * scale + offset[1];
+  pos[2] = double(ipos[2]) * scale + offset[2];
 }
 
 template<typename T, size_t C>
@@ -56,5 +56,18 @@ inline void convert_local_morton_to_world(const morton::morton_t<T, C> &local, c
 {
   morton::morton_upcast(local, min, world);
 }
+
+inline format_t morton_format_from_lod(int lod)
+{
+  int top_index = lod * 3 + 3;
+  if (top_index < 32)
+    return format_m32;
+  if (top_index < 64)
+    return format_m64;
+  if (top_index < 128)
+    return format_m128;
+  return format_m192;
+}
+
 }
 } // namespace points

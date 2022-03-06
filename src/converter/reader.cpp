@@ -141,17 +141,17 @@ sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, point_reader
 
 void sort_worker_t::work()
 {
-  sort_points(tree_state, attributes_def, points);
+  sort_points(tree_state, attributes_def, points, error);
 }
 
 void sort_worker_t::after_work(completion_t completion)
 {
   (void)completion;
   reader_file.sort_done++;
-  reader_file.sorted_points_pipe.post_event(std::move(points));
+  reader_file.sorted_points_pipe.post_event(std::make_pair(std::move(points), std::move(error)));
 }
 
-point_reader_t::point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, event_pipe_t<std::pair<input_data_id_t, attributes_t>> &attributes_event_queue, event_pipe_t<points_t> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors)
+point_reader_t::point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, event_pipe_t<std::pair<input_data_id_t, attributes_t>> &attributes_event_queue, event_pipe_t<std::pair<points_t,error_t>> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors)
   : _tree_state(tree_state)
   , _event_loop(event_loop)
   , _attributes_event_queue(attributes_event_queue)

@@ -23,6 +23,6 @@ namespace points
 {
 namespace converter
 {
-void sort_points(const tree_global_state_t &tree_state, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &pointss);
+void sort_points(const tree_global_state_t &tree_state, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &points, error_t &error);
 }
 } // namespace points

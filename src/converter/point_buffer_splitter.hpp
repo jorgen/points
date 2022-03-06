@@ -40,19 +40,19 @@ void verify_points_range(const tree_global_state_t &state, const read_points_t &
   int count_greater = 0;
   int wrong_order = 0;
   morton::morton_t<T,C> local_min;
-  convert_world_morton_to_local(min, points.header.lod_span, local_min);
+  morton::morton_downcast(min, local_min);
   morton::morton_t<T,C> local_max;
-  convert_world_morton_to_local(max, points.header.lod_span, local_max);
+  morton::morton_downcast(max, local_max);
   const morton::morton_t<T,C> *morton_begin = static_cast<const morton::morton_t<T,C> *>(points.data.data);
   for (int i = start_index; i < end_index; i++)
   {
     morton_current = morton_begin[i];
-    assert(morton_previous < morton_current);
+    //assert(!(morton_current < morton_previous));
     if (morton_current < local_min)
       count_less++;
     if (!(morton_current < local_max))
       count_greater++;
-    if (morton_current < morton_previous)
+    if (!(morton_current < morton_previous))
       wrong_order++;
     morton_previous = morton_current;
   }
@@ -102,19 +102,25 @@ template<typename T, size_t C>
 void point_buffer_subdivide_type(const tree_global_state_t &state, const read_points_t &points, const points_subset_t &subset, int lod, const morton::morton192_t &node_min, points_collection_t (&children)[8])
 {
   assert(points.data.size / sizeof(morton::morton_t<T,C>) == points.header.point_count);
-  const morton::morton_t<T,C>*morton_begin = static_cast<const morton::morton_t<T,C>*>(points.data.data) + subset.offset;
-  const morton::morton_t<T,C>*morton_end = morton_begin + subset.size;
+  const morton::morton_t<T,C>*morton_begin = static_cast<const morton::morton_t<T,C>*>(points.data.data) + subset.offset.data;
+  const morton::morton_t<T,C>*morton_end = morton_begin + subset.count.data;
   const morton::morton_t<T,C>*morton_current_start = morton_begin;
   const morton::morton_t<T,C>*morton_current_end = nullptr;
   assert(*morton_begin < *(morton_end - 1));
 
   morton::morton_t<T,C> local_node_min;
-  convert_world_morton_to_local(node_min, local_node_min);
-  morton::morton_t<T,C> node_mask;
-  //morton::morton_t<T,C> node_max;
-  //morton::morton_add_one(node_max);
-  //verify_points_range<T, C>(state, points, subset.offset, subset.offset + subset.size, node_min, node_max);
+  morton::morton_downcast(node_min, local_node_min);
 
+#ifndef NDEBUG
+  morton::morton192_t node_max = morton::morton_or(node_min, morton::morton_mask_create<uint64_t, 3>(lod));
+  morton::morton_add_one(node_max);
+  morton::morton_t<T,C> local_node_max;
+  morton::morton_downcast(node_max, local_node_max);
+  assert(!((*morton_begin) < local_node_min));
+  assert((*(morton_end - 1)) < local_node_max);
+#endif
+
+  morton::morton_t<T,C> node_mask;
   for (int i = 0; i < 8 && morton_current_start != morton_end; i++)
   {
     if (i == 7)
@@ -128,14 +134,14 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
       morton::morton_set_child_mask(lod, uint8_t(i + 1), node_mask);
     }
 
-    if (node_mask< *morton_current_start)
+    if (!(*morton_current_start < node_mask))
       continue;
 
     morton_current_end = std::lower_bound(morton_current_start, morton_end, node_mask);
     if (morton_current_end == morton_current_start)
       continue;
 
-    auto new_offset = morton_current_start - morton_begin;
+    auto new_offset = morton_current_start - static_cast<const morton::morton_t<T,C>*>(points.data.data);
     auto new_size = morton_current_end - morton_current_start;
     morton::morton192_t global_current_start;
     convert_local_morton_to_world(*morton_current_start, node_min, global_current_start);
@@ -162,22 +168,21 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
         modified = true;
       }
 
-    if (modified)
-    {
-      child.min_lod = morton::morton_lod(child.min, child.max);
-    }
+      if (modified)
+      {
+        child.min_lod = morton::morton_lod(child.min, child.max);
+      }
     }
 
     assert(new_size != 0);
-    child.data.emplace_back(subset.input_id, new_offset, new_size);
+    child.data.emplace_back(subset.input_id, offset_t(new_offset), point_count_t(new_size));
     child.point_count += new_size;
 
-    //morton::morton_set_child_mask(lod, uint8_t(i), child_min);
-    //verify_points_range<T>(state, points, int(morton_codes - morton_begin), offsets[i], child_min, node_mask);
+#ifndef NDEBUG
+    verify_points_range<T,C>(state, points, new_offset, new_offset + new_size, node_min, node_max);
+#endif
 
     morton_current_start = morton_current_end;
-    if (morton_current_start != morton_end)
-      convert_local_morton_to_world(*morton_current_start, node_min, global_current_start);
   }
   assert(morton_current_start == morton_end);
 }

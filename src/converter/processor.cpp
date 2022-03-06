@@ -38,7 +38,7 @@ processor_t::processor_t(converter_t &converter)
   , _pre_init_for_files(_event_loop, [this](std::vector<pre_init_info_file_t> &&aabb_min_for_files) { this->handle_pre_init_info_for_files(std::move(aabb_min_for_files)); })
   , _pre_init_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors_headers(std::move(events)); })
   , _attributes_for_source(_event_loop, [this](std::vector<std::pair<input_data_id_t, attributes_t>> &&events) { this->handle_attribute_event(std::move(events)); })
-  , _sorted_points(_event_loop, [this](std::vector<points::converter::points_t> &&events) { this->handle_sorted_points(std::move(events)); })
+  , _sorted_points(_event_loop, [this](std::vector<std::pair<points::converter::points_t,error_t>> &&events) { this->handle_sorted_points(std::move(events)); })
   , _point_reader_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
   , _point_reader_done_with_file(_event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
   , _cache_file_error(_event_loop, [this](std::vector<error_t> &&errors) { this->handle_cache_file_error(std::move(errors));})
@@ -225,12 +225,12 @@ void processor_t::handle_attribute_event(std::vector<std::pair<input_data_id_t, 
     _input_sources[event.first.data].attribute_id.data = get_attribute_config_index(_attributes_configs, std::move(event.second));
   }
 }
-void processor_t::handle_sorted_points(std::vector<points_t> &&sorted_points_event)
+void processor_t::handle_sorted_points(std::vector<std::pair<points_t,error_t>> &&sorted_points_event)
 {
   for(auto &event : sorted_points_event)
   {
-    auto attributes = _attributes_configs[_input_sources[event.header.input_id.data].attribute_id.data].get();
-    _cache_file_handler.write(event.header, std::move(event.buffers), attributes);
+    auto attributes = _attributes_configs[_input_sources[event.first.header.input_id.data].attribute_id.data].get();
+    _cache_file_handler.write(event.first.header, std::move(event.first.buffers), attributes);
   }
 }
 

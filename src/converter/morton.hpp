@@ -107,7 +107,7 @@ inline morton_t<T,C> morton_xor(const morton_t<T,C> &a, const morton_t<T,C> &b)
 template<typename T, size_t C>
 inline bool morton_is_null(const morton_t<T,C> &a)
 {
-  return a.data[0] == uint64_t(0) && C > 1 ? a.data[1] == uint64_t(0) : true && C > 2 ? a.data[2] == uint64_t(0) : true;
+  return a.data[0] == T(0) && C > 1 ? a.data[1] == T(0) : true && C > 2 ? a.data[2] == T(0) : true;
 }
 
 template<typename T, size_t C>
@@ -141,7 +141,7 @@ inline morton_t<T,C> morton_and(const morton_t<T,C> &a, const morton_t<T,C> &b)
   c.data[0] = a.data[0] & b.data[0];
   if (C > 1)
     c.data[1] = a.data[1] & b.data[1];
-  if (sizeof(c.data) / sizeof(*c.data) > 2)
+  if (C > 2)
     c.data[2] = a.data[2] & b.data[2];
   return c;
 }
@@ -149,12 +149,12 @@ inline morton_t<T,C> morton_and(const morton_t<T,C> &a, const morton_t<T,C> &b)
 template<typename T, size_t C>
 inline void morton_add_one(morton_t<T,C> &a)
 {
-  if (a.data[0] == (~uint64_t(0)))
+  if (a.data[0] == (~T(0)))
   {
     a.data[0] = 0;
     if (C > 1)
     {
-      if (a.data[1] == (~uint64_t(0)))
+      if (a.data[1] == (~T(0)))
       {
         a.data[1] = 0;
         if (C > 2)
@@ -280,7 +280,7 @@ inline uint8_t morton_get_child_mask(int lod, const morton_t<T,C> &morton)
 {
   int index = lod * 3;
   assert(index < int(sizeof(T) * 8 * C));
-  if (index < 64)
+  if (index < int(sizeof(T) * 8))
   {
     uint32_t ret = (morton.data[0] >> index) & 0x7;
     if (index == 63)
@@ -307,7 +307,7 @@ inline void morton_set_child_mask(int lod, uint8_t mask, morton_t<T,C> &morton)
   assert(mask < 8);
   int index = lod * 3;
   assert(index < int(sizeof(T) * 8 * C));
-  if (index < 64)
+  if (index < int(sizeof(T) * 8))
   {
     morton.data[0] &= ~(T(0x7) << index);
     morton.data[0] |= T(mask) << index;
@@ -387,7 +387,7 @@ inline void morton_downcast(const morton_t<T1, C1> &a, morton_t<T2, C2> &b)
   static_assert(C1 >= C2, "invalid size");
   static_assert(C1 > 0 && C2 > 0, "invalid size");
   static_assert(std::is_same<T2, uint32_t>::value ? C2 == 1 : true, "Only support one component 32 morton");
-  b.data[0] = a.data[0];
+  b.data[0] = T2(a.data[0]);
   if (C2 > 1)
   {
     b.data[1] = a.data[1];
