@@ -106,12 +106,27 @@ void tree_initialize_new_parent(const tree_t &some_child, const morton::morton19
   new_parent.data[0].emplace_back();
 }
 
+static int sub_tree_count_skips(uint8_t node, int index)
+{
+  int node_skips = 0;
+  for (int i = 0; i < index; i++)
+  {
+    if (node & uint8_t(1 << i))
+      node_skips++;
+  }
+  return node_skips;
+}
 
 static void sub_tree_alloc_children(tree_t &tree, int level, int skip)
 {
   assert(skip <= int(tree.skips[level].size()));
+  int old_skip = 0;
+  if (skip < int(tree.skips[level].size()))
+    old_skip = tree.skips[level][skip];
+  else if (skip > 0 && skip == int(tree.skips[level].size()))
+    old_skip = tree.skips[level].back() + sub_tree_count_skips(tree.nodes[level].back(), 8);
+
   tree.nodes[level].emplace(tree.nodes[level].begin() + skip);
-  uint16_t old_skip = size_t(skip) == tree.skips[level].empty() ? 0 : skip == int(tree.skips[level].size()) ? tree.skips->back() + 1 : tree.skips[level][skip];
   tree.skips[level].emplace(tree.skips[level].begin() + skip, old_skip);
   tree.data[level].emplace(tree.data[level].begin() + skip);
   tree.mins[level].emplace(tree.mins[level].begin() + skip);
@@ -125,17 +140,6 @@ static void sub_tree_increase_skips(tree_t &tree, int level, int skip)
   {
     skips[i]++;
   }
-}
-
-static int sub_tree_count_skips(uint8_t node, int index)
-{
-  int node_skips = 0;
-  for (int i = 0; i < index; i++)
-  {
-    if (node & uint8_t(1 << i))
-      node_skips++;
-  }
-  return node_skips;
 }
 
 static void sub_tree_split_points_to_children(const tree_global_state_t &state, cache_file_handler_t &cache, points_collection_t &&points, int lod, const morton::morton192_t &node_min, points_collection_t (&children)[8])
@@ -198,7 +202,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, cache_file_
       else
       {
         sub_tree_alloc_children(tree, current_level + 1, sub_skip);
-        sub_tree_increase_skips(tree, current_level + 1, sub_skip);
+        sub_tree_increase_skips(tree, current_level, skip);
         tree.mins[current_level + 1][sub_skip] = new_min;
         sub_tree_insert_points(state, cache, tree, new_min, current_level + 1, sub_skip, std::move(points));
       }
@@ -264,7 +268,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, cache_file_
         {
           node |= uint8_t(1) << i;
           sub_tree_alloc_children(tree, current_level + 1, sub_skip);
-          sub_tree_increase_skips(tree, current_level + 1, sub_skip);
+          sub_tree_increase_skips(tree, current_level, skip);
           tree.mins[current_level + 1][sub_skip] = new_min;
           sub_tree_insert_points(state, cache, tree, new_min, current_level + 1, sub_skip, std::move(child_data));
 
