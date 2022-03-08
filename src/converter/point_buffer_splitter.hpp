@@ -106,7 +106,7 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
   const morton::morton_t<T,C>*morton_end = morton_begin + subset.count.data;
   const morton::morton_t<T,C>*morton_current_start = morton_begin;
   const morton::morton_t<T,C>*morton_current_end = nullptr;
-  assert(*morton_begin < *(morton_end - 1));
+  assert(!(*(morton_end - 1) < *morton_begin));
 
   morton::morton_t<T,C> local_node_min;
   morton::morton_downcast(node_min, local_node_min);
