@@ -39,7 +39,9 @@ void tree_initialize(const tree_global_state_t &global_state, cache_file_handler
   tree.skips[0].push_back(int16_t(0));
   tree.data[0].emplace_back();
   tree.data[0][0].point_count += header.point_count;
+#ifndef NDEBUG
   tree.mins[0].push_back(tree.morton_min);
+#endif
 
   points_data_initialize(tree.data[0][0], header);
 
@@ -87,7 +89,9 @@ void tree_initialize_sub(const tree_t &parent_tree, const morton::morton192_t &m
   sub_tree.nodes[0].push_back(0);
   sub_tree.skips[0].push_back(int16_t(0));
   sub_tree.data[0].emplace_back();
+#ifndef NDEBUG
   sub_tree.mins[0].push_back(sub_tree.morton_min);
+#endif
 }
 
 void tree_initialize_new_parent(const tree_t &some_child, const morton::morton192_t possible_min, const morton::morton192_t possible_max, tree_t &new_parent)
@@ -129,7 +133,9 @@ static void sub_tree_alloc_children(tree_t &tree, int level, int skip)
   tree.nodes[level].emplace(tree.nodes[level].begin() + skip);
   tree.skips[level].emplace(tree.skips[level].begin() + skip, old_skip);
   tree.data[level].emplace(tree.data[level].begin() + skip);
+#ifndef NDEBUG
   tree.mins[level].emplace(tree.mins[level].begin() + skip);
+#endif
 }
 
 static void sub_tree_increase_skips(tree_t &tree, int level, int skip)
@@ -203,7 +209,9 @@ static void sub_tree_insert_points(const tree_global_state_t &state, cache_file_
       {
         sub_tree_alloc_children(tree, current_level + 1, sub_skip);
         sub_tree_increase_skips(tree, current_level, skip);
+#ifndef NDEBUG
         tree.mins[current_level + 1][sub_skip] = new_min;
+#endif
         sub_tree_insert_points(state, cache, tree, new_min, current_level + 1, sub_skip, std::move(points));
       }
       return;
@@ -269,7 +277,9 @@ static void sub_tree_insert_points(const tree_global_state_t &state, cache_file_
           node |= uint8_t(1) << i;
           sub_tree_alloc_children(tree, current_level + 1, sub_skip);
           sub_tree_increase_skips(tree, current_level, skip);
+#ifndef NDEBUG
           tree.mins[current_level + 1][sub_skip] = new_min;
+#endif
           sub_tree_insert_points(state, cache, tree, new_min, current_level + 1, sub_skip, std::move(child_data));
 
         }

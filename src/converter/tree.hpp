@@ -113,7 +113,9 @@ struct tree_t
   std::vector<int16_t> skips[5];
   std::vector<points_collection_t> data[5];
   std::vector<tree_t> sub_trees;
+#ifndef NDEBUG
   std::vector<morton::morton192_t> mins[5];
+#endif
   uint8_t magnitude;
 };
 
