@@ -171,9 +171,8 @@ static void sub_tree_insert_points(const tree_global_state_t &state, cache_file_
   int lod = morton::morton_tree_level_to_lod(tree.magnitude, current_level);
   auto child_mask = morton::morton_get_child_mask(lod, points.min);
   assert(child_mask < 8);
-  morton::morton192_t max = morton::morton_or(min, morton::morton_mask_create<uint64_t, 3>(lod));
   assert(!(points.min < min));
-  assert(!(max < points.max));
+  assert(!(morton::morton_or(min, morton::morton_mask_create<uint64_t, 3>(lod)) < points.max));
   if (lod > points.min_lod)
   {
     morton::morton192_t new_min = min;
