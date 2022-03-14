@@ -55,6 +55,8 @@ processor_t::processor_t(converter_t &converter)
 {
   (void) _converter;
   _event_loop.add_about_to_block_listener(this);
+
+  _tree_cache.current_id = 0;
 }
 
 void processor_t::add_files(std::vector<input_data_source_t> &&files)
@@ -263,11 +265,11 @@ void processor_t::handle_points_written(std::vector<internal_header_t> &&events)
     if (!_tree_initialized)
     {
       _tree_initialized = true;
-      tree_initialize(_converter.tree_state, _cache_file_handler, _tree, event);
+      _tree = tree_initialize(_converter.tree_state, _tree_cache, _cache_file_handler, event);
     }
     else
     {
-      tree_add_points(_converter.tree_state, _cache_file_handler, _tree, event);
+      _tree = tree_add_points(_converter.tree_state, _tree_cache, _cache_file_handler, _tree, event);
     }
     fmt::print(stderr, "written {} {}\n", event.input_id.data, event.input_id.sub);
   }

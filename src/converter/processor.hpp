@@ -80,7 +80,8 @@ private:
   threaded_event_loop_t _input_event_loop;
   pre_init_file_retriever_t _pre_init_file_retriever;
   point_reader_t _point_reader;
-  
+
+  tree_cache_t _tree_cache;
   cache_file_handler_t _cache_file_handler;
 
   std::vector<input_data_source_t> _input_sources;
@@ -97,7 +98,7 @@ private:
 
   std::vector<sorted_input_id_t> _points_read;
   std::vector<sorted_input_id_t> _points_processed;
-  tree_t _tree;
+  tree_id_t _tree;
   bool _tree_initialized;
 
   void handle_new_files(std::vector<std::vector<input_data_source_t>> &&new_files);

@@ -105,6 +105,11 @@ inline void points_data_add(points_collection_t &dest, const internal_header_t &
   dest.min_lod = morton::morton_lod(dest.min, dest.max);
 }
 
+struct tree_id_t
+{
+  uint32_t data;
+};
+
 struct tree_t
 {
   morton::morton192_t morton_min;
@@ -112,15 +117,23 @@ struct tree_t
   std::vector<uint8_t> nodes[5];
   std::vector<int16_t> skips[5];
   std::vector<points_collection_t> data[5];
-  std::vector<tree_t> sub_trees;
+  std::vector<tree_id_t> sub_trees;
 #ifndef NDEBUG
   std::vector<morton::morton192_t> mins[5];
 #endif
+  tree_id_t id;
   uint8_t magnitude;
 };
 
-void tree_initialize(const tree_global_state_t &global_state, cache_file_handler_t &cache, tree_t &tree, const internal_header_t &header);
-void tree_add_points(const tree_global_state_t &state, cache_file_handler_t &cache, tree_t &tree, const internal_header_t &header);
+struct tree_cache_t
+{
+  std::vector<tree_t> data;
+  uint32_t current_id;
+  tree_t *get(tree_id_t id) { return &data[id.data]; }
+};
+
+tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const internal_header_t &header);
+tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const internal_header_t &header);
 }
 }
 
