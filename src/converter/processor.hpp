@@ -33,9 +33,7 @@
 #include "cache_file_handler.hpp"
 #include "threaded_event_loop.hpp"
 #include "morton.hpp"
-
-
-#include "tree.hpp"
+#include "tree_handler.hpp"
 
 namespace points
 {
@@ -76,13 +74,14 @@ private:
 
   event_pipe_t<error_t> _cache_file_error;
   event_pipe_t<internal_header_t> _points_written;
+  event_pipe_t<input_data_id_t> _tree_done_with_input;
 
   threaded_event_loop_t _input_event_loop;
   pre_init_file_retriever_t _pre_init_file_retriever;
   point_reader_t _point_reader;
 
-  tree_cache_t _tree_cache;
   cache_file_handler_t _cache_file_handler;
+  tree_handler_t _tree_handler;
 
   std::vector<input_data_source_t> _input_sources;
   std::vector<std::unique_ptr<attributes_t>> _attributes_configs;
@@ -98,8 +97,6 @@ private:
 
   std::vector<sorted_input_id_t> _points_read;
   std::vector<sorted_input_id_t> _points_processed;
-  tree_id_t _tree;
-  bool _tree_initialized;
 
   void handle_new_files(std::vector<std::vector<input_data_source_t>> &&new_files);
 
@@ -113,6 +110,7 @@ private:
 
   void handle_cache_file_error(std::vector<error_t> &&errors);
   void handle_points_written(std::vector<internal_header_t> &&events);
+  void handle_tree_done_with_input(std::vector<input_data_id_t> &&events);
 
 };
 }

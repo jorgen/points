@@ -28,6 +28,7 @@ set(private_headers
   pre_init_file_retriever.hpp
   cache_file_handler.hpp
   data_provider.hpp
+  tree_handler.hpp
   )
 
 set(sources
@@ -42,6 +43,7 @@ set(sources
   pre_init_file_retriever.cpp
   cache_file_handler.cpp
   data_provider.cpp
+  tree_handler.cpp
   )
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources}  )

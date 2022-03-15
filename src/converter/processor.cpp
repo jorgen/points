@@ -43,20 +43,20 @@ processor_t::processor_t(converter_t &converter)
   , _point_reader_done_with_file(_event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
   , _cache_file_error(_event_loop, [this](std::vector<error_t> &&errors) { this->handle_cache_file_error(std::move(errors));})
   , _points_written(_event_loop, [this](std::vector<internal_header_t> &&events) {this->handle_points_written(std::move(events)); })
+  , _tree_done_with_input(_event_loop, [this](std::vector<input_data_id_t> &&events) { this->handle_tree_done_with_input(std::move(events));})
   , _pre_init_file_retriever(_converter.tree_state, _input_event_loop, _pre_init_for_files, _point_reader_file_errors)
   , _point_reader(_converter.tree_state, _input_event_loop, _attributes_for_source, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _cache_file_handler(_converter.tree_state, converter.cache_filename, _cache_file_error, _points_written)
+  , _tree_handler(_converter.tree_state, _cache_file_handler, _tree_done_with_input)
   , _pending_pre_init_files(0)
   , _pre_init_files_with_aabb_min_read_index(0)
   , _pre_init_files_with_no_aabb_min_read_index(0)
   , _read_sort_pending(0)
   , _read_sort_budget(uint64_t(1) << 20)
-  , _tree_initialized(false)
 {
   (void) _converter;
   _event_loop.add_about_to_block_listener(this);
 
-  _tree_cache.current_id = 0;
 }
 
 void processor_t::add_files(std::vector<input_data_source_t> &&files)
@@ -260,18 +260,13 @@ void processor_t::handle_cache_file_error(std::vector<error_t> &&errors)
 void processor_t::handle_points_written(std::vector<internal_header_t> &&events)
 {
   for (auto &event : events)
-  {
-    if (!_tree_initialized)
-    {
-      _tree_initialized = true;
-      _tree = tree_initialize(_converter.tree_state, _tree_cache, _cache_file_handler, event);
-    }
-    else
-    {
-      _tree = tree_add_points(_converter.tree_state, _tree_cache, _cache_file_handler, _tree, event);
-    }
-    fmt::print(stderr, "written {} {}\n", event.input_id.data, event.input_id.sub);
-  }
+    _tree_handler.add_points(std::move(event));
+}
+
+void processor_t::handle_tree_done_with_input(std::vector<input_data_id_t> &&events)
+{
+  for (auto &event : events)
+    fmt::print(stdout, "Done with file {}", event.data);
 }
 
 }

@@ -99,7 +99,7 @@ void get_data_worker_t::work()
   header.input_id = file.id;
   attributes_event_queue.post_event(std::make_pair(file.id, std::move(attributes)));
 
-  int convert_size = 20000;
+  int convert_size = 10000000;
   uint8_t done_read_file = false;
   uint64_t local_points_read;
   uint32_t sub_part = 0;
