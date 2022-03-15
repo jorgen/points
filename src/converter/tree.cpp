@@ -159,7 +159,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_
 
   auto &node = tree->nodes[current_level][skip];
   int lod = morton::morton_tree_level_to_lod(tree->magnitude, current_level);
-  auto child_mask = morton::morton_get_child_mask(lod, points.min);
+  auto child_mask = morton::morton_get_child_mask(lod, min);
   assert(child_mask < 8);
   assert(!(points.min < min));
   assert(!(morton::morton_or(min, morton::morton_mask_create<uint64_t, 3>(lod)) < points.max));
@@ -215,16 +215,14 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_
   assert(points.point_count);
   assert(tree->magnitude > 0 || current_level < 4);
   {
-    morton::morton192_t node_min = morton::morton_and(morton::morton_negate(morton::morton_mask_create<uint64_t, 3>(lod)), points.min);
-    assert(node_min == min);
     points_collection_t children_data[8];
     if (!node && tree->data[current_level][skip].point_count)
     {
-      sub_tree_split_points_to_children(state, cache, std::move(tree->data[current_level][skip]), lod, node_min, children_data);
+      sub_tree_split_points_to_children(state, cache, std::move(tree->data[current_level][skip]), lod, min, children_data);
       tree->data[current_level][skip].point_count = 0;
     }
     if (points.point_count)
-      sub_tree_split_points_to_children(state, cache, std::move(points), lod, node_min, children_data);
+      sub_tree_split_points_to_children(state, cache, std::move(points), lod, min, children_data);
 
     int child_count = 0;
     for (int i= 0; i < 8; i++)

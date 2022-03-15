@@ -69,7 +69,6 @@ void processor_t::about_to_block()
   if (_pending_pre_init_files == 0)
   { 
     bool can_process_more = true;
-    //&& _aabb_min_read_index < _aabb_min_read.size())
     for (;can_process_more && _pre_init_files_with_no_aabb_min_read_index < _pre_init_no_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_no_aabb_min_read_index++)
     {
       auto &input_file = _input_sources[_pre_init_no_aabb_min[_pre_init_files_with_no_aabb_min_read_index].data]; 
