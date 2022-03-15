@@ -55,40 +55,12 @@ tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t 
   tree.nodes[0].push_back(0);
   tree.skips[0].push_back(int16_t(0));
   tree.data[0].emplace_back();
-  tree.data[0][0].point_count += header.point_count;
 #ifndef NDEBUG
   tree.mins[0].push_back(tree.morton_min);
 #endif
 
-  points_data_initialize(tree.data[0][0], header);
-
-  {
-    morton::morton192_t node_mask = tree.morton_max;
-    morton::morton_add_one(node_mask);
-    for (auto &p : tree.data[0][0].data)
-    {
-      read_points_t read_points(cache, p.input_id);
-      switch (read_points.header.point_format)
-      {
-      case format_m32:
-        verify_points_less_than<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
-        break;
-      case format_m64:
-        verify_points_less_than<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
-        break;
-      case format_m128:
-        verify_points_less_than<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
-        break;
-      case format_m192:
-        verify_points_less_than<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(global_state, read_points, 0, int(read_points.header.point_count), node_mask);
-        break;
-      default:
-        assert(false);
-        break;
-      }
-    }
-  }
-  return tree.id;
+  auto id = tree_add_points(global_state, tree_cache, cache, tree.id, header);
+  return id;
 }
 
 static void tree_initialize_sub(const tree_t &parent_tree, tree_cache_t &tree_cache, const morton::morton192_t &morton, tree_t &sub_tree)
