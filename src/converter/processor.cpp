@@ -137,6 +137,8 @@ void processor_t::handle_new_files(std::vector<std::vector<input_data_source_t>>
       source.input_id.sub = 0;
       source.read_started = false;
       source.read_finished = false;
+      source.sub_count = 0;
+      source.tree_done_count = 0;
       source.approximate_point_count = 0;
       source.approximate_point_size_bytes = 0;
       get_pre_init_files.push_back(get_file_pre_init_from_input_data_source(source));
@@ -230,6 +232,8 @@ void processor_t::handle_sorted_points(std::vector<std::pair<points_t,error_t>> 
 {
   for(auto &event : sorted_points_event)
   {
+    auto &source = _input_sources[event.first.header.input_id.data];
+    source.sub_count++;
     auto attributes = _attributes_configs[_input_sources[event.first.header.input_id.data].attribute_id.data].get();
     _cache_file_handler.write(event.first.header, std::move(event.first.buffers), attributes);
   }
@@ -245,6 +249,7 @@ void processor_t::handle_file_reading_done(std::vector<input_data_id_t> &&files)
   for (auto &file : files)
   {
     auto &source = _input_sources[file.data];
+    source.read_finished = true;
     fmt::print(stderr, "Done processing inputfile {}\n", source.name.get());
   }
 }
@@ -266,7 +271,14 @@ void processor_t::handle_points_written(std::vector<internal_header_t> &&events)
 void processor_t::handle_tree_done_with_input(std::vector<input_data_id_t> &&events)
 {
   for (auto &event : events)
-    fmt::print(stdout, "Done with file {}", event.data);
+  {
+    auto &source = _input_sources[event.data];
+    source.tree_done_count++;
+    if (source.read_finished && source.sub_count == source.tree_done_count)
+    {
+      fmt::print("Done with {}\n", source.name.get());
+    }
+  }
 }
 
 }

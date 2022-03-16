@@ -114,6 +114,8 @@ struct input_data_source_t
   bool read_started;
   bool read_finished;
   uint8_t approximate_point_size_bytes;
+  uint32_t sub_count;
+  uint32_t tree_done_count;
   uint64_t approximate_point_count;
   uint64_t assigned_memory_usage;
 };
