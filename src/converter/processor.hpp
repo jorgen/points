@@ -86,17 +86,12 @@ private:
   std::vector<input_data_source_t> _input_sources;
   std::vector<std::unique_ptr<attributes_t>> _attributes_configs;
 
-  std::vector<sorted_input_id_t> _pre_init_files_with_aabb_min;
-  std::vector<input_data_id_t> _pre_init_no_aabb_min;
+  std::vector<sorted_input_id_t> _processing_order;
   uint32_t _pending_pre_init_files;
-  uint32_t _pre_init_files_with_aabb_min_read_index;
-  uint32_t _pre_init_files_with_no_aabb_min_read_index;
-  uint32_t _read_sort_pending;
+  uint32_t _pre_init_files_read_index;
+  uint32_t _tree_lod_generate_until_index;
 
   int64_t _read_sort_budget;
-
-  std::vector<sorted_input_id_t> _points_read;
-  std::vector<sorted_input_id_t> _points_processed;
 
   void handle_new_files(std::vector<std::vector<input_data_source_t>> &&new_files);
 

@@ -110,9 +110,11 @@ struct input_data_source_t
   attribute_id_t attribute_id;
   std::unique_ptr<char[]> name;
   uint32_t name_length;
-  internal_header_t header;
+  morton::morton192_t min;
+  morton::morton192_t max;
   bool read_started;
   bool read_finished;
+  bool inserted_into_tree;
   uint8_t approximate_point_size_bytes;
   uint32_t sub_count;
   uint32_t tree_done_count;

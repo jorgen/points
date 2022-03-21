@@ -17,6 +17,8 @@
 ************************************************************************/
 #include "tree_handler.hpp"
 
+#include <fmt/printf.h>
+
 namespace points
 {
 namespace converter
@@ -57,5 +59,11 @@ void tree_handler_t::handle_add_points(std::vector<internal_header_t> &&events)
     _done_with_input.post_event(event.input_id);
   }
 }
+
+void tree_handler_t::generate_lod(morton::morton192_t &max)
+{
+  fmt::print(stderr, "generate lod for max {} {} {}", max.data[0], max.data[1], max.data[2]);
+}
+
 }
 }

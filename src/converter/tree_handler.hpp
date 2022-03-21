@@ -32,6 +32,7 @@ public:
   void about_to_block() override;
 
   void add_points(internal_header_t &&header);
+  void generate_lod(morton::morton192_t &max);
 private:
   void handle_add_points(std::vector<internal_header_t> &&events);
   threaded_event_loop_t _event_loop;

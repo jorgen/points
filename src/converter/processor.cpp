@@ -49,9 +49,8 @@ processor_t::processor_t(converter_t &converter)
   , _cache_file_handler(_converter.tree_state, converter.cache_filename, _cache_file_error, _points_written)
   , _tree_handler(_converter.tree_state, _cache_file_handler, _tree_done_with_input)
   , _pending_pre_init_files(0)
-  , _pre_init_files_with_aabb_min_read_index(0)
-  , _pre_init_files_with_no_aabb_min_read_index(0)
-  , _read_sort_pending(0)
+  , _pre_init_files_read_index(0)
+  , _tree_lod_generate_until_index(0)
   , _read_sort_budget(uint64_t(1) << 20)
 {
   (void) _converter;
@@ -68,47 +67,15 @@ void processor_t::about_to_block()
 {
   if (_pending_pre_init_files == 0)
   { 
-    bool can_process_more = true;
-    for (;can_process_more && _pre_init_files_with_no_aabb_min_read_index < _pre_init_no_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_no_aabb_min_read_index++)
+    for (; _pre_init_files_read_index < _processing_order.size() && _read_sort_budget > 0; _pre_init_files_read_index++)
     {
-      auto &input_file = _input_sources[_pre_init_no_aabb_min[_pre_init_files_with_no_aabb_min_read_index].data]; 
-      if (input_file.read_started)
-        continue;
-      if (input_file.approximate_point_count == 0 || input_file.approximate_point_size_bytes == 0)
-      {
-        if (_read_sort_pending > 0)
-        {
-          can_process_more = false;
-          break;
-        }
-        input_file.assigned_memory_usage = uint64_t(1) << 50;
-      }
-      else
-      {
-        auto approximate_input_size = input_file.approximate_point_count * input_file.approximate_point_size_bytes;
-        input_file.assigned_memory_usage = approximate_input_size;
-      }
-
-      input_file.read_started = true;
-      _read_sort_budget -= input_file.assigned_memory_usage;
-      _read_sort_pending++;
-      get_points_file_t file;
-      file.callbacks = _converter.convert_callbacks;
-      file.id = input_file.input_id;
-      file.filename = input_name_ref_from_input_data_source(input_file);
-      _point_reader.add_file(std::move(file));
-    }
-
-    for (; can_process_more && _pre_init_files_with_aabb_min_read_index < _pre_init_files_with_aabb_min.size() && _read_sort_budget > 0; _pre_init_files_with_aabb_min_read_index++)
-    {
-      auto &input_file = _input_sources[_pre_init_files_with_aabb_min[_pre_init_files_with_aabb_min_read_index].id.data]; 
+      auto &input_file = _input_sources[_processing_order[_pre_init_files_read_index].id.data];
       if (input_file.read_started)
         continue;
       auto approximate_input_size = input_file.approximate_point_count * input_file.approximate_point_size_bytes;
       input_file.assigned_memory_usage = approximate_input_size;
       input_file.read_started = true;
       _read_sort_budget -= input_file.assigned_memory_usage;
-      _read_sort_pending++;
       get_points_file_t file;
       file.callbacks = _converter.convert_callbacks;
       file.id = input_file.input_id;
@@ -137,10 +104,13 @@ void processor_t::handle_new_files(std::vector<std::vector<input_data_source_t>>
       source.input_id.sub = 0;
       source.read_started = false;
       source.read_finished = false;
+      source.inserted_into_tree = false;
       source.sub_count = 0;
       source.tree_done_count = 0;
       source.approximate_point_count = 0;
       source.approximate_point_size_bytes = 0;
+      source.max = {};
+      memset(&source.min.data, 0xff, sizeof(source.min));
       get_pre_init_files.push_back(get_file_pre_init_from_input_data_source(source));
     }
     _pre_init_file_retriever.add_files(get_pre_init_files, _converter.convert_callbacks);
@@ -155,23 +125,23 @@ void processor_t::handle_pre_init_info_for_files(std::vector<pre_init_info_file_
     auto &source = _input_sources[pre_init_for_file.id.data];
     source.approximate_point_count = pre_init_for_file.approximate_point_count;
     source.approximate_point_size_bytes = pre_init_for_file.approximate_point_size_bytes;
+    _processing_order.emplace_back();
+    auto &back = _processing_order.back();
+    back.id = pre_init_for_file.id;
     if (pre_init_for_file.found_min)
     {
-      _pre_init_files_with_aabb_min.emplace_back();
-      auto &back = _pre_init_files_with_aabb_min.back();
-      back.id = pre_init_for_file.id;
       convert_pos_to_morton(_converter.tree_state.scale, _converter.tree_state.offset, pre_init_for_file.min, back.aabb_min);
-
     }
     else
     {
-      _pre_init_no_aabb_min.emplace_back(pre_init_for_file.id);
+      back.aabb_min = {};
     }
   }
   if (_pending_pre_init_files == 0)
   {
-    std::sort(_pre_init_files_with_aabb_min.begin(), _pre_init_files_with_aabb_min.end());
-    _pre_init_files_with_aabb_min_read_index = 0;
+    std::sort(_processing_order.begin(), _processing_order.end());
+    _pre_init_files_read_index = 0;
+    _tree_lod_generate_until_index = 0;
   }
 }
 
@@ -233,6 +203,11 @@ void processor_t::handle_sorted_points(std::vector<std::pair<points_t,error_t>> 
   for(auto &event : sorted_points_event)
   {
     auto &source = _input_sources[event.first.header.input_id.data];
+    if (event.first.header.morton_min < source.min)
+      source.min = event.first.header.morton_min;
+    if (source.max < event.first.header.morton_max)
+      source.max = event.first.header.morton_max;
+
     source.sub_count++;
     auto attributes = _attributes_configs[_input_sources[event.first.header.input_id.data].attribute_id.data].get();
     _cache_file_handler.write(event.first.header, std::move(event.first.buffers), attributes);
@@ -250,7 +225,6 @@ void processor_t::handle_file_reading_done(std::vector<input_data_id_t> &&files)
   {
     auto &source = _input_sources[file.data];
     source.read_finished = true;
-    fmt::print(stderr, "Done processing inputfile {}\n", source.name.get());
   }
 }
 
@@ -276,7 +250,31 @@ void processor_t::handle_tree_done_with_input(std::vector<input_data_id_t> &&eve
     source.tree_done_count++;
     if (source.read_finished && source.sub_count == source.tree_done_count)
     {
-      fmt::print("Done with {}\n", source.name.get());
+      source.inserted_into_tree = true;
+    }
+  }
+
+  if (_pending_pre_init_files == 0)
+  {
+    bool increased = false;
+    while(_tree_lod_generate_until_index < _processing_order.size() && _input_sources[_processing_order[_tree_lod_generate_until_index].id.data].inserted_into_tree)
+    {
+       _tree_lod_generate_until_index++;
+       increased = true;
+    }
+    if (increased)
+    {
+      morton::morton192_t max;
+      if (_tree_lod_generate_until_index < uint32_t(_processing_order.size()))
+      {
+         max = _input_sources[_processing_order[_tree_lod_generate_until_index].id.data].min;
+      }
+      else
+      {
+        max = _input_sources[_processing_order.back().id.data].max;
+        morton::morton_add_one(max);
+      }
+      _tree_handler.generate_lod(max);
     }
   }
 }
