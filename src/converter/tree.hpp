@@ -129,11 +129,13 @@ struct tree_cache_t
 {
   std::vector<tree_t> data;
   uint32_t current_id;
+  uint64_t current_lod_node_id;
   tree_t *get(tree_id_t id) { return &data[id.data]; }
+
 };
 
 tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const internal_header_t &header);
-tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const internal_header_t &header);
+tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const internal_header_t &header);
 }
 }
 

@@ -58,6 +58,22 @@ inline bool operator<(const morton_t<T, C> &a, const morton_t<T,C> &b)
 }
 
 template<typename T, size_t C>
+inline bool operator<=(const morton_t<T, C> &a, const morton_t<T,C> &b)
+{
+  if (C > 2)
+  {
+    if (a.data[2] != b.data[2])
+      return a.data[2] < b.data[2];
+  }
+  if (C > 1)
+  {
+    if (a.data[1] != b.data[1])
+      return a.data[1] < b.data[1];
+  }
+  return a.data[0] <= b.data[0];
+}
+
+template<typename T, size_t C>
 inline bool operator>(const morton_t<T, C> &a, const morton_t<T,C> &b)
 {
   if (C > 2)

@@ -51,6 +51,7 @@ processor_t::processor_t(converter_t &converter)
   , _pending_pre_init_files(0)
   , _pre_init_files_read_index(0)
   , _tree_lod_generate_until_index(0)
+  , _input_sources_inserted_into_tree(0)
   , _read_sort_budget(uint64_t(1) << 20)
 {
   (void) _converter;
@@ -251,30 +252,33 @@ void processor_t::handle_tree_done_with_input(std::vector<input_data_id_t> &&eve
     if (source.read_finished && source.sub_count == source.tree_done_count)
     {
       source.inserted_into_tree = true;
+      _input_sources_inserted_into_tree ++;
     }
   }
+
 
   if (_pending_pre_init_files == 0)
   {
     bool increased = false;
     while(_tree_lod_generate_until_index < _processing_order.size() && _input_sources[_processing_order[_tree_lod_generate_until_index].id.data].inserted_into_tree)
     {
-       _tree_lod_generate_until_index++;
-       increased = true;
+      _tree_lod_generate_until_index++;
+      increased = true;
     }
     if (increased)
     {
-      morton::morton192_t max;
-      if (_tree_lod_generate_until_index < uint32_t(_processing_order.size()))
+      if (_input_sources_inserted_into_tree == _input_sources.size())
       {
-         max = _input_sources[_processing_order[_tree_lod_generate_until_index].id.data].min;
+        morton::morton192_t max = {};
+        max = morton::morton_negate(max);
+        _tree_handler.generate_lod(max);
       }
       else
       {
-        max = _input_sources[_processing_order.back().id.data].max;
-        morton::morton_add_one(max);
+        int index = _tree_lod_generate_until_index - 1;
+        auto &source = _input_sources[_processing_order[index].id.data];
+        _tree_handler.generate_lod(source.min);
       }
-      _tree_handler.generate_lod(max);
     }
   }
 }

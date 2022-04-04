@@ -90,6 +90,7 @@ private:
   uint32_t _pending_pre_init_files;
   uint32_t _pre_init_files_read_index;
   uint32_t _tree_lod_generate_until_index;
+  uint32_t _input_sources_inserted_into_tree;
 
   int64_t _read_sort_budget;
 

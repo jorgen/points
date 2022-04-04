@@ -17,6 +17,8 @@
 ************************************************************************/
 #include "tree_handler.hpp"
 
+#include "tree_lod_generator.hpp"
+
 #include <fmt/printf.h>
 
 namespace points
@@ -27,11 +29,13 @@ tree_handler_t::tree_handler_t(const tree_global_state_t &global_state, cache_fi
   : _initialized(false)
   , _global_state(global_state)
   , _file_cache(file_cache)
+  , _generated_until({})
   , _add_points(_event_loop, [this](std::vector<internal_header_t> &&events){this->handle_add_points(std::move(events));})
   , _done_with_input(done_with_input)
 {
   _event_loop.add_about_to_block_listener(this);
   _tree_cache.current_id = 0;
+  _tree_cache.current_lod_node_id = uint64_t(1) << 63;
 }
 
 void tree_handler_t::about_to_block()
@@ -60,9 +64,10 @@ void tree_handler_t::handle_add_points(std::vector<internal_header_t> &&events)
   }
 }
 
-void tree_handler_t::generate_lod(morton::morton192_t &max)
+void tree_handler_t::generate_lod(morton::morton192_t &min)
 {
-  fmt::print(stderr, "generate lod for max {} {} {}", max.data[0], max.data[1], max.data[2]);
+  tree_get_work_items(_tree_cache, _file_cache, _tree_root, _generated_until, min);
+  _generated_until = min;
 }
 
 }

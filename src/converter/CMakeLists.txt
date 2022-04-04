@@ -29,10 +29,11 @@ set(private_headers
   cache_file_handler.hpp
   data_provider.hpp
   tree_handler.hpp
+  tree_lod_generator.hpp
   )
 
 set(sources
-  converter.cpp 
+  converter.cpp
   processor.cpp
   reader.cpp
   worker.cpp
@@ -44,6 +45,7 @@ set(sources
   cache_file_handler.cpp
   data_provider.cpp
   tree_handler.cpp
+  tree_lod_generator.cpp
   )
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources}  )
@@ -69,7 +71,11 @@ endif()
 
 if (BUILD_SHARED_LIBS)
     target_compile_definitions(converter_objects PRIVATE points_converter_EXPORTS)
+    target_compile_options(converter_objects PRIVATE -fsanitize=address)
+    target_link_libraries(converter_objects PRIVATE -fsanitize=address)
 endif()
 
 add_library(converter empty_dylib_function.cpp $<TARGET_OBJECTS:converter_objects>)
+target_compile_options(converter PRIVATE -fsanitize=address)
+target_link_options(converter PRIVATE -fsanitize=address)
 BuildExternalTargetLinkLibrary(converter PUBLIC converter_objects)

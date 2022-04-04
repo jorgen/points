@@ -17,38 +17,12 @@
 ************************************************************************/
 #pragma once
 
-#include "threaded_event_loop.hpp"
 #include "tree.hpp"
 
 namespace points
 {
 namespace converter
 {
-class tree_handler_t : public about_to_block_t
-{
-public:
-  tree_handler_t(const tree_global_state_t &global_state, cache_file_handler_t &cache, event_pipe_t<input_data_id_t> &done_input);
-
-  void about_to_block() override;
-
-  void add_points(internal_header_t &&header);
-  void generate_lod(morton::morton192_t &min);
-private:
-  void handle_add_points(std::vector<internal_header_t> &&events);
-  threaded_event_loop_t _event_loop;
-  bool _initialized;
-
-  const tree_global_state_t &_global_state;
-  cache_file_handler_t &_file_cache;
-
-  tree_cache_t _tree_cache;
-  tree_id_t _tree_root;
-
-  morton::morton192_t _generated_until;
-
-  event_pipe_t<internal_header_t> _add_points;
-  event_pipe_t<input_data_id_t> &_done_with_input;
-};
-
+void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const morton::morton192_t &min, const morton::morton192_t &max);
 }
 }
