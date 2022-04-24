@@ -46,7 +46,7 @@ processor_t::processor_t(converter_t &converter)
   , _tree_done_with_input(_event_loop, [this](std::vector<input_data_id_t> &&events) { this->handle_tree_done_with_input(std::move(events));})
   , _pre_init_file_retriever(_converter.tree_state, _input_event_loop, _pre_init_for_files, _point_reader_file_errors)
   , _point_reader(_converter.tree_state, _input_event_loop, _attributes_for_source, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
-  , _cache_file_handler(_converter.tree_state, converter.cache_filename, _cache_file_error, _points_written)
+  , _cache_file_handler(_converter.tree_state, converter.cache_filename, _attributes_configs, _cache_file_error, _points_written)
   , _tree_handler(_converter.tree_state, _cache_file_handler, _tree_done_with_input)
   , _pending_pre_init_files(0)
   , _pre_init_files_read_index(0)
@@ -151,52 +151,11 @@ void processor_t::handle_file_errors_headers(std::vector<file_error_t> &&errors)
   (void)errors;
 }
 
-static bool compare_attribute(const attribute_t &a, const attribute_t &b)
-{
-  if (a.name_size != b.name_size)
-    return false;
-  if (a.format != b.format)
-    return false;
-  if (a.group != b.group)
-    return false;
-  if (a.components != b.components)
-    return false;
-  return memcmp(a.name, b.name, a.name_size) == 0;
-}
-static bool compare_attributes(const attributes_t &a, const attributes_t &b)
-{
-  if (a.attributes.size() != b.attributes.size())
-    return false;
-  for (int i = 1; i < int(a.attributes.size()); i++)
-  {
-    if (!compare_attribute(a.attributes[i], b.attributes[i]))
-      return false;
-  }
-  return true;
-}
-
-static int get_attribute_config_index(std::vector<std::unique_ptr<attributes_t>> &attribute_configs, attributes_t &&find)
-{
-  for (int i = 0; i < int(attribute_configs.size()); i++)
-  {
-    auto &source = attribute_configs[i];
-    if (compare_attributes(*source, find))
-      return i;
-  }
-
-  int ret = int(attribute_configs.size());
-  //attribute_configs.emplace_back(std::move(find));
-  attribute_configs.emplace_back(new attributes_t());
-  auto &back = attribute_configs.back();
-  *back = std::move(find);
-  return ret;
-}
-
 void processor_t::handle_attribute_event(std::vector<std::pair<input_data_id_t, attributes_t>> &&attribute_events)
 {
   for (auto &event : attribute_events)
   {
-    _input_sources[event.first.data].attribute_id.data = get_attribute_config_index(_attributes_configs, std::move(event.second));
+    _input_sources[event.first.data].attribute_id = _attributes_configs.get_attribute_config_index(std::move(event.second));
   }
 }
 void processor_t::handle_sorted_points(std::vector<std::pair<points_t,error_t>> &&sorted_points_event)
@@ -210,8 +169,8 @@ void processor_t::handle_sorted_points(std::vector<std::pair<points_t,error_t>> 
       source.max = event.first.header.morton_max;
 
     source.sub_count++;
-    auto attributes = _attributes_configs[_input_sources[event.first.header.input_id.data].attribute_id.data].get();
-    _cache_file_handler.write(event.first.header, std::move(event.first.buffers), attributes);
+    auto attributes_id = source.attribute_id;
+    _cache_file_handler.write(event.first.header, std::move(event.first.buffers), attributes_id);
   }
 }
 

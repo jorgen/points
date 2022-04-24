@@ -17,6 +17,9 @@
 ************************************************************************/
 #include "tree_lod_generator.hpp"
 
+#include "worker.hpp"
+#include "cache_file_handler.hpp"
+
 #include <fmt/printf.h>
 
 namespace points
@@ -29,6 +32,7 @@ struct children_subset_t
   std::vector<points_subset_t> data;
   std::vector<int> data_skips;
   std::vector<int> skips;
+  std::vector<int> lods;
 };
 
 static input_data_id_t get_next_input_id(tree_cache_t &tree_cache)
@@ -46,6 +50,7 @@ std::pair<int,int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler
   assert(skip < int(tree->nodes[current_level].size()));
   auto &node = tree->nodes[current_level][skip];
   assert(node || (tree->data[current_level][skip].point_count > 0 && tree->data[current_level][skip].point_count < uint64_t(-1)));
+  int lod = morton::morton_tree_level_to_lod(tree->magnitude, current_level);
   if (!node)
   {
     const auto &data = tree->data[current_level][skip];
@@ -54,18 +59,36 @@ std::pair<int,int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler
     int to_ret = data.data.size();
     to_lod.data_skips.push_back(to_ret);
     to_lod.skips.push_back(1);
+    to_lod.lods.push_back(lod);
     return std::make_pair(1, to_ret);
   }
-  auto &node_data = tree->data[current_level][skip].data;
-  assert(node_data.size() == 0);
-  int skip_index = int(to_lod.skips.size());
-  node_data.emplace_back(get_next_input_id(tree_cache), offset_t(0), point_count_t(0));
-  to_lod.data.emplace_back(node_data.back());
-  to_lod.data_skips.emplace_back();
-  to_lod.skips.emplace_back(0);
-  int lod = morton::morton_tree_level_to_lod(tree->magnitude, current_level);
+
+  int skip_index = 0;
+  auto ret_pair = std::make_pair(0,0);
+  if (min <= parent_min && parent_max <= max)
+  {
+    auto &node_data = tree->data[current_level][skip];
+    assert(node_data.data.size() <= 1);
+    if (node_data.data.size() == 1)
+    {
+      assert(node_data.data.back().offset.data == (~uint64_t(0)));
+      to_lod.data.emplace_back(node_data.data.back());
+      to_lod.data_skips.emplace_back(1);
+      to_lod.skips.emplace_back(1);
+      to_lod.lods.push_back(lod);
+      return std::make_pair(1,1);
+    }
+    skip_index = int(to_lod.skips.size());
+    node_data.data.emplace_back(get_next_input_id(tree_cache), offset_t(~uint64_t(0)), point_count_t(0));
+    node_data.min = parent_min;
+    node_data.max = parent_max;
+    to_lod.data.emplace_back(node_data.data.back());
+    to_lod.data_skips.emplace_back(1);
+    to_lod.skips.emplace_back(1);
+    to_lod.lods.push_back(lod);
+    ret_pair = std::make_pair(1,1);
+  }
   int child_count = 0;
-  auto ret_pair = std::make_pair(1,1);
   int sub_skip_parent = tree->skips[current_level][skip];
   for (int i = 0; i < 8; i++)
   {
@@ -95,20 +118,102 @@ std::pair<int,int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler
       }
       ret_pair.first += adjust.first;
       ret_pair.second += adjust.second;
-      to_lod.skips[skip_index] += adjust.first;
-      to_lod.data_skips[skip_index] += adjust.second;
+      if (ret_pair.first > 0)
+      {
+        to_lod.skips[skip_index] += adjust.first;
+        to_lod.data_skips[skip_index] += adjust.second;
+      }
     }
   }
   return ret_pair;
 }
 
-void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const morton::morton192_t &min, const morton::morton192_t &max)
+static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const morton::morton192_t &min, const morton::morton192_t &max, std::vector<lod_worker_data_t> &lod_data)
 {
   auto tree = tree_cache.get(tree_id);
   children_subset_t to_lod;
   find_missing_lod(tree_cache, cache, tree_id, min, max, tree->morton_min, tree->morton_max, 0,0, to_lod);
+
+  lod_data.reserve(to_lod.skips.size() / 3);
+
+  std::vector<int> parent_end_stack;
+  parent_end_stack.reserve(30);
+  std::vector<int> parent_stack;
+  parent_stack.reserve(30);
+  auto data_start = to_lod.data.begin();
+  for (int i = 0; i < int(to_lod.skips.size()); i++)
+  {
+    int current_skip = int(to_lod.skips[i]);
+    bool leaf_node = current_skip == 1;
+    int data_skip = leaf_node ? to_lod.data_skips[i] : 1;
+    if (parent_stack.size())
+    {
+      auto &parent = lod_data[parent_stack.back()];
+      parent.child_data.insert(parent.child_data.end(), data_start, data_start + data_skip);
+    }
+    if (!leaf_node)
+    {
+      parent_stack.emplace_back(int(lod_data.size()));
+      parent_end_stack.emplace_back(i + current_skip - 1);
+      lod_data.emplace_back(to_lod.lods[i], *data_start);
+    }
+    while(parent_end_stack.size() && parent_end_stack.back() == i)
+    {
+      parent_stack.pop_back();
+      parent_end_stack.pop_back();
+    }
+    data_start += data_skip;
+  }
+  std::sort(lod_data.begin(), lod_data.end(), [](const lod_worker_data_t &a, const lod_worker_data_t &b)
+  {
+    return a.lod < b.lod;
+  });
   fmt::print("{}\n", to_lod.data.size());
 }
 
+lod_worker_t::lod_worker_t(cache_file_handler_t &cache, lod_worker_data_t &data)
+  : cache(cache)
+  , data(data)
+{
+  (void)this->cache;
+  (void)this->data;
 }
+
+
+void lod_worker_t::work()
+{
+//  uint64_t total_count = 0;
+//  for (auto &child : data.child_data)
+//    total_count += child.count.data;
+//
+//  for (auto &child : data.child_data)
+//  {
+//    read_points_t points(cache, child.input_id);
+//
+//    double ratio = double(child.count.data) / total_count;
+//
+//
+//  }
 }
+void lod_worker_t::after_work(completion_t completion)
+{
+
+}
+
+tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, tree_cache_t &tree_cache, cache_file_handler_t &file_cache)
+  : _loop(loop)
+  , _tree_cache(tree_cache)
+  , _file_cache(file_cache)
+{
+  (void)_loop;
+}
+
+void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morton192_t &max)
+{
+  _lod_generating_list.emplace_back();
+  auto lod_work_list = _lod_generating_list.back();
+  tree_get_work_items(_tree_cache, _file_cache, tree_id, _generated_until, max, lod_work_list);
+  _generated_until = max;
+}
+
+}}//namespace

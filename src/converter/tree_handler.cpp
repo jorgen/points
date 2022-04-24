@@ -29,7 +29,7 @@ tree_handler_t::tree_handler_t(const tree_global_state_t &global_state, cache_fi
   : _initialized(false)
   , _global_state(global_state)
   , _file_cache(file_cache)
-  , _generated_until({})
+  , _tree_lod_generator(_event_loop, _tree_cache, _file_cache)
   , _add_points(_event_loop, [this](std::vector<internal_header_t> &&events){this->handle_add_points(std::move(events));})
   , _done_with_input(done_with_input)
 {
@@ -66,8 +66,7 @@ void tree_handler_t::handle_add_points(std::vector<internal_header_t> &&events)
 
 void tree_handler_t::generate_lod(morton::morton192_t &min)
 {
-  tree_get_work_items(_tree_cache, _file_cache, _tree_root, _generated_until, min);
-  _generated_until = min;
+ _tree_lod_generator.generate_lods(_tree_root, min);
 }
 
 }

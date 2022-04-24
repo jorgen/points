@@ -15,41 +15,32 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#pragma once
+#ifndef ATTRIBUTES_CONFIGS_HPP
+#define ATTRIBUTES_CONFIGS_HPP
 
-#include "threaded_event_loop.hpp"
-#include "tree.hpp"
-#include "tree_lod_generator.hpp"
+#include <memory>
+#include <vector>
+#include <mutex>
+
+#include <conversion_types.hpp>
 
 namespace points
 {
 namespace converter
 {
-class tree_handler_t : public about_to_block_t
+
+class attributes_configs_t
 {
 public:
-  tree_handler_t(const tree_global_state_t &global_state, cache_file_handler_t &cache, event_pipe_t<input_data_id_t> &done_input);
+  attributes_configs_t();
 
-  void about_to_block() override;
+  attributes_id_t get_attribute_config_index(attributes_t &&attr);
 
-  void add_points(internal_header_t &&header);
-  void generate_lod(morton::morton192_t &min);
+  const attributes_t &get(attributes_id_t id);
 private:
-  void handle_add_points(std::vector<internal_header_t> &&events);
-  threaded_event_loop_t _event_loop;
-  bool _initialized;
-
-  const tree_global_state_t &_global_state;
-  cache_file_handler_t &_file_cache;
-
-  tree_cache_t _tree_cache;
-  tree_id_t _tree_root;
-
-  tree_lod_generator_t _tree_lod_generator;
-
-  event_pipe_t<internal_header_t> _add_points;
-  event_pipe_t<input_data_id_t> &_done_with_input;
+  std::mutex _mutex;
+  std::vector<std::unique_ptr<attributes_t>> _attributes_configs;
 };
 
-}
-}
+}}
+#endif // ATTRIBUTES_CONFIGS_HPP

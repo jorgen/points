@@ -34,6 +34,7 @@
 #include "threaded_event_loop.hpp"
 #include "morton.hpp"
 #include "tree_handler.hpp"
+#include "attributes_configs.hpp"
 
 namespace points
 {
@@ -84,7 +85,7 @@ private:
   tree_handler_t _tree_handler;
 
   std::vector<input_data_source_t> _input_sources;
-  std::vector<std::unique_ptr<attributes_t>> _attributes_configs;
+  attributes_configs_t _attributes_configs;
 
   std::vector<sorted_input_id_t> _processing_order;
   uint32_t _pending_pre_init_files;

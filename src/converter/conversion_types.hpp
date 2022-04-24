@@ -44,7 +44,7 @@ inline bool operator==(const input_data_id_t &a, const input_data_id_t &b)
   return a.data == b.data && a.sub == b.sub;
 }
 
-struct attribute_id_t
+struct attributes_id_t
 {
   uint32_t data;
 };
@@ -107,7 +107,7 @@ struct points_t
 struct input_data_source_t
 {
   input_data_id_t input_id;
-  attribute_id_t attribute_id;
+  attributes_id_t attribute_id;
   std::unique_ptr<char[]> name;
   uint32_t name_length;
   morton::morton192_t min;

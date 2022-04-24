@@ -22,6 +22,7 @@
 #include "event_pipe.hpp"
 #include "threaded_event_loop.hpp"
 #include "worker.hpp"
+#include "attributes_configs.hpp"
 
 #include <memory>
 #include <unordered_map>
@@ -81,33 +82,32 @@ struct points_cache_item_t
   buffer_t data;
 };
 
-class cache_file_handler_t : public about_to_block_t
+class cache_file_handler_t
 {
 public:
-  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, event_pipe_t<error_t> &cache_file_error, event_pipe_t<internal_header_t> &write_done);
-
-  void about_to_block();
+  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<internal_header_t> &write_done);
 
   void handle_open_cache_file(uv_fs_t *request);
 
-  void write(const internal_header_t &header, attribute_buffers_t &&buffers, attributes_t *attributes);
+  void write(const internal_header_t &header, attribute_buffers_t &&buffers, attributes_id_t attributes);
 
-  points_cache_item_t ref_points(input_data_id_t id);
+  points_cache_item_t ref_points(input_data_id_t id, int attribute_index);
   void deref_points(input_data_id_t id);
 
 private:
-  void handle_write_events(std::vector<std::tuple<internal_header_t, attribute_buffers_t, attributes_t *>> &&events);
+  void handle_write_events(std::vector<std::tuple<internal_header_t, attribute_buffers_t, attributes_id_t>> &&events);
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
 
   const tree_global_state_t &_state;
+  attributes_configs_t &_attributes_configs;
   uv_file _file_handle;
   bool _file_opened;
 
   uv_fs_t _open_request;
   event_pipe_t<error_t> &_cache_file_error;
   event_pipe_t<internal_header_t> &_write_done;
-  event_pipe_t<std::tuple<internal_header_t, attribute_buffers_t, attributes_t *>> _write_event_pipe;
+  event_pipe_t<std::tuple<internal_header_t, attribute_buffers_t, attributes_id_t >> _write_event_pipe;
 
   struct hash_input_data_id_t
   {
@@ -123,6 +123,7 @@ private:
   {
     int ref;
     internal_header_t header;
+    attributes_id_t attribute_id;
     attribute_buffers_t buffers;
   };
 
@@ -135,7 +136,7 @@ struct read_points_t
   read_points_t(cache_file_handler_t &cache_file_handler, input_data_id_t id)
     : cache_file_handler(cache_file_handler)
     , id(id)
-    , cache_item(cache_file_handler.ref_points(id))
+    , cache_item(cache_file_handler.ref_points(id, 0))
     , header(cache_item.header)
     , data(cache_item.data)
   {}

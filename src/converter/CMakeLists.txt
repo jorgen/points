@@ -30,6 +30,7 @@ set(private_headers
   data_provider.hpp
   tree_handler.hpp
   tree_lod_generator.hpp
+  attributes_configs.hpp
   )
 
 set(sources
@@ -46,6 +47,7 @@ set(sources
   data_provider.cpp
   tree_handler.cpp
   tree_lod_generator.cpp
+  attributes_configs.cpp
   )
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources}  )

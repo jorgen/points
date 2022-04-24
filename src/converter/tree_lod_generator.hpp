@@ -18,11 +18,54 @@
 #pragma once
 
 #include "tree.hpp"
+#include "worker.hpp"
+#include "threaded_event_loop.hpp"
 
 namespace points
 {
 namespace converter
 {
-void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const morton::morton192_t &min, const morton::morton192_t &max);
+
+class lod_worker_data_t
+{
+public:
+  lod_worker_data_t(int lod, const points_subset_t &name)
+    : lod(lod)
+    , name(name)
+  {}
+  int lod;
+  points_subset_t name;
+  std::vector<points_subset_t> child_data;
+};
+
+class lod_worker_t : public worker_t
+{
+public:
+  lod_worker_t(cache_file_handler_t &cache, lod_worker_data_t &data);
+  void work() override;
+  void after_work(completion_t completion) override;
+private:
+
+  cache_file_handler_t &cache;
+  lod_worker_data_t &data;
+};
+
+class tree_lod_generator_t
+{
+public:
+  tree_lod_generator_t(threaded_event_loop_t &loop, tree_cache_t &tree_cache, cache_file_handler_t &file_cache);
+  void generate_lods(tree_id_t &tree_id, const morton::morton192_t &max);
+
+private:
+  threaded_event_loop_t &_loop;
+  tree_cache_t &_tree_cache;
+  cache_file_handler_t &_file_cache;
+
+  std::vector<std::vector<lod_worker_data_t>> _lod_generating_list;
+  std::vector<std::vector<lod_worker_t>> _lod_workers;
+
+  morton::morton192_t _generated_until;
+};
+
 }
 }
