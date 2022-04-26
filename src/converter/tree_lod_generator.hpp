@@ -26,9 +26,8 @@ namespace points
 namespace converter
 {
 
-class lod_worker_data_t
+struct lod_worker_data_t
 {
-public:
   lod_worker_data_t(int lod, const points_subset_t &name)
     : lod(lod)
     , name(name)
@@ -38,16 +37,27 @@ public:
   std::vector<points_subset_t> child_data;
 };
 
+class tree_lod_generator_t;
+
 class lod_worker_t : public worker_t
 {
 public:
-  lod_worker_t(cache_file_handler_t &cache, lod_worker_data_t &data);
+  lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, lod_worker_data_t &data);
   void work() override;
   void after_work(completion_t completion) override;
 private:
 
+  tree_lod_generator_t &lod_generator;
   cache_file_handler_t &cache;
   lod_worker_data_t &data;
+};
+
+struct lod_worker_batch_t
+{
+  std::vector<lod_worker_data_t> worker_data;
+  std::vector<lod_worker_t> lod_workers;
+  int current_index = 0;
+  int completed = 0;
 };
 
 class tree_lod_generator_t
@@ -56,13 +66,13 @@ public:
   tree_lod_generator_t(threaded_event_loop_t &loop, tree_cache_t &tree_cache, cache_file_handler_t &file_cache);
   void generate_lods(tree_id_t &tree_id, const morton::morton192_t &max);
 
+  void iterate_workers();
 private:
   threaded_event_loop_t &_loop;
   tree_cache_t &_tree_cache;
   cache_file_handler_t &_file_cache;
 
-  std::vector<std::vector<lod_worker_data_t>> _lod_generating_list;
-  std::vector<std::vector<lod_worker_t>> _lod_workers;
+  std::vector<std::unique_ptr<lod_worker_batch_t>> _lod_batches;
 
   morton::morton192_t _generated_until;
 };
