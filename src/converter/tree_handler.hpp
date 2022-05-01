@@ -28,7 +28,7 @@ namespace converter
 class tree_handler_t : public about_to_block_t
 {
 public:
-  tree_handler_t(const tree_global_state_t &global_state, cache_file_handler_t &cache, event_pipe_t<input_data_id_t> &done_input);
+  tree_handler_t(const tree_global_state_t &global_state, cache_file_handler_t &file_cache, attributes_configs_t &attributrs_configs, event_pipe_t<input_data_id_t> &done_input);
 
   void about_to_block() override;
 
@@ -41,6 +41,7 @@ private:
 
   const tree_global_state_t &_global_state;
   cache_file_handler_t &_file_cache;
+  attributes_configs_t &_attributes_configs;
 
   tree_cache_t _tree_cache;
   tree_id_t _tree_root;

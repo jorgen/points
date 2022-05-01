@@ -84,6 +84,17 @@ void cache_file_handler_t::handle_write_events(std::vector<std::tuple<internal_h
   }
 }
 
+bool cache_file_handler_t::attribute_id_for_input_id(input_data_id_t input_id, attributes_id_t &attributes_id)
+{
+  std::unique_lock<std::mutex> lock(_cache_map_mutex);
+  auto it = _cache_map.find(input_id);
+  if (it == _cache_map.end())
+    return false;
+
+  attributes_id = it->second.attribute_id;
+  return true;
+}
+
 points_cache_item_t cache_file_handler_t::ref_points(input_data_id_t id, int attribute_index)
 {
   std::unique_lock<std::mutex> lock(_cache_map_mutex);

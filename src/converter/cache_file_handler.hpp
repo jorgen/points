@@ -91,6 +91,8 @@ public:
 
   void write(const internal_header_t &header, attribute_buffers_t &&buffers, attributes_id_t attributes);
 
+  bool attribute_id_for_input_id(input_data_id_t input_id, attributes_id_t &attribute_id);
+
   points_cache_item_t ref_points(input_data_id_t id, int attribute_index);
   void deref_points(input_data_id_t id);
 

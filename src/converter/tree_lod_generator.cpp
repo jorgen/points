@@ -19,6 +19,7 @@
 
 #include "worker.hpp"
 #include "cache_file_handler.hpp"
+#include "attributes_configs.hpp"
 
 #include <fmt/printf.h>
 
@@ -171,9 +172,10 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
   fmt::print("{}\n", to_lod.data.size());
 }
 
-lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, lod_worker_data_t &data)
+lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_worker_data_t &data)
   : lod_generator(lod_generator)
   , cache(cache)
+  , attributes_configs(attributes_configs)
   , data(data)
 {
   (void)this->cache;
@@ -184,16 +186,39 @@ lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handl
 void lod_worker_t::work()
 {
   uint64_t total_count = 0;
-  for (auto &child : data.child_data)
+  attributes_t attributes;
+  attribute_buffers_t buffers;
+  std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[data.child_data.size()]);
+  for (int i = 0; i < int(data.child_data.size()); i++)
+  {
+    auto &child = data.child_data[i];
     total_count += child.count.data;
+    bool got_attrib = cache.attribute_id_for_input_id(child.input_id, attribute_ids[i]);
+    (void) got_attrib;
+    assert(got_attrib);
+  }
+  auto attrib_begin = attribute_ids.get();
+  auto attrib_end = attrib_begin + data.child_data.size();
+  std::sort(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data < b.data; });
+  attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
 
+  double ratio = double(lod_generator.global_state().node_limit) / double(total_count);
+
+  if (ratio > 1.0)
+    ratio = 1.0;
+
+  uint64_t total_acc_count = 0;
   for (auto &child : data.child_data)
   {
     read_points_t points(cache, child.input_id);
-    double ratio = double(child.count.data) / total_count;
-    uint64_t child_count = child.count.data * ratio;
-    fmt::print(stderr, "lod {} - child {} - {}\n", data.lod, child.count.data, child_count);
+
+    uint32_t child_count = std::min(uint32_t(std::round(child.count.data * ratio)), child.count.data);
+
+
+    total_acc_count += child_count;
+    (void) attributes_configs;
   }
+  fmt::print("Total count {}, accumulated count {}\n", total_count, total_acc_count);
 }
 
 void lod_worker_t::after_work(completion_t completion)
@@ -201,7 +226,7 @@ void lod_worker_t::after_work(completion_t completion)
   lod_generator.iterate_workers();
 }
 
-static void iterate_batch(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache_file, threaded_event_loop_t &loop)
+static void iterate_batch(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache_file, attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
 {
   assert(batch.completed < int(batch.worker_data.size()));
   if (batch.current_index == int(batch.worker_data.size()))
@@ -217,18 +242,19 @@ static void iterate_batch(tree_lod_generator_t &lod_generator, lod_worker_batch_
   while(batch.current_index < int(batch.worker_data.size())
         && current_lod == batch.worker_data[batch.current_index].lod)
   {
-    batch.lod_workers.emplace_back(lod_generator, cache_file, batch.worker_data[batch.current_index]);
+    batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, batch.worker_data[batch.current_index]);
     batch.current_index++;
     batch.lod_workers.back().enqueue(loop);
   }
 }
 
-tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, tree_cache_t &tree_cache, cache_file_handler_t &file_cache)
+tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tree_global_state_t &tree_global_state, tree_cache_t &tree_cache, cache_file_handler_t &file_cache, attributes_configs_t &attributes_configs)
   : _loop(loop)
+  , _tree_global_state(tree_global_state)
   , _tree_cache(tree_cache)
   , _file_cache(file_cache)
+  , _attributes_configs(attributes_configs)
 {
-  (void)_loop;
 }
 
 void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morton192_t &max)
@@ -247,7 +273,7 @@ void tree_lod_generator_t::iterate_workers()
     _lod_batches.erase(_lod_batches.begin());
   }
   if (_lod_batches.size() && _lod_batches.front()->completed == _lod_batches.front()->current_index)
-    iterate_batch(*this, *_lod_batches.front(), _file_cache, _loop);
+    iterate_batch(*this, *_lod_batches.front(), _file_cache, _attributes_configs, _loop);
 
 }
 

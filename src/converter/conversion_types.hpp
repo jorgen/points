@@ -130,7 +130,7 @@ inline input_name_ref_t input_name_ref_from_input_data_source(const input_data_s
 
 struct tree_global_state_t
 {
-  uint32_t node_limit = 100000;
+  uint64_t node_limit = 100000;
   double scale;
   double inv_scale;
   double offset[3];
