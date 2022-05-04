@@ -67,9 +67,9 @@ struct laszip_handle_t
 };
 
 template<size_t N>
-void add_attribute(attributes_t *attributes, const char (&name)[N], format_t format, components_t components, int group = 0)
+void add_attribute(attributes_t *attributes, const char (&name)[N], format_t format, components_t components)
 {
-  attributes_add_attribute(attributes, name, N - 1, format, components, group);
+  attributes_add_attribute(attributes, name, N - 1, format, components);
 }
 
 static void add_attributes_format_0(attributes_t *attributes)
@@ -103,11 +103,11 @@ static void add_attributes_format_3(attributes_t *attributes)
 
 static void add_wave_packets(attributes_t *attributes)
 {
-  add_attribute(attributes, POINTS_ATTRIBUTE_WAVE_PACKET_DESCRIPTOR_INDEX, format_u8, components_1, -1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_BYTE_OFFSET_TO_WAVEFORM_DATA, format_u64, components_1, -1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_WAVEFORM_PACKET_SIZE_BYTES, format_u32, components_1, -1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_RETURN_POINT_WAVEFORM_LOCATION, format_r32, components_1, -1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ_T, format_r32, components_3, -1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_WAVE_PACKET_DESCRIPTOR_INDEX, format_u8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_BYTE_OFFSET_TO_WAVEFORM_DATA, format_u64, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_WAVEFORM_PACKET_SIZE_BYTES, format_u32, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_RETURN_POINT_WAVEFORM_LOCATION, format_r32, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ_T, format_r32, components_3);
 }
 
 static void add_attributes_format_4(attributes_t *attributes)

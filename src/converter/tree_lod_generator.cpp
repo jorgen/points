@@ -202,6 +202,8 @@ void lod_worker_t::work()
   std::sort(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data < b.data; });
   attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
 
+
+
   double ratio = double(lod_generator.global_state().node_limit) / double(total_count);
 
   if (ratio > 1.0)

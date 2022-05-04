@@ -26,12 +26,12 @@ namespace points
 {
 namespace converter
 {
-void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum format_t format, enum components_t components, int group)
+void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum format_t format, enum components_t components)
 {
   attributes->attribute_names.emplace_back(new char[name_size + 1]);
   memcpy(attributes->attribute_names.back().get(), name, name_size);
   attributes->attribute_names.back().get()[name_size] = 0;
-  attributes->attributes.push_back({attributes->attribute_names.back().get(), name_size, format, components, group});
+  attributes->attributes.push_back({attributes->attribute_names.back().get(), name_size, format, components});
 }
 
 void header_p_set_morton_aabb(const tree_global_state_t &tree_state, internal_header_t &header)

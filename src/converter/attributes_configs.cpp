@@ -33,8 +33,6 @@ static bool compare_attribute(const attribute_t &a, const attribute_t &b)
     return false;
   if (a.format != b.format)
     return false;
-  if (a.group != b.group)
-    return false;
   if (a.components != b.components)
     return false;
   return memcmp(a.name, b.name, a.name_size) == 0;

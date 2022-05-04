@@ -66,7 +66,7 @@ struct header_t
   double min[3];
   double max[3];
 };
-POINTS_CONVERTER_EXPORT void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum format_t format, enum components_t components, int group = 0);
+POINTS_CONVERTER_EXPORT void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum format_t format, enum components_t components);
 
 struct attribute_t
 {
@@ -74,7 +74,6 @@ struct attribute_t
   uint32_t name_size;
   format_t format;
   components_t components;
-  int group;
 };
 
 struct buffer_t
