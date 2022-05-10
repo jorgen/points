@@ -29,17 +29,34 @@ namespace points
 namespace converter
 {
 
+struct attributes_extra_info_t
+{
+  bool is_accumulative;
+};
+
+struct attribute_config_t
+{
+  attributes_t attributes;
+  std::vector<attributes_extra_info_t> extra_info;
+  std::vector<attributes_id_t> child_attributes;
+  std::vector<std::vector<int>> child_attribute_index_map;
+};
+
 class attributes_configs_t
 {
 public:
-  attributes_configs_t();
+  attributes_configs_t(const tree_global_state_t &global_state);
 
   attributes_id_t get_attribute_config_index(attributes_t &&attr);
 
   const attributes_t &get(attributes_id_t id);
+
+  attributes_id_t get_lod_attribute_id_for_input_attributes(const format_t point_type, const attributes_id_t *begin, const attributes_id_t *end);
+
 private:
+  const tree_global_state_t &_global_state;
   std::mutex _mutex;
-  std::vector<std::unique_ptr<attributes_t>> _attributes_configs;
+  std::vector<attribute_config_t> _attributes_configs;
 };
 
 }}
