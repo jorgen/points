@@ -191,16 +191,16 @@ inline void point_buffer_subdivide(const tree_global_state_t &state, const read_
 {
   switch(points.header.point_format)
   {
-  case format_m32:
+  case type_m32:
     point_buffer_subdivide_type<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(state, points, subset, lod, node_min, children);
     break;
-  case format_m64:
+  case type_r64:
     point_buffer_subdivide_type<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(state, points, subset, lod, node_min, children);
     break;
-  case format_m128:
+  case type_m128:
     point_buffer_subdivide_type<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(state, points, subset, lod, node_min, children);
     break;
-  case format_m192:
+  case type_m192:
     point_buffer_subdivide_type<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(state, points, subset, lod, node_min, children);
     break;
   default:

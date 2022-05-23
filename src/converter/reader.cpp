@@ -60,9 +60,9 @@ struct callback_closer
   void *user_ptr;
 };
 
-static std::vector<std::pair<format_t, components_t>> create_attribute_info(const attributes_t &attributes)
+static std::vector<std::pair<type_t, components_t>> create_attribute_info(const attributes_t &attributes)
 {
- std::vector<std::pair<format_t, components_t>> ret;
+ std::vector<std::pair<type_t, components_t>> ret;
  ret.reserve(attributes.attributes.size());
  for (auto &a : attributes.attributes)
  {
@@ -131,7 +131,7 @@ void get_data_worker_t::after_work(completion_t completion)
   point_reader_file.input_split = split;
 }
   
-sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, point_reader_file_t &reader_file, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &&points)
+sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, point_reader_file_t &reader_file, const std::vector<std::pair<type_t, components_t>> &attributes_def, points_t &&points)
   : tree_state(tree_state)
   , reader_file(reader_file)
   , attributes_def(attributes_def)

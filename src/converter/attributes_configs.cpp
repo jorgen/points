@@ -102,7 +102,7 @@ bool is_attribute_names_equal(const attribute_t &a, const attribute_t &b)
   return memcmp(a.name, b.name, a.name_size) == 0;
 }
 
-static void make_new_attributes(attribute_config_t &destination, const format_t point_type, const std::vector<attribute_config_t> &attributes_configs, const attributes_id_t *begin, const attributes_id_t *end)
+static void make_new_attributes(attribute_config_t &destination, const type_t point_type, const std::vector<attribute_config_t> &attributes_configs, const attributes_id_t *begin, const attributes_id_t *end)
 {
   int count = int(end - begin);
   attributes_copy(attributes_configs[begin->data].attributes, destination.attributes);
@@ -175,7 +175,7 @@ static void make_new_attributes(attribute_config_t &destination, const format_t 
   }
 }
 
-attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const format_t point_type, const attributes_id_t *begin, const attributes_id_t *end)
+attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const type_t point_type, const attributes_id_t *begin, const attributes_id_t *end)
 {
   assert(begin < end);
   assert(attributes_ids_increase(begin, end));
@@ -202,12 +202,12 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const fo
   return _attributes_configs.back().attribute_lod_mapping;
 }
 
-std::vector<std::pair<format_t, components_t>> attributes_configs_t::get_format_components(attributes_id_t id)
+std::vector<std::pair<type_t, components_t>> attributes_configs_t::get_format_components(attributes_id_t id)
 {
   assert(id.data < _attributes_configs.size());
   std::unique_lock<std::mutex> lock(_mutex);
   auto &attrib_config = _attributes_configs[id.data];
-  std::vector<std::pair<format_t, components_t>> ret;
+  std::vector<std::pair<type_t, components_t>> ret;
   ret.reserve(attrib_config.attributes.attributes.size());
   for (auto &attrib : attrib_config.attributes.attributes)
   {

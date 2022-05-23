@@ -62,7 +62,7 @@ typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) <= sizeof(morton::mort
 }
 
 template <typename T, typename MT, size_t C>
-void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &points, double smallest_scale, format_t format, error_t &error)
+void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &points, double smallest_scale, type_t format, error_t &error)
 {
   auto &header = points.header;
   uint64_t count = header.point_count;
@@ -94,17 +94,17 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &po
   morton::morton_t<MT,C> last = *(morton_end - 1);
   assert(first < last);
   points.header.lod_span = morton::morton_lod(first, last);
-  format_t new_format = morton_format_from_lod(points.header.lod_span);
-  if (new_format != format && false)
+  type_t new_type = morton_format_from_lod(points.header.lod_span);
+  if (new_type != format && false)
   {
     std::unique_ptr<uint8_t[]> new_data;
     uint64_t new_buffer_size = 0;
     bool dont_move = false;
-    if (new_format == format_m32 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint32_t, 1>))
+    if (new_type == type_m32 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint32_t, 1>))
       downcast_point_buffer<MT,C, uint32_t, 1>(world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
-    else if (new_format == format_m64 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint64_t, 1>))
+    else if (new_type == type_r64 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint64_t, 1>))
       downcast_point_buffer<MT,C, uint64_t, 1>(world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
-    else if (new_format == format_m128 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint64_t, 2>))
+    else if (new_type == type_m128 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint64_t, 2>))
       downcast_point_buffer<MT,C, uint64_t, 2>(world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
     else
       dont_move = true;
@@ -112,7 +112,7 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &po
     {
       world_morton_unique_ptr = std::move(new_data);
       buffer_size = new_buffer_size;
-      format = new_format;
+      format = new_type;
     }
   }
   points.buffers.data[0] = std::move(world_morton_unique_ptr);
@@ -138,11 +138,11 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
   convert_morton_to_pos(smallest_scale, tree_state.offset, global_min, global_min_pos);
   convert_morton_to_pos(smallest_scale, tree_state.offset, global_max, global_max_pos);
 
-  format_t target_format;
+  type_t target_format;
   if (points.header.min[0] == -std::numeric_limits<double>::max() && points.header.min[1] == -std::numeric_limits<double>::max() && points.header.min[2] == -std::numeric_limits<double>::max()
     && points.header.max[0] == std::numeric_limits<double>::max() && points.header.min[1] == std::numeric_limits<double>::max() && points.header.min[2] == std::numeric_limits<double>::max())
   {
-    target_format = format_t::format_m192;
+    target_format = type_t::type_m192;
   }
   else if (points.header.min[0] < global_min_pos[0] || points.header.min[1] < global_min_pos[1] || points.header.min[2] < global_min_pos[2]
     || global_max_pos[0] < points.header.max[0] || global_max_pos[1] < points.header.max[1] || global_max_pos[2] < points.header.max[2])
@@ -159,19 +159,19 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
     target_format = morton_format_from_lod(lod);
   }
 
-  target_format = format_m192;
+  target_format = type_m192;
   switch (target_format)
   {
-    case format_m32:
+    case type_m32:
       convert_and_sort_morton<T, uint32_t, 1>(tree_state, points, smallest_scale, target_format, error);
     break;
-    case format_m64:
+    case type_r64:
       convert_and_sort_morton<T, uint64_t, 1>(tree_state, points, smallest_scale, target_format, error);
     break;
-    case format_m128:
+    case type_m128:
       convert_and_sort_morton<T, uint64_t, 2>(tree_state, points, smallest_scale, target_format, error);
     break;
-  case format_m192:
+  case type_m192:
       convert_and_sort_morton<T, uint64_t, 3>(tree_state, points, smallest_scale, target_format, error);
     break;
   default:
@@ -180,11 +180,11 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
   }
 }
 
-void sort_points(const tree_global_state_t &tree_state, const std::vector<std::pair<format_t, components_t>> &attributes_def, points_t &points, error_t &error)
+void sort_points(const tree_global_state_t &tree_state, const std::vector<std::pair<type_t, components_t>> &attributes_def, points_t &points, error_t &error)
 {
   switch (attributes_def.front().first)
   {
-  case format_i32:
+  case type_i32:
     convert_and_sort<int32_t>(tree_state, points, error);
     break;
   default:

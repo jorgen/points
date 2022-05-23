@@ -37,7 +37,7 @@ struct attributes_extra_info_t
 struct attribute_source_lod_into_t
 {
   int index;
-  std::pair<format_t, components_t> format;
+  std::pair<type_t, components_t> format;
 };
 
 struct attribute_lod_info_t
@@ -46,7 +46,7 @@ struct attribute_lod_info_t
 };
 struct attribute_lod_mapping_t
 {
-  std::vector<std::pair<format_t, components_t>> destination;
+  std::vector<std::pair<type_t, components_t>> destination;
   std::vector<attribute_lod_info_t> source;
 };
 
@@ -67,8 +67,8 @@ public:
 
   const attributes_t &get(attributes_id_t id);
 
-  attribute_lod_mapping_t get_lod_attribute_mapping(const format_t point_type, const attributes_id_t *begin, const attributes_id_t *end);
-  std::vector<std::pair<format_t, components_t>> get_format_components(attributes_id_t id);
+  attribute_lod_mapping_t get_lod_attribute_mapping(const type_t point_type, const attributes_id_t *begin, const attributes_id_t *end);
+  std::vector<std::pair<type_t, components_t>> get_format_components(attributes_id_t id);
 private:
   const tree_global_state_t &_global_state;
   std::mutex _mutex;

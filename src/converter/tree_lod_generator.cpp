@@ -184,7 +184,7 @@ lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handl
   (void)this->data;
 }
 
-static uint32_t quantize_to_buffer(const buffer_t &source_buffer, std::pair<format_t, components_t> source_format, uint32_t count, buffer_t &destination_buffer, std::pair<format_t, components_t> destination_format)
+static uint32_t quantize_to_buffer(const buffer_t &source_buffer, std::pair<type_t, components_t> source_format, uint32_t count, buffer_t &destination_buffer, std::pair<type_t, components_t> destination_format)
 {
   for (uint32_t i = 0; i < count; i++)
   {
@@ -193,7 +193,7 @@ static uint32_t quantize_to_buffer(const buffer_t &source_buffer, std::pair<form
   return 0;
 }
 
-buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<format_t, components_t> format, offset_t offset)
+buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset)
 {
   int format_byte_size = size_for_format(format.first, format.second);
   buffer_t ret;
@@ -212,7 +212,7 @@ bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
   return super.data <= sub.data && buffer_end(sub) <= buffer_end(super);
 }
 
-uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<format_t, components_t>> &destination_map, const std::vector<attribute_source_lod_into_t> &source_map, attribute_buffers_t &destination_buffers, offset_t destination_offset)
+uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<type_t, components_t>> &destination_map, const std::vector<attribute_source_lod_into_t> &source_map, attribute_buffers_t &destination_buffers, offset_t destination_offset)
 {
   assert(destination_map.size() == source_map.size()
          && destination_map.size() == destination_buffers.buffers.size());

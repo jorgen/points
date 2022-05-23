@@ -26,7 +26,7 @@ namespace points
 {
 namespace converter
 {
-void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum format_t format, enum components_t components)
+void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum type_t format, enum components_t components)
 {
   attributes->attribute_names.emplace_back(new char[name_size + 1]);
   memcpy(attributes->attribute_names.back().get(), name, name_size);
@@ -67,7 +67,7 @@ void attributes_copy(const attributes_t &source, attributes_t &target)
   }
 }
 
-void attribute_buffers_initialize(const std::vector<std::pair<format_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
+void attribute_buffers_initialize(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
 {
   buffers.data.reserve(attributes_def.size());
   buffers.buffers.reserve(attributes_def.size());
@@ -79,7 +79,7 @@ void attribute_buffers_initialize(const std::vector<std::pair<format_t, componen
   }
 }
 
-void attribute_buffers_adjust_buffers_to_size(const std::vector<std::pair<format_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
+void attribute_buffers_adjust_buffers_to_size(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
 {
   assert(attributes_def.size() == buffers.buffers.size());
 

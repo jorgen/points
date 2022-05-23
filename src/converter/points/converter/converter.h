@@ -32,22 +32,22 @@ namespace points
 namespace converter
 {
 
-enum format_t
+enum type_t
 {
-  format_u8,
-  format_i8,
-  format_u16,
-  format_i16,
-  format_u32,
-  format_i32,
-  format_m32,
-  format_r32,
-  format_u64,
-  format_i64,
-  format_m64,
-  format_r64,
-  format_m128,
-  format_m192,
+  type_u8,
+  type_i8,
+  type_u16,
+  type_i16,
+  type_u32,
+  type_i32,
+  type_m32,
+  type_r32,
+  type_u64,
+  type_i64,
+  type_m64,
+  type_r64,
+  type_m128,
+  type_m192,
 };
 
 enum components_t
@@ -66,13 +66,13 @@ struct header_t
   double min[3];
   double max[3];
 };
-POINTS_CONVERTER_EXPORT void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum format_t format, enum components_t components);
+POINTS_CONVERTER_EXPORT void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum type_t format, enum components_t components);
 
 struct attribute_t
 {
   const char *name;
   uint32_t name_size;
-  format_t format;
+  type_t format;
   components_t components;
 };
 

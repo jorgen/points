@@ -67,47 +67,47 @@ struct laszip_handle_t
 };
 
 template<size_t N>
-void add_attribute(attributes_t *attributes, const char (&name)[N], format_t format, components_t components)
+void add_attribute(attributes_t *attributes, const char (&name)[N], type_t format, components_t components)
 {
   attributes_add_attribute(attributes, name, N - 1, format, components);
 }
 
 static void add_attributes_format_0(attributes_t *attributes)
 {
-  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ, format_i32, components_3);
-  add_attribute(attributes, POINTS_ATTRIBUTE_INTENSITY, format_u16, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_0, format_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_CLASSIFICATION, format_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_SCAN_ANGLE_RANK, format_i8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_USER_DATA, format_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_POINT_SOURCE_ID, format_u16, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ, type_i32, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_INTENSITY, type_u16, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_0, type_u8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_CLASSIFICATION, type_u8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_SCAN_ANGLE_RANK, type_i8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_USER_DATA, type_u8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_POINT_SOURCE_ID, type_u16, components_1);
 }
 
 static void add_attributes_format_1(attributes_t *attributes)
 {
   add_attributes_format_0(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_GPS_TIME, format_r64, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_GPS_TIME, type_r64, components_1);
 }
 
 static void add_attributes_format_2(attributes_t *attributes)
 {
   add_attributes_format_0(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, format_u16, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, type_u16, components_3);
 }
 
 static void add_attributes_format_3(attributes_t *attributes)
 {
   add_attributes_format_1(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, format_u16, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, type_u16, components_3);
 }
 
 static void add_wave_packets(attributes_t *attributes)
 {
-  add_attribute(attributes, POINTS_ATTRIBUTE_WAVE_PACKET_DESCRIPTOR_INDEX, format_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_BYTE_OFFSET_TO_WAVEFORM_DATA, format_u64, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_WAVEFORM_PACKET_SIZE_BYTES, format_u32, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_RETURN_POINT_WAVEFORM_LOCATION, format_r32, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ_T, format_r32, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_WAVE_PACKET_DESCRIPTOR_INDEX, type_u8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_BYTE_OFFSET_TO_WAVEFORM_DATA, type_r64, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_WAVEFORM_PACKET_SIZE_BYTES, type_u32, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_RETURN_POINT_WAVEFORM_LOCATION, type_r64, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ_T, type_r64, components_3);
 }
 
 static void add_attributes_format_4(attributes_t *attributes)
@@ -124,27 +124,27 @@ static void add_attributes_format_5(attributes_t *attributes)
 
 static void add_attributes_format_6(attributes_t *attributes)
 {
-  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ, format_i32, components_3);
-  add_attribute(attributes, POINTS_ATTRIBUTE_INTENSITY, format_u16, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_1, format_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_2, format_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_CLASSIFICATION, format_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_USER_DATA, format_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_SCAN_ANGLE, format_i16, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_POINT_SOURCE_ID, format_u16, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_GPS_TIME, format_r64, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ, type_i32, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_INTENSITY, type_u16, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_1, type_u8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_2, type_u8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_CLASSIFICATION, type_u8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_USER_DATA, type_u8, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_SCAN_ANGLE, type_i16, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_POINT_SOURCE_ID, type_u16, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_GPS_TIME, type_r64, components_1);
 }
 
 static void add_attributes_format_7(attributes_t *attributes)
 {
   add_attributes_format_6(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, format_u16, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, type_u16, components_3);
 }
 
 static void add_attributes_format_8(attributes_t *attributes)
 {
   add_attributes_format_7(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_NEAR_INFRARED, format_u16, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_NEAR_INFRARED, type_u16, components_1);
 }
 
 static void add_attributes_format_9(attributes_t *attributes)

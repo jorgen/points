@@ -73,7 +73,7 @@ struct internal_header_t : header_t
   input_data_id_t input_id;
   morton::morton192_t morton_min;
   morton::morton192_t morton_max;
-  format_t point_format;
+  type_t point_format;
   int lod_span;
 };
 

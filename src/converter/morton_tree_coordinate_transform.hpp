@@ -57,16 +57,16 @@ inline void convert_local_morton_to_world(const morton::morton_t<T, C> &local, c
   morton::morton_upcast(local, min, world);
 }
 
-inline format_t morton_format_from_lod(int lod)
+inline type_t morton_format_from_lod(int lod)
 {
   int top_index = lod * 3 + 3;
   if (top_index < 32)
-    return format_m32;
+    return type_m32;
   if (top_index < 64)
-    return format_m64;
+    return type_m64;
   if (top_index < 128)
-    return format_m128;
-  return format_m192;
+    return type_m128;
+  return type_m192;
 }
 
 }
