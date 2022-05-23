@@ -110,7 +110,7 @@ static void make_new_attributes(attribute_config_t &destination, const format_t 
   destination.child_attributes.reserve(count);
   destination.child_attributes.emplace_back(*begin);
   assert(std::string(POINTS_ATTRIBUTE_XYZ) == destination.attributes.attributes.front().name);
-  assert(destination.attributes.attributes.front().components == components_1);
+  //assert(destination.attributes.attributes.front().components == components_1);
   destination.attributes.attributes.front().format = point_type;
   for (int i = 1; i < count; i++)
   {
@@ -143,31 +143,39 @@ static void make_new_attributes(attribute_config_t &destination, const format_t 
     }
   }
 
-  destination.child_attribute_index_map.resize(count);
+  destination.attribute_lod_mapping.destination.resize(destination.attributes.attributes.size());
+  destination.attribute_lod_mapping.source.resize(count);
   for (int i = 0; i < count; i++)
   {
-    destination.child_attribute_index_map[i].resize(destination.attributes.attributes.size(), -1);
+    destination.attribute_lod_mapping.source[i].source_attributes.reserve(destination.attributes.attributes.size());
   }
   for (int dest_attrib_index = 0; dest_attrib_index < int(destination.attributes.attributes.size()); dest_attrib_index++)
   {
     auto &dest_attrib = destination.attributes.attributes[dest_attrib_index];
     destination.extra_info[dest_attrib_index].is_accumulative = false;
+    destination.attribute_lod_mapping.destination.emplace_back(dest_attrib.format, dest_attrib.components);
     for (int i = 0; i < count; i++)
     {
+      destination.attribute_lod_mapping.source[i].source_attributes.emplace_back();
+      auto &source_map_info = destination.attribute_lod_mapping.source[i].source_attributes.back();
+      source_map_info.index = -1;
+      source_map_info.format = {};
       auto &source = attributes_configs[begin[i].data];
       for (int source_attrib_index = 0; source_attrib_index < int(source.attributes.attributes.size()); source_attrib_index++)
       {
         auto &source_attrib = source.attributes.attributes[source_attrib_index];
         if (is_attribute_names_equal(dest_attrib, source_attrib))
         {
-          destination.child_attribute_index_map[i][dest_attrib_index] = source_attrib_index;
+          source_map_info.index = source_attrib_index;
+          source_map_info.format = std::make_pair(source_attrib.format, source_attrib.components);
+          break;
         }
       }
     }
   }
 }
 
-attributes_id_t attributes_configs_t::get_lod_attribute_id_for_input_attributes(const format_t point_type, const attributes_id_t *begin, const attributes_id_t *end)
+attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const format_t point_type, const attributes_id_t *begin, const attributes_id_t *end)
 {
   assert(begin < end);
   assert(attributes_ids_increase(begin, end));
@@ -186,11 +194,25 @@ attributes_id_t attributes_configs_t::get_lod_attribute_id_for_input_attributes(
   });
 
   if (it != _attributes_configs.end())
-    return { it - _attributes_configs.begin() };
+    return it->attribute_lod_mapping;
 
   _attributes_configs.emplace_back();
   auto &config = _attributes_configs.back();
   make_new_attributes(config, point_type, _attributes_configs, begin, end);
-  return {_attributes_configs.size() - 1};
+  return _attributes_configs.back().attribute_lod_mapping;
+}
+
+std::vector<std::pair<format_t, components_t>> attributes_configs_t::get_format_components(attributes_id_t id)
+{
+  assert(id.data < _attributes_configs.size());
+  std::unique_lock<std::mutex> lock(_mutex);
+  auto &attrib_config = _attributes_configs[id.data];
+  std::vector<std::pair<format_t, components_t>> ret;
+  ret.reserve(attrib_config.attributes.attributes.size());
+  for (auto &attrib : attrib_config.attributes.attributes)
+  {
+    ret.emplace_back(attrib.format, attrib.components);
+  }
+  return ret;
 }
 }}

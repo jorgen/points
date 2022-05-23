@@ -34,12 +34,28 @@ struct attributes_extra_info_t
   bool is_accumulative;
 };
 
+struct attribute_source_lod_into_t
+{
+  int index;
+  std::pair<format_t, components_t> format;
+};
+
+struct attribute_lod_info_t
+{
+  std::vector<attribute_source_lod_into_t> source_attributes;
+};
+struct attribute_lod_mapping_t
+{
+  std::vector<std::pair<format_t, components_t>> destination;
+  std::vector<attribute_lod_info_t> source;
+};
+
 struct attribute_config_t
 {
   attributes_t attributes;
   std::vector<attributes_extra_info_t> extra_info;
   std::vector<attributes_id_t> child_attributes;
-  std::vector<std::vector<int>> child_attribute_index_map;
+  attribute_lod_mapping_t attribute_lod_mapping;
 };
 
 class attributes_configs_t
@@ -51,8 +67,8 @@ public:
 
   const attributes_t &get(attributes_id_t id);
 
-  attributes_id_t get_lod_attribute_id_for_input_attributes(const format_t point_type, const attributes_id_t *begin, const attributes_id_t *end);
-
+  attribute_lod_mapping_t get_lod_attribute_mapping(const format_t point_type, const attributes_id_t *begin, const attributes_id_t *end);
+  std::vector<std::pair<format_t, components_t>> get_format_components(attributes_id_t id);
 private:
   const tree_global_state_t &_global_state;
   std::mutex _mutex;

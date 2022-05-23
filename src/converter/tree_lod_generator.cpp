@@ -20,6 +20,8 @@
 #include "worker.hpp"
 #include "cache_file_handler.hpp"
 #include "attributes_configs.hpp"
+#include "morton_tree_coordinate_transform.hpp"
+#include "input_header.hpp"
 
 #include <fmt/printf.h>
 
@@ -182,12 +184,55 @@ lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handl
   (void)this->data;
 }
 
+static uint32_t quantize_to_buffer(const buffer_t &source_buffer, std::pair<format_t, components_t> source_format, uint32_t count, buffer_t &destination_buffer, std::pair<format_t, components_t> destination_format)
+{
+  for (uint32_t i = 0; i < count; i++)
+  {
+
+  }
+  return 0;
+}
+
+buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<format_t, components_t> format, offset_t offset)
+{
+  int format_byte_size = size_for_format(format.first, format.second);
+  buffer_t ret;
+  auto offset_bytes = offset.data * format_byte_size;
+  ret.data = ((uint8_t *)buffer.data) + offset_bytes;
+  ret.size = buffer.size - offset_bytes;
+  return ret;
+}
+
+const void *buffer_end(const buffer_t &buffer)
+{
+  return ((const uint8_t*)buffer.data) + buffer.size;
+}
+bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
+{
+  return super.data <= sub.data && buffer_end(sub) <= buffer_end(super);
+}
+
+uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<format_t, components_t>> &destination_map, const std::vector<attribute_source_lod_into_t> &source_map, attribute_buffers_t &destination_buffers, offset_t destination_offset)
+{
+  assert(destination_map.size() == source_map.size()
+         && destination_map.size() == destination_buffers.buffers.size());
+  assert(count <= child.count.data);
+  for (int i = 0; i < int(destination_map.size()); i++)
+  {
+    read_points_t child_data(file_cache, child.input_id, source_map[i].index);
+    const buffer_t source_buffer = buffer_for_subset(child_data.data,source_map[i].format, child.offset);
+    assert(buffer_is_subset(child_data.data, source_buffer));
+    buffer_t  destination_buffer = buffer_for_subset(destination_buffers.buffers[i], destination_map[i], destination_offset);
+    assert(buffer_is_subset(destination_buffers.buffers[i], destination_buffer));
+    quantize_to_buffer(source_buffer, source_map[i].format, count, destination_buffer, destination_map[i]);
+  }
+  return 0;
+}
 
 void lod_worker_t::work()
 {
   uint64_t total_count = 0;
   attributes_t attributes;
-  attribute_buffers_t buffers;
   std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[data.child_data.size()]);
   for (int i = 0; i < int(data.child_data.size()); i++)
   {
@@ -202,25 +247,32 @@ void lod_worker_t::work()
   std::sort(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data < b.data; });
   attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
 
+  auto lod_format = morton_format_from_lod(data.lod);
 
+  auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(lod_format, attrib_begin, attrib_end);
+
+  attribute_buffers_t buffers;
+  attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, total_count);
 
   double ratio = double(lod_generator.global_state().node_limit) / double(total_count);
 
   if (ratio > 1.0)
     ratio = 1.0;
 
-  uint64_t total_acc_count = 0;
-  for (auto &child : data.child_data)
+  offset_t total_acc_count(0);
+  for (int i = 0; i < int(data.child_data.size()); i++)
   {
-    read_points_t points(cache, child.input_id);
+    auto &child = data.child_data[i];
+    uint32_t child_count = std::min(std::min(uint32_t(std::round(child.count.data * ratio)), child.count.data),
+                                    uint32_t(total_count - total_acc_count.data));
 
-    uint32_t child_count = std::min(uint32_t(std::round(child.count.data * ratio)), child.count.data);
+    quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, lod_attrib_mapping.source[i].source_attributes, buffers, total_acc_count);
 
-
-    total_acc_count += child_count;
+    total_acc_count.data += child_count;
     (void) attributes_configs;
   }
-  fmt::print("Total count {}, accumulated count {}\n", total_count, total_acc_count);
+  attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, total_acc_count.data);
+  fmt::print("Total count {}, accumulated count {}\n", total_count, total_acc_count.data);
 }
 
 void lod_worker_t::after_work(completion_t completion)

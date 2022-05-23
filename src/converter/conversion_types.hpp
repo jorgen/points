@@ -135,5 +135,29 @@ struct tree_global_state_t
   double inv_scale;
   double offset[3];
 };
+
+struct offset_t
+{
+  explicit offset_t(uint64_t data) : data(data){}
+  uint64_t data;
+};
+struct point_count_t
+{
+  explicit point_count_t(uint32_t data) : data(data){}
+  uint32_t data;
+};
+
+struct points_subset_t
+{
+  points_subset_t(input_data_id_t id, offset_t offset, point_count_t count)
+    : input_id(id)
+    , offset(offset)
+    , count(count)
+  {}
+  input_data_id_t input_id;
+  offset_t offset;
+  point_count_t count;
+};
+
 } // namespace converter
 } // namespace points

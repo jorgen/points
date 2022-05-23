@@ -135,10 +135,10 @@ private:
 
 struct read_points_t
 {
-  read_points_t(cache_file_handler_t &cache_file_handler, input_data_id_t id)
+  read_points_t(cache_file_handler_t &cache_file_handler, input_data_id_t id, int attribute_index)
     : cache_file_handler(cache_file_handler)
     , id(id)
-    , cache_item(cache_file_handler.ref_points(id, 0))
+    , cache_item(cache_file_handler.ref_points(id, attribute_index))
     , header(cache_item.header)
     , data(cache_item.data)
   {}
@@ -146,6 +146,7 @@ struct read_points_t
   {
     cache_file_handler.deref_points(id);
   }
+
   cache_file_handler_t &cache_file_handler;
   input_data_id_t id;
   points_cache_item_t cache_item;

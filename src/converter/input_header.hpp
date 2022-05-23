@@ -60,6 +60,11 @@ inline int size_for_format(format_t format)
   return 0;
 }
 
+inline int size_for_format(format_t format, components_t components)
+{
+  return size_for_format(format) * (int)components;
+}
+
 template<typename T, size_t C>
 void header_p_set_min_max(internal_header_t &header, const morton::morton_t<T, C> *begin, const morton::morton_t<T, C> *end)
 {
