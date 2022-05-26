@@ -192,8 +192,13 @@ lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handl
 template<size_t S_S, typename S, size_t D_S, typename D>
 void convert_type_impl(const std::pair<type_t, components_t> &source_format, const void *source, const std::pair<type_t, components_t> &destination_format, void *destination)
 {
-  auto &s = *reinterpret_cast<const S *((&)[S_S])>(source);
+  auto &s = *reinterpret_cast<const S (*)[S_S]>(source);
+  auto &d = *reinterpret_cast<D (*)[D_S]>(destination);
+  auto to_copy = std::min(S_S, D_S);
+  for (size_t i = 0; i < to_copy; i++)
+  {
 
+  }
 }
 
 template<size_t S_S, typename S, size_t D_S>
@@ -276,7 +281,6 @@ static void convert_point(const std::pair<type_t, components_t> &source_format, 
   case components_3: return convert_type_one<3>(source_format, source, destination_format, destination);
   case components_4: return convert_type_one<4>(source_format, source, destination_format, destination);
   }
-
 }
 
 static uint32_t quantize_to_buffer(const buffer_t &source_buffer, std::pair<type_t, components_t> source_format, uint32_t step, buffer_t &destination_buffer, std::pair<type_t, components_t> destination_format)
