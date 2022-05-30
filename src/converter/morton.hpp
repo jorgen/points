@@ -415,7 +415,7 @@ inline void morton_downcast(const morton_t<T1, C1> &a, morton_t<T2, C2> &b)
 }
 
 template<typename T1, size_t C1, typename T2, size_t C2>
-inline void morton_upcast(const morton_t<T1, C1> &a, const morton_t<T2, C2> &min, morton_t<T2, C2> &b)
+inline void morton_upcast(const morton_t<T1, C1> &a, const morton::morton192_t &min, morton_t<T2, C2> &b)
 {
   static_assert(sizeof(T1) <= sizeof(T2), "invalid size");
   static_assert(C1 <= C2, "invalid size");
@@ -426,21 +426,27 @@ inline void morton_upcast(const morton_t<T1, C1> &a, const morton_t<T2, C2> &min
   {
     b.data[0] |= (min.data[0] & (~T2(0) << (sizeof(T2) * 4)));
   }
-  if (C1 > 1)
+  if (C2 > 1)
   {
-    b.data[1] = a.data[1];
-  }
-  else
-  {
-    b.data[1] = min.data[1];
-  }
-  if (C1 > 2)
-  {
-    b.data[2] = a.data[2];
-  }
-  else
-  {
-    b.data[2] = min.data[2];
+    if (C1 > 1)
+    {
+      b.data[1] = a.data[1];
+    }
+    else
+    {
+      b.data[1] = min.data[1];
+    }
+    if (C2 > 2)
+    {
+      if (C1 > 2)
+      {
+        b.data[2] = a.data[2];
+      }
+      else
+      {
+        b.data[2] = min.data[2];
+      }
+    }
   }
 }
 

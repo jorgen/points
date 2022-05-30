@@ -189,116 +189,200 @@ lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handl
   (void)this->data;
 }
 
-template<size_t S_S, typename S, size_t D_S, typename D>
-void convert_type_impl(const std::pair<type_t, components_t> &source_format, const void *source, const std::pair<type_t, components_t> &destination_format, void *destination)
+template<typename T, size_t S>
+struct structured_data_t
 {
-  auto &s = *reinterpret_cast<const S (*)[S_S]>(source);
-  auto &d = *reinterpret_cast<D (*)[D_S]>(destination);
-  auto to_copy = std::min(S_S, D_S);
-  for (size_t i = 0; i < to_copy; i++)
-  {
+  T data[S];
+};
 
+template<size_t S_S, typename S, size_t D_S, typename D>
+uint32_t convert_points_impl(uint32_t step, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+{
+  using source_data_type_t = structured_data_t<S, S_S>;
+  using destination_data_type_t = structured_data_t<D, D_S>;
+  auto *source_it = reinterpret_cast<const source_data_type_t *>(source.data);
+  auto *destination_it = reinterpret_cast<destination_data_type_t *>(destination.data);
+  assert(source.size % sizeof(source_data_type_t) == 0);
+  assert(destination.size % sizeof(destination_data_type_t) == 0);
+  auto *source_end = source_it+ (source.size / sizeof(source_data_type_t));
+  auto *destination_end = destination_it + (destination.size / sizeof(destination_data_type_t));
+
+  auto copy_components = std::min(S_S, D_S);
+  uint32_t converted = 0;
+  for (;source_it < source_end && destination_it < destination_end; source_it += step, destination_it++, converted++)
+  {
+    for (int i = 0; i < int(copy_components); i++)
+    {
+      destination_it->data[i] = source_it->data[i];
+    }
+    for (int i = int(copy_components); i < int(D_S); i++)
+    {
+      destination_it->data[i] = D();
+    }
   }
+  return converted;
 }
 
 template<size_t S_S, typename S, size_t D_S>
-void convert_type_three(const std::pair<type_t, components_t> &source_format, const void *source, const std::pair<type_t, components_t> &destination_format, void *destination)
+uint32_t convert_points_three(uint32_t step, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
 {
   switch(destination_format.first)
   {
-  case type_u8: return convert_type_impl<S_S, S, D_S, uint8_t>(source_format, source, destination_format, destination);
-  case type_i8: return convert_type_impl<S_S, S, D_S, int8_t>(source_format, source, destination_format, destination);
-  case type_u16: return convert_type_impl<S_S,S, D_S,  uint16_t>(source_format, source, destination_format, destination);
-  case type_i16: return convert_type_impl<S_S,S, D_S,  int16_t>(source_format, source, destination_format, destination);
-  case type_u32: return convert_type_impl<S_S,S, D_S,  uint32_t>(source_format, source, destination_format, destination);
-  case type_i32: return convert_type_impl<S_S,S, D_S,  int32_t>(source_format, source, destination_format, destination);
-  case type_r32: return convert_type_impl<S_S,S, D_S,  float>(source_format, source, destination_format, destination);
-  case type_u64: return convert_type_impl<S_S,S, D_S,  uint64_t>(source_format, source, destination_format, destination);
-  case type_i64: return convert_type_impl<S_S,S, D_S,  int64_t>(source_format, source, destination_format, destination);
-  case type_r64: return convert_type_impl<S_S,S, D_S,  double>(source_format, source, destination_format, destination);
-  case type_m32:
-    assert(S_S == 1);
-    return convert_type_impl<S_S, S, D_S, morton::morton32_t>(source_format, source, destination_format, destination);
-  case type_m64:
-    assert(S_S == 1);
-    return convert_type_impl<S_S, S, D_S, morton::morton64_t>(source_format, source, destination_format, destination);
-  case type_m128:
-    assert(S_S == 1);
-    return convert_type_impl<S_S, S, D_S, morton::morton128_t>(source_format, source, destination_format, destination);
-  case type_m192:
-    assert(S_S == 1);
-    return convert_type_impl<S_S, S, D_S, morton::morton192_t>(source_format, source, destination_format, destination);
+  case type_u8: return convert_points_impl<S_S, S, D_S, uint8_t>(step, source_format, source, destination_format, destination);
+  case type_i8: return convert_points_impl<S_S, S, D_S, int8_t>(step, source_format, source, destination_format, destination);
+  case type_u16: return convert_points_impl<S_S,S, D_S,  uint16_t>(step, source_format, source, destination_format, destination);
+  case type_i16: return convert_points_impl<S_S,S, D_S,  int16_t>(step, source_format, source, destination_format, destination);
+  case type_u32: return convert_points_impl<S_S,S, D_S,  uint32_t>(step, source_format, source, destination_format, destination);
+  case type_i32: return convert_points_impl<S_S,S, D_S,  int32_t>(step, source_format, source, destination_format, destination);
+  case type_r32: return convert_points_impl<S_S,S, D_S,  float>(step, source_format, source, destination_format, destination);
+  case type_u64: return convert_points_impl<S_S,S, D_S,  uint64_t>(step, source_format, source, destination_format, destination);
+  case type_i64: return convert_points_impl<S_S,S, D_S,  int64_t>(step, source_format, source, destination_format, destination);
+  case type_r64: return convert_points_impl<S_S,S, D_S,  double>(step, source_format, source, destination_format, destination);
+  case type_m32: return convert_points_impl<S_S, S, 1, uint32_t>(step, source_format, source, destination_format, destination);
+  case type_m64: return convert_points_impl<S_S, S, 1, uint64_t>(step, source_format, source, destination_format, destination);
+  case type_m128: return convert_points_impl<S_S, S, 2, uint64_t>(step, source_format, source, destination_format, destination);
+  case type_m192: return convert_points_impl<S_S, S, 3, uint64_t>(step, source_format, source, destination_format, destination);
   }
+  return 0;
 }
 
 template<size_t S_S, typename S>
-void convert_type_two(const std::pair<type_t, components_t> &source_format, const void *source, const std::pair<type_t, components_t> &destination_format, void *destination)
+uint32_t convert_points_two(uint32_t step, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
 {
   switch(destination_format.second)
   {
-  case components_1: return convert_type_three<S_S, S, 1>(source_format, source, destination_format, destination);
-  case components_2: return convert_type_three<S_S, S, 2>(source_format, source, destination_format, destination);
-  case components_3: return convert_type_three<S_S, S, 3>(source_format, source, destination_format, destination);
-  case components_4: return convert_type_three<S_S, S, 4>(source_format, source, destination_format, destination);
+  case components_1: return convert_points_three<S_S, S, 1>(step, source_format, source, destination_format, destination);
+  case components_2: return convert_points_three<S_S, S, 2>(step, source_format, source, destination_format, destination);
+  case components_3: return convert_points_three<S_S, S, 3>(step, source_format, source, destination_format, destination);
+  case components_4: return convert_points_three<S_S, S, 4>(step, source_format, source, destination_format, destination);
   }
 }
 template<size_t S_S>
-void convert_type_one(const std::pair<type_t, components_t> &source_format, const void *source, const std::pair<type_t, components_t> &destination_format, void *destination)
+uint32_t convert_points_one(uint32_t step, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
 {
   switch(source_format.first)
   {
-  case type_u8: return convert_type_two<S_S, uint8_t>(source_format, source, destination_format, destination);
-  case type_i8: return convert_type_two<S_S, int8_t>(source_format, source, destination_format, destination);
-  case type_u16: return convert_type_two<S_S, uint16_t>(source_format, source, destination_format, destination);
-  case type_i16: return convert_type_two<S_S, int16_t>(source_format, source, destination_format, destination);
-  case type_u32: return convert_type_two<S_S, uint32_t>(source_format, source, destination_format, destination);
-  case type_i32: return convert_type_two<S_S, int32_t>(source_format, source, destination_format, destination);
-  case type_r32: return convert_type_two<S_S, float>(source_format, source, destination_format, destination);
-  case type_u64: return convert_type_two<S_S, uint64_t>(source_format, source, destination_format, destination);
-  case type_i64: return convert_type_two<S_S, int64_t>(source_format, source, destination_format, destination);
-  case type_r64: return convert_type_two<S_S, double>(source_format, source, destination_format, destination);
-  case type_m32:
-    assert(S_S == 1);
-    return convert_type_two<S_S, morton::morton32_t>(source_format, source, destination_format, destination);
-  case type_m64:
-    assert(S_S == 1);
-    return convert_type_two<S_S, morton::morton64_t>(source_format, source, destination_format, destination);
-  case type_m128:
-    assert(S_S == 1);
-    return convert_type_two<S_S, morton::morton128_t>(source_format, source, destination_format, destination);
-  case type_m192:
-    assert(S_S == 1);
-    return convert_type_two<S_S, morton::morton192_t>(source_format, source, destination_format, destination);
+  case type_u8: return convert_points_two<S_S, uint8_t>(step, source_format, source, destination_format, destination);
+  case type_i8: return convert_points_two<S_S, int8_t>(step, source_format, source, destination_format, destination);
+  case type_u16: return convert_points_two<S_S, uint16_t>(step, source_format, source, destination_format, destination);
+  case type_i16: return convert_points_two<S_S, int16_t>(step, source_format, source, destination_format, destination);
+  case type_u32: return convert_points_two<S_S, uint32_t>(step, source_format, source, destination_format, destination);
+  case type_i32: return convert_points_two<S_S, int32_t>(step, source_format, source, destination_format, destination);
+  case type_r32: return convert_points_two<S_S, float>(step, source_format, source, destination_format, destination);
+  case type_u64: return convert_points_two<S_S, uint64_t>(step, source_format, source, destination_format, destination);
+  case type_i64: return convert_points_two<S_S, int64_t>(step, source_format, source, destination_format, destination);
+  case type_r64: return convert_points_two<S_S, double>(step, source_format, source, destination_format, destination);
+  case type_m32: return convert_points_two<1, uint32_t>(step, source_format, source, destination_format, destination);
+  case type_m64: return convert_points_two<1, uint64_t>(step, source_format, source, destination_format, destination);
+  case type_m128: return convert_points_two<2, uint64_t>(step, source_format, source, destination_format, destination);
+  case type_m192: return convert_points_two<3, uint64_t>(step, source_format, source, destination_format, destination);
   }
+  return 0;
 }
 
-static void convert_point(const std::pair<type_t, components_t> &source_format, const void *source, const std::pair<type_t, components_t> &destination_format, void *destination)
+static uint32_t quantize_points(uint32_t step, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
 {
   switch(source_format.second)
   {
-  case components_1: return convert_type_one<1>(source_format, source, destination_format, destination);
-  case components_2: return convert_type_one<2>(source_format, source, destination_format, destination);
-  case components_3: return convert_type_one<3>(source_format, source, destination_format, destination);
-  case components_4: return convert_type_one<4>(source_format, source, destination_format, destination);
+  case components_1: return convert_points_one<1>(step, source_format, source, destination_format, destination);
+  case components_2: return convert_points_one<2>(step, source_format, source, destination_format, destination);
+  case components_3: return convert_points_one<3>(step, source_format, source, destination_format, destination);
+  case components_4: return convert_points_one<4>(step, source_format, source, destination_format, destination);
   }
 }
 
-static uint32_t quantize_to_buffer(const buffer_t &source_buffer, std::pair<type_t, components_t> source_format, uint32_t step, buffer_t &destination_buffer, std::pair<type_t, components_t> destination_format)
+template<typename S_M, typename D_M>
+static typename std::enable_if<sizeof(S_M) == sizeof(D_M), void>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, D_M &d)
 {
-  auto source_attribute_byte_size = size_for_format(source_format);
-  assert(source_buffer.size % source_attribute_byte_size == 0);
-  auto source_end = buffer_end(source_buffer);
-  auto source_it = source_buffer.data;
+  (void)morton_min;
+  memcpy(&d, &s, sizeof(d));
+}
 
-  auto dest_attribute_byte_size = size_for_format(destination_format);
-  assert(destination_buffer.size % dest_attribute_byte_size == 0);
-  auto dest_end = buffer_end(destination_buffer);
-  auto dest_it = destination_buffer.data;
-  for (;source_it < source_end && dest_it < dest_end; source_it = ((uint8_t *)source_it) + source_attribute_byte_size
-                              , dest_it = ((uint8_t *)dest_it) + dest_attribute_byte_size)
+template<size_t A, size_t B>
+struct less_than
+{
+  enum the_value { value = A < B };
+};
+template<size_t A, size_t B>
+struct greater_than
+{
+  enum the_value { value = A > B };
+};
+
+template<typename S_M, typename D_M>
+static typename std::enable_if<less_than<sizeof(S_M), sizeof(D_M)>::value, void>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, D_M &d)
+{
+  morton::morton_upcast(s, morton_min, d);
+}
+
+template<typename S_M, typename D_M>
+static typename std::enable_if<greater_than<sizeof(S_M), sizeof(D_M)>::value, S_M>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, D_M &d)
+{
+  (void)s;
+  (void)morton_min;
+  (void)d;
+  assert(false);
+}
+
+template<typename S_M, typename D_M>
+static uint32_t quantize_morton_two(uint32_t step, const morton::morton192_t &morton_min, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+{
+  assert(sizeof(S_M) <= sizeof(D_M));
+  auto *source_it = reinterpret_cast<const S_M *>(source.data);
+  auto *destination_it = reinterpret_cast<D_M *>(destination.data);
+  assert(source.size % sizeof(S_M) == 0);
+  assert(destination.size % sizeof(D_M) == 0);
+  auto *source_end = source_it+ (source.size / sizeof(S_M));
+  auto *destination_end = destination_it + (destination.size / sizeof(D_M));
+  uint32_t converted = 0;
+  for (;source_it < source_end && destination_it < destination_end; source_it += step, destination_it++, converted++)
   {
-    convert_point(source_format, source_it, destination_format, dest_it);
+    copy_morton<S_M, D_M>(*source_it, morton_min, *destination_it);
   }
+  return converted;
+}
+
+template<typename S_M>
+static uint32_t quantize_morton_one(uint32_t step, const morton::morton192_t &morton_min, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+{
+  type_t destination_type = destination_format.first;
+  assert(destination_type == type_m32
+         || destination_type == type_m64
+         || destination_type == type_m128
+         || destination_type == type_m192);
+  assert(int(destination_format.second) == 1);
+  switch(destination_type)
+  {
+  case type_m32: return quantize_morton_two<S_M, morton::morton32_t>(step, morton_min, source_format, source, destination_format, destination);
+  case type_m64: return quantize_morton_two<S_M, morton::morton64_t>(step, morton_min, source_format, source, destination_format, destination);
+  case type_m128: return quantize_morton_two<S_M, morton::morton128_t>(step, morton_min, source_format, source, destination_format, destination);
+  case type_m192: return quantize_morton_two<S_M, morton::morton192_t>(step, morton_min, source_format, source, destination_format, destination);
+  default:
+    break;
+  }
+
+  return 0;
+}
+
+static uint32_t quantize_morton(uint32_t step, const morton::morton192_t &morton_min, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+{
+  type_t source_type = source_format.first;
+  assert(source_type == type_m32
+         || source_type == type_m64
+         || source_type == type_m128
+         || source_type == type_m192);
+  assert(int(source_format.second) == 1);
+
+  switch(source_type)
+  {
+  case type_m32: return quantize_morton_one<morton::morton32_t>(step, morton_min, source_format, source, destination_format, destination);
+  case type_m64: return quantize_morton_one<morton::morton64_t>(step, morton_min, source_format, source, destination_format, destination);
+  case type_m128: return quantize_morton_one<morton::morton128_t>(step, morton_min, source_format, source, destination_format, destination);
+  case type_m192: return quantize_morton_one<morton::morton192_t>(step, morton_min, source_format, source, destination_format, destination);
+  default:
+    break;
+  }
+
   return 0;
 }
 
@@ -323,17 +407,26 @@ uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_
          && destination_map.size() == destination_buffers.buffers.size());
   assert(count <= child.count.data);
   uint32_t step = child.count.data / count;
-  uint32_t points_quantized = child.count.data / step + 1;
-  for (int i = 0; i < int(destination_map.size()); i++)
+  uint32_t quantized_morton = 0;
+  {
+    read_points_t child_data(file_cache, child.input_id, source_map[0].index);
+    const buffer_t source_buffer = buffer_for_subset(child_data.data,source_map[0].format, child.offset);
+    assert(buffer_is_subset(child_data.data, source_buffer));
+    buffer_t  destination_buffer = buffer_for_subset(destination_buffers.buffers[0], destination_map[0], destination_offset);
+    assert(buffer_is_subset(destination_buffers.buffers[0], destination_buffer));
+    quantized_morton = quantize_morton(step, child_data.header.morton_min, source_map[0].format, source_buffer, destination_map[0], destination_buffer);
+  }
+  for (int i = 1; i < int(destination_map.size()); i++)
   {
     read_points_t child_data(file_cache, child.input_id, source_map[i].index);
     const buffer_t source_buffer = buffer_for_subset(child_data.data,source_map[i].format, child.offset);
     assert(buffer_is_subset(child_data.data, source_buffer));
     buffer_t  destination_buffer = buffer_for_subset(destination_buffers.buffers[i], destination_map[i], destination_offset);
     assert(buffer_is_subset(destination_buffers.buffers[i], destination_buffer));
-    quantize_to_buffer(source_buffer, source_map[i].format, step, destination_buffer, destination_map[i]);
+    auto quantized_attribute = quantize_points(step, source_map[i].format, source_buffer, destination_map[i], destination_buffer);
+    assert(quantized_attribute == quantized_morton);
   }
-  return 0;
+  return quantized_morton;
 }
 
 void lod_worker_t::work()
