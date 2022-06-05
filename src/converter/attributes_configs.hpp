@@ -47,6 +47,7 @@ struct attribute_lod_info_t
 };
 struct attribute_lod_mapping_t
 {
+  attributes_id_t destination_id;
   std::vector<std::pair<type_t, components_t>> destination;
   std::vector<attribute_lod_info_t> source;
   const attribute_lod_info_t &get_source_mapping(attributes_id_t id) const

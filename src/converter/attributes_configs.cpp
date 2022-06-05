@@ -199,6 +199,7 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const ty
 
   _attributes_configs.emplace_back();
   auto &config = _attributes_configs.back();
+  config.attribute_lod_mapping.destination_id.data = uint32_t(_attributes_configs.size() - 1);
   make_new_attributes(config, point_type, _attributes_configs, begin, end);
   return _attributes_configs.back().attribute_lod_mapping;
 }

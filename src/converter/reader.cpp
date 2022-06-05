@@ -73,7 +73,7 @@ static std::vector<std::pair<type_t, components_t>> create_attribute_info(const 
 
 void get_data_worker_t::work()
 {
-  internal_header_initialize(header);
+  storage_header_initialize(header);
   attributes_t attributes;
   error_t *local_error = nullptr;
   void *user_ptr;

@@ -361,7 +361,7 @@ static uint32_t quantize_morton_one(uint32_t step, const morton::morton192_t &mo
   return 0;
 }
 
-uint32_t quantize_morton(uint32_t step, const morton::morton192_t &morton_min, type_t source_type, const buffer_t &source, type_t destination_type, buffer_t &destination)
+static uint32_t quantize_morton(uint32_t step, const morton::morton192_t &morton_min, type_t source_type, const buffer_t &source, type_t destination_type, buffer_t &destination)
 {
   assert(source_type == type_m32
          || source_type == type_m64
@@ -381,7 +381,7 @@ uint32_t quantize_morton(uint32_t step, const morton::morton192_t &morton_min, t
   return 0;
 }
 
-buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_t offset)
+static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_t offset)
 {
   int format_byte_size = size_for_format(format);
   buffer_t ret;
@@ -390,7 +390,7 @@ buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_
   ret.size = buffer.size - offset_bytes;
   return ret;
 }
-buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset)
+static buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset)
 {
   int format_byte_size = size_for_format(format.first, format.second);
   buffer_t ret;
@@ -400,12 +400,37 @@ buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<type_t, components_
   return ret;
 }
 
-bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
+static bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
 {
   return super.data <= sub.data && buffer_end(sub) <= buffer_end(super);
 }
 
-uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<type_t, components_t>> &destination_map, const attribute_lod_info_t &source_maping, attribute_buffers_t &destination_buffers, offset_t destination_offset)
+static void update_destination_header(const header_t &source_header, header_t &destination_header)
+{
+  if (source_header.min[0] < destination_header.min[0])
+    destination_header.min[0] = source_header.min[0];
+  if (source_header.min[1] < destination_header.min[1])
+    destination_header.min[1] = source_header.min[1];
+  if (source_header.min[2] < destination_header.min[2])
+    destination_header.min[2] = source_header.min[2];
+  if (destination_header.max[0] < source_header.max[0])
+    destination_header.max[0] = source_header.max[0];
+  if (destination_header.max[1] < source_header.max[1])
+    destination_header.max[1] = source_header.max[1];
+  if (destination_header.max[2] < source_header.max[2])
+    destination_header.max[2] = source_header.max[2];
+}
+
+static void update_destination_header(const storage_header_t &source_header, storage_header_t &destination_header)
+{
+  update_destination_header(source_header.public_header, destination_header.public_header);
+  if (source_header.morton_min < destination_header.morton_min)
+    destination_header.morton_min = source_header.morton_min;
+  if (destination_header.morton_max < source_header.morton_max)
+    destination_header.morton_max = source_header.morton_max;
+}
+
+uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<type_t, components_t>> &destination_map, const attribute_lod_info_t &source_maping, attribute_buffers_t &destination_buffers, offset_t destination_offset, storage_header_t &destination_header)
 {
   auto &source_map = source_maping.source_attributes;
   assert(destination_map.size() == source_map.size()
@@ -416,6 +441,7 @@ uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_
   uint32_t quantized_morton = 0;
   {
     read_points_t child_data(file_cache, child.input_id, source_map[0].index);
+    update_destination_header(child_data.header, destination_header);
     const buffer_t source_buffer = morton_buffer_for_subset(child_data.data,child_data.header.point_format, child.offset);
     assert(buffer_is_subset(child_data.data, source_buffer));
     buffer_t  destination_buffer = buffer_for_subset(destination_buffers.buffers[0], destination_map[0], destination_offset);
@@ -459,6 +485,9 @@ void lod_worker_t::work()
 
   auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(lod_format, attrib_begin, attrib_end);
 
+  storage_header_t destination_header;
+  storage_header_initialize(destination_header);
+  destination_header.input_id = data.name.input_id;
   attribute_buffers_t buffers;
   attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, total_count);
 
@@ -473,12 +502,21 @@ void lod_worker_t::work()
     if (child_count > 0)
     {
       auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
-      total_acc_count.data += quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, source_mapping, buffers, total_acc_count);
+      total_acc_count.data += quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, source_mapping, buffers, total_acc_count, destination_header);
       (void) attributes_configs;
+    }
+    else
+    {
+      auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
+      read_points_t child_data(cache, child.input_id, source_mapping.source_attributes[0].index);
+      update_destination_header(child_data.header, destination_header);
     }
   }
   attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, total_acc_count.data);
-  //cache.write()
+  destination_header.public_header.point_count = total_acc_count.data;
+  destination_header.point_format = lod_format;
+  destination_header.lod_span = data.lod;
+  cache.write(destination_header, std::move(buffers), lod_attrib_mapping.destination_id);
   fmt::print("Total count {}, accumulated count {}\n", total_count, total_acc_count.data);
 }
 

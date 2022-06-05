@@ -78,7 +78,7 @@ struct storage_header_t
   int lod_span;
 };
 
-inline void internal_header_initialize(storage_header_t &header)
+inline void storage_header_initialize(storage_header_t &header)
 {
   header.public_header.point_count = 0;
   header.public_header.offset[0] = 0.0;
