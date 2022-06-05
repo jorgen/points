@@ -95,7 +95,7 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &po
   assert(first < last);
   points.header.lod_span = morton::morton_lod(first, last);
   type_t new_type = morton_format_from_lod(points.header.lod_span);
-  if (new_type != format && false)
+  if (new_type != format)
   {
     std::unique_ptr<uint8_t[]> new_data;
     uint64_t new_buffer_size = 0;

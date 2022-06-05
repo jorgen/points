@@ -143,7 +143,7 @@ static void make_new_attributes(attribute_config_t &destination, const type_t po
     }
   }
 
-  destination.attribute_lod_mapping.destination.resize(destination.attributes.attributes.size());
+  destination.attribute_lod_mapping.destination.reserve(destination.attributes.attributes.size());
   destination.attribute_lod_mapping.source.resize(count);
   for (int i = 0; i < count; i++)
   {
@@ -156,6 +156,7 @@ static void make_new_attributes(attribute_config_t &destination, const type_t po
     destination.attribute_lod_mapping.destination.emplace_back(dest_attrib.format, dest_attrib.components);
     for (int i = 0; i < count; i++)
     {
+      destination.attribute_lod_mapping.source[i].id = begin[i];
       destination.attribute_lod_mapping.source[i].source_attributes.emplace_back();
       auto &source_map_info = destination.attribute_lod_mapping.source[i].source_attributes.back();
       source_map_info.index = -1;

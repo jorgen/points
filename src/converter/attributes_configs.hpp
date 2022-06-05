@@ -42,12 +42,22 @@ struct attribute_source_lod_into_t
 
 struct attribute_lod_info_t
 {
+  attributes_id_t id;
   std::vector<attribute_source_lod_into_t> source_attributes;
 };
 struct attribute_lod_mapping_t
 {
   std::vector<std::pair<type_t, components_t>> destination;
   std::vector<attribute_lod_info_t> source;
+  const attribute_lod_info_t &get_source_mapping(attributes_id_t id) const
+  {
+    auto it = std::find_if(source.begin(), source.end(), [id](const attribute_lod_info_t &info)
+    {
+      return info.id.data == id.data;
+    });
+    assert(it != source.end());
+    return *it;
+  }
 };
 
 struct attribute_config_t

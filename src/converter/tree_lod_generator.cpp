@@ -280,7 +280,7 @@ uint32_t convert_points_one(uint32_t step, const std::pair<type_t, components_t>
   return 0;
 }
 
-static uint32_t quantize_points(uint32_t step, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+uint32_t quantize_points(uint32_t step, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
 {
   switch(source_format.second)
   {
@@ -325,7 +325,7 @@ static typename std::enable_if<greater_than<sizeof(S_M), sizeof(D_M)>::value, S_
 }
 
 template<typename S_M, typename D_M>
-static uint32_t quantize_morton_two(uint32_t step, const morton::morton192_t &morton_min, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+static uint32_t quantize_morton_two(uint32_t step, const morton::morton192_t &morton_min, type_t source_type, const buffer_t &source, type_t destination_type, buffer_t &destination)
 {
   assert(sizeof(S_M) <= sizeof(D_M));
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
@@ -343,20 +343,18 @@ static uint32_t quantize_morton_two(uint32_t step, const morton::morton192_t &mo
 }
 
 template<typename S_M>
-static uint32_t quantize_morton_one(uint32_t step, const morton::morton192_t &morton_min, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+static uint32_t quantize_morton_one(uint32_t step, const morton::morton192_t &morton_min, type_t source_type, const buffer_t &source, type_t destination_type, buffer_t &destination)
 {
-  type_t destination_type = destination_format.first;
   assert(destination_type == type_m32
          || destination_type == type_m64
          || destination_type == type_m128
          || destination_type == type_m192);
-  assert(int(destination_format.second) == 1);
   switch(destination_type)
   {
-  case type_m32: return quantize_morton_two<S_M, morton::morton32_t>(step, morton_min, source_format, source, destination_format, destination);
-  case type_m64: return quantize_morton_two<S_M, morton::morton64_t>(step, morton_min, source_format, source, destination_format, destination);
-  case type_m128: return quantize_morton_two<S_M, morton::morton128_t>(step, morton_min, source_format, source, destination_format, destination);
-  case type_m192: return quantize_morton_two<S_M, morton::morton192_t>(step, morton_min, source_format, source, destination_format, destination);
+  case type_m32: return quantize_morton_two<S_M, morton::morton32_t>(step, morton_min, source_type, source, destination_type, destination);
+  case type_m64: return quantize_morton_two<S_M, morton::morton64_t>(step, morton_min, source_type, source, destination_type, destination);
+  case type_m128: return quantize_morton_two<S_M, morton::morton128_t>(step, morton_min, source_type, source, destination_type, destination);
+  case type_m192: return quantize_morton_two<S_M, morton::morton192_t>(step, morton_min, source_type, source, destination_type, destination);
   default:
     break;
   }
@@ -364,21 +362,19 @@ static uint32_t quantize_morton_one(uint32_t step, const morton::morton192_t &mo
   return 0;
 }
 
-static uint32_t quantize_morton(uint32_t step, const morton::morton192_t &morton_min, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+uint32_t quantize_morton(uint32_t step, const morton::morton192_t &morton_min, type_t source_type, const buffer_t &source, type_t destination_type, buffer_t &destination)
 {
-  type_t source_type = source_format.first;
   assert(source_type == type_m32
          || source_type == type_m64
          || source_type == type_m128
          || source_type == type_m192);
-  assert(int(source_format.second) == 1);
 
   switch(source_type)
   {
-  case type_m32: return quantize_morton_one<morton::morton32_t>(step, morton_min, source_format, source, destination_format, destination);
-  case type_m64: return quantize_morton_one<morton::morton64_t>(step, morton_min, source_format, source, destination_format, destination);
-  case type_m128: return quantize_morton_one<morton::morton128_t>(step, morton_min, source_format, source, destination_format, destination);
-  case type_m192: return quantize_morton_one<morton::morton192_t>(step, morton_min, source_format, source, destination_format, destination);
+  case type_m32: return quantize_morton_one<morton::morton32_t>(step, morton_min, source_type, source, destination_type, destination);
+  case type_m64: return quantize_morton_one<morton::morton64_t>(step, morton_min, source_type, source, destination_type, destination);
+  case type_m128: return quantize_morton_one<morton::morton128_t>(step, morton_min, source_type, source, destination_type, destination);
+  case type_m192: return quantize_morton_one<morton::morton192_t>(step, morton_min, source_type, source, destination_type, destination);
   default:
     break;
   }
@@ -386,6 +382,15 @@ static uint32_t quantize_morton(uint32_t step, const morton::morton192_t &morton
   return 0;
 }
 
+buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_t offset)
+{
+  int format_byte_size = size_for_format(format);
+  buffer_t ret;
+  auto offset_bytes = offset.data * format_byte_size;
+  ret.data = ((uint8_t *)buffer.data) + offset_bytes;
+  ret.size = buffer.size - offset_bytes;
+  return ret;
+}
 buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset)
 {
   int format_byte_size = size_for_format(format.first, format.second);
@@ -401,20 +406,22 @@ bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
   return super.data <= sub.data && buffer_end(sub) <= buffer_end(super);
 }
 
-uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<type_t, components_t>> &destination_map, const std::vector<attribute_source_lod_into_t> &source_map, attribute_buffers_t &destination_buffers, offset_t destination_offset)
+uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<type_t, components_t>> &destination_map, const attribute_lod_info_t &source_maping, attribute_buffers_t &destination_buffers, offset_t destination_offset)
 {
+  auto &source_map = source_maping.source_attributes;
   assert(destination_map.size() == source_map.size()
          && destination_map.size() == destination_buffers.buffers.size());
   assert(count <= child.count.data);
   uint32_t step = child.count.data / count;
+  (void)step;
   uint32_t quantized_morton = 0;
   {
     read_points_t child_data(file_cache, child.input_id, source_map[0].index);
-    const buffer_t source_buffer = buffer_for_subset(child_data.data,source_map[0].format, child.offset);
+    const buffer_t source_buffer = morton_buffer_for_subset(child_data.data,child_data.header.point_format, child.offset);
     assert(buffer_is_subset(child_data.data, source_buffer));
     buffer_t  destination_buffer = buffer_for_subset(destination_buffers.buffers[0], destination_map[0], destination_offset);
     assert(buffer_is_subset(destination_buffers.buffers[0], destination_buffer));
-    quantized_morton = quantize_morton(step, child_data.header.morton_min, source_map[0].format, source_buffer, destination_map[0], destination_buffer);
+    quantized_morton = quantize_morton(step, child_data.header.morton_min, child_data.header.point_format, source_buffer, destination_map[0].first, destination_buffer);
   }
   for (int i = 1; i < int(destination_map.size()); i++)
   {
@@ -442,7 +449,9 @@ void lod_worker_t::work()
     (void) got_attrib;
     assert(got_attrib);
   }
-  auto attrib_begin = attribute_ids.get();
+  std::unique_ptr<attributes_id_t[]> attribute_ids_sorted(new attributes_id_t[data.child_data.size()]);
+  memcpy(attribute_ids_sorted.get(), attribute_ids.get(), data.child_data.size() * sizeof(*(attribute_ids_sorted.get())));
+  auto attrib_begin = attribute_ids_sorted.get();
   auto attrib_end = attrib_begin + data.child_data.size();
   std::sort(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data < b.data; });
   attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
@@ -454,22 +463,20 @@ void lod_worker_t::work()
   attribute_buffers_t buffers;
   attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, total_count);
 
-  double ratio = double(lod_generator.global_state().node_limit) / double(total_count);
-
-  if (ratio > 1.0)
-    ratio = 1.0;
-
   offset_t total_acc_count(0);
   for (int i = 0; i < int(data.child_data.size()); i++)
   {
     auto &child = data.child_data[i];
+    double ratio = std::min(double(lod_generator.global_state().node_limit - total_acc_count.data) / double(total_count), 1.0);
     uint32_t child_count = std::min(std::min(uint32_t(std::round(child.count.data * ratio)), child.count.data),
                                     uint32_t(total_count - total_acc_count.data));
 
-    quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, lod_attrib_mapping.source[i].source_attributes, buffers, total_acc_count);
-
-    total_acc_count.data += child_count;
-    (void) attributes_configs;
+    if (child_count > 0)
+    {
+      auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
+      total_acc_count.data += quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, source_mapping, buffers, total_acc_count);
+      (void) attributes_configs;
+    }
   }
   attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, total_acc_count.data);
   fmt::print("Total count {}, accumulated count {}\n", total_count, total_acc_count.data);
