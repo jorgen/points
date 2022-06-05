@@ -42,7 +42,7 @@ namespace points
 namespace converter
 {
 
-struct reader_header_t : internal_header_t
+struct reader_header_t : storage_header_t
 {
   attributes_t attributes;
 };

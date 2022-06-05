@@ -77,7 +77,7 @@ void get_data_worker_t::work()
   attributes_t attributes;
   error_t *local_error = nullptr;
   void *user_ptr;
-  file.callbacks.init(file.filename.name, file.filename.name_length, &header, &attributes, &user_ptr, &local_error);
+  file.callbacks.init(file.filename.name, file.filename.name_length, &header.public_header, &attributes, &user_ptr, &local_error);
   callback_closer closer(file.callbacks, user_ptr);
   if (local_error)
   {
@@ -108,9 +108,9 @@ void get_data_worker_t::work()
     points_t points;
     points.header = header;
     points.header.input_id.sub = sub_part++;
-    points.header.point_count = convert_size;
+    points.header.public_header.point_count = convert_size;
     attribute_buffers_initialize(attribute_info, points.buffers, convert_size);
-    file.callbacks.convert_data(user_ptr, &header, header.attributes.attributes.data(), header.attributes.attributes.size(), convert_size, points.buffers.buffers.data(), points.buffers.buffers.size(), &local_points_read, &done_read_file, &local_error);
+    file.callbacks.convert_data(user_ptr, &header.public_header, header.attributes.attributes.data(), header.attributes.attributes.size(), convert_size, points.buffers.buffers.data(), points.buffers.buffers.size(), &local_points_read, &done_read_file, &local_error);
     if (local_error)
     {
       error.reset(local_error);
@@ -118,7 +118,7 @@ void get_data_worker_t::work()
     }
     attribute_buffers_adjust_buffers_to_size(attribute_info, points.buffers, local_points_read);
     points_read += local_points_read;
-    points.header.point_count = local_points_read;
+    points.header.public_header.point_count = local_points_read;
     split++;
     unsorted_points_event_t event(attribute_info, std::move(points), point_reader_file);
     unsorted_points_queue.post_event(std::move(event));

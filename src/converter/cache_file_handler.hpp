@@ -78,18 +78,18 @@ struct cache_file_read_request_t
 
 struct points_cache_item_t
 {
-  internal_header_t header;
+  storage_header_t header;
   buffer_t data;
 };
 
 class cache_file_handler_t
 {
 public:
-  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<internal_header_t> &write_done);
+  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<storage_header_t> &write_done);
 
   void handle_open_cache_file(uv_fs_t *request);
 
-  void write(const internal_header_t &header, attribute_buffers_t &&buffers, attributes_id_t attributes);
+  void write(const storage_header_t &header, attribute_buffers_t &&buffers, attributes_id_t attributes);
 
   bool attribute_id_for_input_id(input_data_id_t input_id, attributes_id_t &attribute_id);
 
@@ -97,7 +97,7 @@ public:
   void deref_points(input_data_id_t id);
 
 private:
-  void handle_write_events(std::vector<std::tuple<internal_header_t, attribute_buffers_t, attributes_id_t>> &&events);
+  void handle_write_events(std::vector<std::tuple<storage_header_t, attribute_buffers_t, attributes_id_t>> &&events);
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
 
@@ -108,8 +108,8 @@ private:
 
   uv_fs_t _open_request;
   event_pipe_t<error_t> &_cache_file_error;
-  event_pipe_t<internal_header_t> &_write_done;
-  event_pipe_t<std::tuple<internal_header_t, attribute_buffers_t, attributes_id_t >> _write_event_pipe;
+  event_pipe_t<storage_header_t> &_write_done;
+  event_pipe_t<std::tuple<storage_header_t, attribute_buffers_t, attributes_id_t >> _write_event_pipe;
 
   struct hash_input_data_id_t
   {
@@ -124,7 +124,7 @@ private:
   struct cache_item_impl_t
   {
     int ref;
-    internal_header_t header;
+    storage_header_t header;
     attributes_id_t attribute_id;
     attribute_buffers_t buffers;
   };
@@ -150,7 +150,7 @@ struct read_points_t
   cache_file_handler_t &cache_file_handler;
   input_data_id_t id;
   points_cache_item_t cache_item;
-  internal_header_t &header;
+  storage_header_t &header;
   buffer_t &data;
 };
 }

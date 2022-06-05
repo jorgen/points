@@ -31,7 +31,7 @@ tree_handler_t::tree_handler_t(const tree_global_state_t &global_state, cache_fi
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
   , _tree_lod_generator(_event_loop, global_state, _tree_cache, _file_cache, _attributes_configs)
-  , _add_points(_event_loop, [this](std::vector<internal_header_t> &&events){this->handle_add_points(std::move(events));})
+  , _add_points(_event_loop, [this](std::vector<storage_header_t> &&events){this->handle_add_points(std::move(events));})
   , _done_with_input(done_with_input)
 {
   _event_loop.add_about_to_block_listener(this);
@@ -43,12 +43,12 @@ void tree_handler_t::about_to_block()
 {
 }
 
-void tree_handler_t::add_points(internal_header_t &&header)
+void tree_handler_t::add_points(storage_header_t &&header)
 {
   _add_points.post_event(std::move(header));
 }
 
-void tree_handler_t::handle_add_points(std::vector<internal_header_t> &&events)
+void tree_handler_t::handle_add_points(std::vector<storage_header_t> &&events)
 {
   for (auto &event : events)
   {

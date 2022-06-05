@@ -68,30 +68,31 @@ struct attribute_buffers_t
   std::vector<std::unique_ptr<uint8_t[]>> data;
 };
 
-struct internal_header_t : header_t
+struct storage_header_t
 {
   input_data_id_t input_id;
+  header_t public_header;
   morton::morton192_t morton_min;
   morton::morton192_t morton_max;
   type_t point_format;
   int lod_span;
 };
 
-inline void internal_header_initialize(internal_header_t &header)
+inline void internal_header_initialize(storage_header_t &header)
 {
-  header.point_count = 0;
-  header.offset[0] = 0.0;
-  header.offset[1] = 0.0;
-  header.offset[2] = 0.0;
-  header.scale[0] = 0.0;
-  header.scale[1] = 0.0;
-  header.scale[2] = 0.0;
-  header.min[0] = -std::numeric_limits<double>::max();
-  header.min[1] = -std::numeric_limits<double>::max();
-  header.min[2] = -std::numeric_limits<double>::max();
-  header.max[0] = std::numeric_limits<double>::max();
-  header.max[1] = std::numeric_limits<double>::max();
-  header.max[2] = std::numeric_limits<double>::max();
+  header.public_header.point_count = 0;
+  header.public_header.offset[0] = 0.0;
+  header.public_header.offset[1] = 0.0;
+  header.public_header.offset[2] = 0.0;
+  header.public_header.scale[0] = 0.0;
+  header.public_header.scale[1] = 0.0;
+  header.public_header.scale[2] = 0.0;
+  header.public_header.min[0] = -std::numeric_limits<double>::max();
+  header.public_header.min[1] = -std::numeric_limits<double>::max();
+  header.public_header.min[2] = -std::numeric_limits<double>::max();
+  header.public_header.max[0] = std::numeric_limits<double>::max();
+  header.public_header.max[1] = std::numeric_limits<double>::max();
+  header.public_header.max[2] = std::numeric_limits<double>::max();
 
   morton::morton_init_min(header.morton_min);
   morton::morton_init_max(header.morton_max);
@@ -100,7 +101,7 @@ inline void internal_header_initialize(internal_header_t &header)
 
 struct points_t
 {
-  internal_header_t header;
+  storage_header_t header;
   attribute_buffers_t buffers;
 };
 

@@ -179,14 +179,13 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
   fmt::print("{}\n", to_lod.data.size());
 }
 
-lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_worker_data_t &data)
+lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_worker_data_t &data, int &inc_on_completed)
   : lod_generator(lod_generator)
   , cache(cache)
   , attributes_configs(attributes_configs)
   , data(data)
+  , inc_on_completed(inc_on_completed)
 {
-  (void)this->cache;
-  (void)this->data;
 }
 
 template<typename T, size_t S>
@@ -479,11 +478,13 @@ void lod_worker_t::work()
     }
   }
   attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, total_acc_count.data);
+  //cache.write()
   fmt::print("Total count {}, accumulated count {}\n", total_count, total_acc_count.data);
 }
 
 void lod_worker_t::after_work(completion_t completion)
 {
+  inc_on_completed++;
   lod_generator.iterate_workers();
 }
 
@@ -503,7 +504,7 @@ static void iterate_batch(tree_lod_generator_t &lod_generator, lod_worker_batch_
   while(batch.current_index < int(batch.worker_data.size())
         && current_lod == batch.worker_data[batch.current_index].lod)
   {
-    batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, batch.worker_data[batch.current_index]);
+    batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, batch.worker_data[batch.current_index], batch.completed);
     batch.current_index++;
     batch.lod_workers.back().enqueue(loop);
   }

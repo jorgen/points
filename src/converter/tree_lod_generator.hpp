@@ -43,15 +43,15 @@ class attributes_configs_t;
 class lod_worker_t : public worker_t
 {
 public:
-  lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_worker_data_t &data);
+  lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_worker_data_t &data, int &inc_on_completed);
   void work() override;
   void after_work(completion_t completion) override;
 private:
-
   tree_lod_generator_t &lod_generator;
   cache_file_handler_t &cache;
   attributes_configs_t &attributes_configs;
   lod_worker_data_t &data;
+  int &inc_on_completed;
 };
 
 struct lod_worker_batch_t

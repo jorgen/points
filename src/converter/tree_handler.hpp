@@ -32,10 +32,10 @@ public:
 
   void about_to_block() override;
 
-  void add_points(internal_header_t &&header);
+  void add_points(storage_header_t &&header);
   void generate_lod(morton::morton192_t &min);
 private:
-  void handle_add_points(std::vector<internal_header_t> &&events);
+  void handle_add_points(std::vector<storage_header_t> &&events);
   threaded_event_loop_t _event_loop;
   bool _initialized;
 
@@ -48,7 +48,7 @@ private:
 
   tree_lod_generator_t _tree_lod_generator;
 
-  event_pipe_t<internal_header_t> _add_points;
+  event_pipe_t<storage_header_t> _add_points;
   event_pipe_t<input_data_id_t> &_done_with_input;
 };
 

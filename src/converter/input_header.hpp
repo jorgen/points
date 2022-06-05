@@ -70,25 +70,25 @@ inline int size_for_format(std::pair<type_t, components_t> format)
 }
 
 template<typename T, size_t C>
-void header_p_set_min_max(internal_header_t &header, const morton::morton_t<T, C> *begin, const morton::morton_t<T, C> *end)
+void header_p_set_min_max(storage_header_t &header, const morton::morton_t<T, C> *begin, const morton::morton_t<T, C> *end)
 {
   uint64_t final_min[3];
   uint64_t final_max[3];
   morton::decode(*begin, final_min);
   morton::decode(*(end - 1),final_max);
-  header.min[0] = final_min[0] * header.scale[0] + header.offset[0];
-  header.min[1] = final_min[1] * header.scale[1] + header.offset[1];
-  header.min[2] = final_min[2] * header.scale[2] + header.offset[2];
+  header.public_header.min[0] = final_min[0] * header.public_header.scale[0] + header.public_header.offset[0];
+  header.public_header.min[1] = final_min[1] * header.public_header.scale[1] + header.public_header.offset[1];
+  header.public_header.min[2] = final_min[2] * header.public_header.scale[2] + header.public_header.offset[2];
   
-  header.max[0] = final_max[0] * header.scale[0] + header.offset[0];
-  header.max[1] = final_max[1] * header.scale[1] + header.offset[1];
-  header.max[2] = final_max[2] * header.scale[2] + header.offset[2];
+  header.public_header.max[0] = final_max[0] * header.public_header.scale[0] + header.public_header.offset[0];
+  header.public_header.max[1] = final_max[1] * header.public_header.scale[1] + header.public_header.offset[1];
+  header.public_header.max[2] = final_max[2] * header.public_header.scale[2] + header.public_header.offset[2];
 }
 
-void header_p_set_morton_aabb(const tree_global_state_t &state, internal_header_t &header);
+void header_p_set_morton_aabb(const tree_global_state_t &state, storage_header_t &header);
 
 template<typename T, size_t C>
-void header_p_adjust_to_sorted_data(const tree_global_state_t &state, internal_header_t &header, const morton::morton_t<T, C> *begin, const morton::morton_t<T,C> *end)
+void header_p_adjust_to_sorted_data(const tree_global_state_t &state, storage_header_t &header, const morton::morton_t<T, C> *begin, const morton::morton_t<T,C> *end)
 {
   header_p_set_min_max(header, begin, end);
   header_p_set_morton_aabb(state, header);

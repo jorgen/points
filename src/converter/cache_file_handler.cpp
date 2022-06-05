@@ -27,7 +27,7 @@ namespace points
 {
 namespace converter
 {
-cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<internal_header_t> &write_done)
+cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<storage_header_t> &write_done)
   : _cache_file_name(cache_file)
   , _state(state)
   , _attributes_configs(attributes_configs)
@@ -35,7 +35,7 @@ cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, con
   , _file_opened(false)
   , _cache_file_error(cache_file_error)
   , _write_done(write_done)
-  , _write_event_pipe(_event_loop, [this](std::vector<std::tuple<internal_header_t, attribute_buffers_t, attributes_id_t>> &&events){this->handle_write_events(std::move(events));})
+  , _write_event_pipe(_event_loop, [this](std::vector<std::tuple<storage_header_t, attribute_buffers_t, attributes_id_t>> &&events){this->handle_write_events(std::move(events));})
 {
   (void) _state;
   _open_request.data = this;
@@ -65,12 +65,12 @@ void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
   }
 }
 
-void cache_file_handler_t::write(const internal_header_t &header, attribute_buffers_t &&buffers, attributes_id_t attributes)
+void cache_file_handler_t::write(const storage_header_t &header, attribute_buffers_t &&buffers, attributes_id_t attributes)
 {
   _write_event_pipe.post_event(std::make_tuple(header, std::move(buffers), attributes));
 }
 
-void cache_file_handler_t::handle_write_events(std::vector<std::tuple<internal_header_t, attribute_buffers_t, attributes_id_t>> &&events)
+void cache_file_handler_t::handle_write_events(std::vector<std::tuple<storage_header_t, attribute_buffers_t, attributes_id_t>> &&events)
 {
   std::unique_lock<std::mutex> lock(_cache_map_mutex);
   for (auto &event : events)

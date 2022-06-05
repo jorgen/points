@@ -39,10 +39,10 @@ struct points_collection_t
   std::vector<points_subset_t> data;
 };
 
-inline void points_data_initialize(points_collection_t &to_init, const internal_header_t &header)
+inline void points_data_initialize(points_collection_t &to_init, const storage_header_t &header)
 {
-  to_init.point_count = header.point_count;
-  to_init.data.emplace_back(header.input_id, offset_t(0), point_count_t(header.point_count));
+  to_init.point_count = header.public_header.point_count;
+  to_init.data.emplace_back(header.input_id, offset_t(0), point_count_t(header.public_header.point_count));
   to_init.max = header.morton_max;
   to_init.min = header.morton_min;
   to_init.min_lod = header.lod_span;
@@ -66,15 +66,15 @@ inline void points_data_add(points_collection_t &dest, points_collection_t &&to_
   dest.min_lod = morton::morton_lod(dest.min, dest.max);
 }
 
-inline void points_data_add(points_collection_t &dest, const internal_header_t &to_add)
+inline void points_data_add(points_collection_t &dest, const storage_header_t &to_add)
 {
   if (dest.point_count == 0)
   {
     points_data_initialize(dest, to_add);
     return;
   }
-  dest.data.emplace_back(to_add.input_id, offset_t(0), point_count_t(to_add.point_count));
-  dest.point_count += to_add.point_count;
+  dest.data.emplace_back(to_add.input_id, offset_t(0), point_count_t(to_add.public_header.point_count));
+  dest.point_count += to_add.public_header.point_count;
   if (to_add.morton_min < dest.min)
     dest.min = to_add.morton_min;
   if (dest.max < to_add.morton_max)
@@ -111,8 +111,8 @@ struct tree_cache_t
 
 };
 
-tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const internal_header_t &header);
-tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const internal_header_t &header);
+tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header);
+tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const storage_header_t &header);
 }
 }
 

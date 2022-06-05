@@ -65,7 +65,7 @@ template <typename T, typename MT, size_t C>
 void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &points, double smallest_scale, type_t format, error_t &error)
 {
   auto &header = points.header;
-  uint64_t count = header.point_count;
+  uint64_t count = header.public_header.point_count;
   uint64_t buffer_size = sizeof(morton::morton_t<MT,C>) * count;
   std::unique_ptr<uint8_t[]> world_morton_unique_ptr(new uint8_t[buffer_size]);
   morton::morton_t<MT,C> *morton_begin = reinterpret_cast<morton::morton_t<MT,C>*>(world_morton_unique_ptr.get());
@@ -77,9 +77,9 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &po
   for (uint64_t i = 0; i < count; i++)
   {
     auto &point = point_data[i];
-    pos[0] = point.data[0] * header.scale[0] + header.offset[0];
-    pos[1] = point.data[1] * header.scale[1] + header.offset[1];
-    pos[2] = point.data[2] * header.scale[2] + header.offset[2];
+    pos[0] = point.data[0] * header.public_header.scale[0] + header.public_header.offset[0];
+    pos[1] = point.data[1] * header.public_header.scale[1] + header.public_header.offset[1];
+    pos[2] = point.data[2] * header.public_header.scale[2] + header.public_header.offset[2];
     tmp[0] = pos[0] - tree_state.offset[0] * inv_scale;
     tmp[1] = pos[1] - tree_state.offset[1] * inv_scale;
     tmp[2] = pos[2] - tree_state.offset[2] * inv_scale;
@@ -128,7 +128,7 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
 {
   auto &header = points.header;
 
-  double smallest_scale = std::min(std::min(std::min(header.scale[0], header.scale[1]), header.scale[2]), tree_state.scale);
+  double smallest_scale = std::min(std::min(std::min(header.public_header.scale[0], header.public_header.scale[1]), header.public_header.scale[2]), tree_state.scale);
 
   morton::morton192_t global_min = {};
   morton::morton192_t global_max;
@@ -139,13 +139,13 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
   convert_morton_to_pos(smallest_scale, tree_state.offset, global_max, global_max_pos);
 
   type_t target_format;
-  if (points.header.min[0] == -std::numeric_limits<double>::max() && points.header.min[1] == -std::numeric_limits<double>::max() && points.header.min[2] == -std::numeric_limits<double>::max()
-    && points.header.max[0] == std::numeric_limits<double>::max() && points.header.min[1] == std::numeric_limits<double>::max() && points.header.min[2] == std::numeric_limits<double>::max())
+  if (points.header.public_header.min[0] == -std::numeric_limits<double>::max() && points.header.public_header.min[1] == -std::numeric_limits<double>::max() && points.header.public_header.min[2] == -std::numeric_limits<double>::max()
+    && points.header.public_header.max[0] == std::numeric_limits<double>::max() && points.header.public_header.min[1] == std::numeric_limits<double>::max() && points.header.public_header.min[2] == std::numeric_limits<double>::max())
   {
     target_format = type_t::type_m192;
   }
-  else if (points.header.min[0] < global_min_pos[0] || points.header.min[1] < global_min_pos[1] || points.header.min[2] < global_min_pos[2]
-    || global_max_pos[0] < points.header.max[0] || global_max_pos[1] < points.header.max[1] || global_max_pos[2] < points.header.max[2])
+  else if (points.header.public_header.min[0] < global_min_pos[0] || points.header.public_header.min[1] < global_min_pos[1] || points.header.public_header.min[2] < global_min_pos[2]
+    || global_max_pos[0] < points.header.public_header.max[0] || global_max_pos[1] < points.header.public_header.max[1] || global_max_pos[2] < points.header.public_header.max[2])
   {
     error.msg = "Data for is outside the dataset range.";
     error.code = -1;
@@ -153,8 +153,8 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
   }
   else
   {
-    convert_pos_to_morton(smallest_scale, tree_state.offset, points.header.min,  points.header.morton_min);
-    convert_pos_to_morton(smallest_scale, tree_state.offset, points.header.max,  points.header.morton_max);
+    convert_pos_to_morton(smallest_scale, tree_state.offset, points.header.public_header.min,  points.header.morton_min);
+    convert_pos_to_morton(smallest_scale, tree_state.offset, points.header.public_header.max,  points.header.morton_max);
     int lod = morton::morton_lod(points.header.morton_min, points.header.morton_max);
     target_format = morton_format_from_lod(lod);
   }

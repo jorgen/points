@@ -42,7 +42,7 @@ processor_t::processor_t(converter_t &converter)
   , _point_reader_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
   , _point_reader_done_with_file(_event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
   , _cache_file_error(_event_loop, [this](std::vector<error_t> &&errors) { this->handle_cache_file_error(std::move(errors));})
-  , _points_written(_event_loop, [this](std::vector<internal_header_t> &&events) {this->handle_points_written(std::move(events)); })
+  , _points_written(_event_loop, [this](std::vector<storage_header_t> &&events) {this->handle_points_written(std::move(events)); })
   , _tree_done_with_input(_event_loop, [this](std::vector<input_data_id_t> &&events) { this->handle_tree_done_with_input(std::move(events));})
   , _pre_init_file_retriever(_converter.tree_state, _input_event_loop, _pre_init_for_files, _point_reader_file_errors)
   , _point_reader(_converter.tree_state, _input_event_loop, _attributes_for_source, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
@@ -197,7 +197,7 @@ void processor_t::handle_cache_file_error(std::vector<error_t> &&errors)
   }
 }
 
-void processor_t::handle_points_written(std::vector<internal_header_t> &&events)
+void processor_t::handle_points_written(std::vector<storage_header_t> &&events)
 {
   for (auto &event : events)
     _tree_handler.add_points(std::move(event));

@@ -41,7 +41,7 @@ tree_t &tree_cache_add_tree(tree_cache_t &tree_cache, tree_t *(&parent))
   return tree_cache.data.back();
 }
 
-tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const internal_header_t &header)
+tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header)
 {
   tree_t &tree = tree_cache_create_root_tree(tree_cache);
   morton::morton192_t mask = morton::morton_xor(header.morton_min, header.morton_max);
@@ -292,15 +292,15 @@ static bool validate_min_offset(uint64_t min_offset, uint64_t scaled_offset)
   return min_offset <= scaled_offset;
 }
 
-static bool validate_points_offset(const internal_header_t &header)
+static bool validate_points_offset(const storage_header_t &header)
 {
-  const double (&offsets)[3] = header.offset;
+  const double (&offsets)[3] = header.public_header.offset;
   if (offsets[0] == 0.0 && offsets[1] == 0.0 && offsets[2] == 0.0)
     return true;
   uint64_t scaled_offsets[3];
-  scaled_offsets[0] = uint64_t(offsets[0] / header.scale[0]);
-  scaled_offsets[1] = uint64_t(offsets[1] / header.scale[1]);
-  scaled_offsets[2] = uint64_t(offsets[2] / header.scale[2]);
+  scaled_offsets[0] = uint64_t(offsets[0] / header.public_header.scale[0]);
+  scaled_offsets[1] = uint64_t(offsets[1] / header.public_header.scale[1]);
+  scaled_offsets[2] = uint64_t(offsets[2] / header.public_header.scale[2]);
 
   uint64_t min_offset = uint64_t(1) << header.lod_span;
   return validate_min_offset(min_offset, scaled_offsets[0])
@@ -375,7 +375,7 @@ static tree_id_t reparent_tree(tree_cache_t &tree_cache, tree_id_t tree_id, cons
 }
 
 
-tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const internal_header_t &header)
+tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const storage_header_t &header)
 {
   tree_id_t ret = tree_id;
   auto *tree = tree_cache.get(tree_id);
