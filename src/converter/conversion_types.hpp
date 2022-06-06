@@ -43,6 +43,10 @@ inline bool operator==(const input_data_id_t &a, const input_data_id_t &b)
 {
   return a.data == b.data && a.sub == b.sub;
 }
+inline bool input_data_id_is_leaf(input_data_id_t input)
+{
+  return !(input.sub & decltype(input.sub)(1) << 31);
+}
 
 struct attributes_id_t
 {

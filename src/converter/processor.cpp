@@ -200,7 +200,8 @@ void processor_t::handle_cache_file_error(std::vector<error_t> &&errors)
 void processor_t::handle_points_written(std::vector<storage_header_t> &&events)
 {
   for (auto &event : events)
-    _tree_handler.add_points(std::move(event));
+    if (input_data_id_is_leaf(event.input_id))
+        _tree_handler.add_points(std::move(event));
 }
 
 void processor_t::handle_tree_done_with_input(std::vector<input_data_id_t> &&events)
