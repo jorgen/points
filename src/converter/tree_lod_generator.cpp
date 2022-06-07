@@ -381,22 +381,33 @@ static uint32_t quantize_morton(uint32_t step, const morton::morton192_t &morton
   return 0;
 }
 
-static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_t offset)
+static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_t offset, point_count_t count)
 {
-  int format_byte_size = size_for_format(format);
+  uint64_t format_byte_size = uint64_t(size_for_format(format));
   buffer_t ret;
   auto offset_bytes = offset.data * format_byte_size;
   ret.data = ((uint8_t *)buffer.data) + offset_bytes;
-  ret.size = buffer.size - offset_bytes;
+  ret.size = uint64_t(count.data) * format_byte_size;
+  assert(ret.size + offset.data <= buffer.size);
   return ret;
 }
-static buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset)
+static buffer_t buffer_for_target(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset)
 {
   int format_byte_size = size_for_format(format.first, format.second);
   buffer_t ret;
   auto offset_bytes = offset.data * format_byte_size;
   ret.data = ((uint8_t *)buffer.data) + offset_bytes;
   ret.size = buffer.size - offset_bytes;
+  return ret;
+}
+static buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset, point_count_t count)
+{
+  int format_byte_size = size_for_format(format.first, format.second);
+  buffer_t ret;
+  auto offset_bytes = offset.data * format_byte_size;
+  ret.data = ((uint8_t *)buffer.data) + offset_bytes;
+  ret.size = uint64_t(count.data) * format_byte_size;
+  assert(ret.size + offset.data <= buffer.size);
   return ret;
 }
 
@@ -430,7 +441,7 @@ static void update_destination_header(const storage_header_t &source_header, sto
     destination_header.morton_max = source_header.morton_max;
 }
 
-uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<type_t, components_t>> &destination_map, const attribute_lod_info_t &source_maping, attribute_buffers_t &destination_buffers, offset_t destination_offset, storage_header_t &destination_header)
+static uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<type_t, components_t>> &destination_map, const attribute_lod_info_t &source_maping, attribute_buffers_t &destination_buffers, offset_t destination_offset, storage_header_t &destination_header)
 {
   auto &source_map = source_maping.source_attributes;
   assert(destination_map.size() == source_map.size()
@@ -442,18 +453,18 @@ uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_
   {
     read_points_t child_data(file_cache, child.input_id, source_map[0].index);
     update_destination_header(child_data.header, destination_header);
-    const buffer_t source_buffer = morton_buffer_for_subset(child_data.data,child_data.header.point_format, child.offset);
+    const buffer_t source_buffer = morton_buffer_for_subset(child_data.data,child_data.header.point_format, child.offset, child.count);
     assert(buffer_is_subset(child_data.data, source_buffer));
-    buffer_t  destination_buffer = buffer_for_subset(destination_buffers.buffers[0], destination_map[0], destination_offset);
+    buffer_t  destination_buffer = buffer_for_target(destination_buffers.buffers[0], destination_map[0], destination_offset);
     assert(buffer_is_subset(destination_buffers.buffers[0], destination_buffer));
     quantized_morton = quantize_morton(step, child_data.header.morton_min, child_data.header.point_format, source_buffer, destination_map[0].first, destination_buffer);
   }
   for (int i = 1; i < int(destination_map.size()); i++)
   {
     read_points_t child_data(file_cache, child.input_id, source_map[i].index);
-    const buffer_t source_buffer = buffer_for_subset(child_data.data,source_map[i].format, child.offset);
+    const buffer_t source_buffer = buffer_for_subset(child_data.data,source_map[i].format, child.offset, child.count);
     assert(buffer_is_subset(child_data.data, source_buffer));
-    buffer_t  destination_buffer = buffer_for_subset(destination_buffers.buffers[i], destination_map[i], destination_offset);
+    buffer_t  destination_buffer = buffer_for_target(destination_buffers.buffers[i], destination_map[i], destination_offset);
     assert(buffer_is_subset(destination_buffers.buffers[i], destination_buffer));
     auto quantized_attribute = quantize_points(step, source_map[i].format, source_buffer, destination_map[i], destination_buffer);
     assert(quantized_attribute == quantized_morton);
