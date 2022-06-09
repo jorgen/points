@@ -1,7 +1,8 @@
 #ifndef POINTS_RENDERER_H
 #define POINTS_RENDERER_H
 
-#include <points/render/export.h>
+#include <points/export.h>
+#include <points/format.h>
 #include <points/render/aabb.h>
 #include <points/render/buffer.h>
 
@@ -18,23 +19,6 @@ enum buffer_type_t
   buffer_type_vertex,
   buffer_type_index,
   buffer_type_uniform
-};
-enum format_t
-{
-  format_u8,
-  format_u16,
-  format_u32,
-  format_r32,
-  format_r64
-};
-
-enum components_t
-{
-  components_1 = 1,
-  components_2 = 2,
-  components_3 = 3,
-  components_4 = 4,
-  components_4x4 = 5
 };
 
 enum texture_type_t
@@ -104,12 +88,12 @@ struct renderer_t;
 typedef void (*renderer_dirty_callback_t)(struct renderer_t* renderer, void *renderer_user_ptr);
 
 typedef void (*renderer_create_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, enum buffer_type_t buffer_type, void **buffer_user_ptr);
-typedef void (*renderer_initialize_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *buffer_user_ptr, enum format_t format, enum components_t components, int buffer_size, void *data);
+typedef void (*renderer_initialize_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *buffer_user_ptr, enum type_t type, enum components_t components, int buffer_size, void *data);
 typedef void (*renderer_modify_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
 typedef void (*renderer_destroy_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, void *buffer_user_ptr);
 
 typedef void (*renderer_create_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, enum texture_type_t buffer_texture_type, void **buffer_user_ptr);
-typedef void (*renderer_initialize_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *texture_user_ptr, enum texture_type_t buffer_texture_type, enum format_t format, enum components_t components, int size[3], void *data);
+typedef void (*renderer_initialize_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *texture_user_ptr, enum texture_type_t buffer_texture_type, enum type_t type, enum components_t components, int size[3], void *data);
 typedef void (*renderer_modify_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *texture_user_ptr, enum texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
 typedef void (*renderer_destroy_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, void *texture_user_ptr);
 
@@ -129,14 +113,14 @@ struct renderer_callbacks_t
 };
 
 struct data_source_t;
-POINTS_RENDER_EXPORT struct renderer_t* renderer_create();
-POINTS_RENDER_EXPORT void renderer_destroy(struct renderer_t *renderer);
-POINTS_RENDER_EXPORT void renderer_add_camera(struct renderer_t* renderer, struct camera_t* camera);
-POINTS_RENDER_EXPORT void renderer_remove_camera(struct renderer_t* renderer, struct camera_t* camera);
-POINTS_RENDER_EXPORT struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* camera);
-POINTS_RENDER_EXPORT void renderer_set_callback(struct renderer_t* renderer, renderer_callbacks_t callbacks, void *user_ptr);
-POINTS_RENDER_EXPORT void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t *data_source);
-POINTS_RENDER_EXPORT void renderer_remove_data_source(struct renderer_t *renderer, struct data_source_t *data_source);
+POINTS_EXPORT struct renderer_t* renderer_create();
+POINTS_EXPORT void renderer_destroy(struct renderer_t *renderer);
+POINTS_EXPORT void renderer_add_camera(struct renderer_t* renderer, struct camera_t* camera);
+POINTS_EXPORT void renderer_remove_camera(struct renderer_t* renderer, struct camera_t* camera);
+POINTS_EXPORT struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* camera);
+POINTS_EXPORT void renderer_set_callback(struct renderer_t* renderer, renderer_callbacks_t callbacks, void *user_ptr);
+POINTS_EXPORT void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t *data_source);
+POINTS_EXPORT void renderer_remove_data_source(struct renderer_t *renderer, struct data_source_t *data_source);
 }
 }
 

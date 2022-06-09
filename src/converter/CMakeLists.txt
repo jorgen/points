@@ -5,9 +5,8 @@ Find_Package(CURL REQUIRED)
 
 set(public_headers
   points/converter/converter.h
-  points/converter/export.h
-  points/converter/error.h
   points/converter/default_attribute_names.h
+  points/converter/converter_data_source.h
   )
 
 set(private_headers
@@ -31,6 +30,7 @@ set(private_headers
   tree_handler.hpp
   tree_lod_generator.hpp
   attributes_configs.hpp
+  data_source_converter.hpp
   )
 
 set(sources
@@ -48,10 +48,11 @@ set(sources
   tree_handler.cpp
   tree_lod_generator.cpp
   attributes_configs.cpp
+  #data_source_converter.cpp
   )
 
-add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources}  )
-target_link_libraries(converter_objects PRIVATE fmt glm)
+add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
+target_link_libraries(converter_objects PRIVATE fmt glm points_render points_common)
 BuildExternalTargetLinkLibrary(converter_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
 target_include_directories(converter_objects
     PUBLIC

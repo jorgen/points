@@ -18,7 +18,7 @@
 #ifndef POINTS_CONVERTER_LASZIP_CALLBACKS_H
 #define POINTS_CONVERTER_LASZIP_CALLBACKS_H
 
-#include <points/converter/export.h>
+#include <points/export.h>
 #include <points/converter/converter.h>
 
 #ifdef __cplusplus
@@ -29,7 +29,7 @@ namespace points
 {
 namespace converter
 {
-POINTS_CONVERTER_EXPORT struct converter_file_convert_callbacks_t laszip_callbacks();
+POINTS_EXPORT struct converter_file_convert_callbacks_t laszip_callbacks();
 } // namespace converter
 } // namespace points
 #ifdef __cplusplus

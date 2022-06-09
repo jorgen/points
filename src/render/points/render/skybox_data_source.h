@@ -18,7 +18,7 @@
 #ifndef POINTS_SKYBOX_DATA_SOURCE_H
 #define POINTS_SKYBOX_DATA_SOURCE_H
 
-#include <points/render/export.h>
+#include <points/export.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,10 +45,10 @@ struct skybox_data_t
 };
 
 struct skybox_data_source_t;
-POINTS_RENDER_EXPORT struct skybox_data_source_t *skybox_data_source_create(struct renderer_t *renderer, skybox_data_t data);
-POINTS_RENDER_EXPORT void skybox_data_source_destroy(struct skybox_data_source_t *skybox_data_source);
-POINTS_RENDER_EXPORT struct data_source_t *skybox_data_source_get(struct skybox_data_source_t *skybox_data_source);
-//POINTS_RENDER_EXPORT void set
+POINTS_EXPORT struct skybox_data_source_t *skybox_data_source_create(struct renderer_t *renderer, skybox_data_t data);
+POINTS_EXPORT void skybox_data_source_destroy(struct skybox_data_source_t *skybox_data_source);
+POINTS_EXPORT struct data_source_t *skybox_data_source_get(struct skybox_data_source_t *skybox_data_source);
+//POINTS_EXPORT void set
 }
 
 } // namespace points

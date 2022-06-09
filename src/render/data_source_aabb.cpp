@@ -76,12 +76,12 @@ static std::vector<uint16_t> indecies_for_aabb()
 }
 
 template<typename buffer_data_t>
-inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, buffer_type_t type, format_t format, components_t components, buffer_t &buffer)
+inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, buffer_type_t buffer_type, type_t type, components_t components, buffer_t &buffer)
 {
   assert(data_vector.size());
   buffer.releaseBuffer = [&data_vector]() { data_vector = std::vector<buffer_data_t>(); };
-  callbacks.do_create_buffer(buffer, type);
-  callbacks.do_initialize_buffer(buffer, format, components, int(data_vector.size() * sizeof(data_vector[0])), data_vector.data());
+  callbacks.do_create_buffer(buffer, buffer_type);
+  callbacks.do_initialize_buffer(buffer, type, components, int(data_vector.size() * sizeof(data_vector[0])), data_vector.data());
 }
 
 aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
@@ -89,12 +89,12 @@ aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
   , project_view(1)
 {
   callbacks.do_create_buffer(project_view_buffer, buffer_type_uniform);
-  callbacks.do_initialize_buffer(project_view_buffer, format_r32, components_4x4, sizeof(project_view), &project_view);
+  callbacks.do_initialize_buffer(project_view_buffer, type_r32, components_4x4, sizeof(project_view), &project_view);
 
   indecies = indecies_for_aabb();
-  initialize_buffer(callbacks, indecies, buffer_type_index, format_u16, components_1, index_buffer);
+  initialize_buffer(callbacks, indecies, buffer_type_index, type_u16, components_1, index_buffer);
   colors = colors_for_aabb();
-  initialize_buffer(callbacks, colors, buffer_type_vertex, format_u8, components_3, color_buffer);
+  initialize_buffer(callbacks, colors, buffer_type_vertex, type_u8, components_3, color_buffer);
 }
 
 void aabb_data_source_t::add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render)
@@ -139,7 +139,7 @@ void create_aabb_buffer(callback_manager_t &callbacks, const double min[3], cons
   memcpy(buffer->aabb.max, max, sizeof(*max) * 3);
   buffer->vertices = coordinates_for_aabb(buffer->aabb);
   callbacks.do_create_buffer(buffer->vertices_buffer, buffer_type_vertex);
-  callbacks.do_initialize_buffer(buffer->vertices_buffer, format_r32, components_3,
+  callbacks.do_initialize_buffer(buffer->vertices_buffer, type_r32, components_3,
                                  int(buffer->vertices.size() * sizeof(buffer->vertices[0])), buffer->vertices.data());
 }
 

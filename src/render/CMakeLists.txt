@@ -7,7 +7,6 @@ set(public_headers
   points/render/camera.h
   points/render/renderer.h
   points/render/aabb.h 
-  points/render/export.h
   points/render/aabb_data_source.h
   points/render/flat_points_data_source.h)
 
@@ -34,6 +33,7 @@ set(sources
   )
 add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources} )
 target_link_libraries(points_render_objects PRIVATE fmt glm)
+target_link_libraries(points_render_objects PUBLIC points_common)
 BuildExternalTargetLinkLibrary(points_render_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
 target_include_directories(points_render_objects
     PUBLIC

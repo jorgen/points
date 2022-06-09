@@ -254,6 +254,7 @@ uint32_t convert_points_two(uint32_t step, const std::pair<type_t, components_t>
   case components_2: return convert_points_three<S_S, S, 2>(step, source_format, source, destination_format, destination);
   case components_3: return convert_points_three<S_S, S, 3>(step, source_format, source, destination_format, destination);
   case components_4: return convert_points_three<S_S, S, 4>(step, source_format, source, destination_format, destination);
+  case components_4x4: return convert_points_three<S_S, S, 4*4>(step, source_format, source, destination_format, destination);
   }
 }
 template<size_t S_S>
@@ -287,6 +288,7 @@ uint32_t quantize_points(uint32_t step, const std::pair<type_t, components_t> &s
   case components_2: return convert_points_one<2>(step, source_format, source, destination_format, destination);
   case components_3: return convert_points_one<3>(step, source_format, source, destination_format, destination);
   case components_4: return convert_points_one<4>(step, source_format, source, destination_format, destination);
+  case components_4x4: return convert_points_one<4*4>(step, source_format, source, destination_format, destination);
   }
 }
 
@@ -544,6 +546,7 @@ static void iterate_batch(tree_lod_generator_t &lod_generator, lod_worker_batch_
     return;
   batch.lod_workers.clear();
   int current_lod = batch.worker_data[batch.current_index].lod;
+
   int batch_index = batch.current_index;
   while(batch_index < int(batch.worker_data.size())
         && current_lod == batch.worker_data[batch.current_index].lod)

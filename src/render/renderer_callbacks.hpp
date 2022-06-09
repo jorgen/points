@@ -56,11 +56,11 @@ public:
     if (callbacks.create_buffer)
       callbacks.create_buffer(renderer, user_ptr, buffer_type, &buffer.user_ptr);
   }
-  void do_initialize_buffer(buffer_t &buffer, enum format_t format, enum components_t components, int buffer_size, void *data)
+  void do_initialize_buffer(buffer_t &buffer, enum type_t type, enum components_t components, int buffer_size, void *data)
   {
     std::unique_lock<std::mutex> lock(mutex);
     if (callbacks.initialize_buffer)
-      callbacks.initialize_buffer(renderer, user_ptr, &buffer, buffer.user_ptr, format, components, buffer_size, data);
+      callbacks.initialize_buffer(renderer, user_ptr, &buffer, buffer.user_ptr, type, components, buffer_size, data);
   }
   void do_modify_buffer(buffer_t &buffer, int offset, int buffer_size, void *data)
   {
@@ -83,11 +83,11 @@ public:
       callbacks.create_texture(renderer, user_ptr, buffer_texture_type, &buffer.user_ptr);
   }
 
-  void do_initialize_texture(buffer_t &buffer, enum texture_type_t buffer_texture_type, enum format_t format, enum components_t components, int size[3], void *data)
+  void do_initialize_texture(buffer_t &buffer, enum texture_type_t buffer_texture_type, enum type_t type, enum components_t components, int size[3], void *data)
   {
     std::unique_lock<std::mutex> lock(mutex);
     if (callbacks.initialize_texture)
-      callbacks.initialize_texture(renderer, user_ptr, &buffer, buffer.user_ptr, buffer_texture_type, format, components, size, data);
+      callbacks.initialize_texture(renderer, user_ptr, &buffer, buffer.user_ptr, buffer_texture_type, type, components, size, data);
   }
   void do_modify_texture(buffer_t &buffer, enum texture_type_t buffer_texture_type, int offset[3], int size[3], void *data)
   {

@@ -18,7 +18,7 @@
 #pragma once
 
 #include <points/converter/converter.h>
-#include <points/converter/error.h>
+#include <points/error.h>
 #include <points/converter/laszip_file_convert_callbacks.h>
 
 #include <string>

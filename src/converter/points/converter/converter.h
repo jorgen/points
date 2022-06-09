@@ -20,8 +20,9 @@
 
 #include <stdint.h>
 
-#include <points/converter/export.h>
-#include <points/converter/error.h>
+#include <points/export.h>
+#include <points/error.h>
+#include <points/format.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,33 +32,6 @@ namespace points
 {
 namespace converter
 {
-
-enum type_t
-{
-  type_u8,
-  type_i8,
-  type_u16,
-  type_i16,
-  type_u32,
-  type_i32,
-  type_m32,
-  type_r32,
-  type_u64,
-  type_i64,
-  type_m64,
-  type_r64,
-  type_m128,
-  type_m192,
-};
-
-enum components_t
-{
-  components_1 = 1,
-  components_2 = 2,
-  components_3 = 3,
-  components_4 = 4
-};
-
 struct header_t
 {
   uint64_t point_count;
@@ -66,7 +40,7 @@ struct header_t
   double min[3];
   double max[3];
 };
-POINTS_CONVERTER_EXPORT void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum type_t format, enum components_t components);
+POINTS_EXPORT void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum type_t format, enum components_t components);
 
 struct attribute_t
 {
@@ -137,13 +111,13 @@ enum converter_conversion_status_t
 };
 
 struct converter_t;
-POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size);
-POINTS_CONVERTER_EXPORT void converter_destroy(converter_t *destroy);
-POINTS_CONVERTER_EXPORT void converter_add_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks);
-POINTS_CONVERTER_EXPORT void converter_add_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks);
-POINTS_CONVERTER_EXPORT void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count);
-POINTS_CONVERTER_EXPORT void converter_wait_finish(converter_t *converter);
-POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter_t *converter, error_t **errors, size_t *error_count);
+POINTS_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size);
+POINTS_EXPORT void converter_destroy(converter_t *destroy);
+POINTS_EXPORT void converter_add_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks);
+POINTS_EXPORT void converter_add_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks);
+POINTS_EXPORT void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count);
+POINTS_EXPORT void converter_wait_finish(converter_t *converter);
+POINTS_EXPORT converter_conversion_status_t converter_status(converter_t *converter, error_t **errors, size_t *error_count);
 
 }
 

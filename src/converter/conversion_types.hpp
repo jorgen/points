@@ -19,6 +19,7 @@
 
 #include <points/converter/converter.h>
 
+#include "error.hpp"
 #include "morton.hpp"
 
 #include <vector>
@@ -47,6 +48,11 @@ inline bool input_data_id_is_leaf(input_data_id_t input)
 {
   return !(input.sub & decltype(input.sub)(1) << 31);
 }
+struct file_error_t
+{
+  input_data_id_t input_id;
+  error_t error;
+};
 
 struct attributes_id_t
 {
