@@ -31,6 +31,7 @@ set(private_headers
   tree_lod_generator.hpp
   attributes_configs.hpp
   data_source_converter.hpp
+  frustum_tree_walker.hpp
   )
 
 set(sources
@@ -48,7 +49,8 @@ set(sources
   tree_handler.cpp
   tree_lod_generator.cpp
   attributes_configs.cpp
-  #data_source_converter.cpp
+  data_source_converter.cpp
+  frustum_tree_walker.cpp
   )
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources})

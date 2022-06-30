@@ -5,6 +5,7 @@
 #include <points/format.h>
 #include <points/render/aabb.h>
 #include <points/render/buffer.h>
+#include <points/render/draw_group.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,19 +35,6 @@ enum texture_type_t
   texture_type_cubemap_negative_z
 };
 
-struct draw_buffer_t
-{
-  int buffer_mapping;
-  void *user_ptr;
-};
-
-enum draw_type_t
-{
-  aabb_triangle_mesh,
-  skybox_triangle,
-  flat_points
-};
-
 enum aabb_mesh_buffer_mapping_t
 {
   aabb_bm_camera,
@@ -68,14 +56,6 @@ enum points_buffer_mapping_t
   points_bm_camera,
   points_bm_vertex,
   points_bm_color
-};
-
-struct draw_group_t
-{
-  draw_type_t draw_type;
-  struct draw_buffer_t *buffers;
-  int buffers_size;
-  int draw_size;
 };
 
 struct frame_t
@@ -112,15 +92,16 @@ struct renderer_callbacks_t
   renderer_destroy_texture_t destroy_texture;
 };
 
-struct data_source_t;
 POINTS_EXPORT struct renderer_t* renderer_create();
 POINTS_EXPORT void renderer_destroy(struct renderer_t *renderer);
 POINTS_EXPORT void renderer_add_camera(struct renderer_t* renderer, struct camera_t* camera);
 POINTS_EXPORT void renderer_remove_camera(struct renderer_t* renderer, struct camera_t* camera);
 POINTS_EXPORT struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* camera);
 POINTS_EXPORT void renderer_set_callback(struct renderer_t* renderer, renderer_callbacks_t callbacks, void *user_ptr);
-POINTS_EXPORT void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t *data_source);
-POINTS_EXPORT void renderer_remove_data_source(struct renderer_t *renderer, struct data_source_t *data_source);
+POINTS_EXPORT void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t data_source);
+POINTS_EXPORT void renderer_remove_data_source(struct renderer_t *renderer, struct data_source_t data_source);
+
+POINTS_EXPORT void to_render_add_render_group(struct to_render_t *to_render, draw_group_t draw_group);
 }
 }
 

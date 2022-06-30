@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2021  Jørgen Lind
+** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -17,45 +17,22 @@
 ************************************************************************/
 #pragma once
 
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
-#include <points/render/flat_points_data_source.h>
-#include "data_source.hpp"
-#include "buffer.hpp"
-#include "renderer_callbacks.hpp"
+#include <tree_handler.hpp>
 
-#include "glm_include.hpp"
-
-#include <vector>
-#include <memory>
-#include <stdint.h>
+#include <glm_include.hpp>
 
 namespace points
 {
-namespace render
+namespace converter
 {
-struct flat_points_data_source_t : public data_source_cpp_t
+class frustum_tree_walker_t
 {
-  flat_points_data_source_t(callback_manager_t &callbacks, std::string url);
+public:
+  frustum_tree_walker_t();
 
-  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
-  
-  callback_manager_t &callbacks;
-
-  std::vector<glm::vec3> vertices;
-  buffer_t vertex_buffer;
-
-  std::vector<glm::u8vec3> colors;
-  buffer_t color_buffer;
-  
-  aabb_t aabb;
-
-  buffer_t project_view_buffer;
-  glm::mat4 project_view;
-
-  draw_buffer_t render_list[3];
+  void set_view_projection(glm::dmat4 view, glm::dmat4 projection, glm::dmat4 view_projection);
+  void walk_tree(tree_cache_t tree_cache, tree_id_t tree_root, cache_file_handler_t &file_cache);
 };
 
-} // namespace render
 }
-
+}

@@ -40,11 +40,11 @@ struct skybox_texture_t
   int components = 0;
 };
 
-struct skybox_data_source_t : public data_source_t
+struct skybox_data_source_t : public data_source_cpp_t
 {
   skybox_data_source_t(callback_manager_t &callbacks, skybox_data_t skybox_data);
 
-  void add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render) override;
+  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
 
   callback_manager_t &callbacks;
 

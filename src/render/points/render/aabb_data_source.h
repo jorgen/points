@@ -20,6 +20,7 @@
 
 #include <points/export.h>
 #include <points/render/aabb.h>
+#include <points/render/data_source.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,7 +33,7 @@ namespace render
 struct aabb_data_source_t;
 POINTS_EXPORT struct aabb_data_source_t *aabb_data_source_create(struct renderer_t *renderer);
 POINTS_EXPORT void aabb_data_source_destroy(struct aabb_data_source_t *aabb_data_source);
-POINTS_EXPORT struct data_source_t *aabb_data_source_get(struct aabb_data_source_t *aabb_data_source);
+POINTS_EXPORT struct data_source_t aabb_data_source_get(struct aabb_data_source_t *aabb_data_source);
 POINTS_EXPORT int aabb_data_source_add_aabb(struct aabb_data_source_t *aabb_data_source, const double min[3], const double max[3]);
 POINTS_EXPORT void aabb_data_source_remove_aabb(struct aabb_data_source_t *aabb_data_source, int id);
 POINTS_EXPORT void aabb_data_source_modify_aabb(struct aabb_data_source_t *aabb_data_source, int id, const double min[3], const double max[3]);

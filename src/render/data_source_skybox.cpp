@@ -57,7 +57,7 @@ skybox_data_source_t::skybox_data_source_t(callback_manager_t &c, skybox_data_t 
                                  int(sizeof(*vertices.data()) * vertices.size()), vertices.data());
 }
 
-void skybox_data_source_t::add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render)
+void skybox_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
 {
   inverse_vp = camera.inverse_view_projection;
   callbacks.do_modify_buffer(inverse_vp_buffer, 0, int(sizeof(inverse_vp)), &inverse_vp);
@@ -72,12 +72,12 @@ void skybox_data_source_t::add_to_frame(const frame_camera_t &camera, std::vecto
   draw_buffers[2].user_ptr = vertex_buffer.user_ptr;
   draw_buffers[3].buffer_mapping = skybox_bm_camera_pos;
   draw_buffers[3].user_ptr = camera_pos_buffer.user_ptr;
-  to_render.emplace_back();
-  auto &draw_group = to_render.back();
+  draw_group_t draw_group;
   draw_group.buffers = draw_buffers;
   draw_group.buffers_size = sizeof(draw_buffers) / sizeof(*draw_buffers);
   draw_group.draw_type = skybox_triangle;
   draw_group.draw_size = 3;
+  to_render_add_render_group(to_render, draw_group);
 }
 
 struct skybox_data_source_t *skybox_data_source_create(struct renderer_t *renderer, skybox_data_t data)
@@ -88,9 +88,9 @@ void skybox_data_source_destroy(struct skybox_data_source_t *skybox_data_source)
 {
   delete skybox_data_source;
 }
-struct data_source_t *skybox_data_source_get(struct skybox_data_source_t *skybox_data_source)
+struct data_source_t skybox_data_source_get(struct skybox_data_source_t *skybox_data_source)
 {
-  return skybox_data_source;
+  return skybox_data_source->data_source;
 }
 
 }

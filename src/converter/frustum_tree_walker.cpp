@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2020  Jørgen Lind
+** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -15,11 +15,25 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <data_source.hpp>
+#include "frustum_tree_walker.hpp"
 
 namespace points
 {
-namespace render
+namespace converter
 {
-} // namespace render
-} // namespace points
+frustum_tree_walker_t::frustum_tree_walker_t()
+{
+
+}
+
+void frustum_tree_walker_t::walk_tree(tree_cache_t tree_cache, tree_id_t tree_root, cache_file_handler_t &file_cache)
+{
+  (void) tree_cache;
+  (void) tree_root;
+  (void) file_cache;
+  //auto root_tree = tree_cache.get(tree_root);
+  //root_tree->data
+}
+
+}
+}

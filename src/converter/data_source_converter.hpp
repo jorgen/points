@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2021  Jørgen Lind
+** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -19,43 +19,44 @@
 
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
-#include <points/render/flat_points_data_source.h>
+#include <points/render/data_source.h>
 #include "data_source.hpp"
+#include "glm_include.hpp"
 #include "buffer.hpp"
 #include "renderer_callbacks.hpp"
-
-#include "glm_include.hpp"
+#include "converter.hpp"
+#include "frustum_tree_walker.hpp"
 
 #include <vector>
 #include <memory>
-#include <stdint.h>
 
 namespace points
 {
-namespace render
+namespace converter
 {
-struct flat_points_data_source_t : public data_source_cpp_t
+struct converter_data_source_t
 {
-  flat_points_data_source_t(callback_manager_t &callbacks, std::string url);
+  converter_data_source_t(converter_t *converter, render::callback_manager_t &callback_manager);
 
-  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
-  
-  callback_manager_t &callbacks;
+  void add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render);
 
-  std::vector<glm::vec3> vertices;
-  buffer_t vertex_buffer;
+  converter_t *converter;
+  render::callback_manager_t &callbacks;
+  render::data_source_t data_source;
 
+  frustum_tree_walker_t tree_walker;
+
+  std::vector<uint32_t> aabbs_ids;
+
+  render::buffer_t project_view_buffer;
+  glm::dmat4 project_view;
+
+  render::buffer_t index_buffer;
+  std::vector<uint16_t> indecies;
+
+  render::buffer_t color_buffer;
   std::vector<glm::u8vec3> colors;
-  buffer_t color_buffer;
-  
-  aabb_t aabb;
 
-  buffer_t project_view_buffer;
-  glm::mat4 project_view;
-
-  draw_buffer_t render_list[3];
 };
-
 } // namespace render
-}
-
+} // namespace points

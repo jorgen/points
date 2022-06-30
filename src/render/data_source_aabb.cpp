@@ -97,7 +97,7 @@ aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
   initialize_buffer(callbacks, colors, buffer_type_vertex, type_u8, components_3, color_buffer);
 }
 
-void aabb_data_source_t::add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render)
+void aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
 {
   project_view = camera.view_projection;
   callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view); 
@@ -116,7 +116,7 @@ void aabb_data_source_t::add_to_frame(const frame_camera_t &camera, std::vector<
     draw_group.buffers_size = array_size(aabb_buffer->render_list);
     draw_group.draw_type = draw_type_t::aabb_triangle_mesh;
     draw_group.draw_size = 36;
-    to_render.emplace_back(draw_group);
+    to_render_add_render_group(to_render, draw_group);
   }
 }
 
@@ -128,9 +128,9 @@ void aabb_data_source_destroy(struct aabb_data_source_t *aabb_data_source)
 {
   delete aabb_data_source;
 }
-struct data_source_t *aabb_data_source_get(struct aabb_data_source_t *aabb_data_source)
+struct data_source_t aabb_data_source_get(struct aabb_data_source_t *aabb_data_source)
 {
-  return aabb_data_source;
+  return aabb_data_source->data_source;
 }
 
 void create_aabb_buffer(callback_manager_t &callbacks, const double min[3], const double max[3], aabb_buffer_t *buffer)

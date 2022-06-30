@@ -18,6 +18,7 @@
 #include <points/render/flat_points_data_source.h>
 
 #include <points/converter/converter.h>
+#include <points/converter/converter_data_source.h>
 
 #include <vector>
 
@@ -158,11 +159,15 @@ int main(int, char **)
   points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
 
 
+  bool render_flat_points = true;
   auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size),
                                    &points::render::flat_points_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
 
 
+  auto converter_points = create_unique_ptr(points::converter::converter_data_source_create(converter.get(), renderer.get()),
+                                            &points::converter::converter_data_source_destroy);
+  points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
   //points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
   //(void)points;
 
@@ -313,7 +318,7 @@ int main(int, char **)
     ImGui_ImplSDL2_NewFrame(window);
     ImGui::NewFrame();
 
-    ImGui::Begin("Input", 0, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+    ImGui::Begin("Input", 0, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
 
     ImGui::BeginGroup();
     if (ImGui::RadioButton("ArcBall", arcball.get()))
@@ -332,8 +337,19 @@ int main(int, char **)
         fps.reset(points::render::camera_manipulator::fps_create(camera.get()));
       }
     }
-    ImGui::EndGroup();
 
+    if (ImGui::Checkbox("Render flat", &render_flat_points))
+    {
+      if (render_flat_points)
+      {
+        points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
+      }
+      else
+      {
+        points::render::renderer_remove_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
+      }
+    }
+    ImGui::EndGroup();
     ImGui::End();
    
     //ImGui::ShowDemoWindow();

@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2020  Jørgen Lind
+** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -15,11 +15,24 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <data_source.hpp>
+#ifndef POINTS_ERROR_H
+#define POINTS_ERROR_H
+#include <stddef.h>
+#include <points/export.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 namespace points
 {
-namespace render
-{
-} // namespace render
+struct error_t;
+POINTS_EXPORT error_t *error_create();
+POINTS_EXPORT void error_destroy(error_t *error);
+POINTS_EXPORT void error_set_info(error_t *error, int code, const char *str, size_t str_len);
+POINTS_EXPORT void error_get_info(const error_t *error, int *code, const char **str, size_t *str_len);
 } // namespace points
+#ifdef __cplusplus
+}
+#endif
+
+#endif

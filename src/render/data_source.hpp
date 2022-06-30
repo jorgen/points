@@ -17,6 +17,7 @@
 ************************************************************************/
 #pragma once
 
+#include <points/render/data_source.h>
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
 #include "glm_include.hpp"
@@ -26,7 +27,8 @@ namespace points
 {
 namespace render
 {
-struct frame_camera_t
+
+struct frame_camera_cpp_t
 {
   glm::dmat4 view;
   glm::dmat4 projection;
@@ -36,10 +38,29 @@ struct frame_camera_t
   glm::dmat4 inverse_view_projection;
 };
 
-struct data_source_t
+inline frame_camera_cpp_t cast_to_frame_camera_cpp(const frame_camera_t &camera)
 {
-  virtual ~data_source_t();
-  virtual void add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render) = 0;
+  static_assert(sizeof(frame_camera_cpp_t) == sizeof(frame_camera_t), "Conversion types not the same size");
+  frame_camera_cpp_t ret;
+  memcpy(&ret, &camera, sizeof(ret));
+  return ret;
+}
+
+struct data_source_cpp_t
+{
+  data_source_cpp_t()
+  {
+    data_source.user_ptr = this;
+    data_source.add_to_frame = [](frame_camera_t *camera, to_render_t *to_render, void *user_ptr)
+    {
+      auto *thiz = static_cast<data_source_cpp_t *>(user_ptr);
+      frame_camera_cpp_t c = cast_to_frame_camera_cpp(*camera);
+      thiz->add_to_frame(c, to_render);
+    };
+  };
+  virtual ~data_source_cpp_t() {}
+  virtual void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) = 0;
+  data_source_t data_source;
 };
 } // namespace render
 } // namespace points

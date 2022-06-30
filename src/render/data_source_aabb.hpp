@@ -42,11 +42,11 @@ struct aabb_buffer_t
 };
 
 
-struct aabb_data_source_t : public data_source_t
+struct aabb_data_source_t : public data_source_cpp_t
 {
   aabb_data_source_t(callback_manager_t &callback_manager);
 
-  void add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render) override;
+  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
 
   callback_manager_t &callbacks;
 

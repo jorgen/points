@@ -33,7 +33,7 @@ struct renderer_t
     : callbacks(this)
   {}
   std::vector<camera_t*> cameras;
-  std::vector<data_source_t *> data_sources;
+  std::vector<data_source_t> data_sources;
   std::vector<draw_group_t> to_render;
   callback_manager_t callbacks;
 };

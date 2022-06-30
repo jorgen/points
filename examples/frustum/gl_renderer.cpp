@@ -652,6 +652,7 @@ void gl_renderer::modify_buffer(struct points::render::buffer_t *buffer, void *b
 {
   (void)buffer;
   auto *gl_buffer = static_cast<gl_buffer_t *>(buffer_user_ptr);
+
   switch(gl_buffer->buffer_type)
   {
     case points::render::buffer_type_index:

@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2021  Jørgen Lind
+** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -15,47 +15,45 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#pragma once
+#ifndef DRAW_GROUP_H
+#define DRAW_GROUP_H
 
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
-#include <points/render/flat_points_data_source.h>
-#include "data_source.hpp"
-#include "buffer.hpp"
-#include "renderer_callbacks.hpp"
+#include <points/export.h>
 
-#include "glm_include.hpp"
-
-#include <vector>
-#include <memory>
-#include <stdint.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 namespace points
 {
 namespace render
 {
-struct flat_points_data_source_t : public data_source_cpp_t
+
+struct draw_buffer_t
 {
-  flat_points_data_source_t(callback_manager_t &callbacks, std::string url);
-
-  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
-  
-  callback_manager_t &callbacks;
-
-  std::vector<glm::vec3> vertices;
-  buffer_t vertex_buffer;
-
-  std::vector<glm::u8vec3> colors;
-  buffer_t color_buffer;
-  
-  aabb_t aabb;
-
-  buffer_t project_view_buffer;
-  glm::mat4 project_view;
-
-  draw_buffer_t render_list[3];
+  int buffer_mapping;
+  void *user_ptr;
 };
 
-} // namespace render
+enum draw_type_t
+{
+  aabb_triangle_mesh,
+  skybox_triangle,
+  flat_points
+};
+
+struct draw_group_t
+{
+  draw_type_t draw_type;
+  struct draw_buffer_t *buffers;
+  int buffers_size;
+  int draw_size;
+};
+
+}
 }
 
+#ifdef __cplusplus
+}
+#endif
+#endif // DRAW_GROUP_H

@@ -25,6 +25,7 @@ namespace points
 {
 namespace converter
 {
+class frustum_tree_walker_t;
 class tree_handler_t : public about_to_block_t
 {
 public:
@@ -36,6 +37,7 @@ public:
   void generate_lod(morton::morton192_t &min);
 private:
   void handle_add_points(std::vector<storage_header_t> &&events);
+  void handle_walk_tree(std::vector<frustum_tree_walker_t*> &&events);
   threaded_event_loop_t _event_loop;
   bool _initialized;
 
@@ -49,6 +51,7 @@ private:
   tree_lod_generator_t _tree_lod_generator;
 
   event_pipe_t<storage_header_t> _add_points;
+  event_pipe_t<frustum_tree_walker_t *> _walk_tree;
   event_pipe_t<input_data_id_t> &_done_with_input;
 };
 

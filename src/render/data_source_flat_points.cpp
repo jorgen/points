@@ -48,7 +48,7 @@ static glm::vec3 get_point(laszip_point *point, double (&offset)[3], double (&sc
 }
 
 flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbacks, std::string url)
-  : data_source_t()
+  : data_source_cpp_t()
   , callbacks(callbacks)
 {
   laszip_POINTER laszip_reader;
@@ -147,16 +147,16 @@ flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbac
   render_list[2].buffer_mapping = points_bm_color;
   render_list[2].user_ptr = color_buffer.user_ptr;
 }
-void flat_points_data_source_t::add_to_frame(const frame_camera_t &camera, std::vector<draw_group_t> &to_render)
+void flat_points_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
 {
   project_view = camera.view_projection;
   callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view);
-  to_render.emplace_back();
-  auto &draw_group = to_render.back();
+  draw_group_t draw_group;
   draw_group.buffers = render_list;
   draw_group.buffers_size = sizeof(render_list) / sizeof(*render_list);
   draw_group.draw_type = flat_points;
   draw_group.draw_size = int(vertices.size());
+  to_render_add_render_group(to_render, draw_group);
 }
 
 struct flat_points_data_source_t *flat_points_data_source_create(struct renderer_t *renderer, const char *url, int url_size)
@@ -167,9 +167,9 @@ void flat_points_data_source_destroy(struct flat_points_data_source_t *flat_poin
 {
   delete flat_points_data_source;
 }
-struct data_source_t *flat_points_data_source_get(struct flat_points_data_source_t *flat_points_data_source)
+struct data_source_t flat_points_data_source_get(struct flat_points_data_source_t *flat_points_data_source)
 {
-  return flat_points_data_source;
+  return flat_points_data_source->data_source;
 }
 
 void flat_points_get_aabb(struct flat_points_data_source_t *points, double aabb_min[3], double aabb_max[3])
