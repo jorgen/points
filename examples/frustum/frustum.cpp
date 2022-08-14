@@ -137,15 +137,7 @@ int main(int, char **)
   get_texture_data_size("textures/back.jpg", skybox_data.negative_z, skybox_data.negative_z_size);
   auto skybox = create_unique_ptr(points::render::skybox_data_source_create(renderer.get(), skybox_data),
                                   &points::render::skybox_data_source_destroy);
-  points::render::renderer_add_data_source(renderer.get(), points::render::skybox_data_source_get(skybox.get()));
-
-  auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get()),
-                                   &points::render::aabb_data_source_destroy);
-  points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
-  points::render::aabb_t aabb;
-  aabb.min[0] = -1.0; aabb.min[1] = -1.0; aabb.min[2] = -1.0;
-  aabb.max[0] = 1.0; aabb.max[1] = 1.0; aabb.max[2] = 1.0;
-  points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  //points::render::renderer_add_data_source(renderer.get(), points::render::skybox_data_source_get(skybox.get()));
 
   std::vector<points::converter::str_buffer> input_files;
   //input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
@@ -163,28 +155,33 @@ int main(int, char **)
   auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size),
                                    &points::render::flat_points_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
+  points::render::aabb_t aabb;
+  points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
 
 
   auto converter_points = create_unique_ptr(points::converter::converter_data_source_create(converter.get(), renderer.get()),
                                             &points::converter::converter_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
-  //points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
+
+  auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get(), aabb.min),
+                                   &points::render::aabb_data_source_destroy);
+  points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
+  //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
   //(void)points;
 
 
   double aabb_center[3] = {5.0, 0.0, 5.0};
-  
   double up[3];
   up[0] = 0.0; up[1] = 1.0; up[2] = 0.0;
 
-  points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 10000);
+  points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
   points::render::camera_look_at_aabb(camera.get(), &aabb, aabb_center, up);
 
   points::render::aabb_t aabb2;
-  aabb2.min[0] = 10.0; aabb2.min[1] = 1.5; aabb2.min[2] = 8.0;
-  aabb2.max[0] = 10.5; aabb2.max[1] = 2.5; aabb2.max[2] = 8.9;
-  int aabb_box2 = points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb2.min, aabb2.max);
-  (void)aabb_box2;
+  aabb2.min[0] = 0.0; aabb2.min[1] = 0.0; aabb2.min[2] = 0.0;
+  aabb2.max[0] = 0.0; aabb2.max[1] = 0.0; aabb2.max[2] = 0.0;
+  int aabb2_id =  -1; //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
 
   auto error = glGetError();
   (void)error;
@@ -313,6 +310,19 @@ int main(int, char **)
     clear clear_mask = clear(int(clear::color) | int(clear::depth));
 
     points_gl_renderer.draw(clear_mask, width, height);
+    double converter_min[3];
+    double converter_max[3];
+    double diff[3];
+    points::converter::converter_data_source_get_aabb(converter_points.get(), converter_min, converter_max);
+    diff[0] = converter_max[0] - converter_min[0];
+    diff[1] = converter_max[1] - converter_min[1];
+    diff[2] = converter_max[2] - converter_min[2];
+    if (converter_min[0] != aabb2.min[0] && aabb2_id == -1)
+    {
+      aabb2_id = points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
+      memcpy(aabb2.min, converter_min, sizeof(converter_min));
+      memcpy(aabb2.max, converter_max, sizeof(converter_max));
+    }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(window);

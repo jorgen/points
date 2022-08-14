@@ -36,6 +36,8 @@
 #include "tree_handler.hpp"
 #include "attributes_configs.hpp"
 
+#include <memory>
+
 namespace points
 {
 namespace converter
@@ -50,12 +52,13 @@ struct sorted_input_id_t
     return aabb_min < other.aabb_min;
   }
 };
-
+class frustum_tree_walker_t;
 class processor_t : public about_to_block_t
 {
 public:
   processor_t(converter_t &converter);
   void add_files(std::vector<input_data_source_t> &&files);
+  void walkt_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
   void about_to_block() override;
   //void add_data(const void *data, size_t data_size);
 

@@ -52,6 +52,7 @@ struct flat_points_data_source_t : public data_source_cpp_t
 
   buffer_t project_view_buffer;
   glm::mat4 project_view;
+  double offset[3];
 
   draw_buffer_t render_list[3];
 };

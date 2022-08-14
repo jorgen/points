@@ -17,23 +17,94 @@
 ************************************************************************/
 #include "frustum_tree_walker.hpp"
 
+#include <points/render/aabb.h>
+#include "morton_tree_coordinate_transform.hpp"
+
+#include <fmt/printf.h>
+
 namespace points
 {
 namespace converter
 {
-frustum_tree_walker_t::frustum_tree_walker_t()
+inline bool frustum_contains_aabb2(const glm::dmat4 &view_perspective, const render::aabb_t &aabb)
+{
+  glm::dvec4 min_vec(aabb.min[0], aabb.min[1], aabb.min[2], 1.0);
+  glm::dvec4 max_vec(aabb.max[0], aabb.max[1], aabb.max[2], 1.0);
+
+  glm::dvec4 projected_min = view_perspective * min_vec;
+  glm::dvec4 projected_max = view_perspective * max_vec;
+
+  if (projected_min.x < projected_max.x)
+  {
+    if (projected_max.x < -projected_max.w || projected_min.x > projected_min.w)
+    {
+      return false;
+    }
+  }
+  else
+  {
+    if (projected_min.x < -projected_min.w || projected_max.x > projected_max.w)
+    {
+      return false;
+    }
+  }
+  if (projected_min.y < projected_max.y)
+  {
+    if (projected_max.y < -projected_max.w || projected_min.y > projected_min.w)
+    {
+      return false;
+    }
+  }
+  else
+  {
+    if (projected_min.y < -projected_min.w || projected_max.y > projected_max.w)
+    {
+      return false;
+    }
+  }
+  if (projected_min.z < projected_max.z)
+  {
+    if (projected_max.z < -projected_max.w || projected_min.z > projected_min.w)
+    {
+      return false;
+    }
+  }
+  else
+  {
+    if (projected_min.z < -projected_min.w || projected_max.z > projected_max.w)
+    {
+      return false;
+    }
+  }
+
+
+  return true;
+}
+
+frustum_tree_walker_t::frustum_tree_walker_t(glm::dmat4 view_perspective)
+    : m_view_perspective(view_perspective)
+    , m_done(false)
 {
 
 }
 
-void frustum_tree_walker_t::walk_tree(tree_cache_t tree_cache, tree_id_t tree_root, cache_file_handler_t &file_cache)
+void frustum_tree_walker_t::walk_tree(const tree_global_state_t &global_state, tree_cache_t tree_cache, tree_id_t tree_root)
 {
+  std::unique_lock<std::mutex> lock(m_mutex);
   (void) tree_cache;
   (void) tree_root;
-  (void) file_cache;
-  //auto root_tree = tree_cache.get(tree_root);
-  //root_tree->data
+  auto root_tree = tree_cache.get(tree_root);
+  convert_morton_to_pos(global_state.scale, global_state.offset, root_tree->morton_min, tree_aabb.min);
+  convert_morton_to_pos(global_state.scale, global_state.offset, root_tree->morton_max, tree_aabb.max);
+
+  m_done = true;
+  fmt::print(stderr, "Walk tree in view {}\n", frustum_contains_aabb2(m_view_perspective, tree_aabb));
 }
 
+bool frustum_tree_walker_t::done()
+{
+  std::unique_lock<std::mutex> lock(m_mutex);
+  return m_done;
+}
 }
 }

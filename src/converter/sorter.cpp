@@ -80,9 +80,9 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &po
     pos[0] = point.data[0] * header.public_header.scale[0] + header.public_header.offset[0];
     pos[1] = point.data[1] * header.public_header.scale[1] + header.public_header.offset[1];
     pos[2] = point.data[2] * header.public_header.scale[2] + header.public_header.offset[2];
-    tmp[0] = pos[0] - tree_state.offset[0] * inv_scale;
-    tmp[1] = pos[1] - tree_state.offset[1] * inv_scale;
-    tmp[2] = pos[2] - tree_state.offset[2] * inv_scale;
+    tmp[0] = (pos[0] - tree_state.offset[0]) * inv_scale;
+    tmp[1] = (pos[1] - tree_state.offset[1]) * inv_scale;
+    tmp[2] = (pos[2] - tree_state.offset[2]) * inv_scale;
     morton::encode(tmp, morton_begin[i]);
   }
   std::sort(morton_begin, morton_end);

@@ -20,6 +20,7 @@
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
 #include <points/render/data_source.h>
+#include <points/render/aabb_data_source.h>
 #include "data_source.hpp"
 #include "glm_include.hpp"
 #include "buffer.hpp"
@@ -44,19 +45,15 @@ struct converter_data_source_t
   render::callback_manager_t &callbacks;
   render::data_source_t data_source;
 
-  frustum_tree_walker_t tree_walker;
+  render::aabb_t aabb;
 
-  std::vector<uint32_t> aabbs_ids;
+  std::shared_ptr<frustum_tree_walker_t> back_buffer;
 
   render::buffer_t project_view_buffer;
   glm::dmat4 project_view;
 
   render::buffer_t index_buffer;
   std::vector<uint16_t> indecies;
-
-  render::buffer_t color_buffer;
-  std::vector<glm::u8vec3> colors;
-
 };
 } // namespace render
 } // namespace points

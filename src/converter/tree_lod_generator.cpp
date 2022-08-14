@@ -317,18 +317,17 @@ static typename std::enable_if<less_than<sizeof(S_M), sizeof(D_M)>::value, void>
 }
 
 template<typename S_M, typename D_M>
-static typename std::enable_if<greater_than<sizeof(S_M), sizeof(D_M)>::value, S_M>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, D_M &d)
+static typename std::enable_if<greater_than<sizeof(S_M), sizeof(D_M)>::value, void>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, D_M &d)
 {
   (void)s;
   (void)morton_min;
   (void)d;
-  assert(false);
+  morton::morton_downcast(s, d);
 }
 
 template<typename S_M, typename D_M>
 static uint32_t quantize_morton_two(uint32_t step, const morton::morton192_t &morton_min, type_t source_type, const buffer_t &source, type_t destination_type, buffer_t &destination)
 {
-  assert(sizeof(S_M) <= sizeof(D_M));
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
   auto *destination_it = reinterpret_cast<D_M *>(destination.data);
   assert(source.size % sizeof(S_M) == 0);

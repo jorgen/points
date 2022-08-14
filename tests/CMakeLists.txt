@@ -12,7 +12,7 @@ add_executable(private_interface_unit_tests
 	private/morton_tests.cpp
 	 "private/tree_tests.cpp")
 BuildExternalTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm points_render_objects converter_objects)
-target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR})
+target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
 	#target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)
 endif()

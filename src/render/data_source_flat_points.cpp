@@ -31,20 +31,22 @@ namespace render
 
 static glm::vec3 get_point(laszip_point *point, double (&offset)[3], double (&scale)[3], aabb_t &aabb)
 {
-  glm::dvec3 p(point->X * scale[0] - offset[0], point->Y * scale[1] - offset[1], point->Z * scale[2] - offset[2]);
+  glm::dvec3 ret(point->X * scale[0], point->Y * scale[1], point->Z * scale[2]);
+  glm::dvec3 o(offset[0], offset[1], offset[2]);
+  auto p = ret + o;
   if (p[0] < aabb.min[0])
     aabb.min[0] = p[0];
-  else if (p[0] > aabb.max[0])
+  if (p[0] > aabb.max[0])
     aabb.max[0] = p[0];
   if (p[1] < aabb.min[1])
     aabb.min[1] = p[1];
-  else if (p[1] > aabb.max[1])
+  if (p[1] > aabb.max[1])
     aabb.max[1] = p[1];
   if (p[2] < aabb.min[2])
     aabb.min[2] = p[2];
-  else if (p[2] > aabb.max[2])
+  if (p[2] > aabb.max[2])
     aabb.max[2] = p[2];
-  return p;
+  return ret;
 }
 
 flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbacks, std::string url)
@@ -92,10 +94,10 @@ flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbac
 
   vertices.reserve(npoints);
   colors.reserve(npoints);
-  double offset[3];
-  offset[0] = 0.0;
-  offset[1] = 0.0;
-  offset[2] = 0.0;
+  offset[0] = header->x_offset;
+  offset[1] = header->y_offset;
+  offset[2] = header->z_offset;
+
   double scale[3];
   scale[0] = header->x_scale_factor;
   scale[1] = header->y_scale_factor;
@@ -149,7 +151,7 @@ flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbac
 }
 void flat_points_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
 {
-  project_view = camera.view_projection;
+  project_view = camera.projection * glm::translate(camera.view, glm::dvec3(offset[0], offset[1], offset[2]));
   callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view);
   draw_group_t draw_group;
   draw_group.buffers = render_list;

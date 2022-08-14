@@ -18,6 +18,7 @@
 #pragma once
 
 #include <tree_handler.hpp>
+#include <points/render/aabb.h>
 
 #include <glm_include.hpp>
 
@@ -28,10 +29,15 @@ namespace converter
 class frustum_tree_walker_t
 {
 public:
-  frustum_tree_walker_t();
+  frustum_tree_walker_t(glm::dmat4 view_perspective);
+  void walk_tree(const tree_global_state_t &global_state, tree_cache_t tree_cache, tree_id_t tree_root);
 
-  void set_view_projection(glm::dmat4 view, glm::dmat4 projection, glm::dmat4 view_projection);
-  void walk_tree(tree_cache_t tree_cache, tree_id_t tree_root, cache_file_handler_t &file_cache);
+  bool done();
+
+  glm::dmat4 m_view_perspective;
+  bool m_done;
+  render::aabb_t tree_aabb;
+  std::mutex m_mutex;
 };
 
 }

@@ -37,6 +37,8 @@ converter_data_source_t::converter_data_source_t(converter_t *converter, render:
   , callbacks(callbacks)
   , project_view(1)
 {
+  memset(aabb.min, 0, sizeof(aabb.min));
+  memset(aabb.max, 0, sizeof(aabb.max));
   callbacks.do_create_buffer(project_view_buffer, render::buffer_type_uniform);
   callbacks.do_initialize_buffer(project_view_buffer, type_r32, components_4x4, sizeof(project_view), &project_view);
   data_source.user_ptr = this;
@@ -49,9 +51,22 @@ converter_data_source_t::converter_data_source_t(converter_t *converter, render:
 
 void converter_data_source_t::add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render)
 {
+  //tree_walker.
+  //tree_walker.walk_tree()
   memcpy(&project_view, camera->view_projection, sizeof(project_view));
   callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view);
 
+  if (back_buffer && back_buffer->done())
+  {
+    aabb = back_buffer->tree_aabb;
+    back_buffer.reset();
+  }
+
+  if (!back_buffer)
+  {
+    back_buffer = std::make_shared<frustum_tree_walker_t>(project_view);
+    converter->processor.walkt_tree(back_buffer);
+  }
 }
 
 struct converter_data_source_t *converter_data_source_create(struct converter::converter_t *converter, struct render::renderer_t *renderer)
@@ -67,6 +82,12 @@ void converter_data_source_destroy(struct converter_data_source_t *converter_dat
 struct render::data_source_t converter_data_source_get(struct converter_data_source_t *converter_data_source)
 {
   return converter_data_source->data_source;
+}
+
+void converter_data_source_get_aabb(struct converter_data_source_t *converter_data_source, double aabb_min[3], double aabb_max[3])
+{
+  memcpy(aabb_min, converter_data_source->aabb.min, sizeof(converter_data_source->aabb.min));
+  memcpy(aabb_max, converter_data_source->aabb.max, sizeof(converter_data_source->aabb.max));
 }
 
 }

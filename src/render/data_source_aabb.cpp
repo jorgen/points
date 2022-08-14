@@ -18,8 +18,11 @@
 #include "data_source_aabb.hpp"
 #include <points/render/aabb_data_source.h>
 #include <points/render/buffer.h>
+#include "frustum.hpp"
 
 #include "renderer.hpp"
+
+#include <fmt/printf.h>
 
 namespace points
 {
@@ -84,9 +87,10 @@ inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_
   callbacks.do_initialize_buffer(buffer, type, components, int(data_vector.size() * sizeof(data_vector[0])), data_vector.data());
 }
 
-aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
+aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks, const glm::dvec3 &offset)
   : callbacks(callbacks)
   , project_view(1)
+  , offset(offset)
 {
   callbacks.do_create_buffer(project_view_buffer, buffer_type_uniform);
   callbacks.do_initialize_buffer(project_view_buffer, type_r32, components_4x4, sizeof(project_view), &project_view);
@@ -99,8 +103,9 @@ aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks)
 
 void aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
 {
-  project_view = camera.view_projection;
-  callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view); 
+  //project_view = camera.view_projection;
+  project_view = camera.projection * glm::translate(camera.view, offset);
+  callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view);
   for (auto &aabb_buffer : aabbs)
   {
     aabb_buffer->render_list[0].buffer_mapping = aabb_bm_position;
@@ -120,9 +125,9 @@ void aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_rende
   }
 }
 
-struct aabb_data_source_t *aabb_data_source_create(struct renderer_t *renderer)
+struct aabb_data_source_t *aabb_data_source_create(struct renderer_t *renderer, const double offset[3])
 {
-  return new aabb_data_source_t(renderer->callbacks);
+  return new aabb_data_source_t(renderer->callbacks, glm::dvec3(offset[0], offset[1], offset[2]));
 }
 void aabb_data_source_destroy(struct aabb_data_source_t *aabb_data_source)
 {
@@ -133,10 +138,10 @@ struct data_source_t aabb_data_source_get(struct aabb_data_source_t *aabb_data_s
   return aabb_data_source->data_source;
 }
 
-void create_aabb_buffer(callback_manager_t &callbacks, const double min[3], const double max[3], aabb_buffer_t *buffer)
+void create_aabb_buffer(callback_manager_t &callbacks, const glm::dvec3 &min, const glm::dvec3 &max, aabb_buffer_t *buffer)
 {
-  memcpy(buffer->aabb.min, min, sizeof(*min) * 3);
-  memcpy(buffer->aabb.max, max, sizeof(*max) * 3);
+  memcpy(buffer->aabb.min, &min, sizeof(min));
+  memcpy(buffer->aabb.max, &max, sizeof(max));
   buffer->vertices = coordinates_for_aabb(buffer->aabb);
   callbacks.do_create_buffer(buffer->vertices_buffer, buffer_type_vertex);
   callbacks.do_initialize_buffer(buffer->vertices_buffer, type_r32, components_3,
@@ -147,7 +152,9 @@ int aabb_data_source_add_aabb(struct aabb_data_source_t *aabb_data_source, const
 {
   static uint16_t ids = 0;
   aabb_data_source->aabbs.emplace_back(new aabb_buffer_t());
-  create_aabb_buffer(aabb_data_source->callbacks, min, max, aabb_data_source->aabbs.back().get());
+  auto min_offset = (glm::dvec3(min[0], min[1], min[2]) - aabb_data_source->offset);
+  auto max_offset = (glm::dvec3(max[0], max[1], max[2]) - aabb_data_source->offset);
+  create_aabb_buffer(aabb_data_source->callbacks, min_offset, max_offset, aabb_data_source->aabbs.back().get());
   auto id = ids++;
   aabb_data_source->aabbs_ids.emplace_back(id);
   return id;
@@ -161,8 +168,10 @@ void aabb_data_source_modify_aabb(struct aabb_data_source_t *aabb_data_source, i
   auto i = it - aabb_data_source->aabbs_ids.begin();
   auto aabb_it = aabb_data_source->aabbs.begin() + i;
   auto &aabb_buffer = *aabb_it;
-  memcpy(aabb_buffer->aabb.min, min, sizeof(*min) * 3);
-  memcpy(aabb_buffer->aabb.max, max, sizeof(*max) * 3);
+  auto min_offset = (glm::dvec3(min[0], min[1], min[2]) - aabb_data_source->offset);
+  auto max_offset = (glm::dvec3(max[0], max[1], max[2]) - aabb_data_source->offset);
+  memcpy(aabb_buffer->aabb.min, &min_offset, sizeof(min_offset));
+  memcpy(aabb_buffer->aabb.max, &max_offset, sizeof(max_offset));
   aabb_buffer->vertices = coordinates_for_aabb(aabb_buffer->aabb);
   aabb_data_source->callbacks.do_modify_buffer(aabb_buffer->vertices_buffer, 0, int(aabb_buffer->vertices.size()),
                                                aabb_buffer->vertices.data());

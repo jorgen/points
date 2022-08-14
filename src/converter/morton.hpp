@@ -460,9 +460,9 @@ inline void decode(const morton192_t &morton, uint64_t (&decoded)[3])
   libmorton::morton3D_64_decode(morton.data[1], mid[0], mid[1], mid[2]);
   libmorton::morton3D_64_decode(morton.data[2], high[0], high[1], high[2]);
 
-  decoded[0] = uint64_t(lower[0]) | uint64_t(mid[0]) << 22 | uint64_t(high[0]) << (22 + 21);
-  decoded[1] = uint64_t(lower[1]) | uint64_t(mid[1]) << 21 | uint64_t(high[1]) << (21 + 22);
-  decoded[2] = uint64_t(lower[2]) | uint64_t(mid[2]) << 21 | uint64_t(high[1]) << (21 + 21);
+  decoded[0] = uint64_t(lower[0]) | (morton.data[0] >> 63) << 21 | uint64_t(mid[2]) << 22 | uint64_t(high[1]) << (22 + 21);
+  decoded[1] = uint64_t(lower[1]) | (morton.data[1] >> 63) << (21 + 21) | uint64_t(mid[0]) << 21 | uint64_t(high[2]) << (21 + 22);
+  decoded[2] = uint64_t(lower[2]) | (morton.data[2] >> 63) << 63 | uint64_t(mid[1]) << 21 | uint64_t(high[0]) << (21 + 21);
 }
 
 inline void decode(const morton128_t &morton, uint64_t (&decoded)[3])
@@ -473,16 +473,16 @@ inline void decode(const morton128_t &morton, uint64_t (&decoded)[3])
   libmorton::morton3D_64_decode(morton.data[0], lower[0], lower[1], lower[2]);
   libmorton::morton3D_64_decode(morton.data[1], mid[0], mid[1], mid[2]);
 
-  decoded[0] = uint64_t(lower[0]) | uint64_t(mid[0]) << 22;
-  decoded[1] = uint64_t(lower[1]) | uint64_t(mid[1]) << 21;
-  decoded[2] = uint64_t(lower[2]) | uint64_t(mid[2]) << 21;
+  decoded[0] = uint64_t(lower[0]) | (morton.data[0] >> 63) << 21 | uint64_t(mid[2]) << 22;
+  decoded[1] = uint64_t(lower[1]) | (morton.data[1] >> 63) << (21 + 21) | uint64_t(mid[0]) << 21;
+  decoded[2] = uint64_t(lower[2]) | uint64_t(mid[1]) << 21;
 }
 
 inline void decode(const morton_t<uint64_t, 1> &morton, uint64_t (&decoded)[3])
 {
   uint_fast32_t tmp[3];
   libmorton::morton3D_64_decode(morton.data[0], tmp[0], tmp[1], tmp[2]);
-  decoded[0] = tmp[0];
+  decoded[0] = uint64_t(tmp[0]) | (morton.data[0] >> 63) << 21;
   decoded[1] = tmp[1];
   decoded[2] = tmp[2];
 }
@@ -498,16 +498,16 @@ inline void decode(const morton32_t &morton, uint64_t (&decoded)[3])
 
 inline void encode(const uint64_t (&pos)[3], morton192_t &morton)
 {
-  constexpr uint32_t mask21 = (uint32_t(1) << 21) - 1;
-  constexpr uint32_t mask22 = (uint32_t(1) << 22) - 1;
+  constexpr uint64_t mask21 = (uint64_t(1) << 21) - 1;
+  constexpr uint64_t mask22 = (uint64_t(1) << 22) - 1;
 
   uint32_t x_lower = pos[0] & mask22;
-  uint32_t x_mid = (pos[0] >> 22) & mask21;
-  uint32_t x_high = pos[0] >> (22 + 21);
+  uint32_t x_mid = ((pos[0] >> 22) & mask21);
+  uint32_t x_high = (pos[0] >> (22 + 21));
 
   uint32_t y_lower = pos[1] & mask21;
   uint32_t y_mid = (pos[1] >> 21) & mask22;
-  uint32_t y_high = pos[1] >> (21 + 22);
+  uint32_t y_high = (pos[1] >> (21 + 22));
 
   uint32_t z_lower = pos[2] & mask21;
   uint32_t z_mid = (pos[2] >> 21) & mask21;
@@ -515,17 +515,17 @@ inline void encode(const uint64_t (&pos)[3], morton192_t &morton)
 
   // X starts at LSB
   morton.data[0] = libmorton::morton3D_64_encode(x_lower, y_lower, z_lower);
-  morton.data[1] = libmorton::morton3D_64_encode(x_mid, y_mid, z_mid);
-  morton.data[2] = libmorton::morton3D_64_encode(x_high, y_high, z_high);
+  morton.data[1] = libmorton::morton3D_64_encode(y_mid, z_mid, x_mid);
+  morton.data[2] = libmorton::morton3D_64_encode(z_high, x_high, y_high);
 }
 
 inline void encode(const uint64_t (&pos)[3], morton128_t &morton)
 {
-  constexpr uint32_t mask21 = (uint32_t(1) << 21) - 1;
-  constexpr uint32_t mask22 = (uint32_t(1) << 22) - 1;
+  constexpr uint64_t mask21 = (uint64_t(1) << 21) - 1;
+  constexpr uint64_t mask22 = (uint64_t(1) << 22) - 1;
 
   uint32_t x_lower = pos[0] & mask22;
-  uint32_t x_mid = (pos[0] >> 22) & mask21;
+  uint32_t x_mid = ((pos[0] >> 22) & mask21);
 
   uint32_t y_lower = pos[1] & mask21;
   uint32_t y_mid = (pos[1] >> 21) & mask22;
@@ -535,19 +535,14 @@ inline void encode(const uint64_t (&pos)[3], morton128_t &morton)
 
   // X starts at LSB
   morton.data[0] = libmorton::morton3D_64_encode(x_lower, y_lower, z_lower);
-  morton.data[1] = libmorton::morton3D_64_encode(x_mid, y_mid, z_mid);
+  morton.data[1] = libmorton::morton3D_64_encode(y_mid, z_mid, x_mid);
 }
 
 inline void encode(const uint64_t (&pos)[3], morton_t<uint64_t,1> &morton)
 {
-  constexpr uint32_t mask21 = (uint32_t(1) << 21) - 1;
-  constexpr uint32_t mask22 = (uint32_t(1) << 22) - 1;
-
-  uint32_t x_lower = pos[0] & mask22;
-
-  uint32_t y_lower = pos[1] & mask21;
-
-  uint32_t z_lower = pos[2] & mask21;
+  uint32_t x_lower = pos[0];
+  uint32_t y_lower = pos[1];
+  uint32_t z_lower = pos[2];
 
   // X starts at LSB
   morton.data[0] = libmorton::morton3D_64_encode(x_lower, y_lower, z_lower);
@@ -555,14 +550,9 @@ inline void encode(const uint64_t (&pos)[3], morton_t<uint64_t,1> &morton)
 
 inline void encode(const uint64_t (&pos)[3], morton32_t &morton)
 {
-  constexpr uint32_t mask21 = (uint32_t(1) << 21) - 1;
-  constexpr uint32_t mask22 = (uint32_t(1) << 22) - 1;
-
-  uint_fast16_t x_lower = uint_fast16_t(pos[0] & mask22);
-
-  uint_fast16_t y_lower = uint_fast16_t(pos[1] & mask21);
-
-  uint_fast16_t z_lower = uint_fast16_t(pos[2] & mask21);
+  uint_fast16_t x_lower = uint_fast16_t(pos[0]);
+  uint_fast16_t y_lower = uint_fast16_t(pos[1]);
+  uint_fast16_t z_lower = uint_fast16_t(pos[2]);
 
   // X starts at LSB
   morton.data[0] = libmorton::morton3D_32_encode(x_lower, y_lower, z_lower);

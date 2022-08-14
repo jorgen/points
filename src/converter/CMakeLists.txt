@@ -26,7 +26,6 @@ set(private_headers
   point_buffer_splitter.hpp
   pre_init_file_retriever.hpp
   cache_file_handler.hpp
-  data_provider.hpp
   tree_handler.hpp
   tree_lod_generator.hpp
   attributes_configs.hpp
@@ -45,7 +44,6 @@ set(sources
   tree.cpp
   pre_init_file_retriever.cpp
   cache_file_handler.cpp
-  data_provider.cpp
   tree_handler.cpp
   tree_lod_generator.cpp
   attributes_configs.cpp
@@ -64,14 +62,14 @@ target_include_directories(converter_objects
 )
 target_include_directories(converter_objects
   PRIVATE
-   ${libmorton_SOURCE_DIR}
+   ${libmorton_SOURCE_DIR}/include
 )
 setWarningflagsForTarget(converter_objects)
 
 if (MSVC)
   target_compile_options(converter_objects PRIVATE /arch:AVX2)
 else()
-  target_compile_options(converter_objects PRIVATE -mavx2)
+  #target_compile_options(converter_objects PRIVATE -mavx2)
 endif()
 
 if (BUILD_SHARED_LIBS)

@@ -19,7 +19,6 @@
 #include <assert.h>
 #include <points/converter/default_attribute_names.h>
 #include "point_buffer_splitter.hpp"
-#include "data_provider.hpp"
 namespace points
 {
 namespace converter
@@ -50,8 +49,18 @@ tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t 
   morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
   tree.morton_min = morton::morton_and(header.morton_min, new_tree_mask_inv);
   tree.morton_max = morton::morton_or(header.morton_min, new_tree_mask);
+#ifndef NDEBUG
+  double min_pos[3];
+  double max_pos[3];
+  convert_morton_to_pos(global_state.scale, global_state.offset, tree.morton_min, min_pos);
+  convert_morton_to_pos(global_state.scale, global_state.offset, tree.morton_max, max_pos);
+  double diff[3];
+  diff[0] = int(max_pos[0] - min_pos[0]);
+  diff[1] = int(max_pos[1] - min_pos[1]);
+  diff[2] = int(max_pos[2] - min_pos[2]);
+  assert(diff[0] == diff[1] && diff[0] == diff[2]);
+#endif
   tree.magnitude = uint8_t(magnitude);
-  (void) global_state; //should subdivide?
   tree.nodes[0].push_back(0);
   tree.skips[0].push_back(int16_t(0));
   tree.data[0].emplace_back();
@@ -70,9 +79,6 @@ static void tree_initialize_sub(const tree_t &parent_tree, tree_cache_t &tree_ca
   morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
   sub_tree.morton_min = morton::morton_and(morton, new_tree_mask_inv);
   sub_tree.morton_max = morton::morton_or(morton, new_tree_mask);
-  morton::morton192_t test = {};
-  test.data[0] = 11568107548032565248ull;
-  test.data[1] = 60127907857ull;
 
   sub_tree.nodes[0].push_back(0);
   sub_tree.skips[0].push_back(int16_t(0));
@@ -282,32 +288,6 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_
   }
 }
 
-
-static bool validate_min_offset(uint64_t min_offset, uint64_t scaled_offset)
-{
-  if (scaled_offset == 0)
-    return true;
-//  if (scaled_offset % min_offset != 0)
-//    return false;
-  return min_offset <= scaled_offset;
-}
-
-static bool validate_points_offset(const storage_header_t &header)
-{
-  const double (&offsets)[3] = header.public_header.offset;
-  if (offsets[0] == 0.0 && offsets[1] == 0.0 && offsets[2] == 0.0)
-    return true;
-  uint64_t scaled_offsets[3];
-  scaled_offsets[0] = uint64_t(offsets[0] / header.public_header.scale[0]);
-  scaled_offsets[1] = uint64_t(offsets[1] / header.public_header.scale[1]);
-  scaled_offsets[2] = uint64_t(offsets[2] / header.public_header.scale[2]);
-
-  uint64_t min_offset = uint64_t(1) << header.lod_span;
-  return validate_min_offset(min_offset, scaled_offsets[0])
-    && validate_min_offset(min_offset, scaled_offsets[1])
-    && validate_min_offset(min_offset, scaled_offsets[2]);
-}
-
 static void insert_tree_in_tree(tree_cache_t &tree_cache, tree_id_t &parent_id, const tree_id_t &child_id)
 {
   tree_t *parent = tree_cache.get(parent_id);
@@ -379,7 +359,7 @@ tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_c
 {
   tree_id_t ret = tree_id;
   auto *tree = tree_cache.get(tree_id);
-  assert(validate_points_offset(header));
+  //assert(validate_points_offset(header));
   if (header.morton_min < tree->morton_min || tree->morton_max < header.morton_max )
   {
     ret = reparent_tree(tree_cache, tree_id, header.morton_min, header.morton_max);
