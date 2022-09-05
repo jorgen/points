@@ -35,6 +35,13 @@ namespace points
 {
 namespace converter
 {
+
+struct tree_walker_with_buffer_t
+{
+  tree_walker_nodes_t node_data;
+  std::vector<buffer_t> buffers[5];
+};
+
 struct converter_data_source_t
 {
   converter_data_source_t(converter_t *converter, render::callback_manager_t &callback_manager);
@@ -53,7 +60,8 @@ struct converter_data_source_t
   glm::dmat4 project_view;
 
   render::buffer_t index_buffer;
-  std::vector<uint16_t> indecies;
+  std::vector<tree_walker_with_buffer_t> current_tree_nodes;
+
 };
 } // namespace render
 } // namespace points

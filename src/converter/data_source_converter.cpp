@@ -49,16 +49,120 @@ converter_data_source_t::converter_data_source_t(converter_t *converter, render:
   };
 }
 
+
+
+static void merge_trees(const tree_walker_nodes_t &node, tree_walker_with_buffer_t &buffer)
+{
+  for (int level = 0; level < 5; level++)
+  {
+    auto node_morton_current = node.morton_nodes[level].begin();
+    auto node_subset_current = node.point_subsets[level].begin();
+    auto buffer_morton_current = buffer.node_data.morton_nodes[level].begin();
+    auto buffer_subset_current = buffer.node_data.point_subsets[level].begin();
+    auto buffer_buffer_current = buffer.buffers[level].begin();
+    while(buffer_morton_current != buffer.node_data.morton_nodes[level].end())
+    {
+      auto node_morton_old = node_morton_current;
+      while(node_morton_current != node.morton_nodes[level].end() && *node_morton_current < *buffer_morton_current)
+        node_morton_current++;
+      if (node_morton_old != node_morton_current)
+      {
+        auto count = std::distance(node_morton_old, node_morton_current);
+        buffer_morton_current = buffer.node_data.morton_nodes[level].insert(buffer_morton_current, node_morton_old, node_morton_current);
+        buffer_subset_current = buffer.node_data.point_subsets[level].insert(buffer_subset_current, node_subset_current, node_subset_current + count);
+        buffer_buffer_current = buffer.buffers[level].insert(buffer_buffer_current, count, {});
+        node_subset_current += count;
+      }
+      auto buffer_morton_old = buffer_morton_current;
+      while(buffer_morton_current != buffer.node_data.morton_nodes[level].end()
+            && (node_morton_current == node.morton_nodes[level].end()
+                || *buffer_morton_current < *node_morton_current))
+        ++buffer_morton_current;
+      if (buffer_morton_old != buffer_morton_current)
+      {
+        auto count = std::distance(buffer_morton_old, buffer_morton_current);
+        buffer_morton_current = buffer.node_data.morton_nodes[level].erase(buffer_morton_old, buffer_morton_current);
+        buffer_subset_current = buffer.node_data.point_subsets[level].erase(buffer_subset_current, buffer_subset_current + count);
+        buffer_buffer_current = buffer.buffers[level].erase(buffer_buffer_current, buffer_buffer_current + count);
+      }
+      while(node_morton_current != node.morton_nodes[level].end()
+            && buffer_morton_current != buffer.node_data.morton_nodes[level].end()
+            && *node_morton_current == *buffer_morton_current)
+      {
+        ++node_morton_current;
+        ++node_subset_current;
+        ++buffer_morton_current;
+        ++buffer_subset_current;
+        ++buffer_buffer_current;
+      }
+    }
+  }
+}
+
+static void combine_buffers(const std::vector<tree_walker_nodes_t> &new_nodes, render::callback_manager_t &callback_manager, std::vector<tree_walker_with_buffer_t> &buffers)
+{
+  auto current_buffer = buffers.begin();
+  auto current_node = new_nodes.begin();
+  while(current_node != new_nodes.end())
+  {
+    if (current_buffer != buffers.end())
+    {
+      auto old_current = current_buffer;
+      while (current_buffer != buffers.end() && (current_node != new_nodes.end() && current_buffer->node_data.min_morton < current_node->min_morton ))
+        ++current_buffer;
+      if (old_current != current_buffer)
+      {
+        current_buffer = buffers.erase(old_current, current_buffer);
+      }
+    }
+    auto old_current_node = current_node;
+    while (current_node != new_nodes.end() && (current_buffer == buffers.end() || current_node->min_morton < current_buffer->node_data.min_morton))
+           ++current_node;
+    if (old_current_node != current_node)
+    {
+      auto to_insert = std::distance(old_current_node, current_node);
+      current_buffer = buffers.insert(current_buffer, to_insert, {});
+      for (int i = 0; i < to_insert; i++)
+      {
+        current_buffer->node_data = *old_current_node;
+        ++current_buffer;
+        ++old_current_node++;
+      }
+    }
+    if (current_buffer != buffers.end()
+        && current_node != new_nodes.end()
+        && current_buffer->node_data.min_morton == current_node->min_morton)
+    {
+      if (current_buffer->node_data.level > current_node->level)
+      {
+        current_buffer = buffers.erase(current_buffer);
+      }
+      else if (current_buffer->node_data.level < current_node->level)
+      {
+        current_buffer = buffers.insert(current_buffer,{});
+        current_buffer->node_data = *current_node;
+        ++current_node;
+        ++current_buffer;
+      }
+      else
+      {
+        merge_trees(*current_node, *current_buffer);
+        ++current_node;
+        ++current_buffer;
+      }
+    }
+  }
+}
+
 void converter_data_source_t::add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render)
 {
-  //tree_walker.
-  //tree_walker.walk_tree()
   memcpy(&project_view, camera->view_projection, sizeof(project_view));
   callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view);
 
   if (back_buffer && back_buffer->done())
   {
-    aabb = back_buffer->tree_aabb;
+    aabb = back_buffer->m_tree_aabb;
+    combine_buffers({back_buffer->m_new_nodes}, callbacks, current_tree_nodes);
     back_buffer.reset();
   }
 

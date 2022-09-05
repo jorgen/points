@@ -41,6 +41,7 @@ struct children_subset_t
   std::vector<int> data_skips;
   std::vector<int> skips;
   std::vector<int> lods;
+  std::vector<tree_id_t> tree_id;
 };
 
 static input_data_id_t get_next_input_id(tree_cache_t &tree_cache)

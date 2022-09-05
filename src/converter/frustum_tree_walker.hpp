@@ -26,6 +26,21 @@ namespace points
 {
 namespace converter
 {
+
+struct tree_walker_data_t
+{
+  std::vector<points_subset_t> data;
+};
+
+struct tree_walker_nodes_t
+{
+  morton::morton192_t min_morton;
+  tree_id_t id;
+  uint16_t level;
+  std::vector<uint16_t> morton_nodes[5];
+  std::vector<tree_walker_data_t> point_subsets[5];
+};
+
 class frustum_tree_walker_t
 {
 public:
@@ -35,9 +50,10 @@ public:
   bool done();
 
   glm::dmat4 m_view_perspective;
-  bool m_done;
-  render::aabb_t tree_aabb;
+  render::aabb_t m_tree_aabb;
   std::mutex m_mutex;
+  tree_walker_nodes_t m_new_nodes;
+  bool m_done;
 };
 
 }

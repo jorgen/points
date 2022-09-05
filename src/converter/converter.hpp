@@ -39,9 +39,9 @@ struct converter_t
     , runtime_callbacks{}
   {
     tree_state.scale = 0.00025;
-    tree_state.offset[0] = -double(uint64_t(1) << 21);
-    tree_state.offset[1] = -double(uint64_t(1) << 21);
-    tree_state.offset[2] = -double(uint64_t(1) << 21);
+    tree_state.offset[0] = -double(uint64_t(1) << 24);
+    tree_state.offset[1] = -double(uint64_t(1) << 24);
+    tree_state.offset[2] = -double(uint64_t(1) << 24);
   }
   std::string cache_filename;
   tree_global_state_t tree_state;
