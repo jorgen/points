@@ -15,45 +15,8 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef DRAW_GROUP_H
-#define DRAW_GROUP_H
 
-#include <points/render/export.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-namespace points
+int return_three()
 {
-namespace render
-{
-
-struct draw_buffer_t
-{
-  int buffer_mapping;
-  void *user_ptr;
-};
-
-enum draw_type_t
-{
-  aabb_triangle_mesh,
-  skybox_triangle,
-  flat_points
-};
-
-struct draw_group_t
-{
-  draw_type_t draw_type;
-  struct draw_buffer_t *buffers;
-  int buffers_size;
-  int draw_size;
-};
-
+    return 3;
 }
-}
-
-#ifdef __cplusplus
-}
-#endif
-#endif // DRAW_GROUP_H

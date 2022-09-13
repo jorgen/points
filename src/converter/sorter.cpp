@@ -64,6 +64,7 @@ typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) <= sizeof(morton::mort
 template <typename T, typename MT, size_t C>
 void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &points, double smallest_scale, type_t format, error_t &error)
 {
+  (void)error;
   auto &header = points.header;
   uint64_t count = header.public_header.point_count;
   uint64_t buffer_size = sizeof(morton::morton_t<MT,C>) * count;
@@ -80,9 +81,9 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &po
     pos[0] = point.data[0] * header.public_header.scale[0] + header.public_header.offset[0];
     pos[1] = point.data[1] * header.public_header.scale[1] + header.public_header.offset[1];
     pos[2] = point.data[2] * header.public_header.scale[2] + header.public_header.offset[2];
-    tmp[0] = (pos[0] - tree_state.offset[0]) * inv_scale;
-    tmp[1] = (pos[1] - tree_state.offset[1]) * inv_scale;
-    tmp[2] = (pos[2] - tree_state.offset[2]) * inv_scale;
+    tmp[0] = uint64_t((pos[0] - tree_state.offset[0]) * inv_scale);
+    tmp[1] = uint64_t((pos[1] - tree_state.offset[1]) * inv_scale);
+    tmp[2] = uint64_t((pos[2] - tree_state.offset[2]) * inv_scale);
     morton::encode(tmp, morton_begin[i]);
   }
   std::sort(morton_begin, morton_end);

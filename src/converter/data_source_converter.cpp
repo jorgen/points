@@ -101,6 +101,7 @@ static void merge_trees(const tree_walker_nodes_t &node, tree_walker_with_buffer
 
 static void combine_buffers(const std::vector<tree_walker_nodes_t> &new_nodes, render::callback_manager_t &callback_manager, std::vector<tree_walker_with_buffer_t> &buffers)
 {
+  (void)callback_manager;
   auto current_buffer = buffers.begin();
   auto current_node = new_nodes.begin();
   while(current_node != new_nodes.end())
@@ -156,6 +157,7 @@ static void combine_buffers(const std::vector<tree_walker_nodes_t> &new_nodes, r
 
 void converter_data_source_t::add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render)
 {
+  (void)to_render;
   memcpy(&project_view, camera->view_projection, sizeof(project_view));
   callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view);
 

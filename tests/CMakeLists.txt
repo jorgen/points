@@ -10,10 +10,14 @@ endif()
 add_executable(private_interface_unit_tests
 	private/basic_camera.cpp
 	private/morton_tests.cpp
-	 "private/tree_tests.cpp")
-BuildExternalTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm points_render_objects converter_objects)
-target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include)
+	private/tree_tests.cpp
+	$<TARGET_OBJECTS:common_objects>
+	$<TARGET_OBJECTS:converter_objects>
+	$<TARGET_OBJECTS:points_render_objects>
+)
+BuildExternalTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm libuv::libuv laszip::api)
+target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
 	#target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)
 endif()
-copy_dll_for_target(private_interface_unit_tests points_render converter)
+copy_dll_for_target(public_interface_unit_tests points_render converter)

@@ -34,7 +34,7 @@ struct load_dll_t
 {
   load_dll_t()
   {
-    laszip_load_dll();
+    //laszip_load_dll();
   }
 };
 

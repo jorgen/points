@@ -50,6 +50,7 @@ struct cache_file_read_request_t
   cache_file_read_request_t(cache_file_t &cache_file, int64_t offset, int32_t size, std::function<void(std::unique_ptr<uint8_t[]> &&, error_t &&)> read_function)
     : buffer(new uint8_t[size])
   {
+    (void)read_function;
     read_request.data = this;
     uv_buffer.base = (char*) buffer.get();
     uv_buffer.len = size;
@@ -57,8 +58,8 @@ struct cache_file_read_request_t
       error_t error;
       if (req->result < 0)
       {
-        error.code = req->result;
-        error.msg = uv_strerror(req->result);
+        error.code = int(req->result);
+        error.msg = uv_strerror(int(req->result));
       }
       uv_fs_req_cleanup(req);
       auto *read_request = static_cast<cache_file_read_request_t *>(req->data);

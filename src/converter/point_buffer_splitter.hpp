@@ -34,6 +34,7 @@ namespace converter
 template<typename T, size_t C>
 void verify_points_range(const tree_global_state_t &state, const read_points_t &points, int start_index, int end_index, const morton::morton192_t &min, const morton::morton192_t &max)
 {
+  (void)state;
   morton::morton_t<T,C> morton_current;
   morton::morton_t<T,C> morton_previous = {};
   int count_less = 0;
@@ -175,11 +176,11 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
     }
 
     assert(new_size != 0);
-    child.data.emplace_back(subset.input_id, offset_t(new_offset), point_count_t(new_size));
+    child.data.emplace_back(subset.input_id, offset_t(new_offset), point_count_t(uint32_t(new_size)));
     child.point_count += new_size;
 
 #ifndef NDEBUG
-    verify_points_range<T,C>(state, points, new_offset, new_offset + new_size, node_min, node_max);
+    verify_points_range<T,C>(state, points, int(new_offset), int(new_offset + new_size), node_min, node_max);
 #endif
 
     morton_current_start = morton_current_end;

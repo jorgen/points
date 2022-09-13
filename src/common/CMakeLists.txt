@@ -1,15 +1,30 @@
-set(EXPORTED_HEADERS
-  points/error.h
-  points/export.h
+include(BuildExternalTargetLinkLibrary)
+
+set(public_headers
+  points/common/error.h
+  points/common/export.h
+  points/common/format.h
+)
+set(private_headers
+  error.hpp
+)
+set(sources
+  error.cpp
 )
 
-add_library(points_common INTERFACE ${EXPORTED_HEADERS})
-set_target_properties(${target}
+add_library(common_objects OBJECT ${public_headers} ${private_headers} ${sources})
+add_library(common empty_dylib_function.cpp $<TARGET_OBJECTS:common_objects>)
+BuildExternalTargetLinkLibrary(common PUBLIC common_objects)
+if (BUILD_SHARED_LIBS)
+    target_compile_definitions(common_objects PRIVATE POINTS_COMMON_EXPORTS)
+endif()
+set_target_properties(common_objects
   PROPERTIES
-  PUBLIC_HEADER "${EXPORTED_HEADERS}"
+  PUBLIC_HEADER "${public_headers}"
 )
-target_include_directories(points_common
-  INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(common_objects
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:include>
 )

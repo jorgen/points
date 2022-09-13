@@ -18,7 +18,6 @@
 #ifndef DATA_SOURCE_H
 #define DATA_SOURCE_H
 
-#include <points/export.h>
 #include <points/render/draw_group.h>
 
 #ifdef __cplusplus

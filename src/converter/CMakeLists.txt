@@ -4,6 +4,7 @@ Find_Package(libuv REQUIRED)
 Find_Package(CURL REQUIRED)
 
 set(public_headers
+  points/converter/export.h
   points/converter/converter.h
   points/converter/default_attribute_names.h
   points/converter/converter_data_source.h
@@ -52,7 +53,7 @@ set(sources
   )
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(converter_objects PRIVATE fmt glm points_render points_common)
+target_link_libraries(converter_objects PRIVATE fmt glm points_render common)
 BuildExternalTargetLinkLibrary(converter_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
 target_include_directories(converter_objects
     PUBLIC
@@ -73,12 +74,12 @@ else()
 endif()
 
 if (BUILD_SHARED_LIBS)
-    target_compile_definitions(converter_objects PRIVATE points_converter_EXPORTS)
-    target_compile_options(converter_objects PRIVATE -fsanitize=address)
-    target_link_libraries(converter_objects PRIVATE -fsanitize=address)
+    target_compile_definitions(converter_objects PRIVATE POINTS_CONVERTER_EXPORTS)
+#    target_compile_options(converter_objects PRIVATE -fsanitize=address)
+#    target_link_libraries(converter_objects PRIVATE -fsanitize=address)
 endif()
 
 add_library(converter empty_dylib_function.cpp $<TARGET_OBJECTS:converter_objects>)
-target_compile_options(converter PRIVATE -fsanitize=address)
-target_link_options(converter PRIVATE -fsanitize=address)
+#target_compile_options(converter PRIVATE -fsanitize=address)
+#target_link_options(converter PRIVATE -fsanitize=address)
 BuildExternalTargetLinkLibrary(converter PUBLIC converter_objects)

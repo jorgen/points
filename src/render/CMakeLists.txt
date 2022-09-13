@@ -4,6 +4,7 @@ Find_Package(libuv REQUIRED)
 Find_Package(CURL REQUIRED)
 
 set(public_headers
+  points/render/export.h
   points/render/camera.h
   points/render/renderer.h
   points/render/aabb.h 
@@ -33,7 +34,7 @@ set(sources
   )
 add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources} )
 target_link_libraries(points_render_objects PRIVATE fmt glm)
-target_link_libraries(points_render_objects PUBLIC points_common)
+target_link_libraries(points_render_objects PUBLIC common)
 BuildExternalTargetLinkLibrary(points_render_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
 target_include_directories(points_render_objects
     PUBLIC
@@ -45,7 +46,7 @@ target_include_directories(points_render_objects  PRIVATE ${stbimage_SOURCE_DIR}
 #target_include_directories(points_render_objects PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 setWarningflagsForTarget(points_render_objects)
 if (BUILD_SHARED_LIBS)
-    target_compile_definitions(points_render_objects PRIVATE points_render_EXPORTS)
+    target_compile_definitions(points_render_objects PRIVATE POINTS_RENDER_EXPORTS)
 endif()
 
 add_library(points_render empty_dylib_function.cpp $<TARGET_OBJECTS:points_render_objects>)

@@ -62,7 +62,6 @@ tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t 
 #endif
   tree.magnitude = uint8_t(magnitude);
   tree.nodes[0].push_back(0);
-  tree.ids[0].push_back(0);
   tree.skips[0].push_back(int16_t(0));
   tree.data[0].emplace_back();
 #ifndef NDEBUG
@@ -75,6 +74,7 @@ tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t 
 
 static void tree_initialize_sub(const tree_t &parent_tree, tree_cache_t &tree_cache, const morton::morton192_t &morton, tree_t &sub_tree)
 {
+  (void)tree_cache;
   sub_tree.magnitude = parent_tree.magnitude - 1;
   morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t, 3>(sub_tree.magnitude * 5 + 4);
   morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
@@ -82,7 +82,6 @@ static void tree_initialize_sub(const tree_t &parent_tree, tree_cache_t &tree_ca
   sub_tree.morton_max = morton::morton_or(morton, new_tree_mask);
 
   sub_tree.nodes[0].push_back(0);
-  sub_tree.ids[0].push_back(0);
   sub_tree.skips[0].push_back(int16_t(0));
   sub_tree.data[0].emplace_back();
 #ifndef NDEBUG
@@ -102,7 +101,6 @@ static void tree_initialize_new_parent(const tree_t &some_child, const morton::m
   new_parent.morton_min = morton::morton_and(new_tree_mask_inv, new_min);
   new_parent.morton_max = morton::morton_or(new_parent.morton_min, new_tree_mask);
   new_parent.nodes[0].push_back(0);
-  new_parent.ids[0].push_back(0);
   new_parent.skips[0].push_back(int16_t(0));
   new_parent.data[0].emplace_back();
 }
@@ -128,7 +126,7 @@ static void sub_tree_alloc_children(tree_t &tree, int level, int skip)
     old_skip = tree.skips[level].back() + sub_tree_count_skips(tree.nodes[level].back(), 8);
 
   tree.nodes[level].emplace(tree.nodes[level].begin() + skip);
-  tree.skips[level].emplace(tree.skips[level].begin() + skip, old_skip);
+  tree.skips[level].emplace(tree.skips[level].begin() + skip, uint16_t(old_skip));
   tree.data[level].emplace(tree.data[level].begin() + skip);
 #ifndef NDEBUG
   tree.mins[level].emplace(tree.mins[level].begin() + skip);

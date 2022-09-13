@@ -101,7 +101,7 @@ static void walk_tree_l(const tree_global_state_t &global_state, const tree_t &t
   {
     if (node & 1 << i)
     {
-      walk_tree_l(global_state, tree, view_perspective, level + 1, tree.skips[level][index] + children, morton | (i << 4 * 3), aabb, nodes);
+      walk_tree_l(global_state, tree, view_perspective, level + 1, tree.skips[level][index] + children, uint16_t(morton | (i << 4 * 3)), aabb, nodes);
       children++;
     }
   }

@@ -60,14 +60,14 @@ attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&
   {
     auto &source = _attributes_configs[i];
     if (compare_attributes(source.attributes, attr))
-      return {i};
+      return {uint32_t(i)};
   }
 
   int ret = int(_attributes_configs.size());
   _attributes_configs.emplace_back();
   auto &new_config = _attributes_configs.back();
   new_config.attributes = std::move(attr);
-  return {ret};
+  return {uint32_t(ret)};
 }
 
 const attributes_t &attributes_configs_t::get(attributes_id_t id)

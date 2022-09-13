@@ -15,45 +15,25 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef DRAW_GROUP_H
-#define DRAW_GROUP_H
-
-#include <points/render/export.h>
-
+#ifndef POINTS_ERROR_H
+#define POINTS_ERROR_H
+#include <stddef.h>
+#include <points/common/export.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 namespace points
 {
-namespace render
-{
 
-struct draw_buffer_t
-{
-  int buffer_mapping;
-  void *user_ptr;
-};
-
-enum draw_type_t
-{
-  aabb_triangle_mesh,
-  skybox_triangle,
-  flat_points
-};
-
-struct draw_group_t
-{
-  draw_type_t draw_type;
-  struct draw_buffer_t *buffers;
-  int buffers_size;
-  int draw_size;
-};
-
-}
-}
-
+struct error_t;
+POINTS_COMMON_EXPORT error_t *error_create();
+POINTS_COMMON_EXPORT void error_destroy(error_t *error);
+POINTS_COMMON_EXPORT void error_set_info(error_t *error, int code, const char *str, size_t str_len);
+POINTS_COMMON_EXPORT void error_get_info(const error_t *error, int *code, const char **str, size_t *str_len);
+} // namespace points
 #ifdef __cplusplus
 }
 #endif
-#endif // DRAW_GROUP_H
+
+#endif

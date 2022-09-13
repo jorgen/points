@@ -18,7 +18,7 @@
 #ifndef POINTS_BUFFER_H
 #define POINTS_BUFFER_H
 
-#include <points/export.h>
+#include <points/render/export.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,8 +29,8 @@ namespace points
 namespace render
 {
 struct buffer_t;
-POINTS_EXPORT void buffer_set_rendered(struct buffer_t *buffer);
-POINTS_EXPORT void buffer_release_data(struct buffer_t *buffer);
+POINTS_RENDER_EXPORT void buffer_set_rendered(struct buffer_t *buffer);
+POINTS_RENDER_EXPORT void buffer_release_data(struct buffer_t *buffer);
 }
 }
 

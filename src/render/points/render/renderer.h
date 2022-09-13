@@ -1,8 +1,8 @@
 #ifndef POINTS_RENDERER_H
 #define POINTS_RENDERER_H
 
-#include <points/export.h>
-#include <points/format.h>
+#include <points/common/format.h>
+#include <points/render/export.h>
 #include <points/render/aabb.h>
 #include <points/render/buffer.h>
 #include <points/render/draw_group.h>
@@ -92,16 +92,16 @@ struct renderer_callbacks_t
   renderer_destroy_texture_t destroy_texture;
 };
 
-POINTS_EXPORT struct renderer_t* renderer_create();
-POINTS_EXPORT void renderer_destroy(struct renderer_t *renderer);
-POINTS_EXPORT void renderer_add_camera(struct renderer_t* renderer, struct camera_t* camera);
-POINTS_EXPORT void renderer_remove_camera(struct renderer_t* renderer, struct camera_t* camera);
-POINTS_EXPORT struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* camera);
-POINTS_EXPORT void renderer_set_callback(struct renderer_t* renderer, renderer_callbacks_t callbacks, void *user_ptr);
-POINTS_EXPORT void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t data_source);
-POINTS_EXPORT void renderer_remove_data_source(struct renderer_t *renderer, struct data_source_t data_source);
+POINTS_RENDER_EXPORT struct renderer_t* renderer_create();
+POINTS_RENDER_EXPORT void renderer_destroy(struct renderer_t *renderer);
+POINTS_RENDER_EXPORT void renderer_add_camera(struct renderer_t* renderer, struct camera_t* camera);
+POINTS_RENDER_EXPORT void renderer_remove_camera(struct renderer_t* renderer, struct camera_t* camera);
+POINTS_RENDER_EXPORT struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* camera);
+POINTS_RENDER_EXPORT void renderer_set_callback(struct renderer_t* renderer, renderer_callbacks_t callbacks, void *user_ptr);
+POINTS_RENDER_EXPORT void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t data_source);
+POINTS_RENDER_EXPORT void renderer_remove_data_source(struct renderer_t *renderer, struct data_source_t data_source);
 
-POINTS_EXPORT void to_render_add_render_group(struct to_render_t *to_render, draw_group_t draw_group);
+POINTS_RENDER_EXPORT void to_render_add_render_group(struct to_render_t *to_render, draw_group_t draw_group);
 }
 }
 

@@ -18,7 +18,7 @@
 #ifndef POINTS_CONVERTER_DATA_SOURCE_H
 #define POINTS_CONVERTER_DATA_SOURCE_H
 
-#include <points/export.h>
+#include <points/converter/export.h>
 
 #include <points/render/renderer.h>
 #include <points/render/data_source.h>
@@ -37,10 +37,10 @@ struct aabb_data_source_t;
 namespace converter
 {
 struct converter_data_source_t;
-POINTS_EXPORT  struct converter_data_source_t *converter_data_source_create(struct converter::converter_t *converter, struct render::renderer_t *renderer);
-POINTS_EXPORT void converter_data_source_destroy(struct converter_data_source_t *converter_data_source);
-POINTS_EXPORT struct render::data_source_t converter_data_source_get(struct converter_data_source_t *converter_data_source);
-POINTS_EXPORT void converter_data_source_get_aabb(struct converter_data_source_t *converter_data_source, double aabb_min[3], double aabb_max[3]);
+POINTS_CONVERTER_EXPORT struct converter_data_source_t *converter_data_source_create(struct converter::converter_t *converter, struct render::renderer_t *renderer);
+POINTS_CONVERTER_EXPORT void converter_data_source_destroy(struct converter_data_source_t *converter_data_source);
+POINTS_CONVERTER_EXPORT struct render::data_source_t converter_data_source_get(struct converter_data_source_t *converter_data_source);
+POINTS_CONVERTER_EXPORT void converter_data_source_get_aabb(struct converter_data_source_t *converter_data_source, double aabb_min[3], double aabb_max[3]);
 }
 
 } // namespace points

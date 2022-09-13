@@ -30,28 +30,6 @@ namespace points
 {
 namespace converter
 {
-error_t *converter_error_create()
-{
-  return new error_t();
-}
-
-void converter_error_destroy(error_t *error)
-{
-  delete error;
-}
-
-void converter_error_set_info(error_t *error, int code, const char *str, size_t str_len)
-{
-  error->code = code;
-  error->msg = std::string(str, str_len);
-}
-void converter_error_get_info(const error_t *error, int *code, const char **str, size_t *str_len)
-{
-  *code = error->code;
-  *str = error->msg.c_str();
-  *str_len = error->msg.size();
-}
-
 struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size)
 {
   return new converter_t(cache_filename, cache_filename_size);

@@ -22,11 +22,19 @@
 
 #include "glm_include.hpp"
 
+#ifdef near
+#undef near
+#endif
+
+#ifdef far
+#undef far
+#endif
+
 namespace points
 {
   namespace render
   {
-    typedef glm::dvec4 plane;
+    typedef glm::dvec4 plane_t;
     struct frustum_t
     {
       enum plane_names_t
@@ -38,10 +46,10 @@ namespace points
         near,
         far
       };
-      plane planes[6];
+      plane_t planes[6];
     };
 
-    inline void plane_normalize(plane& plane)
+    inline void plane_normalize(plane_t& plane)
     {
       //glm::normalize(plane);
       double mag = sqrt(plane.x * plane.x + plane.y * plane.y + plane.z * plane.z);
@@ -52,7 +60,7 @@ namespace points
     }
 
     template<typename T>
-    inline double plane_distance(const plane& plane, const T& pos)
+    inline double plane_distance(const plane_t& plane, const T& pos)
     {
       return plane.x * pos[0] + plane.y * pos[1] + plane.z * pos[2] + plane.w;
     }

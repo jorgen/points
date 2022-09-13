@@ -18,7 +18,7 @@
 #ifndef POINTS_ERROR_H
 #define POINTS_ERROR_H
 #include <stddef.h>
-#include <points/export.h>
+#include <points/common/export.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,10 +26,10 @@ extern "C" {
 namespace points
 {
 struct error_t;
-POINTS_EXPORT error_t *error_create();
-POINTS_EXPORT void error_destroy(error_t *error);
-POINTS_EXPORT void error_set_info(error_t *error, int code, const char *str, size_t str_len);
-POINTS_EXPORT void error_get_info(const error_t *error, int *code, const char **str, size_t *str_len);
+POINTS_COMMON_EXPORT error_t *error_create();
+POINTS_COMMON_EXPORT void error_destroy(error_t *error);
+POINTS_COMMON_EXPORT void error_set_info(error_t *error, int code, const char *str, size_t str_len);
+POINTS_COMMON_EXPORT void error_get_info(const error_t *error, int *code, const char **str, size_t *str_len);
 } // namespace points
 #ifdef __cplusplus
 }
