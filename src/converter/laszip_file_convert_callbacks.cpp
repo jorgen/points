@@ -34,7 +34,9 @@ struct load_dll_t
 {
   load_dll_t()
   {
-    //laszip_load_dll();
+#ifndef WIN32
+    laszip_load_dll();
+#endif
   }
 };
 

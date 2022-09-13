@@ -540,6 +540,9 @@ uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_
 
 void lod_worker_t::work()
 {
+  (void) cache;
+  (void)attributes_configs;
+  (void)data;
   //uint64_t total_count = 0;
   //attributes_t attributes;
   //std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[data.child_data.size()]);
@@ -639,6 +642,8 @@ tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tr
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
 {
+  (void)_tree_cache;
+  (void)_generated_until;
 }
 
 void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morton192_t &max)
