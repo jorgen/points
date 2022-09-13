@@ -26,15 +26,23 @@ namespace points
 namespace converter
 {
 
-struct lod_worker_data_t
+struct lod_node_worker_data_t
 {
-  lod_worker_data_t(int lod, const points_subset_t &name)
-    : lod(lod)
-    , name(name)
-  {}
-  int lod;
+  uint16_t id;
   points_subset_t name;
   std::vector<points_subset_t> child_data;
+};
+
+struct lod_tree_worker_data_t
+{
+  lod_tree_worker_data_t(tree_id_t tree_id, int magnitude)
+    : tree_id(tree_id)
+    , magnitude(magnitude)
+  {}
+
+  tree_id_t tree_id;
+  int magnitude;
+  std::vector<points_subset_t> nodes[5];
 };
 
 class tree_lod_generator_t;
@@ -43,20 +51,20 @@ class attributes_configs_t;
 class lod_worker_t : public worker_t
 {
 public:
-  lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_worker_data_t &data, int &inc_on_completed);
+  lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, int &inc_on_completed);
   void work() override;
   void after_work(completion_t completion) override;
 private:
   tree_lod_generator_t &lod_generator;
   cache_file_handler_t &cache;
   attributes_configs_t &attributes_configs;
-  lod_worker_data_t &data;
+  lod_node_worker_data_t &data;
   int &inc_on_completed;
 };
 
 struct lod_worker_batch_t
 {
-  std::vector<lod_worker_data_t> worker_data;
+  std::vector<lod_node_worker_data_t> worker_data;
   std::vector<lod_worker_t> lod_workers;
   int current_index = 0;
   int completed = 0;

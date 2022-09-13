@@ -62,6 +62,7 @@ tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t 
 #endif
   tree.magnitude = uint8_t(magnitude);
   tree.nodes[0].push_back(0);
+  tree.ids[0].push_back(0);
   tree.skips[0].push_back(int16_t(0));
   tree.data[0].emplace_back();
 #ifndef NDEBUG
@@ -81,6 +82,7 @@ static void tree_initialize_sub(const tree_t &parent_tree, tree_cache_t &tree_ca
   sub_tree.morton_max = morton::morton_or(morton, new_tree_mask);
 
   sub_tree.nodes[0].push_back(0);
+  sub_tree.ids[0].push_back(0);
   sub_tree.skips[0].push_back(int16_t(0));
   sub_tree.data[0].emplace_back();
 #ifndef NDEBUG
@@ -100,6 +102,7 @@ static void tree_initialize_new_parent(const tree_t &some_child, const morton::m
   new_parent.morton_min = morton::morton_and(new_tree_mask_inv, new_min);
   new_parent.morton_max = morton::morton_or(new_parent.morton_min, new_tree_mask);
   new_parent.nodes[0].push_back(0);
+  new_parent.ids[0].push_back(0);
   new_parent.skips[0].push_back(int16_t(0));
   new_parent.data[0].emplace_back();
 }
