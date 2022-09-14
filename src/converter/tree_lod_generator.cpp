@@ -137,64 +137,82 @@ std::pair<int,int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler
   return ret_pair;
 }
 
-//static void tree_get_work_items2(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const morton::morton192_t &min, const morton::morton192_t &max, children_subset_t &to_lod)
-//{
-//  auto tree = tree_cache.get(tree_id);
-//  std::vector<uint16_t> parent_skips[2];
-//  parent_skips[0].reserve(std::max(std::max(tree->skips[4].size(), tree->skips[3].size()), tree->skips[2].size()));
-//  parent_skips[0].emplace_back(0);
-//  parent_skips[1].reserve(parent_skips[0].capacity());
-//  bool index = false;
-//  for (int i = 0; i < 5; i++, index = !index)
-//  {
-//    for (auto parent_skip : parent_skips[index])
-//    {
-//      auto node = tree->nodes[i][parent_skip];
-//      if (!node)
-//      {
-//        const auto &data = tree->data[i][parent_skip];
-//        assert(data.data.size());
-//        to_lod.data.insert(to_lod.data.end(), data.data.cbegin(), data.data.cend());
-//        int to_ret = data.data.size();
-//        to_lod.data_skips.push_back(to_ret);
-//        to_lod.skips.push_back(1);
-//        to_lod.lods.push_back(lod);
-//        return std::make_pair(1, to_ret);
-//      }
-//
-//      int skip_index = 0;
-//      auto ret_pair = std::make_pair(0,0);
-//      if (min <= parent_min && parent_max <= max)
-//      {
-//        auto &node_data = tree->data[current_level][skip];
-//        assert(node_data.data.size() <= 1);
-//        if (node_data.data.size() == 1)
-//        {
-//          assert(node_data.data.back().offset.data == (~uint64_t(0)));
-//          to_lod.data.emplace_back(node_data.data.back());
-//          to_lod.data_skips.emplace_back(1);
-//          to_lod.skips.emplace_back(1);
-//          to_lod.lods.push_back(lod);
-//          return std::make_pair(1,1);
-//        }
-//        skip_index = int(to_lod.skips.size());
-//        node_data.data.emplace_back(get_next_input_id(tree_cache), offset_t(~uint64_t(0)), point_count_t(0));
-//        node_data.min = parent_min;
-//        node_data.max = parent_max;
-//        to_lod.data.emplace_back(node_data.data.back());
-//        to_lod.data_skips.emplace_back(1);
-//        to_lod.skips.emplace_back(1);
-//        to_lod.lods.push_back(lod);
-//        ret_pair = std::make_pair(1,1);
-//      }
-//
-//
-//    }
-//
-//  }
-//
-//
-//}
+static lod_tree_worker_data_t make_tree_worker_data(const tree_t &tree)
+{
+  lod_tree_worker_data_t ret;
+  ret.tree_id = tree.id;
+  ret.magnitude = tree.magnitude;
+  for (int i = 0; i < 5; i++)
+  {
+    ret.nodes[i].reserve(tree.skips[i].size());
+  }
+  return ret;
+}
+
+
+static void tree_get_work_items2(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const morton::morton192_t &min, const morton::morton192_t &max, std::vector<lod_tree_worker_data_t> &to_lod)
+{
+  auto tree = tree_cache.get(tree_id);
+  to_lod.emplace_back(tree_id, tree->magnitude);
+  lod_tree_worker_data_t lod_tree_worker_data(tree_id, tree->magnitude);
+
+  std::vector<uint16_t> parent_skips[2];
+  parent_skips[0].reserve(std::max(std::max(tree->skips[4].size(), tree->skips[3].size()), tree->skips[2].size()));
+  parent_skips[0].emplace_back(0);
+  parent_skips[1].reserve(parent_skips[0].capacity());
+
+  bool index = false;
+
+  for (int i = 0; i < 5; i++, index = !index)
+  {
+    for (auto parent_skip : parent_skips[index])
+    {
+      auto node = tree->nodes[i][parent_skip];
+      if (!node)
+      {
+        const auto &data = tree->data[i][parent_skip];
+        assert(data.data.size());
+        to_lod.data.insert(to_lod.data.end(), data.data.cbegin(), data.data.cend());
+        int to_ret = data.data.size();
+        to_lod.data_skips.push_back(to_ret);
+        to_lod.skips.push_back(1);
+        to_lod.lods.push_back(lod);
+        continue;
+      }
+
+      int skip_index = 0;
+      auto ret_pair = std::make_pair(0,0);
+      if (min <= parent_min && parent_max <= max)
+      {
+        auto &node_data = tree->data[current_level][skip];
+        assert(node_data.data.size() <= 1);
+        if (node_data.data.size() == 1)
+        {
+          assert(node_data.data.back().offset.data == (~uint64_t(0)));
+          to_lod.data.emplace_back(node_data.data.back());
+          to_lod.data_skips.emplace_back(1);
+          to_lod.skips.emplace_back(1);
+          to_lod.lods.push_back(lod);
+          return std::make_pair(1,1);
+        }
+        skip_index = int(to_lod.skips.size());
+        node_data.data.emplace_back(get_next_input_id(tree_cache), offset_t(~uint64_t(0)), point_count_t(0));
+        node_data.min = parent_min;
+        node_data.max = parent_max;
+        to_lod.data.emplace_back(node_data.data.back());
+        to_lod.data_skips.emplace_back(1);
+        to_lod.skips.emplace_back(1);
+        to_lod.lods.push_back(lod);
+        ret_pair = std::make_pair(1,1);
+      }
+
+
+    }
+
+  }
+
+
+}
 //static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const morton::morton192_t &min, const morton::morton192_t &max, std::vector<lod_worker_data_t> &lod_data)
 //{
 //  auto tree = tree_cache.get(tree_id);

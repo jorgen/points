@@ -35,14 +35,9 @@ struct lod_node_worker_data_t
 
 struct lod_tree_worker_data_t
 {
-  lod_tree_worker_data_t(tree_id_t tree_id, int magnitude)
-    : tree_id(tree_id)
-    , magnitude(magnitude)
-  {}
-
   tree_id_t tree_id;
   int magnitude;
-  std::vector<points_subset_t> nodes[5];
+  std::vector<lod_node_worker_data_t> nodes[5];
 };
 
 class tree_lod_generator_t;
