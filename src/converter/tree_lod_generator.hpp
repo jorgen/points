@@ -29,7 +29,7 @@ namespace converter
 struct lod_node_worker_data_t
 {
   uint16_t id;
-  points_subset_t name;
+  input_data_id_t storage_name;
   std::vector<points_subset_t> child_data;
 };
 
@@ -55,6 +55,11 @@ private:
   attributes_configs_t &attributes_configs;
   lod_node_worker_data_t &data;
   int &inc_on_completed;
+};
+
+struct lod_tree_worker_batch
+{
+
 };
 
 struct lod_worker_batch_t
