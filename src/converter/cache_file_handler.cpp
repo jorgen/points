@@ -84,7 +84,7 @@ void cache_file_handler_t::handle_write_events(std::vector<std::tuple<storage_he
   }
 }
 
-bool cache_file_handler_t::attribute_id_for_input_id(input_data_id_t input_id, attributes_id_t &attributes_id)
+bool cache_file_handler_t::attribute_id_and_count_for_input_id(input_data_id_t input_id, attributes_id_t &attributes_id, point_count_t &count)
 {
   std::unique_lock<std::mutex> lock(_cache_map_mutex);
   auto it = _cache_map.find(input_id);
@@ -92,6 +92,7 @@ bool cache_file_handler_t::attribute_id_for_input_id(input_data_id_t input_id, a
     return false;
 
   attributes_id = it->second.attribute_id;
+  count.data = it->second.header.public_header.point_count;
   return true;
 }
 

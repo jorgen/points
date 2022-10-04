@@ -318,6 +318,13 @@ inline uint8_t morton_get_child_mask(int lod, const morton_t<T,C> &morton)
   return uint8_t((morton.data[2] >> index) & 0x7);
 }
 
+inline uint16_t morton_get_name(uint16_t parent, int level, int child_index)
+{
+  assert(4 - level >= 0);
+  assert((4 - level) * 3 <= 12);
+ return parent | (uint16_t(child_index) << (4 - level) * 3);
+}
+
 template<typename T, size_t C>
 inline void morton_set_child_mask(int lod, uint8_t mask, morton_t<T,C> &morton)
 {

@@ -21,6 +21,8 @@
 #include "worker.hpp"
 #include "threaded_event_loop.hpp"
 
+#include <deque>
+
 namespace points
 {
 namespace converter
@@ -29,8 +31,10 @@ namespace converter
 struct lod_node_worker_data_t
 {
   uint16_t id;
+  uint16_t lod;
   input_data_id_t storage_name;
   std::vector<points_subset_t> child_data;
+  point_count_t generated_point_count;
 };
 
 struct lod_tree_worker_data_t
@@ -64,10 +68,11 @@ struct lod_tree_worker_batch
 
 struct lod_worker_batch_t
 {
-  std::vector<lod_node_worker_data_t> worker_data;
+  std::vector<lod_tree_worker_data_t> worker_data;
   std::vector<lod_worker_t> lod_workers;
-  int current_index = 0;
   int completed = 0;
+  int level = 5;
+  bool new_batch = true;
 };
 
 class tree_lod_generator_t
@@ -86,7 +91,7 @@ private:
   cache_file_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;
 
-  std::vector<std::unique_ptr<lod_worker_batch_t>> _lod_batches;
+  std::deque<std::unique_ptr<lod_worker_batch_t>> _lod_batches;
 
   morton::morton192_t _generated_until;
 };

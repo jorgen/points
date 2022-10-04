@@ -93,10 +93,11 @@ struct tree_t
   morton::morton192_t morton_max;
   std::vector<uint8_t> nodes[5];
   std::vector<int16_t> skips[5];
+  std::vector<uint16_t> node_ids[5];
   std::vector<points_collection_t> data[5];
   std::vector<tree_id_t> sub_trees;
 #ifndef NDEBUG
-  std::vector<morton::morton192_t> mins[5];
+  std::vector<morton::morton192_t> minss[5];
 #endif
   tree_id_t id;
   uint8_t magnitude;

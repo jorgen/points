@@ -188,7 +188,8 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
   auto *parent_buffer = &parent_node;
   tree_iterator[buffer_index].parent_indecies.emplace_back(0);
   tree_iterator[buffer_index].skips.emplace_back(0);
-  tree_iterator[buffer_index].names.emplace_back(0);
+  uint16_t root_name = morton::morton_get_child_mask(morton::morton_magnitude_to_lod(tree->magnitude), tree->morton_min);
+  tree_iterator[buffer_index].names.emplace_back(root_name << 4);
 
   for (int level = 0; level < 5 && tree_iterator[buffer_index].parent_indecies.size(); level++)
   {
@@ -198,7 +199,6 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
       auto node = tree->nodes[level][tree_skip];
       auto &parent = parent_buffer[tree_iterator[buffer_index].parent_indecies[to_process_index]];
       auto &data = tree->data[level][tree_skip];
-      parent.child_data.insert(parent.child_data.end(), data.data.begin(), data.data.end());
       if (node)
       {
         assert(data.data.size() <= 1);
@@ -209,20 +209,25 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
         uint16_t parent_index = uint16_t(tree_iterator[!buffer_index].parents.size());
         tree_iterator[!buffer_index].parents.emplace_back();
         auto &this_node = tree_iterator[!buffer_index].parents.back();
-        this_node.id = tree_iterator[buffer_index].names[to_process_index];
+        this_node.id = tree->node_ids[level][tree_skip];
+        this_node.lod = uint16_t(morton::morton_magnitude_to_lod(tree->magnitude) + level);
         this_node.storage_name = data.data.front().input_id;
+        this_node.generated_point_count.data = 0;
         int child_count = 0;
+        uint16_t parent_node_name = level == 4 ? 0 : this_node.id;
+        int node_name_level = level == 4 ? 0 : level + 1;
         for (int child_index = 0; child_index < 8; child_index++)
         {
           if (!(node & uint8_t(1 << child_index)))
             continue;
           auto &sub_level = tree_iterator[!buffer_index];
-          sub_level.names.push_back(this_node.id | (uint16_t(child_index) << (4 - level)));
+          sub_level.names.push_back(morton::morton_get_name(parent_node_name, node_name_level, child_index));
           sub_level.skips.push_back(tree->skips[level][tree_skip] + child_count);
           sub_level.parent_indecies.push_back(parent_index);
           child_count++;
         }
       }
+      parent.child_data.insert(parent.child_data.end(), data.data.begin(), data.data.end());
     }
 
     if (level > 0)
@@ -549,64 +554,68 @@ uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_
 
 void lod_worker_t::work()
 {
-  (void) cache;
-  (void)attributes_configs;
-  (void)data;
-  //uint64_t total_count = 0;
-  //attributes_t attributes;
-  //std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[data.child_data.size()]);
-  //for (int i = 0; i < int(data.child_data.size()); i++)
-  //{
-  //  auto &child = data.child_data[i];
-  //  total_count += child.count.data;
-  //  bool got_attrib = cache.attribute_id_for_input_id(child.input_id, attribute_ids[i]);
-  //  (void) got_attrib;
-  //  assert(got_attrib);
-  //}
-  //std::unique_ptr<attributes_id_t[]> attribute_ids_sorted(new attributes_id_t[data.child_data.size()]);
-  //memcpy(attribute_ids_sorted.get(), attribute_ids.get(), data.child_data.size() * sizeof(*(attribute_ids_sorted.get())));
-  //auto attrib_begin = attribute_ids_sorted.get();
-  //auto attrib_end = attrib_begin + data.child_data.size();
-  //std::sort(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data < b.data; });
-  //attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
+  uint64_t total_count = 0;
+  attributes_t attributes;
+  std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[data.child_data.size()]);
+  for (int i = 0; i < int(data.child_data.size()); i++)
+  {
+    auto &child = data.child_data[i];
+    point_count_t count(0);
+    bool got_attrib = cache.attribute_id_and_count_for_input_id(child.input_id, attribute_ids[i], count);
+    if (child.count.data == 0) //adjust for lod data
+    {
+      child.count.data = count.data;
+      child.offset.data = 0;
+    }
 
-  //auto lod_format = morton_format_from_lod(data.lod);
+    total_count += child.count.data;
+    (void) got_attrib;
+    assert(got_attrib);
+  }
+  std::unique_ptr<attributes_id_t[]> attribute_ids_sorted(new attributes_id_t[data.child_data.size()]);
+  memcpy(attribute_ids_sorted.get(), attribute_ids.get(), data.child_data.size() * sizeof(*(attribute_ids_sorted.get())));
+  auto attrib_begin = attribute_ids_sorted.get();
+  auto attrib_end = attrib_begin + data.child_data.size();
+  std::sort(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data < b.data; });
+  attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
 
-  //auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(lod_format, attrib_begin, attrib_end);
+  auto lod_format = morton_format_from_lod(data.lod);
 
-  //storage_header_t destination_header;
-  //storage_header_initialize(destination_header);
-  //destination_header.input_id = data.name.input_id;
-  //attribute_buffers_t buffers;
-  //attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, total_count);
+  auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(lod_format, attrib_begin, attrib_end);
 
-  //offset_t total_acc_count(0);
-  //for (int i = 0; i < int(data.child_data.size()); i++)
-  //{
-  //  auto &child = data.child_data[i];
-  //  double ratio = std::min(double(lod_generator.global_state().node_limit - total_acc_count.data) / double(total_count), 1.0);
-  //  uint32_t child_count = std::min(std::min(uint32_t(std::round(child.count.data * ratio)), child.count.data),
-  //                                  uint32_t(total_count - total_acc_count.data));
+  storage_header_t destination_header;
+  storage_header_initialize(destination_header);
+  destination_header.input_id = data.storage_name;
+  attribute_buffers_t buffers;
+  attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, total_count);
 
-  //  if (child_count > 0)
-  //  {
-  //    auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
-  //    total_acc_count.data += quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, source_mapping, buffers, total_acc_count, destination_header);
-  //    (void) attributes_configs;
-  //  }
-  //  else
-  //  {
-  //    auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
-  //    read_points_t child_data(cache, child.input_id, source_mapping.source_attributes[0].index);
-  //    update_destination_header(child_data.header, destination_header);
-  //  }
-  //}
-  //attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, total_acc_count.data);
-  //destination_header.public_header.point_count = total_acc_count.data;
-  //destination_header.point_format = lod_format;
-  //destination_header.lod_span = data.lod;
-  //cache.write(destination_header, std::move(buffers), lod_attrib_mapping.destination_id);
-  //fmt::print("Total count {}, accumulated count {}\n", total_count, total_acc_count.data);
+  offset_t total_acc_count(0);
+  for (int i = 0; i < int(data.child_data.size()); i++)
+  {
+    auto &child = data.child_data[i];
+    double ratio = std::min(double(lod_generator.global_state().node_limit - total_acc_count.data) / double(total_count), 1.0);
+    uint32_t child_count = std::min(std::min(uint32_t(std::round(child.count.data * ratio)), child.count.data),
+                                    uint32_t(total_count - total_acc_count.data));
+
+    if (child_count > 0)
+    {
+      auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
+      total_acc_count.data += quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, source_mapping, buffers, total_acc_count, destination_header);
+      (void) attributes_configs;
+    }
+    else
+    {
+      auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
+      read_points_t child_data(cache, child.input_id, source_mapping.source_attributes[0].index);
+      update_destination_header(child_data.header, destination_header);
+    }
+  }
+  attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, total_acc_count.data);
+  destination_header.public_header.point_count = total_acc_count.data;
+  destination_header.point_format = lod_format;
+  destination_header.lod_span = data.lod;
+  cache.write(destination_header, std::move(buffers), lod_attrib_mapping.destination_id);
+  data.generated_point_count.data = total_acc_count.data;
 }
 
 void lod_worker_t::after_work(completion_t completion)
@@ -618,30 +627,31 @@ void lod_worker_t::after_work(completion_t completion)
 
 static void iterate_batch(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache_file, attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
 {
-  (void)lod_generator;
-  (void)batch;
-  (void)cache_file;
-  (void)attributes_configs;
-  (void)loop;
-  //assert(batch.completed < int(batch.worker_data.size()));
-  //if (batch.current_index == int(batch.worker_data.size()))
-  //  return;
-  //batch.lod_workers.clear();
-  //int current_lod = batch.worker_data[batch.current_index].lod;
+  batch.new_batch = false;
+  batch.lod_workers.clear();
+  batch.level--;
+  batch.completed = 0;
 
-  //int batch_index = batch.current_index;
-  //while(batch_index < int(batch.worker_data.size())
-  //      && current_lod == batch.worker_data[batch.current_index].lod)
-  //  batch_index++;
-  //int batch_size = batch_index - batch.current_index;
-  //batch.lod_workers.reserve(batch_size);
-  //while(batch.current_index < int(batch.worker_data.size())
-  //      && current_lod == batch.worker_data[batch.current_index].lod)
-  //{
-  //  batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, batch.worker_data[batch.current_index], batch.completed);
-  //  batch.current_index++;
-  //  batch.lod_workers.back().enqueue(loop);
-  //}
+  size_t batch_size = 0;
+  while (batch_size == 0 && batch.level > 0)
+  {
+    for (auto &tree : batch.worker_data)
+      batch_size += tree.nodes[batch.level].size();
+    if (batch_size == 0)
+      batch.level--;
+  }
+
+  batch.lod_workers.reserve(batch_size);
+
+  for (auto &tree : batch.worker_data)
+  {
+    for (auto &node : tree.nodes[batch.level])
+    {
+      assert(node.child_data.size());
+      batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, node, batch.completed);
+      batch.lod_workers.back().enqueue(loop);
+    }
+  }
 }
 
 tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tree_global_state_t &tree_global_state, tree_cache_t &tree_cache, cache_file_handler_t &file_cache, attributes_configs_t &attributes_configs)
@@ -659,25 +669,71 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
 {
   (void)tree_id;
   (void)max;
-  _lod_batches.emplace_back(new lod_worker_batch_t());
-  //auto &batch = *_lod_batches.back();
   //auto &worker_data = batch.worker_data;
   std::vector<lod_tree_worker_data_t> to_lod;
   lod_node_worker_data_t fake_parent;
   tree_get_work_items(_tree_cache, _file_cache, tree_id, _generated_until, max, fake_parent, to_lod);
-  std::sort(to_lod.begin(), to_lod.end(), [](const lod_tree_worker_data_t &a, const lod_tree_worker_data_t &b) { return a.magnitude < b.magnitude; });
+  if (to_lod.size())
+  {
+    std::sort(to_lod.begin(), to_lod.end(), [](const lod_tree_worker_data_t &a, const lod_tree_worker_data_t &b) { return a.magnitude < b.magnitude; });
+    int current_level = to_lod.front().magnitude;
+    int batch_start = 0;
+    for (int i = 0; i < int(to_lod.size()); i++)
+    {
+      auto &current = to_lod[i];
+      if (current.magnitude != current_level)
+      {
+        _lod_batches.emplace_back(new lod_worker_batch_t());
+        auto &batch = *_lod_batches.back();
+        batch.worker_data.insert(batch.worker_data.end(), std::make_move_iterator(to_lod.begin() + batch_start), std::make_move_iterator(to_lod.begin() + i));
+        current_level = current.magnitude;
+        batch_start = i;
+      }
+    }
+    _lod_batches.emplace_back(new lod_worker_batch_t());
+    auto &batch = *_lod_batches.back();
+    batch.worker_data.insert(batch.worker_data.end(), std::make_move_iterator(to_lod.begin() + batch_start), std::make_move_iterator(to_lod.end()));
+  }
   iterate_workers();
+}
+
+static void adjust_tree_after_lod(tree_cache_t &tree_cache, cache_file_handler_t &cache, const std::vector<lod_tree_worker_data_t> &to_adjust)
+{
+  for (auto &adjust_data : to_adjust)
+  {
+    tree_t *tree = tree_cache.get(adjust_data.tree_id);
+    for (int level = 0; level < 5; level++)
+    {
+      if (adjust_data.nodes[level].empty())
+        break;
+      int tree_index = 0;
+      for (int node_index = 0; node_index < int(adjust_data.nodes[level].size()); node_index++)
+      {
+        auto current = adjust_data.nodes[level][node_index].id;
+        auto &node_ids = tree->node_ids[level];
+
+        while (tree_index < int(node_ids.size()) && node_ids[tree_index] < current)
+          tree_index++;
+        assert(node_ids[tree_index] == current);
+        tree->data[level][tree_index].point_count = adjust_data.nodes[level][node_index].generated_point_count.data;
+      }
+    }
+  }
 }
 
 void tree_lod_generator_t::iterate_workers()
 {
-  if (_lod_batches.size() && _lod_batches.front()->completed == int(_lod_batches.front()->worker_data.size()))
+  if (_lod_batches.size() && _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size()) && _lod_batches.front()->level == 0)
   {
-    _lod_batches.erase(_lod_batches.begin());
+    adjust_tree_after_lod(_tree_cache, _file_cache, _lod_batches.front()->worker_data);
+    _lod_batches.pop_front();
   }
-  if (_lod_batches.size() && _lod_batches.front()->completed == _lod_batches.front()->current_index)
+  if (_lod_batches.size() && (_lod_batches.front()->new_batch || _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size())))
     iterate_batch(*this, *_lod_batches.front(), _file_cache, _attributes_configs, _loop);
-
+  if (_lod_batches.empty())
+  {
+    fmt::print(stderr, "Done\n");
+  }
 }
 
 }}//namespace

@@ -155,6 +155,7 @@ struct offset_t
 struct point_count_t
 {
   explicit point_count_t(uint32_t data) : data(data){}
+  explicit point_count_t() {}
   uint32_t data;
 };
 
