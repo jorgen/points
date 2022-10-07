@@ -581,6 +581,18 @@ inline void encode(const uint64_t (&pos)[3], morton32_t &morton)
   morton.data[0] = libmorton::morton3D_32_encode(x_lower, y_lower, z_lower);
 }
 
+inline uint16_t get_name_from_morton(int lod, morton192_t morton)
+{
+  uint16_t ret = 0;
+  auto lod_in_tree = lod % 5;
+  auto parents = 5 - lod_in_tree;
+  lod++;
+  for (int i = 0; i < parents; i++, lod_in_tree++, lod++)
+  {
+    ret |= morton_get_child_mask(lod, morton) << (lod_in_tree * 3);
+  }
+  return ret;
+}
 
 
 

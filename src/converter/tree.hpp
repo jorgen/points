@@ -97,7 +97,7 @@ struct tree_t
   std::vector<points_collection_t> data[5];
   std::vector<tree_id_t> sub_trees;
 #ifndef NDEBUG
-  std::vector<morton::morton192_t> minss[5];
+  std::vector<morton::morton192_t> mins[5];
 #endif
   tree_id_t id;
   uint8_t magnitude;
