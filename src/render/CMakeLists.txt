@@ -42,7 +42,7 @@ target_include_directories(points_render_objects
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:include>
 )
-target_include_directories(points_render_objects  PRIVATE ${stbimage_SOURCE_DIR})
+target_include_directories(points_render_objects SYSTEM PRIVATE ${stbimage_SOURCE_DIR})
 #target_include_directories(points_render_objects PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 setWarningflagsForTarget(points_render_objects)
 if (BUILD_SHARED_LIBS)

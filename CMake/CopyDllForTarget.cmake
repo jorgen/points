@@ -50,21 +50,30 @@ endfunction()
 
 
 function(copy_dll_for_target target)
-  if (WIN32)
+  if (WIN32 OR APPLE)
     set(release_dll "")
     set(debug_dll "")
     get_dll_filenames(${target} "release_dll" "debug_dll" ${ARGN})
     foreach(dll ${release_dll})
-      set(release_dlls "\"${dll}\" ${release_dlls}")
+      list(APPEND release_dlls "${dll}")
+    endforeach()
+    foreach(dll ${debug_dll})
+      list(APPEND debug_dlls "${dll}")
     endforeach()
 
-    foreach(dll ${debug_dll})
-      set(debug_dlls "\"${dll}\" ${debug_dlls}")
-    endforeach()
     if (release_dll OR debug_dll)
-      add_custom_command(OUTPUT ${target}_copy_runtime
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<$<NOT:$<CONFIG:Debug>>:${release_dlls}> $<$<CONFIG:Debug>:${debug_dlls}> $<SHELL_PATH:$<TARGET_FILE_DIR:${target}>>
-      )
+      if (WIN32)
+        add_custom_command(OUTPUT ${target}_copy_runtime
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<$<NOT:$<CONFIG:Debug>>:${release_dlls}>" "$<$<CONFIG:Debug>:${debug_dlls}>" "$<SHELL_PATH:$<TARGET_FILE_DIR:${target}>>"
+          COMMAND_EXPAND_LISTS
+          )
+      else()
+        add_custom_command(OUTPUT ${target}_copy_runtime
+          COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:$<TARGET_FILE_DIR:${target}>/../lib>"
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<$<NOT:$<CONFIG:Debug>>:${release_dlls}>" "$<$<CONFIG:Debug>:${debug_dlls}>" "$<SHELL_PATH:$<TARGET_FILE_DIR:${target}>/../lib>"
+          COMMAND_EXPAND_LISTS
+          )
+      endif()
       set_property(SOURCE "${target}_copy_runtime"
                    PROPERTY SYMBOLIC ON)
       target_sources(${target} PRIVATE ${target}_copy_runtime)
