@@ -29,25 +29,26 @@ void update_vector(std::vector<SOURCE_T> &source, std::vector<TARGET_T> &old, st
   auto source_it = source.begin();
   auto old_it = old.begin();
   result.reserve(source.size());
-  while (old_it != old.end() && comp(*old_it, *source_it) < 0)
-    old_it++;
   while (source_it != source.end())
   {
     if (old_it == old.end() || comp(*old_it, *source_it) > 0)
     {
+      // If there are no more elements in old or the element in old is
+      // greater than the element in source, add the element from source
+      // to the result vector and advance the source iterator.
       result.emplace_back(std::move(*source_it));
       ++source_it;
     }
     else if (comp(*old_it, *source_it) < 0)
     {
-      do
-      {
-        ++old_it;
-      } while (old_it != old.end() && comp(*old_it, *source_it) < 0);
+      // If the element in old is less than the element in source,
+      // advance the old iterator.
+      ++old_it;
     }
-    else //if (source_it->data == old_it->data)
+    else //if (comp(*old_it, *source_it) == 0)
     {
-      assert(comp(*old_it, *source_it) == 0);
+      // If the elements are equal, update the element in the result
+      // vector using the update function and advance both iterators.
       update(old_it, source_it, result);
       ++old_it;
       ++source_it;
