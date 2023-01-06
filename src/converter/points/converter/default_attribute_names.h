@@ -21,7 +21,7 @@
 #define POINTS_ATTRIBUTE_XYZ "xyz"
 #define POINTS_ATTRIBUTE_INTENSITY "intensity"
 
-// | Return Number 3 bits (bits 0 – 2) | Number of Returns (given pulse) 3 bits (bits 3 – 5) | Scan Direction Flag 1 bit (bit 6) | Edge of Flight Line 1 bit (bit 7) |
+// | Return Number 3 bits (bits 0 - 2) | Number of Returns (given pulse) 3 bits (bits 3 - 5) | Scan Direction Flag 1 bit (bit 6) | Edge of Flight Line 1 bit (bit 7) |
 #define POINTS_ATTRIBUTE_LAS_COMPOSITE_0 "las_composite_0"
 // | Return Number 4 bits(bits 0 - 3)  | Number of Returns(given pulse) 4 bits(bits 4 - 7)   |
 #define POINTS_ATTRIBUTE_LAS_COMPOSITE_1 "las_composite_1"

@@ -18,7 +18,6 @@ if (WIN32)
   Find_Package(CURL REQUIRED)
   BuildExternalCMake(curl_build ${curl_VERSION} ${curl_SOURCE_DIR} "-DBUILD_CURL_EXE=OFF;-DHTTP_ONLY=ON" "CURL::libcurl")
 endif()
-
   list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/laszip)
   GetPackageInstallDir(LASZIP_INSTALL_DIR laszip_build ${laszip_VERSION})
   Find_Package(laszip REQUIRED)

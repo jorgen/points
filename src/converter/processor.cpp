@@ -65,7 +65,7 @@ void processor_t::add_files(std::vector<input_data_source_t> &&files)
   _files_added.post_event(std::move(files));
 }
 
-void processor_t::walkt_tree(const std::shared_ptr<frustum_tree_walker_t> &event)
+void processor_t::walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event)
 {
   _tree_handler.walk_tree(event);
 }

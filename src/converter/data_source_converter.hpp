@@ -38,6 +38,16 @@ namespace converter
 
 struct tree_walker_with_buffer_t
 {
+  tree_walker_with_buffer_t()
+  {}
+  tree_walker_with_buffer_t(tree_walker_nodes_t &&node_data)
+    : node_data(std::move(node_data))
+  {
+    for (int i = 0; i < 5; i++)
+    {
+      buffers[i].resize(node_data.morton_nodes[i].size());
+    }
+  }
   tree_walker_nodes_t node_data;
   std::vector<buffer_t> buffers[5];
 };
@@ -60,7 +70,8 @@ struct converter_data_source_t
   glm::dmat4 project_view;
 
   render::buffer_t index_buffer;
-  std::vector<tree_walker_with_buffer_t> current_tree_nodes;
+  std::vector<tree_walker_with_buffer_t> current_tree_nodes[2];
+  bool current_tree_nodes_index = false;
 
 };
 } // namespace render

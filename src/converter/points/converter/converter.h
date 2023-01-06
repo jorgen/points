@@ -52,6 +52,14 @@ struct attribute_t
 
 struct buffer_t
 {
+  buffer_t()
+    : data(nullptr)
+    , size(0)
+  {}
+  buffer_t(void *data, uint64_t size)
+    : data(data)
+    , size(size)
+  {}
   void *data;
   uint64_t size;
 };

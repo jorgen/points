@@ -58,9 +58,10 @@ class processor_t : public about_to_block_t
 public:
   processor_t(converter_t &converter);
   void add_files(std::vector<input_data_source_t> &&files);
-  void walkt_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
+  void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
   void about_to_block() override;
-  //void add_data(const void *data, size_t data_size);
+
+  cache_file_handler_t &cache_file() { return _cache_file_handler; }
 
 private:
   converter_t &_converter;
