@@ -45,7 +45,7 @@ struct tree_walker_with_buffer_t
   {
     for (int i = 0; i < 5; i++)
     {
-      buffers[i].resize(node_data.morton_nodes[i].size());
+      buffers[i].resize(this->node_data.point_subsets[i].size());
     }
   }
   tree_walker_nodes_t node_data;

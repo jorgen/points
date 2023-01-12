@@ -215,3 +215,66 @@ TEST_CASE("vector_multi_updater_start", "[vector]")
     }
   }
 }
+
+TEST_CASE("update_vector with empty source vector")
+{
+  std::vector<int> source;
+  std::vector<int> old{1, 2, 3};
+  std::vector<int> result;
+  update_vector(source, old, result,
+    [](int a, int b) { return a - b; },
+    [](auto, auto, auto&) {});
+
+  REQUIRE(result.empty());
+}
+
+TEST_CASE("update_vector with empty old vector")
+{
+  std::vector<int> source{1, 2, 3};
+  std::vector<int> old;
+  std::vector<int> result;
+  update_vector(source, old, result,
+    [](int a, int b) { return a - b; },
+    [](auto, auto, auto&) {});
+
+  REQUIRE(result == source);
+}
+
+TEST_CASE("update_vector with no updates")
+{
+  std::vector<int> source{1, 2, 3};
+  std::vector<int> old{1, 2, 3};
+  std::vector<int> result;
+  update_vector(source, old, result,
+    [](int a, int b) { return a - b; },
+    [](auto s, auto, auto&result) { result.emplace_back(std::move(*s));});
+
+  REQUIRE(result == old);
+}
+
+TEST_CASE("update_vector with updates")
+{
+  std::vector<int> source{1, 2, 3};
+  std::vector<int> old{0, 2, 4};
+  std::vector<int> result;
+  update_vector(source, old, result,
+    [](int a, int b) { return a - b; },
+    [](auto s, auto, auto&result) { result.emplace_back(std::move(*s));});
+
+  REQUIRE(result == std::vector<int>({1, 2, 3}));
+}
+
+TEST_CASE("update_vector with updates and custom update function")
+{
+  std::vector<int> source{1, 2, 3};
+  std::vector<int> old{0, 2, 4};
+  std::vector<int> result;
+  update_vector(source, old, result,
+    [](int a, int b) { return a - b; },
+    [](auto old_it, auto source_it, auto& result)
+    {
+      result.emplace_back(*old_it + *source_it);
+    });
+
+  REQUIRE(result == std::vector<int>({1, 4, 3}));
+}
