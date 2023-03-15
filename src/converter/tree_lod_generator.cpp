@@ -471,6 +471,17 @@ static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, 
   assert(ret.size + offset.data <= buffer.size);
   return ret;
 }
+
+static buffer_t morton_buffer_for_target(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset)
+{
+  int format_byte_size = size_for_format(format.first);
+  buffer_t ret;
+  auto offset_bytes = offset.data * format_byte_size;
+  ret.data = ((uint8_t *)buffer.data) + offset_bytes;
+  ret.size = buffer.size - offset_bytes;
+  return ret;
+}
+
 static buffer_t buffer_for_target(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset)
 {
   int format_byte_size = size_for_format(format.first, format.second);
@@ -535,7 +546,7 @@ uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_
     update_destination_header(child_data.header, destination_header);
     const buffer_t source_buffer = morton_buffer_for_subset(child_data.data,child_data.header.point_format, child.offset, child.count);
     assert(buffer_is_subset(child_data.data, source_buffer));
-    buffer_t  destination_buffer = buffer_for_target(destination_buffers.buffers[0], destination_map[0], destination_offset);
+    buffer_t  destination_buffer = morton_buffer_for_target(destination_buffers.buffers[0], destination_map[0], destination_offset);
     assert(buffer_is_subset(destination_buffers.buffers[0], destination_buffer));
     quantized_morton = quantize_morton(step, child_data.header.morton_min, child_data.header.point_format, source_buffer, destination_map[0].first, destination_buffer);
   }
