@@ -58,6 +58,12 @@ enum points_buffer_mapping_t
   points_bm_color
 };
 
+enum dyn_points_buffer_mapping_t
+{
+  dyn_points_bm_camera,
+  dyn_points_bm_vertex
+};
+
 struct frame_t
 {
   struct draw_group_t* to_render;

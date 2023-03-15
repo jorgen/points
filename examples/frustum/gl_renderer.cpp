@@ -217,6 +217,81 @@ void gl_aabb_handler::draw(points::render::draw_group_t &group)
   glBindVertexArray(0);
 }
 
+gl_dyn_points_handler::gl_dyn_points_handler()
+  : vao(0)
+  , program(0)
+  , is_initialized(false)
+{
+}
+
+gl_dyn_points_handler::~gl_dyn_points_handler()
+{
+  if (program)
+    glDeleteProgram(program);
+  if (vao)
+    glDeleteVertexArrays(1, &vao);
+}
+
+void gl_dyn_points_handler::initialize()
+{
+  is_initialized = true;
+  auto shaderfs = cmrc::shaders::get_filesystem();
+  auto vertex_shader = shaderfs.open("shaders/dynpoints.vert");
+  auto fragment_shader = shaderfs.open("shaders/dynpoints.frag");
+
+  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), vertex_shader.end() - vertex_shader.begin());
+  glUseProgram(program);
+  attrib_position = glGetAttribLocation(program, "position");
+  uniform_camera = glGetUniformLocation(program, "camera");
+
+  glGenVertexArrays(1, &vao);
+  glBindVertexArray(vao);
+
+  GLuint tmp_buffer;
+  glGenBuffers(1, &tmp_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, tmp_buffer);
+  glEnableVertexAttribArray(attrib_position);
+  glBindVertexArray(0);
+  glDeleteBuffers(1, &tmp_buffer);
+  glBindVertexArray(0);
+}
+
+void gl_dyn_points_handler::draw(points::render::draw_group_t &group)
+{
+  if (!is_initialized)
+    initialize();
+  glUseProgram(program);
+
+  glBindVertexArray(vao);
+  glUseProgram(program);
+  
+  for (int i = 0; i < group.buffers_size; i++)
+  {
+    auto &buffer = group.buffers[i];
+    auto buffer_mapping = points::render::points_buffer_mapping_t(buffer.buffer_mapping);
+    switch (buffer_mapping)
+    {
+    case points::render::points_bm_vertex: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+      glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
+      break;
+    }
+    case points::render::points_bm_color: {
+      break;
+    }
+    case points::render::points_bm_camera: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glUniformMatrix4fv(uniform_camera, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
+      break;
+    }
+    }
+  }
+
+  glDrawArrays(GL_POINTS, 0, group.draw_size);
+  glBindVertexArray(0);
+}
+
 gl_flat_points_handler::gl_flat_points_handler()
   : vao(0)
   , program(0)
@@ -547,6 +622,9 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
       break;
     case points::render::flat_points:
       points_handler.draw(to_render);
+      break;
+    case points::render::dyn_points:
+      dynpoints_handler.draw(to_render);
       break;
     default:
       fmt::print(stderr, "Missing gl handler!.");

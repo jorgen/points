@@ -39,7 +39,8 @@ enum draw_type_t
 {
   aabb_triangle_mesh,
   skybox_triangle,
-  flat_points
+  flat_points,
+  dyn_points
 };
 
 struct draw_group_t

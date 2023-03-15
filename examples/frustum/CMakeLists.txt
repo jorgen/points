@@ -32,6 +32,8 @@ cmrc_add_resource_library(frustum_shaders ALIAS frustum::shaders NAMESPACE shade
   shaders/skybox.vert
   shaders/points.frag
   shaders/points.vert
+  shaders/dynpoints.frag
+  shaders/dynpoints.vert
   )
 cmrc_add_resource_library(frustum_fonts   ALIAS frustum::fonts NAMESPACE fonts
  fonts/Cousine-Regular.ttf

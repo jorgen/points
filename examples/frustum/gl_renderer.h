@@ -72,6 +72,21 @@ public:
   bool is_initialized;
 };
 
+class gl_dyn_points_handler : public gl_frame_handler
+{
+public:
+  gl_dyn_points_handler();
+  ~gl_dyn_points_handler();
+  void initialize() override; 
+  void draw(points::render::draw_group_t &group) override;
+
+  GLuint vao;
+  GLuint program;
+  GLint attrib_position;
+  GLint uniform_camera;
+  bool is_initialized;
+};
+
 class gl_skybox_handler: public gl_frame_handler
 {
 public:
@@ -134,6 +149,7 @@ private:
   gl_aabb_handler aabb_handler;
   gl_skybox_handler skybox_handler;
   gl_flat_points_handler points_handler;
+  gl_dyn_points_handler dynpoints_handler;
 };
 
 #endif //FRUSTUM_GL_RENDERER_H

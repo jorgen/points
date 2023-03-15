@@ -21,6 +21,7 @@
 #include <points/render/renderer.h>
 #include <points/render/data_source.h>
 #include <points/render/aabb_data_source.h>
+#include <points/render/draw_group.h>
 #include "data_source.hpp"
 #include "glm_include.hpp"
 #include "buffer.hpp"
@@ -30,16 +31,35 @@
 
 #include <vector>
 #include <memory>
+#include <array>
 
 namespace points
 {
 namespace converter
 {
 
+struct dyn_points_draw_buffer_t
+{
+  render::draw_buffer_t render_list[2];
+  render::buffer_t render_buffers[2];
+  std::unique_ptr<uint8_t[]> vertex_data;
+  buffer_t vertex_data_info;
+  points::type_t point_type;
+  int point_count;
+  std::array<double,3> offset;
+  std::array<double,3> scale;
+};
+
+struct buffers_t
+{
+  std::vector<dyn_points_draw_buffer_t> data;
+  bool fetching_data = false;
+  bool has_data = false;
+};
+
 struct tree_walker_with_buffer_t
 {
-  tree_walker_with_buffer_t()
-  {}
+  tree_walker_with_buffer_t() = default;
   tree_walker_with_buffer_t(tree_walker_nodes_t &&node_data)
     : node_data(std::move(node_data))
   {
@@ -48,8 +68,10 @@ struct tree_walker_with_buffer_t
       buffers[i].resize(this->node_data.point_subsets[i].size());
     }
   }
+  tree_walker_with_buffer_t(tree_walker_with_buffer_t &&) = default;
+  ~tree_walker_with_buffer_t() = default;
   tree_walker_nodes_t node_data;
-  std::vector<buffer_t> buffers[5];
+  std::vector<buffers_t> buffers[5];
 };
 
 struct converter_data_source_t
@@ -67,7 +89,6 @@ struct converter_data_source_t
   std::shared_ptr<frustum_tree_walker_t> back_buffer;
 
   render::buffer_t project_view_buffer;
-  glm::dmat4 project_view;
 
   render::buffer_t index_buffer;
   std::vector<tree_walker_with_buffer_t> current_tree_nodes[2];

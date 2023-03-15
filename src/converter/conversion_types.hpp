@@ -97,15 +97,15 @@ inline void storage_header_initialize(storage_header_t &header)
   header.public_header.scale[0] = 0.0;
   header.public_header.scale[1] = 0.0;
   header.public_header.scale[2] = 0.0;
-  header.public_header.min[0] = -std::numeric_limits<double>::max();
-  header.public_header.min[1] = -std::numeric_limits<double>::max();
-  header.public_header.min[2] = -std::numeric_limits<double>::max();
-  header.public_header.max[0] = std::numeric_limits<double>::max();
-  header.public_header.max[1] = std::numeric_limits<double>::max();
-  header.public_header.max[2] = std::numeric_limits<double>::max();
+  header.public_header.min[0] = std::numeric_limits<double>::max();
+  header.public_header.min[1] = std::numeric_limits<double>::max();
+  header.public_header.min[2] = std::numeric_limits<double>::max();
+  header.public_header.max[0] = -std::numeric_limits<double>::max();
+  header.public_header.max[1] = -std::numeric_limits<double>::max();
+  header.public_header.max[2] = -std::numeric_limits<double>::max();
 
-  morton::morton_init_min(header.morton_min);
-  morton::morton_init_max(header.morton_max);
+  morton::morton_init_min(header.morton_max);
+  morton::morton_init_max(header.morton_min);
   header.lod_span = 255;
 }
 
