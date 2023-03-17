@@ -160,7 +160,6 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
     target_format = morton_format_from_lod(lod);
   }
 
-  target_format = type_m192;
   switch (target_format)
   {
     case type_m32:
