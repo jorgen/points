@@ -103,7 +103,7 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &po
     bool dont_move = false;
     if (new_type == type_m32 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint32_t, 1>))
       downcast_point_buffer<MT,C, uint32_t, 1>(world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
-    else if (new_type == type_r64 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint64_t, 1>))
+    else if (new_type == type_m64 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint64_t, 1>))
       downcast_point_buffer<MT,C, uint64_t, 1>(world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
     else if (new_type == type_m128 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton_t<uint64_t, 2>))
       downcast_point_buffer<MT,C, uint64_t, 2>(world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
@@ -166,7 +166,7 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
     case type_m32:
       convert_and_sort_morton<T, uint32_t, 1>(tree_state, points, smallest_scale, target_format, error);
     break;
-    case type_r64:
+    case type_m64:
       convert_and_sort_morton<T, uint64_t, 1>(tree_state, points, smallest_scale, target_format, error);
     break;
     case type_m128:
