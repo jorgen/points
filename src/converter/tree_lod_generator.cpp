@@ -491,6 +491,7 @@ static buffer_t buffer_for_target(const buffer_t &buffer, std::pair<type_t, comp
   ret.size = buffer.size - offset_bytes;
   return ret;
 }
+
 static buffer_t buffer_for_subset(const buffer_t &buffer, std::pair<type_t, components_t> format, offset_t offset, point_count_t count)
 {
   int format_byte_size = size_for_format(format.first, format.second);
@@ -539,26 +540,32 @@ uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_
          && destination_map.size() == destination_buffers.buffers.size());
   assert(count <= child.count.data);
   uint32_t step = child.count.data / count;
-  (void)step;
   uint32_t quantized_morton = 0;
   {
-    read_points_t child_data(file_cache, child.input_id, source_map[0].index);
+    read_points_t child_data(file_cache, child.input_id, source_map[0].source_index);
     update_destination_header(child_data.header, destination_header);
-    const buffer_t source_buffer = morton_buffer_for_subset(child_data.data,child_data.header.point_format, child.offset, child.count);
+    const buffer_t source_buffer = morton_buffer_for_subset(child_data.data,child_data.header.point_format.first, child.offset, child.count);
     assert(buffer_is_subset(child_data.data, source_buffer));
     buffer_t  destination_buffer = morton_buffer_for_target(destination_buffers.buffers[0], destination_map[0], destination_offset);
     assert(buffer_is_subset(destination_buffers.buffers[0], destination_buffer));
-    quantized_morton = quantize_morton(step, child_data.header.morton_min, child_data.header.point_format, source_buffer, destination_map[0].first, destination_buffer);
+    quantized_morton = quantize_morton(step, child_data.header.morton_min, child_data.header.point_format.first, source_buffer, destination_map[0].first, destination_buffer);
   }
   for (int i = 1; i < int(destination_map.size()); i++)
   {
-    read_points_t child_data(file_cache, child.input_id, source_map[i].index);
+    if (source_map[i].source_index > 0)
+    {
+    read_points_t child_data(file_cache, child.input_id, source_map[i].source_index);
     const buffer_t source_buffer = buffer_for_subset(child_data.data,source_map[i].format, child.offset, child.count);
     assert(buffer_is_subset(child_data.data, source_buffer));
     buffer_t  destination_buffer = buffer_for_target(destination_buffers.buffers[i], destination_map[i], destination_offset);
     assert(buffer_is_subset(destination_buffers.buffers[i], destination_buffer));
     auto quantized_attribute = quantize_points(step, source_map[i].format, source_buffer, destination_map[i], destination_buffer);
     assert(quantized_attribute == quantized_morton);
+    }
+    else
+    {
+      assert(false && "insert no values (0)");
+    }
   }
   return quantized_morton;
 }
@@ -583,16 +590,10 @@ void lod_worker_t::work()
     (void) got_attrib;
     assert(got_attrib);
   }
-  std::unique_ptr<attributes_id_t[]> attribute_ids_sorted(new attributes_id_t[data.child_data.size()]);
-  memcpy(attribute_ids_sorted.get(), attribute_ids.get(), data.child_data.size() * sizeof(*(attribute_ids_sorted.get())));
-  auto attrib_begin = attribute_ids_sorted.get();
-  auto attrib_end = attrib_begin + data.child_data.size();
-  std::sort(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data < b.data; });
-  attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
 
   auto lod_format = morton_format_from_lod(data.lod);
 
-  auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(lod_format, attrib_begin, attrib_end);
+  auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(data.lod, attribute_ids.get(), attribute_ids.get() + data.child_data.size());
 
   storage_header_t destination_header;
   storage_header_initialize(destination_header);
@@ -617,13 +618,13 @@ void lod_worker_t::work()
     else
     {
       auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
-      read_points_t child_data(cache, child.input_id, source_mapping.source_attributes[0].index);
+      read_points_t child_data(cache, child.input_id, source_mapping.source_attributes[0].source_index);
       update_destination_header(child_data.header, destination_header);
     }
   }
   attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, total_acc_count.data);
   destination_header.public_header.point_count = total_acc_count.data;
-  destination_header.point_format = lod_format;
+  destination_header.point_format = {lod_format, components_1};
   destination_header.lod_span = data.lod;
   cache.write(destination_header, std::move(buffers), lod_attrib_mapping.destination_id);
   data.generated_point_count.data = total_acc_count.data;

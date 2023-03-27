@@ -16,7 +16,6 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "cache_file_handler.hpp"
-#include "point_buffer_splitter.hpp"
 #include <uv.h>
 
 #include <fmt/printf.h>

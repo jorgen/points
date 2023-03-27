@@ -81,10 +81,12 @@ struct attribute_buffers_t
 struct storage_header_t
 {
   input_data_id_t input_id;
+  attributes_id_t attributes_id;
+  attributes_id_t original_attributes_id;
   header_t public_header;
+  std::pair<type_t, components_t> point_format;
   morton::morton192_t morton_min;
   morton::morton192_t morton_max;
-  type_t point_format;
   int lod_span;
 };
 

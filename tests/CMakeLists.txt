@@ -11,7 +11,8 @@ add_executable(private_interface_unit_tests
 	private/basic_camera.cpp
 	private/morton_tests.cpp
 	private/tree_tests.cpp
-        private/vector_updater_tests.cpp
+  private/vector_updater_tests.cpp
+  private/fixed_size_vector_tests.cpp
 	$<TARGET_OBJECTS:common_objects>
 	$<TARGET_OBJECTS:converter_objects>
 	$<TARGET_OBJECTS:points_render_objects>

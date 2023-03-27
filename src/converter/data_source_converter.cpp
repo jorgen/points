@@ -94,7 +94,7 @@ static void convert_points_to_vertex_data_morton(const read_points_t &read_point
 static void convert_points_to_vertex_data(const tree_global_state_t &global_state, const read_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer)
 {
   auto pformat = read_points.header.point_format;
-  switch (pformat)
+  switch (pformat.first)
   {
   case type_u8:
   case type_i8:
@@ -109,7 +109,7 @@ static void convert_points_to_vertex_data(const tree_global_state_t &global_stat
   {
     draw_buffer.vertex_data.reset(new uint8_t[read_points.data.size]);
     draw_buffer.vertex_data_info = buffer_t(draw_buffer.vertex_data.get(), read_points.data.size);
-    draw_buffer.point_type = pformat;
+    draw_buffer.point_type = pformat.first;
     memcpy(draw_buffer.vertex_data.get(), read_points.data.data, read_points.data.size);
     return;
   }
@@ -181,7 +181,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
             assert(read_points.data.size);
             convert_points_to_vertex_data(converter->tree_state, read_points, buffer);
             callbacks.do_create_buffer(buffer.render_buffers[0], points::render::buffer_type_vertex);
-            callbacks.do_initialize_buffer(buffer.render_buffers[0], read_points.cache_item.header.point_format, points::components_3, read_points.data.size, read_points.data.data);
+            callbacks.do_initialize_buffer(buffer.render_buffers[0], read_points.cache_item.header.point_format.first, points::components_1, read_points.data.size, read_points.data.data);
             callbacks.do_create_buffer(buffer.render_buffers[1], points::render::buffer_type_uniform);
             glm::mat4 mat4;
             callbacks.do_initialize_buffer(buffer.render_buffers[1], type_r32, points::components_4x4, sizeof(mat4), &mat4);

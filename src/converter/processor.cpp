@@ -37,7 +37,6 @@ processor_t::processor_t(converter_t &converter)
   , _files_added(_event_loop, [this](std::vector<std::vector<input_data_source_t>> &&new_files) { this->handle_new_files(std::move(new_files)); })
   , _pre_init_for_files(_event_loop, [this](std::vector<pre_init_info_file_t> &&aabb_min_for_files) { this->handle_pre_init_info_for_files(std::move(aabb_min_for_files)); })
   , _pre_init_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors_headers(std::move(events)); })
-  , _attributes_for_source(_event_loop, [this](std::vector<std::pair<input_data_id_t, attributes_t>> &&events) { this->handle_attribute_event(std::move(events)); })
   , _sorted_points(_event_loop, [this](std::vector<std::pair<points::converter::points_t,error_t>> &&events) { this->handle_sorted_points(std::move(events)); })
   , _point_reader_file_errors(_event_loop, [this](std::vector<file_error_t> &&events) { this->handle_file_errors(std::move(events)); })
   , _point_reader_done_with_file(_event_loop, [this](std::vector<input_data_id_t> &&files) { this->handle_file_reading_done(std::move(files));})
@@ -45,7 +44,7 @@ processor_t::processor_t(converter_t &converter)
   , _points_written(_event_loop, [this](std::vector<storage_header_t> &&events) {this->handle_points_written(std::move(events)); })
   , _tree_done_with_input(_event_loop, [this](std::vector<input_data_id_t> &&events) { this->handle_tree_done_with_input(std::move(events));})
   , _pre_init_file_retriever(_converter.tree_state, _input_event_loop, _pre_init_for_files, _point_reader_file_errors)
-  , _point_reader(_converter.tree_state, _input_event_loop, _attributes_for_source, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
+  , _point_reader(_converter.tree_state, _input_event_loop, _attributes_configs, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _cache_file_handler(_converter.tree_state, converter.cache_filename, _attributes_configs, _cache_file_error, _points_written)
   , _tree_handler(_converter.tree_state, _cache_file_handler, _attributes_configs, _tree_done_with_input)
   , _attributes_configs(_converter.tree_state)
@@ -157,13 +156,6 @@ void processor_t::handle_file_errors_headers(std::vector<file_error_t> &&errors)
   (void)errors;
 }
 
-void processor_t::handle_attribute_event(std::vector<std::pair<input_data_id_t, attributes_t>> &&attribute_events)
-{
-  for (auto &event : attribute_events)
-  {
-    _input_sources[event.first.data].attribute_id = _attributes_configs.get_attribute_config_index(std::move(event.second));
-  }
-}
 void processor_t::handle_sorted_points(std::vector<std::pair<points_t,error_t>> &&sorted_points_event)
 {
   for(auto &event : sorted_points_event)

@@ -72,7 +72,6 @@ private:
   event_pipe_t<pre_init_info_file_t> _pre_init_for_files;
   event_pipe_t<file_error_t> _pre_init_file_errors;
 
-  event_pipe_t<std::pair<input_data_id_t, attributes_t>> _attributes_for_source;
   event_pipe_t<std::pair<points_t, error_t>> _sorted_points;
   event_pipe_t<file_error_t> _point_reader_file_errors;
   event_pipe_t<input_data_id_t> _point_reader_done_with_file;
@@ -104,7 +103,6 @@ private:
   void handle_pre_init_info_for_files(std::vector<pre_init_info_file_t> &&pre_init_info_for_files);
   void handle_file_errors_headers(std::vector<file_error_t> &&errors);
 
-  void handle_attribute_event(std::vector<std::pair<input_data_id_t, attributes_t>> &&attribute_events);
   void handle_sorted_points(std::vector<std::pair<points_t,error_t>> &&sorted_points);
   void handle_file_errors(std::vector<file_error_t> &&errors);
   void handle_file_reading_done(std::vector<input_data_id_t> &&files);

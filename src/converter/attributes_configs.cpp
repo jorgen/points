@@ -20,6 +20,10 @@
 #include "input_header.hpp"
 
 #include <points/converter/default_attribute_names.h>
+#include "fixed_size_vector.hpp"
+#include "morton_tree_coordinate_transform.hpp"
+#include <algorithm>
+
 namespace points
 {
 namespace converter
@@ -45,6 +49,28 @@ static bool compare_attributes(const attributes_t &a, const attributes_t &b)
 {
   if (a.attributes.size() != b.attributes.size())
     return false;
+  for (int i = 0; i < int(a.attributes.size()); i++)
+  {
+    if (!compare_attribute(a.attributes[i], b.attributes[i]))
+      return false;
+  }
+  return true;
+}
+static bool compare_attributrs_with_point_format(const attributes_t &a, type_t point_type, components_t point_components, const attributes_t &b)
+{
+  if (a.attributes.size() != b.attributes.size())
+    return false;
+  if (a.attributes.empty())
+    return true;
+  auto &b_point_attr = b.attributes.front();
+  if (a.attributes.front().name_size != b_point_attr.name_size)
+    return false;
+  if (point_type != b_point_attr.format)
+    return false;
+  if (point_components!= b_point_attr.components)
+    return false;
+  if (memcmp(a.attributes.front().name, b_point_attr.name, b_point_attr.name_size) != 0)
+    return false;
   for (int i = 1; i < int(a.attributes.size()); i++)
   {
     if (!compare_attribute(a.attributes[i], b.attributes[i]))
@@ -52,6 +78,8 @@ static bool compare_attributes(const attributes_t &a, const attributes_t &b)
   }
   return true;
 }
+
+
 
 attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&attr)
 {
@@ -68,6 +96,88 @@ attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&
   auto &new_config = _attributes_configs.back();
   new_config.attributes = std::move(attr);
   return {uint32_t(ret)};
+}
+
+attributes_id_t attributes_configs_t::get_attribute_for_point_format(attributes_id_t id, type_t type, components_t components)
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  assert(id.data < _attributes_configs.size());
+  if (_attributes_configs.capacity() == _attributes_configs.size())
+  {
+    _attributes_configs.reserve(_attributes_configs.size() * 2);
+  }
+  auto &attr = _attributes_configs[id.data];
+  for (int i = 0; i < int(_attributes_configs.size()); i++)
+  {
+    auto &source = _attributes_configs[i];
+    if (compare_attributrs_with_point_format(attr.attributes, type, components, source.attributes))
+    {
+      return {uint32_t(i)};
+    }
+  }
+  int ret = int(_attributes_configs.size());
+  _attributes_configs.emplace_back();
+  auto &new_config = _attributes_configs.back();
+  attributes_copy(attr.attributes, new_config.attributes);
+  new_config.attributes.attributes[0].format = type;
+  new_config.attributes.attributes[0].components = components;
+  return {uint32_t(ret)};
+}
+
+static bool contains_attribute(const attributes_t &attributes, const attribute_t &attribute)
+{
+  for (auto &to_check_attrib :attributes.attributes)
+  {
+    if (to_check_attrib.name_size == attribute.name_size
+        && memcmp(to_check_attrib.name, attribute.name, attribute.name_size) == 0)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void add_missing_attributes(const attributes_t &source, attributes_t &target)
+{
+  for (auto &source_attrib : source.attributes)
+  {
+    if (contains_attribute(target, source_attrib))
+    {
+        continue;
+    }
+    target.attributes.push_back(source_attrib);
+    auto &target_attrib = target.attributes.back();
+    target.attribute_names.emplace_back(new char[source_attrib.name_size + 1]);
+    memcpy(target.attribute_names.back().get(), source_attrib.name, source_attrib.name_size);
+    target.attribute_names.back().get()[source_attrib.name_size] = 0;
+    target_attrib.name = target.attribute_names.back().get();
+  }
+}
+
+attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end)
+{
+  fixed_capacity_vector_t<attributes_id_t> attribute_ids_sorted(end - begin);
+  memcpy(attribute_ids_sorted.begin(), begin, attribute_ids_sorted.capacity() * sizeof(attributes_id_t));
+  auto attrib_begin = attribute_ids_sorted.begin();
+  auto attrib_end = attribute_ids_sorted.end();
+  std::sort(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data < b.data; });
+  attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
+
+  auto lod_format = morton_format_from_lod(lod);
+  attributes_t target;
+  {
+    std::unique_lock<std::mutex> lock(_mutex);
+    attributes_copy(_attributes_configs[attrib_begin->data].attributes, target);
+    auto it = attrib_begin;
+    while (++it != attrib_end)
+    {
+      add_missing_attributes(_attributes_configs[it->data].attributes, target);
+    }
+    target.attributes.front().format = lod_format;
+    target.attributes.front().components = components_1;
+  }
+  auto id = get_attribute_config_index(std::move(target));
+  return get_lod_attribute_mapping(lod_format, id, attrib_begin, attrib_end);
 }
 
 const attributes_t &attributes_configs_t::get(attributes_id_t id)
@@ -95,113 +205,65 @@ static bool attributes_ids_increase(const attributes_id_t *begin, const attribut
 }
 #endif
 
-bool is_attribute_names_equal(const attribute_t &a, const attribute_t &b)
+static bool is_attribute_names_equal(const attribute_t &a, const attribute_t &b)
 {
   if (a.name_size != b.name_size)
     return false;
   return memcmp(a.name, b.name, a.name_size) == 0;
 }
 
-static void make_new_attributes(attribute_config_t &destination, const type_t point_type, const std::vector<attribute_config_t> &attributes_configs, const attributes_id_t *begin, const attributes_id_t *end)
+attribute_source_lod_into_t create_attribute_source_lod_into (const attribute_t &attr, const attributes_t &attributes)
 {
-  int count = int(end - begin);
-  attributes_copy(attributes_configs[begin->data].attributes, destination.attributes);
-  destination.extra_info.resize(destination.attributes.attributes.size());
-  destination.child_attributes.reserve(count);
-  destination.child_attributes.emplace_back(*begin);
-  assert(std::string(POINTS_ATTRIBUTE_XYZ) == destination.attributes.attributes.front().name);
-  //assert(destination.attributes.attributes.front().components == components_1);
-  destination.attributes.attributes.front().format = point_type;
-  for (int i = 1; i < count; i++)
+  for (int i = 0; i < int(attributes.attributes.size()); i++)
   {
-    destination.child_attributes.emplace_back(begin[i]);
-    auto &source = attributes_configs[begin[i].data];
-    for (int attribute_index = 0; attribute_index < int(source.attributes.attributes.size()); attribute_index++)
+    if (is_attribute_names_equal(attr, attributes.attributes[i]))
     {
-      auto &source_attrib = source.attributes.attributes[attribute_index];
-      bool found = false;
-      for (int dest_attrib_index = 0; dest_attrib_index < int(destination.attributes.attributes.size()); dest_attrib_index++)
-      {
-        auto &dest_attrib = destination.attributes.attributes[dest_attrib_index];
-        if (is_attribute_names_equal(source_attrib, dest_attrib))
-        {
-          if (int(dest_attrib.format) < int(source_attrib.format))
-            dest_attrib.format = source_attrib.format;
-          if (int(dest_attrib.components) < int(source_attrib.components))
-            dest_attrib.components = source_attrib.components;
-          found = true;
-        }
-      }
-      if (!found)
-      {
-        destination.attributes.attributes.push_back(source_attrib);
-        destination.attributes.attribute_names.emplace_back(new char[source_attrib.name_size + 1]);
-        memcpy(destination.attributes.attribute_names[i].get(), source_attrib.name, source_attrib.name_size);
-        destination.attributes.attribute_names[i].get()[source_attrib.name_size] = 0;
-        destination.attributes.attributes[i].name = destination.attributes.attribute_names[i].get();
-      }
+      attribute_source_lod_into_t ret;
+      ret.format.first = attributes.attributes[i].format;
+      ret.format.second = attributes.attributes[i].components;
+      ret.source_index = i;
+      return ret;
     }
   }
-
-  destination.attribute_lod_mapping.destination.reserve(destination.attributes.attributes.size());
-  destination.attribute_lod_mapping.source.resize(count);
-  for (int i = 0; i < count; i++)
-  {
-    destination.attribute_lod_mapping.source[i].source_attributes.reserve(destination.attributes.attributes.size());
-  }
-  for (int dest_attrib_index = 0; dest_attrib_index < int(destination.attributes.attributes.size()); dest_attrib_index++)
-  {
-    auto &dest_attrib = destination.attributes.attributes[dest_attrib_index];
-    destination.extra_info[dest_attrib_index].is_accumulative = false;
-    destination.attribute_lod_mapping.destination.emplace_back(dest_attrib.format, dest_attrib.components);
-    for (int i = 0; i < count; i++)
-    {
-      destination.attribute_lod_mapping.source[i].id = begin[i];
-      destination.attribute_lod_mapping.source[i].source_attributes.emplace_back();
-      auto &source_map_info = destination.attribute_lod_mapping.source[i].source_attributes.back();
-      source_map_info.index = -1;
-      source_map_info.format = {};
-      auto &source = attributes_configs[begin[i].data];
-      for (int source_attrib_index = 0; source_attrib_index < int(source.attributes.attributes.size()); source_attrib_index++)
-      {
-        auto &source_attrib = source.attributes.attributes[source_attrib_index];
-        if (is_attribute_names_equal(dest_attrib, source_attrib))
-        {
-          source_map_info.index = source_attrib_index;
-          source_map_info.format = std::make_pair(source_attrib.format, source_attrib.components);
-          break;
-        }
-      }
-    }
-  }
+  attribute_source_lod_into_t ret;
+  ret.source_index = -1;
+  return ret;
 }
 
-attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const type_t point_type, const attributes_id_t *begin, const attributes_id_t *end)
+attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end)
 {
   assert(begin < end);
+#ifndef NDEBUG
   assert(attributes_ids_increase(begin, end));
+#endif
   std::unique_lock<std::mutex> lock(_mutex);
-  auto it = std::find_if(_attributes_configs.begin(), _attributes_configs.end(), [begin, end](const attribute_config_t &config)
+  const auto &target = _attributes_configs[target_id.data].attributes;
+  attribute_lod_mapping_t ret;
+  ret.destination_id = target_id;
+  ret.destination.reserve(target.attributes.size());
+  ret.source.reserve(end - begin);
+  for (auto &attr : target.attributes)
   {
-    auto current = begin;
-    for (int i = 0; i < int(config.child_attributes.size()) && current != end; ++current, i++)
+    ret.destination.emplace_back(attr.format, attr.components);
+  }
+  for (auto it = begin; it != end; ++it)
+  {
+    if (std::find_if(ret.source.begin(), ret.source.end(), [it](const attribute_lod_info_t &a) { return it->data == a.source_id.data; }) != ret.source.end())
     {
-      if (current->data != config.child_attributes[i].data)
-        return false;
+      continue;
     }
-    if (current != end)
-      return false;
-    return true;
-  });
+    ret.source.emplace_back();
+    auto &source = ret.source.back();
+    source.source_id = *it;
+    source.source_attributes.reserve(target.attributes.size());
+    auto &source_attr = this->_attributes_configs[source.source_id.data].attributes;
 
-  if (it != _attributes_configs.end())
-    return it->attribute_lod_mapping;
-
-  _attributes_configs.emplace_back();
-  auto &config = _attributes_configs.back();
-  config.attribute_lod_mapping.destination_id.data = uint32_t(_attributes_configs.size() - 1);
-  make_new_attributes(config, point_type, _attributes_configs, begin, end);
-  return _attributes_configs.back().attribute_lod_mapping;
+    for (auto &target_attr : target.attributes)
+    {
+      source.source_attributes.push_back(create_attribute_source_lod_into(target_attr, source_attr));
+    }
+  }
+  return ret;
 }
 
 std::vector<std::pair<type_t, components_t>> attributes_configs_t::get_format_components(attributes_id_t id)
@@ -216,5 +278,13 @@ std::vector<std::pair<type_t, components_t>> attributes_configs_t::get_format_co
     ret.emplace_back(attrib.format, attrib.components);
   }
   return ret;
+}
+
+std::pair<type_t, components_t> attributes_configs_t::get_point_format(attributes_id_t id)
+{
+  assert(id.data < _attributes_configs.size());
+  std::unique_lock<std::mutex> lock(_mutex);
+  auto &attrib = _attributes_configs[id.data].attributes.attributes[0];
+  return { attrib.format, attrib.components };
 }
 }}

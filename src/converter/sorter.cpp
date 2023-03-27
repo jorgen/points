@@ -16,11 +16,10 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "sorter.hpp"
-#include "input_header.hpp"
 #include "morton.hpp"
-#include "memcpy_array.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 #include "error.hpp"
+#include "attributes_configs.hpp"
 
 #include <points/converter/default_attribute_names.h>
 #include <vector>
@@ -62,7 +61,7 @@ typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) <= sizeof(morton::mort
 }
 
 template <typename T, typename MT, size_t C>
-void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &points, double smallest_scale, type_t format, error_t &error)
+void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_configs_t &attributes_config, points_t &points, double smallest_scale, type_t format, error_t &error)
 {
   (void)error;
   auto &header = points.header;
@@ -113,19 +112,20 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, points_t &po
     {
       world_morton_unique_ptr = std::move(new_data);
       buffer_size = new_buffer_size;
-      format = new_type;
     }
   }
   points.buffers.data[0] = std::move(world_morton_unique_ptr);
   points.buffers.buffers[0].data = points.buffers.data[0].get();
   points.buffers.buffers[0].size = buffer_size;
-  points.header.point_format = format;
+  points.header.original_attributes_id = points.header.attributes_id;
+  points.header.attributes_id = attributes_config.get_attribute_for_point_format(points.header.original_attributes_id, new_type, components_1);
+  points.header.point_format = std::make_pair(new_type, components_1);
   morton::morton_upcast(first, base_morton, points.header.morton_min);
   morton::morton_upcast(last, base_morton, points.header.morton_max);
   assert(points.header.lod_span == morton::morton_lod(points.header.morton_min, points.header.morton_max));
 }
 template <typename T>
-void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, error_t &error)
+void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, points_t &points, error_t &error)
 {
   auto &header = points.header;
 
@@ -163,16 +163,16 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
   switch (target_format)
   {
     case type_m32:
-      convert_and_sort_morton<T, uint32_t, 1>(tree_state, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, uint32_t, 1>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
     break;
     case type_m64:
-      convert_and_sort_morton<T, uint64_t, 1>(tree_state, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, uint64_t, 1>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
     break;
     case type_m128:
-      convert_and_sort_morton<T, uint64_t, 2>(tree_state, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, uint64_t, 2>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
     break;
   case type_m192:
-      convert_and_sort_morton<T, uint64_t, 3>(tree_state, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, uint64_t, 3>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
     break;
   default:
     assert(false);
@@ -180,12 +180,13 @@ void convert_and_sort(const tree_global_state_t &tree_state, points_t &points, e
   }
 }
 
-void sort_points(const tree_global_state_t &tree_state, const std::vector<std::pair<type_t, components_t>> &attributes_def, points_t &points, error_t &error)
+void sort_points(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, points_t &points, error_t &error)
 {
-  switch (attributes_def.front().first)
+  auto point_format = attributes_configs.get_point_format(points.header.attributes_id);
+  switch (point_format.first)
   {
   case type_i32:
-    convert_and_sort<int32_t>(tree_state, points, error);
+    convert_and_sort<int32_t>(tree_state, attributes_configs, points, error);
     break;
   default:
     assert(false);

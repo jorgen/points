@@ -7,6 +7,7 @@ set(public_headers
 )
 set(private_headers
   error.hpp
+  fixed_size_vector.hpp
 )
 set(sources
   error.cpp

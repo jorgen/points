@@ -202,7 +202,7 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
 
 inline void point_buffer_subdivide(const tree_global_state_t &state, const read_points_t &points, const points_subset_t &subset, int lod, const morton::morton192_t &node_min, points_collection_t (&children)[8])
 {
-  switch(points.header.point_format)
+  switch(points.header.point_format.first)
   {
   case type_m32:
     point_buffer_subdivide_type<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(state, points, subset, lod, node_min, children);

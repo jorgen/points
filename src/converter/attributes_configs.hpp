@@ -36,15 +36,16 @@ struct attributes_extra_info_t
 
 struct attribute_source_lod_into_t
 {
-  int index;
+  int source_index;
   std::pair<type_t, components_t> format;
 };
 
 struct attribute_lod_info_t
 {
-  attributes_id_t id;
+  attributes_id_t source_id;
   std::vector<attribute_source_lod_into_t> source_attributes;
 };
+
 struct attribute_lod_mapping_t
 {
   attributes_id_t destination_id;
@@ -54,7 +55,7 @@ struct attribute_lod_mapping_t
   {
     auto it = std::find_if(source.begin(), source.end(), [id](const attribute_lod_info_t &info)
     {
-      return info.id.data == id.data;
+      return info.source_id.data == id.data;
     });
     assert(it != source.end());
     return *it;
@@ -64,9 +65,6 @@ struct attribute_lod_mapping_t
 struct attribute_config_t
 {
   attributes_t attributes;
-  std::vector<attributes_extra_info_t> extra_info;
-  std::vector<attributes_id_t> child_attributes;
-  attribute_lod_mapping_t attribute_lod_mapping;
 };
 
 class attributes_configs_t
@@ -75,11 +73,14 @@ public:
   attributes_configs_t(const tree_global_state_t &global_state);
 
   attributes_id_t get_attribute_config_index(attributes_t &&attr);
+  attributes_id_t get_attribute_for_point_format(attributes_id_t id, type_t type, components_t components);
+  attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end);
+  attribute_lod_mapping_t get_lod_attribute_mapping(const type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end);
 
   const attributes_t &get(attributes_id_t id);
 
-  attribute_lod_mapping_t get_lod_attribute_mapping(const type_t point_type, const attributes_id_t *begin, const attributes_id_t *end);
   std::vector<std::pair<type_t, components_t>> get_format_components(attributes_id_t id);
+  std::pair<type_t, components_t> get_point_format(attributes_id_t id);
 private:
   const tree_global_state_t &_global_state;
   std::mutex _mutex;
