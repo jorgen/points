@@ -427,9 +427,17 @@ inline void morton_downcast(const morton_t<T1, C1> &a, morton_t<T2, C2> &b)
   static_assert(C1 > 0 && C2 > 0, "invalid size");
   static_assert(std::is_same<T2, uint32_t>::value ? C2 == 1 : true, "Only support one component 32 morton");
   b.data[0] = T2(a.data[0]);
+  if constexpr (C2 == 1)
+  {
+    b.data[0] &= ~((~T2(0)) << (sizeof(T2) * 8 - ((sizeof(T2) * 8) % 3)));
+  }
   if constexpr (C2 > 1)
   {
     b.data[1] = a.data[1];
+  }
+  if constexpr (C2 == 2)
+  {
+    b.data[1] &= ~((~T2(0)) << (sizeof(T2) * 8 - ((sizeof(T2) * 8 * 2) % 3)));
   }
   if constexpr (C2 > 2)
   {

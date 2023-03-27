@@ -504,3 +504,25 @@ TEST_CASE("Morton 32 encode/decode z", "[converter]")
   REQUIRE(outpos[1] == expected_output[1]);
   REQUIRE(outpos[2] == expected_output[2]);
 }
+
+TEST_CASE("Morton downcast", "[converter]")
+{
+  using namespace points::converter;
+  morton::morton192_t m192;
+  m192.data[0] = ~uint64_t(0);
+  m192.data[1] = ~uint64_t(0);
+  m192.data[2] = ~uint64_t(0);
+
+  morton::morton128_t m128;
+  morton::morton_downcast(m192, m128);
+  REQUIRE(m128.data[0] == ~uint64_t(0));
+  REQUIRE(m128.data[1] == (~uint64_t(0)) >> 2);
+
+  morton::morton64_t m64;
+  morton::morton_downcast(m128, m64);
+  REQUIRE(m64.data[0] == (~uint64_t(0) >> 1));
+
+  morton::morton32_t m32;
+  morton::morton_downcast(m64, m32);
+  REQUIRE(m32.data[0] == (~uint32_t(0)) >> 2);
+}
