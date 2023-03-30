@@ -74,15 +74,21 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
   double pos[3];
   const vec_t<T> *point_data = reinterpret_cast<const vec_t<T>*>(points.buffers.buffers[0].data);
   double inv_scale = 1/smallest_scale;
+
+  int64_t local_offset_diff[3];
+  local_offset_diff[0] = int64_t(header.public_header.offset[0] * inv_scale) - int64_t(tree_state.offset[0] * inv_scale);
+  local_offset_diff[1] = int64_t(header.public_header.offset[1] * inv_scale) - int64_t(tree_state.offset[1] * inv_scale);
+  local_offset_diff[2] = int64_t(header.public_header.offset[2] * inv_scale) - int64_t(tree_state.offset[2] * inv_scale);
+
   for (uint64_t i = 0; i < count; i++)
   {
     auto &point = point_data[i];
-    pos[0] = point.data[0] * header.public_header.scale[0] + header.public_header.offset[0];
-    pos[1] = point.data[1] * header.public_header.scale[1] + header.public_header.offset[1];
-    pos[2] = point.data[2] * header.public_header.scale[2] + header.public_header.offset[2];
-    tmp[0] = uint64_t((pos[0] - tree_state.offset[0]) * inv_scale);
-    tmp[1] = uint64_t((pos[1] - tree_state.offset[1]) * inv_scale);
-    tmp[2] = uint64_t((pos[2] - tree_state.offset[2]) * inv_scale);
+    pos[0] = point.data[0] * header.public_header.scale[0];
+    pos[1] = point.data[1] * header.public_header.scale[1];
+    pos[2] = point.data[2] * header.public_header.scale[2];
+    tmp[0] = uint64_t((pos[0] * inv_scale) - local_offset_diff[0]);
+    tmp[1] = uint64_t((pos[1] * inv_scale) - local_offset_diff[1]);
+    tmp[2] = uint64_t((pos[2] * inv_scale) - local_offset_diff[2]);
     morton::encode(tmp, morton_begin[i]);
   }
   std::sort(morton_begin, morton_end);
