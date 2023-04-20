@@ -163,9 +163,9 @@ int main(int, char **)
                                             &points::converter::converter_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
 
-  auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get(), aabb.min),
-                                   &points::render::aabb_data_source_destroy);
-  points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
+ // auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get(), aabb.min),
+ //                                  &points::render::aabb_data_source_destroy);
+ // points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
   //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
   //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
   //(void)points;
@@ -181,7 +181,7 @@ int main(int, char **)
   points::render::aabb_t aabb2;
   aabb2.min[0] = 0.0; aabb2.min[1] = 0.0; aabb2.min[2] = 0.0;
   aabb2.max[0] = 0.0; aabb2.max[1] = 0.0; aabb2.max[2] = 0.0;
-  int aabb2_id =  -1; //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  //int aabb2_id =  -1; //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
 
   auto error = glGetError();
   (void)error;
@@ -317,12 +317,12 @@ int main(int, char **)
     diff[0] = converter_max[0] - converter_min[0];
     diff[1] = converter_max[1] - converter_min[1];
     diff[2] = converter_max[2] - converter_min[2];
-    if (converter_min[0] != aabb2.min[0] && aabb2_id == -1)
-    {
-      aabb2_id = points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
-      memcpy(aabb2.min, converter_min, sizeof(converter_min));
-      memcpy(aabb2.max, converter_max, sizeof(converter_max));
-    }
+   // if (converter_min[0] != aabb2.min[0] && aabb2_id == -1)
+   // {
+   //   aabb2_id = points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
+   //   memcpy(aabb2.min, converter_min, sizeof(converter_min));
+   //   memcpy(aabb2.max, converter_max, sizeof(converter_max));
+   // }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(window);

@@ -22,8 +22,6 @@
 #include <points/render/data_source.h>
 #include <points/render/aabb_data_source.h>
 #include <points/render/draw_group.h>
-#include "data_source.hpp"
-#include "glm_include.hpp"
 #include "buffer.hpp"
 #include "renderer_callbacks.hpp"
 #include "converter.hpp"
@@ -40,8 +38,8 @@ namespace converter
 
 struct dyn_points_draw_buffer_t
 {
-  render::draw_buffer_t render_list[2];
-  render::buffer_t render_buffers[2];
+  render::draw_buffer_t render_list[3];
+  render::buffer_t render_buffers[3];
   std::unique_ptr<uint8_t[]> vertex_data;
   buffer_t vertex_data_info;
   points::type_t point_type;
@@ -93,6 +91,8 @@ struct converter_data_source_t
   render::buffer_t index_buffer;
   std::vector<tree_walker_with_buffer_t> current_tree_nodes[2];
   bool current_tree_nodes_index = false;
+
+  std::vector<dyn_points_draw_buffer_t> buffers;
 
 };
 } // namespace render

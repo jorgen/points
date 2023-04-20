@@ -5,6 +5,7 @@
 
 #include <assert.h>
 
+#include <array>
 namespace points
 {
 namespace converter
@@ -457,11 +458,19 @@ inline void morton_upcast(const morton_t<T1, C1> &a, const morton::morton192_t &
   {
     b.data[0] |= (min.data[0] & (~T2(0) << (sizeof(T2) * 4)));
   }
+  if constexpr (C1 == 1 && C2 > C1)
+  {
+    b.data[0] |= T2((~T1(0)) << (sizeof(T1) * 8 - ((sizeof(T1) * 8) % 3))) & min.data[0];
+  }
   if constexpr (C2 > 1)
   {
     if constexpr (C1 > 1)
     {
       b.data[1] = a.data[1];
+      if constexpr (C1 == 2)
+      {
+        b.data[1] |= ((~T2(0)) << (sizeof(T2) * 8 - ((sizeof(T2) * 8 * 2) % 3))) & min.data[1];
+      }
     }
     else
     {

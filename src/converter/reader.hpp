@@ -40,7 +40,7 @@ namespace points
 {
 namespace converter
 {
-
+class cache_file_handler_t;
 struct reader_header_t : storage_header_t
 {
   attributes_t attributes;

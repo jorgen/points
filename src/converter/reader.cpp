@@ -89,7 +89,7 @@ void get_data_worker_t::work()
   auto &attributes = attribute_configs.get(header.attributes_id);
   auto attribute_info = attribute_configs.get_format_components(header.attributes_id);
 
-  int convert_size = 20000;
+  int convert_size = 20000000;
   uint8_t done_read_file = false;
   uint64_t local_points_read;
   uint32_t sub_part = 0;

@@ -244,6 +244,7 @@ void gl_dyn_points_handler::initialize()
   attrib_position = glGetAttribLocation(program, "position");
   uniform_camera = glGetUniformLocation(program, "camera");
 
+
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
@@ -268,19 +269,16 @@ void gl_dyn_points_handler::draw(points::render::draw_group_t &group)
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::points_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points::render::dyn_points_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::points_bm_vertex: {
+    case points::render::dyn_points_bm_vertex: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::points_bm_color: {
-      break;
-    }
-    case points::render::points_bm_camera: {
+    case points::render::dyn_points_bm_camera: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(uniform_camera, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;

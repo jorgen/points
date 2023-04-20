@@ -24,6 +24,7 @@ namespace points
 {
 namespace converter
 {
+class cache_file_handler_t;
 void sort_points(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, points_t &points, error_t &error);
 }
 } // namespace points

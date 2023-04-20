@@ -578,6 +578,7 @@ void lod_worker_t::work()
   for (int i = 0; i < int(data.child_data.size()); i++)
   {
     auto &child = data.child_data[i];
+    //child.
     point_count_t count(0);
     bool got_attrib = cache.attribute_id_and_count_for_input_id(child.input_id, attribute_ids[i], count);
     if (child.count.data == 0) //adjust for lod data
@@ -588,7 +589,6 @@ void lod_worker_t::work()
 
     total_count += child.count.data;
     (void) got_attrib;
-    assert(got_attrib);
   }
 
   auto lod_format = morton_format_from_lod(data.lod);

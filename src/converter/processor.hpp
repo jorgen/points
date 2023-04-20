@@ -67,6 +67,9 @@ private:
   converter_t &_converter;
   threaded_event_loop_t _event_loop;
  
+  cache_file_handler_t _cache_file_handler;
+  tree_handler_t _tree_handler;
+
   event_pipe_t<std::vector<input_data_source_t>> _files_added;
 
   event_pipe_t<pre_init_info_file_t> _pre_init_for_files;
@@ -83,9 +86,6 @@ private:
   threaded_event_loop_t _input_event_loop;
   pre_init_file_retriever_t _pre_init_file_retriever;
   point_reader_t _point_reader;
-
-  cache_file_handler_t _cache_file_handler;
-  tree_handler_t _tree_handler;
 
   std::vector<input_data_source_t> _input_sources;
   attributes_configs_t _attributes_configs;

@@ -1,4 +1,5 @@
 #include <catch2/catch.hpp>
+#include <random>
 #include <fmt/printf.h>
 
 #include <morton.hpp>
@@ -69,6 +70,33 @@ TEST_CASE("Morton order", "[converter]")
 //  convert_pos_to_morton(world_scale, world_offset, pos_first, world_first);
 //  convert_pos_to_morton(world_scale, world_offset, pos_second, world_second);
 //  REQUIRE(world_first < world_second);
+}
+
+
+TEST_CASE("Morton random downcast/upcast", "[converter]")
+{
+  using namespace  points::converter;
+  std::mt19937 gen(44);
+  std::uniform_int_distribution<uint64_t> distrib(0, ~uint64_t(0));
+
+  constexpr size_t test_count = 1000000;
+
+  uint64_t input[3];
+  uint64_t test_output[3];
+  morton::morton192_t output;
+  morton::morton192_t upscaled;
+  morton::morton64_t descaled;
+  for (int i = 0; i < test_count; i++)
+  {
+    input[0] = distrib(gen);  input[1] = distrib(gen);  input[2] = distrib(gen);
+    morton::encode(input, output);
+    morton::morton_downcast(output, descaled);
+    morton::morton_upcast(descaled, output, upscaled);
+    morton::decode(upscaled, test_output);
+    REQUIRE(input[0] == test_output[0]);
+    REQUIRE(input[1] == test_output[1]);
+    REQUIRE(input[2] == test_output[2]);
+  }
 }
 
 TEST_CASE("Morton 192 encode/decode x", "[converter]")
@@ -521,8 +549,47 @@ TEST_CASE("Morton downcast", "[converter]")
   morton::morton64_t m64;
   morton::morton_downcast(m128, m64);
   REQUIRE(m64.data[0] == (~uint64_t(0) >> 1));
+  morton::morton_downcast(m192, m64);
+  REQUIRE(m64.data[0] == (~uint64_t(0) >> 1));
 
   morton::morton32_t m32;
   morton::morton_downcast(m64, m32);
   REQUIRE(m32.data[0] == (~uint32_t(0)) >> 2);
+  morton::morton_downcast(m192, m32);
+  REQUIRE(m32.data[0] == (~uint32_t(0)) >> 2);
+  morton::morton_downcast(m128, m32);
+  REQUIRE(m32.data[0] == (~uint32_t(0)) >> 2);
+}
+
+TEST_CASE("Morton upcast", "[converter]")
+{
+  using namespace points::converter;
+  morton::morton192_t m192;
+  m192.data[0] = ~uint64_t(0);
+  m192.data[1] = ~uint64_t(0);
+  m192.data[2] = ~uint64_t(0);
+
+  morton::morton128_t m128;
+  morton::morton_downcast(m192, m128);
+  morton::morton192_t upcast;
+  morton::morton_upcast(m128, m192, upcast);
+  REQUIRE(m192 == upcast);
+
+  morton::morton64_t m64;
+  morton::morton_downcast(m192, m64);
+  morton::morton_upcast(m64, m192, upcast);
+  REQUIRE(m192 == upcast);
+
+  morton::morton32_t m32;
+  morton::morton_downcast(m192, m32);
+  morton::morton_upcast(m32, m192, upcast);
+  REQUIRE(m192 == upcast);
+
+  morton::morton128_t m128full;
+  m128full.data[0] = ~uint64_t(0);
+  m128full.data[1] = ~uint64_t(0);
+
+  morton::morton128_t upcast128;
+  morton::morton_upcast(m64, m192, upcast128);
+  REQUIRE(m128full == upcast128);
 }
