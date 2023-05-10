@@ -41,9 +41,6 @@ converter_data_source_t::converter_data_source_t(converter_t *converter, render:
 {
   memset(aabb.min, 0, sizeof(aabb.min));
   memset(aabb.max, 0, sizeof(aabb.max));
-  glm::mat4 mat4;
-  callbacks.do_create_buffer(project_view_buffer, render::buffer_type_uniform);
-  callbacks.do_initialize_buffer(project_view_buffer, type_r32, components_4x4, sizeof(mat4), &mat4);
   data_source.user_ptr = this;
   data_source.add_to_frame = [](render::frame_camera_t *camera, render::to_render_t *to_render, void *user_ptr) {
     auto *thiz = static_cast<converter_data_source_t *>(user_ptr);
@@ -66,103 +63,9 @@ static void combine_buffers(std::vector<tree_walker_nodes_t> &new_nodes, render:
   });
 }
 
-template <typename MORTON_TYPE, typename DECODED_T>
-static void convert_points_to_vertex_data_morton(const tree_global_state_t &state, const read_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset, std::unique_ptr<uint8_t[]> &vertex_data)
-{
-  assert(read_points.data.size % sizeof(MORTON_TYPE) == 0);
-  assert(read_points.header.public_header.point_count == read_points.data.size / sizeof(MORTON_TYPE));
-  MORTON_TYPE *morton_array = static_cast<MORTON_TYPE *>(read_points.data.data);
-  auto point_count = read_points.header.public_header.point_count;
-
-  uint64_t buffer_size = point_count * sizeof(DECODED_T);
-  vertex_data.reset(new uint8_t[buffer_size]);
-  vertex_data_info = buffer_t(vertex_data.get(), buffer_size);
-  auto vertex_data_ptr = vertex_data.get();
-  std::array<float,3> *decoded_array = reinterpret_cast<std::array<float, 3>*>(vertex_data_ptr);
-
-  morton::morton192_t current;
-  morton::morton192_t morton_min = read_points.header.morton_min;
-
-  uint64_t min_int[3];
-  morton::decode(morton_min, min_int);
-  double min[3];
-  min[0] = min_int[0] * state.scale;
-  min[1] = min_int[1] * state.scale;
-  min[2] = min_int[2] * state.scale;
-
-  output_offset[0] = min[0];
-  output_offset[1] = min[1];
-  output_offset[2] = min[2];
-
-
-  uint64_t tmp_pos[3];
-  for (uint64_t i = 0; i < point_count; i++)
-  {
-    morton::morton_upcast(morton_array[i], morton_min, current);
-    morton::decode(current, tmp_pos);
-    for (int n = 0; n < 3; n++)
-    {
-      tmp_pos[n] -= min_int[n];
-      decoded_array[i][n] = float(tmp_pos[n] * state.scale);
-    }
-  }
-}
-
-static void convert_points_to_vertex_data(const tree_global_state_t &global_state, const read_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer)
-{
-  auto pformat = read_points.header.point_format;
-  switch (pformat.first)
-  {
-  case type_u8:
-  case type_i8:
-  case type_u16:
-  case type_i16:
-  case type_u32:
-  case type_i32:
-  case type_r32:
-  case type_u64:
-  case type_i64:
-  case type_r64:
-  {
-    draw_buffer.vertex_data.reset(new uint8_t[read_points.data.size]);
-    draw_buffer.vertex_data_info = buffer_t(draw_buffer.vertex_data.get(), read_points.data.size);
-    draw_buffer.point_type = pformat.first;
-    memcpy(draw_buffer.vertex_data.get(), read_points.data.data, read_points.data.size);
-    break;
-  }
-  case type_m32:
-    convert_points_to_vertex_data_morton<morton::morton32_t, std::array<uint16_t, 3>>(global_state, read_points, draw_buffer.vertex_data_info, draw_buffer.offset, draw_buffer.vertex_data);
-    draw_buffer.point_type = points::type_r32;
-    break;
-  case type_m64:
-    convert_points_to_vertex_data_morton<morton::morton64_t, std::array<uint32_t, 3>>(global_state, read_points, draw_buffer.vertex_data_info, draw_buffer.offset, draw_buffer.vertex_data);
-    draw_buffer.point_type = points::type_r32;
-    break;
-  case type_m128:
-    convert_points_to_vertex_data_morton<morton::morton128_t, std::array<uint64_t, 3>>(global_state, read_points, draw_buffer.vertex_data_info, draw_buffer.offset, draw_buffer.vertex_data);
-    draw_buffer.point_type = points::type_r32;
-    break;
-  case type_m192:
-    convert_points_to_vertex_data_morton<morton::morton192_t, std::array<uint64_t, 3>>(global_state, read_points, draw_buffer.vertex_data_info, draw_buffer.offset, draw_buffer.vertex_data);
-    draw_buffer.point_type = points::type_r32;
-    break;
-  }
-}
-
-template<size_t SIZE>
-glm::vec<SIZE, glm::f64, glm::defaultp> to_glm(const std::array<double, SIZE> &a)
-{
-  glm::vec<SIZE, glm::f64, glm::defaultp> ret;
-  static_assert(sizeof(ret) == sizeof(a));
-  memcpy(&ret, &a, sizeof ret);
-  return ret;
-}
-
 void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, render::to_render_t *to_render)
 {
   const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
-  glm::mat4 pv = camera.view_projection;
-  callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(pv), &pv);
 
   if (back_buffer && back_buffer->done() && !has_rendered)
   {
@@ -174,108 +77,63 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
     back_buffer.reset();
   }
 
-  if (buffers.empty())
+  for (int level = 4; level < 5; level++)
   {
-    for (int i = 0 ; i < 1; i++)
+    auto &current_trees = current_tree_nodes[current_tree_nodes_index];
+    assert(current_trees.size() <= 1);
+    for (auto &tree : current_trees)
     {
-      buffers.emplace_back();
-      auto &buffer = buffers.back();
-      input_data_id_t id;
-      id.data = 0;
-      id.sub= i;
-      read_points_t read_points(converter->processor.cache_file(), id , 0);
-      assert(read_points.data.size);
-      convert_points_to_vertex_data(converter->tree_state, read_points, buffer);
-      callbacks.do_create_buffer(buffer.render_buffers[0], points::render::buffer_type_vertex);
-      callbacks.do_initialize_buffer(buffer.render_buffers[0], points::type_r32, points::components_3, read_points.data.size, read_points.data.data);
-      buffer.render_buffers[0].rendered = true;
-      buffer.point_count = read_points.cache_item.header.public_header.point_count;
-      callbacks.do_create_buffer(buffer.render_buffers[1], points::render::buffer_type_uniform);
-      glm::mat4 mat4;
-      callbacks.do_initialize_buffer(buffer.render_buffers[1], type_r32, points::components_4x4, sizeof(mat4), &mat4);
+      assert(tree.buffers[level].size() == tree.node_data.point_subsets[level].size());
+      for (int node_index = 0; node_index < int(tree.buffers[level].size()); node_index++)
+      {
+        auto &node = tree.buffers[level][node_index];
+        if (!node.has_data && !node.fetching_data)
+        {
+          node.has_data = true;
+          auto &subsets = tree.node_data.point_subsets[level][node_index];
+          auto &buffers = tree.buffers[level][node_index].data;
+          buffers.resize(subsets.data.size());
+          for (int subset_index = 0; subset_index < int(subsets.data.size()); subset_index++)
+          {
+            auto &subset = subsets.data[subset_index];
+            auto &buffer = buffers[subset_index];
+            if (!buffer.render_buffers->rendered)
+            {
+              read_points_t read_points(converter->processor.cache_file(), subset.input_id, 0);
+              assert(read_points.data.size);
+              convert_points_to_vertex_data(converter->tree_state, read_points, buffer);
+              callbacks.do_create_buffer(buffer.render_buffers[0], points::render::buffer_type_vertex);
+              callbacks.do_initialize_buffer(buffer.render_buffers[0], points::type_r32, points::components_3, buffer.vertex_data_info.size, buffer.vertex_data_info.data);
+              buffer.render_buffers[0].rendered = true;
+              buffer.point_count = read_points.cache_item.header.public_header.point_count;
+              callbacks.do_create_buffer(buffer.render_buffers[1], points::render::buffer_type_uniform);
+              callbacks.do_initialize_buffer(buffer.render_buffers[1], type_r32, points::components_4x4, sizeof(buffer.camera_view), &buffer.camera_view);
+            }
+            buffer.render_list[0].buffer_mapping = render::points_bm_vertex;
+            buffer.render_list[0].user_ptr = buffer.render_buffers[0].user_ptr;
+            buffer.render_list[1].buffer_mapping = render::points_bm_camera;
+            buffer.render_list[1].user_ptr = buffer.render_buffers[1].user_ptr;
+          }
+        }
 
-      buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;
-      buffer.render_list[0].user_ptr = buffer.render_buffers[0].user_ptr;
-      buffer.render_list[1].buffer_mapping = render::dyn_points_bm_camera;
-      buffer.render_list[1].user_ptr = buffer.render_buffers[1].user_ptr;
+        if (node.has_data)
+        {
+          for (auto &buffer : node.data)
+          {
+            buffer.camera_view = camera.projection * glm::translate(camera.view, to_glm(buffer.offset));
+            callbacks.do_modify_buffer(buffer.render_buffers[1], 0, sizeof(buffer.camera_view), &buffer.camera_view);
+            render::draw_group_t draw_group;
+            draw_group.buffers = buffer.render_list;
+            draw_group.buffers_size = 2;
+            draw_group.draw_type = render::dyn_points;
+            draw_group.draw_size = buffer.point_count;
+            to_render_add_render_group(to_render, draw_group);
+            has_rendered = true;
+          }
+        }
+      }
     }
   }
-
-  for (auto &buffer : buffers)
-  {
-    std::array<float,3> floatb[10];
-    memcpy(floatb, buffer.vertex_data.get(), sizeof(floatb));
-    glm::mat4 project_view = camera.projection * glm::translate(camera.view, to_glm(buffer.offset));
-    callbacks.do_modify_buffer(buffer.render_buffers[1], 0, sizeof(project_view), &project_view);
-    render::draw_group_t draw_group;
-    draw_group.buffers = buffer.render_list;
-    draw_group.buffers_size = 2;
-    draw_group.draw_type = render::dyn_points;
-    draw_group.draw_size = buffer.point_count;
-    to_render_add_render_group(to_render, draw_group);
-    has_rendered = true;
-  }
-
-  //for (int level = 0; level < 5; level++)
-  //{
-  //  auto &current_trees = current_tree_nodes[current_tree_nodes_index];
-  //  assert(current_trees.size() <= 1);
-  //  for (auto &tree : current_trees)
-  //  {
-  //    assert(tree.buffers[level].size() == tree.node_data.point_subsets[level].size());
-  //    for (int node_index = 0; node_index < int(tree.buffers[level].size()); node_index++)
-  //    {
-  //      auto &node = tree.buffers[level][node_index];
-  //      if (!node.has_data && !node.fetching_data)
-  //      {
-  //        node.has_data = true;
-  //        auto &subsets = tree.node_data.point_subsets[level][node_index];
-  //        auto &buffers = tree.buffers[level][node_index].data;
-  //        buffers.resize(subsets.data.size());
-  //        for (int subset_index = 0; subset_index < int(subsets.data.size()); subset_index++)
-  //        {
-  //          auto &subset = subsets.data[subset_index];
-  //          auto &buffer = buffers[subset_index];
-  //          if (!buffer.render_buffers->rendered)
-  //          {
-  //            read_points_t read_points(converter->processor.cache_file(), subset.input_id, 0);
-  //            assert(read_points.data.size);
-  //            convert_points_to_vertex_data(converter->tree_state, read_points, buffer);
-  //            callbacks.do_create_buffer(buffer.render_buffers[0], points::render::buffer_type_vertex);
-  //            callbacks.do_initialize_buffer(buffer.render_buffers[0], points::type_r32, points::components_3, read_points.data.size, read_points.data.data);
-  //            buffer.render_buffers[0].rendered = true;
-  //            buffer.point_count = read_points.cache_item.header.public_header.point_count;
-  //            callbacks.do_create_buffer(buffer.render_buffers[1], points::render::buffer_type_uniform);
-  //            glm::mat4 mat4;
-  //            callbacks.do_initialize_buffer(buffer.render_buffers[1], type_r32, points::components_4x4, sizeof(mat4), &mat4);
-  //          }
-  //          buffer.render_list[0].buffer_mapping = render::points_bm_camera;
-  //          buffer.render_list[0].user_ptr = buffer.render_buffers[1].user_ptr;
-  //          buffer.render_list[1].buffer_mapping = render::points_bm_vertex;
-  //          buffer.render_list[1].user_ptr = buffer.render_buffers[0].user_ptr;
-  //        }
-  //      }
-
-  //      if (node.has_data)
-  //      {
-  //        for (auto &buffer : node.data)
-  //        {
-  //          std::array<float,3> floatb[10];
-  //          memcpy(floatb, buffer.vertex_data.get(), sizeof(floatb));
-  //          glm::mat4 project_view = camera.projection * glm::translate(camera.view, to_glm(buffer.offset));
-  //          callbacks.do_modify_buffer(buffer.render_buffers[1], 0, sizeof(project_view), &project_view);
-  //          render::draw_group_t draw_group;
-  //          draw_group.buffers = buffer.render_list;
-  //          draw_group.buffers_size = 2;
-  //          draw_group.draw_type = render::dyn_points;
-  //          draw_group.draw_size = buffer.point_count;
-  //          to_render_add_render_group(to_render, draw_group);
-  //          has_rendered = true;
-  //        }
-  //      }
-  //    }
-  //  }
-  //}
 
   if (!back_buffer && !has_rendered)
   {

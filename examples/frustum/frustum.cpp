@@ -19,6 +19,7 @@
 
 #include <points/converter/converter.h>
 #include <points/converter/converter_data_source.h>
+#include <points/converter/storage_data_source.h>
 
 #include <vector>
 
@@ -27,6 +28,7 @@
 
 CMRC_DECLARE(fonts);
 CMRC_DECLARE(textures);
+
 
 template <typename T, typename Deleter>
 std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
@@ -158,11 +160,31 @@ int main(int, char **)
   points::render::aabb_t aabb;
   points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
 
-
+  bool render_converter_points = true;
   auto converter_points = create_unique_ptr(points::converter::converter_data_source_create(converter.get(), renderer.get()),
                                             &points::converter::converter_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
 
+  auto storage_datasource = create_unique_ptr(points::converter::storage_data_source_create(converter.get(), renderer.get()),
+                                              &points::converter::storage_data_source_destroy);
+  points::render::renderer_add_data_source(renderer.get(), points::converter::storage_data_source_get(storage_datasource.get()));
+
+  int storage_count = points::converter::storage_data_source_ids_count(storage_datasource.get());
+  std::vector<uint32_t> storage_ids(storage_count);
+  std::vector<uint32_t> storage_subs(storage_count);
+  std::vector<std::string> storage_strings(storage_count);
+  std::vector<const char *> storage_chars(storage_count);
+  int current_selected_storage = -1;
+  {
+    uint32_t *sids = storage_ids.data();
+    uint32_t *subs = storage_subs.data();
+    points::converter::storage_data_source_ids(storage_datasource.get(), &sids, &subs, storage_count);
+    for (int i = 0; i < storage_count; i++)
+    {
+        storage_strings[i] = fmt::format("{} - {}", sids[i], subs[i]);
+        storage_chars[i] = storage_strings[i].data();
+    }
+  }
  // auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get(), aabb.min),
  //                                  &points::render::aabb_data_source_destroy);
  // points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
@@ -358,6 +380,30 @@ int main(int, char **)
       {
         points::render::renderer_remove_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
       }
+    }
+    if (ImGui::Checkbox("Render converter", &render_converter_points))
+    {
+      if (render_converter_points)
+      {
+        points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+      }
+      else
+      {
+        points::render::renderer_remove_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+      }
+    }
+    if (ImGui::BeginCombo("storage to render", current_selected_storage < 0 ? "pick one" : storage_chars[current_selected_storage]))
+    {
+      for (int i = 0; i < storage_count; i++)
+      {
+        bool is_selected = false;
+        if (ImGui::Selectable(storage_chars[i], is_selected))
+        {
+          points::converter::storage_data_source_render(storage_datasource.get(), storage_ids[i], storage_subs[i]);
+          current_selected_storage = i;
+        }
+      }
+      ImGui::EndCombo();
     }
     ImGui::EndGroup();
     ImGui::End();

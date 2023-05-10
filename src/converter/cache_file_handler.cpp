@@ -114,5 +114,22 @@ void cache_file_handler_t::deref_points(input_data_id_t id)
   it->second.ref--;
 }
 
+int cache_file_handler_t::fill_ids(uint32_t **ids, uint32_t **subs, int buffer_size)
+{
+  int to_process = std::min(buffer_size, int(_cache_map.size()));
+  auto it = _cache_map.begin();
+  for (int i = 0; i < to_process; ++it, i++)
+  {
+    (*ids)[i] = it->first.data;
+    (*subs)[i] = it->first.sub;
+  }
+  return to_process;
+}
+
+int cache_file_handler_t::item_count()
+{
+  return int(_cache_map.size());
+}
+
 }
 } // namespace points

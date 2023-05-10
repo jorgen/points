@@ -696,7 +696,7 @@ void gl_renderer::create_buffer(enum points::render::buffer_type_t buffer_type, 
     break;
     case points::render::buffer_type_uniform:
       create_uniform_buffer(buffer, uniform_buffers);
-      break;
+    break;
     default:
       fmt::print(stderr, "unexpected create_buffer\n");
   }

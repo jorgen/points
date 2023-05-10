@@ -8,6 +8,7 @@ set(public_headers
   points/converter/converter.h
   points/converter/default_attribute_names.h
   points/converter/converter_data_source.h
+  points/converter/storage_data_source.h
   )
 
 set(private_headers
@@ -31,6 +32,7 @@ set(private_headers
   tree_lod_generator.hpp
   attributes_configs.hpp
   data_source_converter.hpp
+  data_source_storage.hpp
   frustum_tree_walker.hpp
   )
 
@@ -48,6 +50,7 @@ set(sources
   tree_handler.cpp
   tree_lod_generator.cpp
   attributes_configs.cpp
+  data_source_storage.cpp
   data_source_converter.cpp
   frustum_tree_walker.cpp
   )

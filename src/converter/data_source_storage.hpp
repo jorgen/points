@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2022  Jørgen Lind
+** Copyright (C) 2023  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -20,67 +20,48 @@
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
 #include <points/render/data_source.h>
-#include <points/render/aabb_data_source.h>
+#include <points/converter/storage_data_source.h>
+
 #include <points/render/draw_group.h>
 #include "buffer.hpp"
 #include "renderer_callbacks.hpp"
 #include "converter.hpp"
-#include "frustum_tree_walker.hpp"
 #include "point_buffer_render_helper.h"
-
-#include <vector>
-#include <memory>
-#include <array>
 
 namespace points
 {
 namespace converter
 {
 
-struct buffers_t
+struct current_storage_item_t
 {
-  std::vector<dyn_points_draw_buffer_t> data;
-  bool fetching_data = false;
-  bool has_data = false;
+  uint32_t id;
+  uint32_t sub;
+  dyn_points_draw_buffer_t buffer;
 };
 
-struct tree_walker_with_buffer_t
+struct storage_data_source_t
 {
-  tree_walker_with_buffer_t() = default;
-  tree_walker_with_buffer_t(tree_walker_nodes_t &&node_data)
-    : node_data(std::move(node_data))
-  {
-    for (int i = 0; i < 5; i++)
-    {
-      buffers[i].resize(this->node_data.point_subsets[i].size());
-    }
-  }
-  tree_walker_with_buffer_t(tree_walker_with_buffer_t &&) = default;
-  ~tree_walker_with_buffer_t() = default;
-  tree_walker_nodes_t node_data;
-  std::vector<buffers_t> buffers[5];
-};
-
-struct converter_data_source_t
-{
-  converter_data_source_t(converter_t *converter, render::callback_manager_t &callback_manager);
+  storage_data_source_t(converter_t *converter, render::callback_manager_t &callback_manager);
 
   void add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render);
+  void set_item(uint32_t id, uint32_t sub);
+  int get_items(uint32_t **ids, uint32_t **subs, int buffer_size);
+  int item_count();
 
   converter_t *converter;
   render::callback_manager_t &callbacks;
   render::data_source_t data_source;
 
-  render::aabb_t aabb;
+  current_storage_item_t render_item;
 
-  std::shared_ptr<frustum_tree_walker_t> back_buffer;
+  std::vector<uint32_t> ids;
+  std::vector<uint32_t> subs;
 
+
+  render::buffer_t project_view_buffer;
   render::buffer_t index_buffer;
-  std::vector<tree_walker_with_buffer_t> current_tree_nodes[2];
-  bool current_tree_nodes_index = false;
-
-  std::vector<dyn_points_draw_buffer_t> buffers;
-
 };
-} // namespace render
-} // namespace points
+
+}
+}

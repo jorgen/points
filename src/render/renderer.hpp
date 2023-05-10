@@ -21,7 +21,6 @@
 
 #include "renderer_callbacks.hpp"
 #include "camera.hpp"
-#include "data_source.hpp"
 namespace points
 {
 namespace render

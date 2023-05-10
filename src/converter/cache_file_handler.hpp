@@ -97,6 +97,8 @@ public:
   points_cache_item_t ref_points(input_data_id_t id, int attribute_index);
   void deref_points(input_data_id_t id);
 
+  int fill_ids(uint32_t **ids, uint32_t **subs, int buffer_size);
+  int item_count();
 private:
   void handle_write_events(std::vector<std::tuple<storage_header_t, attribute_buffers_t, attributes_id_t>> &&events);
   std::string _cache_file_name;

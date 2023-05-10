@@ -578,7 +578,6 @@ void lod_worker_t::work()
   for (int i = 0; i < int(data.child_data.size()); i++)
   {
     auto &child = data.child_data[i];
-    //child.
     point_count_t count(0);
     bool got_attrib = cache.attribute_id_and_count_for_input_id(child.input_id, attribute_ids[i], count);
     if (child.count.data == 0) //adjust for lod data
@@ -684,7 +683,27 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
   //auto &worker_data = batch.worker_data;
   std::vector<lod_tree_worker_data_t> to_lod;
   lod_node_worker_data_t fake_parent;
+  std::vector<input_data_id_t> ids;
   tree_get_work_items(_tree_cache, _file_cache, tree_id, _generated_until, max, fake_parent, to_lod);
+  for (auto &to_lod_data : to_lod)
+  {
+    for (auto &l : to_lod_data.nodes)
+    {
+      for (auto &i : l)
+      {
+        for (const auto &child : i.child_data)
+        {
+          ids.push_back(child.input_id);
+        }
+      }
+    }
+  }
+  std::sort(ids.begin(), ids.end(), [](const input_data_id_t &a, input_data_id_t &b) { return a.data == b.data ? a.sub < b.sub : a.data < b.data; });
+  auto new_end = std::unique(ids.begin(), ids.end(), [](const input_data_id_t &a, input_data_id_t &b) { return a.data == b.data && a.sub == b.sub; });
+  for (auto it = ids.begin(); it != new_end; ++it)
+  {
+    fmt::print(stdout, "{} - {}\n", it->data, it->sub);
+  }
   if (to_lod.size())
   {
     std::sort(to_lod.begin(), to_lod.end(), [](const lod_tree_worker_data_t &a, const lod_tree_worker_data_t &b) { return a.magnitude < b.magnitude; });

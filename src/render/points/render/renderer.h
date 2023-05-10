@@ -53,8 +53,8 @@ enum skybox_buffer_mapping_t
 
 enum points_buffer_mapping_t
 {
-  points_bm_camera,
   points_bm_vertex,
+  points_bm_camera,
   points_bm_color
 };
 
