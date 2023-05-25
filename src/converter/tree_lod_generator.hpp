@@ -30,6 +30,7 @@ namespace converter
 
 struct lod_node_worker_data_t
 {
+  morton::morton192_t node_min;
   uint16_t id;
   uint16_t lod;
   input_data_id_t storage_name;

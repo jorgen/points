@@ -54,7 +54,7 @@ void storage_data_source_t::add_to_frame(render::frame_camera_t *c_camera, rende
 
 void storage_data_source_t::set_item(uint32_t id, uint32_t sub)
 {
-  input_data_id_t input_id = {render_item.id, render_item.sub};
+  input_data_id_t input_id = {id, sub};
   read_points_t read_points(converter->processor.cache_file(), input_id, 0);
   assert(read_points.data.size);
   convert_points_to_vertex_data(converter->tree_state, read_points, render_item.buffer);

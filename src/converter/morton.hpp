@@ -282,15 +282,15 @@ inline int morton_magnitude_from_lod(int lod)
 {
   return lod / 5;
 }
-inline int morton_magnitude_to_lod(int magnitude)
+inline uint16_t morton_magnitude_to_lod(int magnitude)
 {
-  return magnitude * 5 + 4;
+  return uint16_t(magnitude) * 5 + 4;
 }
 
-inline int morton_tree_level_to_lod(int magnitude, int level_in_tree)
+inline uint16_t morton_tree_level_to_lod(int magnitude, int level_in_tree)
 {
   assert(level_in_tree < 5);
-  return morton_magnitude_to_lod(magnitude) - level_in_tree;
+  return morton_magnitude_to_lod(magnitude) - uint16_t(level_in_tree);
 }
 
 template<typename T, size_t C>
@@ -649,7 +649,7 @@ inline void encode(const uint64_t (&pos)[3], morton32_t &morton)
   morton.data[0] = libmorton::morton3D_32_encode(x_lower, y_lower, z_lower);
 }
 
-inline uint16_t get_name_from_morton(int lod, morton192_t morton)
+inline uint16_t get_name_from_morton(int lod, const morton192_t &morton)
 {
   uint16_t ret = 0;
   auto lod_in_tree = lod % 5;
@@ -657,11 +657,37 @@ inline uint16_t get_name_from_morton(int lod, morton192_t morton)
   lod++;
   for (int i = 0; i < parents; i++, lod_in_tree++, lod++)
   {
-    ret |= morton_get_child_mask(lod, morton) << (lod_in_tree * 3);
+    ret |= uint16_t(morton_get_child_mask(lod, morton)) << (lod_in_tree * 3);
   }
   return ret;
 }
 
+inline uint16_t get_name_from_morton_magnitude(int magnitude, const morton192_t &morton)
+{
+  int lod = magnitude * 5;
+  uint16_t ret = 0;
+  ret = morton_get_child_mask(lod, morton)
+        | (morton_get_child_mask(lod + 1, morton) << 3 * 1)
+        | (morton_get_child_mask(lod + 2, morton) << 3 * 2)
+        | (morton_get_child_mask(lod + 3, morton) << 3 * 3)
+        | (morton_get_child_mask(lod + 4, morton) << 3 * 4);
+  return ret;
+}
+
+inline morton192_t set_name_in_morton(int magnitude, const morton192_t &morton, uint16_t name)
+{
+  int lower_bit = magnitude * (5 * 3);
+  int lower_section = lower_bit / int(sizeof(morton.data[0]) * 8);
+  int lower_bit_part = lower_bit % int(sizeof(morton.data[0]) * 8);
+  int left_over = int(sizeof(morton.data[0]) * 8) - lower_bit_part;
+  morton::morton192_t ret = morton;
+  ret.data[lower_section] |= uint64_t(name) << lower_bit_part;
+  if (left_over < 15)
+  {
+    ret.data[lower_section + 1] |= (uint64_t(name) >> left_over);
+  }
+  return ret;
+}
 
 
 } // namespace morton

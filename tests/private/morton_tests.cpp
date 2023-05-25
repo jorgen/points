@@ -593,3 +593,28 @@ TEST_CASE("Morton upcast", "[converter]")
   morton::morton_upcast(m64, m192, upcast128);
   REQUIRE(m128full == upcast128);
 }
+
+TEST_CASE("Morton name", "[converter]")
+{
+  using namespace points::converter;
+  morton::morton192_t to_test;
+  memset(to_test.data, 0, sizeof(to_test.data));
+
+  uint16_t name = 0x7fff;
+
+  for (int i = 0; i < (192 / 15); i+=2)
+  {
+    auto reply = morton::set_name_in_morton(i, to_test, name);
+
+    auto test = morton::get_name_from_morton_magnitude(i, reply);
+    REQUIRE(test == name);
+  }
+
+  for (int i = 1; i < (192 / 15); i+=2)
+  {
+    auto reply = morton::set_name_in_morton(i, to_test, name);
+
+    auto test = morton::get_name_from_morton_magnitude(i, reply);
+    REQUIRE(test == name);
+  }
+}

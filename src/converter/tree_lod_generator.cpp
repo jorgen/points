@@ -189,7 +189,7 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
   tree_iterator[buffer_index].parent_indecies.emplace_back(0);
   tree_iterator[buffer_index].skips.emplace_back(0);
   uint16_t root_name = morton::morton_get_child_mask(morton::morton_magnitude_to_lod(tree->magnitude), tree->morton_min);
-  tree_iterator[buffer_index].names.emplace_back(root_name << 4);
+  tree_iterator[buffer_index].names.emplace_back(root_name << 3);
 
   for (int level = 0; level < 5 && tree_iterator[buffer_index].parent_indecies.size(); level++)
   {
@@ -199,6 +199,7 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
       auto node = tree->nodes[level][tree_skip];
       auto &parent = parent_buffer[tree_iterator[buffer_index].parent_indecies[to_process_index]];
       auto &data = tree->data[level][tree_skip];
+      auto name = tree_iterator[buffer_index].names[to_process_index];
       if (node)
       {
         assert(data.data.size() <= 1);
@@ -210,9 +211,10 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
         tree_iterator[!buffer_index].parents.emplace_back();
         auto &this_node = tree_iterator[!buffer_index].parents.back();
         this_node.id = tree->node_ids[level][tree_skip];
-        this_node.lod = uint16_t(morton::morton_magnitude_to_lod(tree->magnitude) + level);
+        this_node.lod = uint16_t(morton::morton_tree_level_to_lod(tree->magnitude, level));
         this_node.storage_name = data.data.front().input_id;
         this_node.generated_point_count.data = 0;
+        this_node.node_min = morton::set_name_in_morton(tree->magnitude, tree->morton_min, name);
         int child_count = 0;
         uint16_t parent_node_name = level == 4 ? 0 : this_node.id;
         int node_name_level = level == 4 ? 0 : level + 1;
@@ -225,6 +227,15 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
           sub_level.skips.push_back(tree->skips[level][tree_skip] + child_count);
           sub_level.parent_indecies.push_back(parent_index);
           child_count++;
+        }
+      }
+      for (auto &tmp : data.data)
+      {
+        if ((tmp.input_id.data == 0 && tmp.input_id.sub == 114)
+          || (tmp.input_id.data == 24 && tmp.input_id.sub > 0)
+          || (tmp.input_id.data == 20 && tmp.input_id.sub > 0))
+        {
+          fprintf(stderr, "THIS IS THE ONE!\n");
         }
       }
       parent.child_data.insert(parent.child_data.end(), data.data.begin(), data.data.end());
@@ -396,10 +407,17 @@ static typename std::enable_if<less_than<sizeof(S_M), sizeof(D_M)>::value, void>
 template<typename S_M, typename D_M>
 static typename std::enable_if<greater_than<sizeof(S_M), sizeof(D_M)>::value, void>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, D_M &d)
 {
-  (void)s;
-  (void)morton_min;
-  (void)d;
   morton::morton_downcast(s, d);
+#ifndef NDEBUG
+  S_M upcasted;
+  morton::morton_upcast(d, morton_min, upcasted);
+  assert(upcasted == s);
+
+  for (int i = std::size(d.data); i < int(std::size(s.data)); i++)
+  {
+    assert(s.data[i] == morton_min.data[i]);
+  }
+#endif
 }
 
 template<typename S_M, typename D_M>
@@ -508,32 +526,7 @@ static bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
   return super.data <= sub.data && buffer_end(sub) <= buffer_end(super);
 }
 
-static void update_destination_header(const header_t &source_header, header_t &destination_header)
-{
-  if (source_header.min[0] < destination_header.min[0])
-    destination_header.min[0] = source_header.min[0];
-  if (source_header.min[1] < destination_header.min[1])
-    destination_header.min[1] = source_header.min[1];
-  if (source_header.min[2] < destination_header.min[2])
-    destination_header.min[2] = source_header.min[2];
-  if (destination_header.max[0] < source_header.max[0])
-    destination_header.max[0] = source_header.max[0];
-  if (destination_header.max[1] < source_header.max[1])
-    destination_header.max[1] = source_header.max[1];
-  if (destination_header.max[2] < source_header.max[2])
-    destination_header.max[2] = source_header.max[2];
-}
-
-static void update_destination_header(const storage_header_t &source_header, storage_header_t &destination_header)
-{
-  update_destination_header(source_header.public_header, destination_header.public_header);
-  if (source_header.morton_min < destination_header.morton_min)
-    destination_header.morton_min = source_header.morton_min;
-  if (destination_header.morton_max < source_header.morton_max)
-    destination_header.morton_max = source_header.morton_max;
-}
-
-uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<type_t, components_t>> &destination_map, const attribute_lod_info_t &source_maping, attribute_buffers_t &destination_buffers, offset_t destination_offset, storage_header_t &destination_header)
+static uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_file_handler_t &file_cache, const std::vector<std::pair<type_t, components_t>> &destination_map, const attribute_lod_info_t &source_maping, const morton::morton192_t &min, attribute_buffers_t &destination_buffers, offset_t destination_offset, storage_header_t &destination_header)
 {
   auto &source_map = source_maping.source_attributes;
   assert(destination_map.size() == source_map.size()
@@ -543,12 +536,11 @@ uint32_t quantize_to_parent(const points_subset_t &child, uint32_t count, cache_
   uint32_t quantized_morton = 0;
   {
     read_points_t child_data(file_cache, child.input_id, source_map[0].source_index);
-    update_destination_header(child_data.header, destination_header);
     const buffer_t source_buffer = morton_buffer_for_subset(child_data.data,child_data.header.point_format.first, child.offset, child.count);
     assert(buffer_is_subset(child_data.data, source_buffer));
     buffer_t  destination_buffer = morton_buffer_for_target(destination_buffers.buffers[0], destination_map[0], destination_offset);
     assert(buffer_is_subset(destination_buffers.buffers[0], destination_buffer));
-    quantized_morton = quantize_morton(step, child_data.header.morton_min, child_data.header.point_format.first, source_buffer, destination_map[0].first, destination_buffer);
+    quantized_morton = quantize_morton(step, min, child_data.header.point_format.first, source_buffer, destination_map[0].first, destination_buffer);
   }
   for (int i = 1; i < int(destination_map.size()); i++)
   {
@@ -574,6 +566,11 @@ void lod_worker_t::work()
 {
   uint64_t total_count = 0;
   attributes_t attributes;
+
+  if (data.storage_name.data == 18 && data.storage_name.sub > 0)
+  {
+    fprintf(stderr, "Lodding here\n");
+  }
   std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[data.child_data.size()]);
   for (int i = 0; i < int(data.child_data.size()); i++)
   {
@@ -600,27 +597,30 @@ void lod_worker_t::work()
   attribute_buffers_t buffers;
   attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, total_count);
 
+  destination_header.morton_min = data.node_min;
+  destination_header.morton_max = morton::morton_or(data.node_min, morton::morton_mask_create<uint64_t, 3>(data.lod));
+
   offset_t total_acc_count(0);
   for (int i = 0; i < int(data.child_data.size()); i++)
   {
     auto &child = data.child_data[i];
+
+    auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
+    read_points_t child_data(cache, child.input_id, source_mapping.source_attributes[0].source_index);
+
     double ratio = std::min(double(lod_generator.global_state().node_limit - total_acc_count.data) / double(total_count), 1.0);
     uint32_t child_count = std::min(std::min(uint32_t(std::round(child.count.data * ratio)), child.count.data),
                                     uint32_t(total_count - total_acc_count.data));
 
-    if (child_count > 0)
+    if (child_count != 0)
     {
       auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
-      total_acc_count.data += quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, source_mapping, buffers, total_acc_count, destination_header);
+      total_acc_count.data += quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, source_mapping, child_data.header.morton_min, buffers, total_acc_count, destination_header);
       (void) attributes_configs;
     }
-    else
-    {
-      auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
-      read_points_t child_data(cache, child.input_id, source_mapping.source_attributes[0].source_index);
-      update_destination_header(child_data.header, destination_header);
-    }
   }
+  if (total_acc_count.data == 0)
+    fmt::print(stderr, "Should not happend\n");
   attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, total_acc_count.data);
   destination_header.public_header.point_count = total_acc_count.data;
   destination_header.point_format = {lod_format, components_1};
@@ -683,27 +683,7 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
   //auto &worker_data = batch.worker_data;
   std::vector<lod_tree_worker_data_t> to_lod;
   lod_node_worker_data_t fake_parent;
-  std::vector<input_data_id_t> ids;
   tree_get_work_items(_tree_cache, _file_cache, tree_id, _generated_until, max, fake_parent, to_lod);
-  for (auto &to_lod_data : to_lod)
-  {
-    for (auto &l : to_lod_data.nodes)
-    {
-      for (auto &i : l)
-      {
-        for (const auto &child : i.child_data)
-        {
-          ids.push_back(child.input_id);
-        }
-      }
-    }
-  }
-  std::sort(ids.begin(), ids.end(), [](const input_data_id_t &a, input_data_id_t &b) { return a.data == b.data ? a.sub < b.sub : a.data < b.data; });
-  auto new_end = std::unique(ids.begin(), ids.end(), [](const input_data_id_t &a, input_data_id_t &b) { return a.data == b.data && a.sub == b.sub; });
-  for (auto it = ids.begin(); it != new_end; ++it)
-  {
-    fmt::print(stdout, "{} - {}\n", it->data, it->sub);
-  }
   if (to_lod.size())
   {
     std::sort(to_lod.begin(), to_lod.end(), [](const lod_tree_worker_data_t &a, const lod_tree_worker_data_t &b) { return a.magnitude < b.magnitude; });
@@ -721,9 +701,12 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
         batch_start = i;
       }
     }
-    _lod_batches.emplace_back(new lod_worker_batch_t());
-    auto &batch = *_lod_batches.back();
-    batch.worker_data.insert(batch.worker_data.end(), std::make_move_iterator(to_lod.begin() + batch_start), std::make_move_iterator(to_lod.end()));
+    if (to_lod.begin() + batch_start != to_lod.end())
+    {
+      _lod_batches.emplace_back(new lod_worker_batch_t());
+      auto &batch = *_lod_batches.back();
+      batch.worker_data.insert(batch.worker_data.end(), std::make_move_iterator(to_lod.begin() + batch_start), std::make_move_iterator(to_lod.end()));
+    }
   }
   iterate_workers();
 }

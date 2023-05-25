@@ -117,11 +117,19 @@ void cache_file_handler_t::deref_points(input_data_id_t id)
 int cache_file_handler_t::fill_ids(uint32_t **ids, uint32_t **subs, int buffer_size)
 {
   int to_process = std::min(buffer_size, int(_cache_map.size()));
+  std::vector<input_data_id_t> input_ids(_cache_map.size());
   auto it = _cache_map.begin();
-  for (int i = 0; i < to_process; ++it, i++)
+  for (int i = 0; i < int(_cache_map.size()); ++it, i++)
   {
-    (*ids)[i] = it->first.data;
-    (*subs)[i] = it->first.sub;
+    input_ids[i] = it->first;
+  }
+
+  std::sort(input_ids.begin(), input_ids.end(), [](const input_data_id_t &a, const input_data_id_t &b) { return a.data == b.data ? a.sub < b.sub : a.data < b.data; });
+
+  for (int i = 0; i < to_process; i++)
+  {
+    (*ids)[i] = input_ids[i].data;
+    (*subs)[i] = input_ids[i].sub;
   }
   return to_process;
 }
