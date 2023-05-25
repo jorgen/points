@@ -200,6 +200,7 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
       auto &parent = parent_buffer[tree_iterator[buffer_index].parent_indecies[to_process_index]];
       auto &data = tree->data[level][tree_skip];
       auto name = tree_iterator[buffer_index].names[to_process_index];
+      morton::morton192_t node_min = morton::set_name_in_morton(tree->magnitude, tree->morton_min, name);
       if (node)
       {
         assert(data.data.size() <= 1);
@@ -212,6 +213,7 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
         auto &this_node = tree_iterator[!buffer_index].parents.back();
         this_node.id = tree->node_ids[level][tree_skip];
         this_node.lod = uint16_t(morton::morton_tree_level_to_lod(tree->magnitude, level));
+        this_node.node_min = node_min;
         this_node.storage_name = data.data.front().input_id;
         this_node.generated_point_count.data = 0;
         this_node.node_min = morton::set_name_in_morton(tree->magnitude, tree->morton_min, name);
@@ -238,7 +240,14 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
           fprintf(stderr, "THIS IS THE ONE!\n");
         }
       }
-      parent.child_data.insert(parent.child_data.end(), data.data.begin(), data.data.end());
+      if (data.data.size())
+      {
+        parent.child_data.emplace_back();
+        auto &child_data = parent.child_data.back();
+        child_data.min = node_min;
+        child_data.child_data.insert(child_data.child_data.end(), data.data.begin(), data.data.end());
+      }
+
     }
 
     if (level > 0)
@@ -571,25 +580,31 @@ void lod_worker_t::work()
   {
     fprintf(stderr, "Lodding here\n");
   }
-  std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[data.child_data.size()]);
+  int child_data_count = 0;
+  for (auto &sub_node : data.child_data)
+    child_data_count += sub_node.child_data.size();
+  std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[child_data_count]);
+  child_data_count = 0;
   for (int i = 0; i < int(data.child_data.size()); i++)
   {
-    auto &child = data.child_data[i];
+    auto &data_for_child_node = data.child_data[i];
     point_count_t count(0);
-    bool got_attrib = cache.attribute_id_and_count_for_input_id(child.input_id, attribute_ids[i], count);
-    if (child.count.data == 0) //adjust for lod data
+    for (auto &child_data_for_node : data_for_child_node.child_data)
     {
-      child.count.data = count.data;
-      child.offset.data = 0;
+      bool got_attrib = cache.attribute_id_and_count_for_input_id(child_data_for_node.input_id, attribute_ids[child_data_count++], count);
+      (void) got_attrib;
+      if (child_data_for_node.count.data == 0) //adjust for lod data
+      {
+        child_data_for_node.count.data = count.data;
+        child_data_for_node.offset.data = 0;
+      }
+      total_count += child_data_for_node.count.data;
     }
-
-    total_count += child.count.data;
-    (void) got_attrib;
   }
 
   auto lod_format = morton_format_from_lod(data.lod);
 
-  auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(data.lod, attribute_ids.get(), attribute_ids.get() + data.child_data.size());
+  auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(data.lod, attribute_ids.get(), attribute_ids.get() + child_data_count);
 
   storage_header_t destination_header;
   storage_header_initialize(destination_header);
@@ -603,20 +618,22 @@ void lod_worker_t::work()
   offset_t total_acc_count(0);
   for (int i = 0; i < int(data.child_data.size()); i++)
   {
-    auto &child = data.child_data[i];
-
-    auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
-    read_points_t child_data(cache, child.input_id, source_mapping.source_attributes[0].source_index);
-
-    double ratio = std::min(double(lod_generator.global_state().node_limit - total_acc_count.data) / double(total_count), 1.0);
-    uint32_t child_count = std::min(std::min(uint32_t(std::round(child.count.data * ratio)), child.count.data),
-                                    uint32_t(total_count - total_acc_count.data));
-
-    if (child_count != 0)
+    auto &data_for_child_node = data.child_data[i];
+    for (auto &child_data_for_node : data_for_child_node.child_data)
     {
       auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
-      total_acc_count.data += quantize_to_parent(child, child_count, cache, lod_attrib_mapping.destination, source_mapping, child_data.header.morton_min, buffers, total_acc_count, destination_header);
-      (void) attributes_configs;
+      read_points_t child_data(cache, child_data_for_node.input_id, source_mapping.source_attributes[0].source_index);
+
+      double ratio = std::min(double(lod_generator.global_state().node_limit - total_acc_count.data) / double(total_count), 1.0);
+      uint32_t child_count = std::min(std::min(uint32_t(std::round(child_data_for_node.count.data * ratio)), child_data_for_node.count.data),
+                                      uint32_t(total_count - total_acc_count.data));
+
+      if (child_count != 0)
+      {
+        auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
+        total_acc_count.data += quantize_to_parent(child_data_for_node, child_count, cache, lod_attrib_mapping.destination, source_mapping, data_for_child_node.min, buffers, total_acc_count, destination_header);
+        (void) attributes_configs;
+      }
     }
   }
   if (total_acc_count.data == 0)
