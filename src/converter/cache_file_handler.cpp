@@ -124,7 +124,7 @@ int cache_file_handler_t::fill_ids(uint32_t **ids, uint32_t **subs, int buffer_s
     input_ids[i] = it->first;
   }
 
-  std::sort(input_ids.begin(), input_ids.end(), [](const input_data_id_t &a, const input_data_id_t &b) { return a.data == b.data ? a.sub < b.sub : a.data < b.data; });
+  std::sort(input_ids.begin(), input_ids.end(), [](const input_data_id_t &a, const input_data_id_t &b) { return a.sub == b.sub ? a.data < b.data: a.sub > b.sub; });
 
   for (int i = 0; i < to_process; i++)
   {

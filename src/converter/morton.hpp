@@ -684,11 +684,15 @@ inline morton192_t set_name_in_morton(int magnitude, const morton192_t &morton, 
   ret.data[lower_section] |= uint64_t(name) << lower_bit_part;
   if (left_over < 15)
   {
-    ret.data[lower_section + 1] |= (uint64_t(name) >> left_over);
+    ret.data[lower_section + 1] |= (uint64_t(name) >> (left_over));
   }
   return ret;
 }
 
+inline morton192_t create_max(int lod, const morton192_t &min)
+{
+  return morton_or(morton_mask_create<uint64_t, 3>(lod), min);
+}
 
 } // namespace morton
 } // namespace converter
