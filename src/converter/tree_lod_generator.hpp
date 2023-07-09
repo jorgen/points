@@ -93,8 +93,6 @@ private:
   attributes_configs_t &_attributes_configs;
 
   std::deque<std::unique_ptr<lod_worker_batch_t>> _lod_batches;
-
-  morton::morton192_t _generated_until;
 };
 
 }

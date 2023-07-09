@@ -689,9 +689,10 @@ inline morton192_t set_name_in_morton(int magnitude, const morton192_t &morton, 
   return ret;
 }
 
-inline morton192_t create_max(int lod, const morton192_t &min)
+template<typename T, size_t S>
+inline morton_t<T,S> create_max(int lod, const morton_t<T,S> &min)
 {
-  return morton_or(morton_mask_create<uint64_t, 3>(lod), min);
+  return morton_or(morton_mask_create<T, S>(lod), min);
 }
 
 } // namespace morton
