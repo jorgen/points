@@ -91,7 +91,7 @@ bool cache_file_handler_t::attribute_id_and_count_for_input_id(input_data_id_t i
     return false;
 
   attributes_id = it->second.attribute_id;
-  count.data = it->second.header.public_header.point_count;
+  count.data = uint32_t(it->second.header.public_header.point_count);
   return true;
 }
 

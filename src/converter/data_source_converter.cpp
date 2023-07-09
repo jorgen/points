@@ -91,21 +91,21 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
         {
           node.has_data = true;
           auto &subsets = tree.node_data.point_subsets[level][node_index];
-          auto &buffers = tree.buffers[level][node_index].data;
-          buffers.resize(subsets.data.size());
+          auto &lod_buffers = tree.buffers[level][node_index].data;
+          lod_buffers.resize(subsets.data.size());
           for (int subset_index = 0; subset_index < int(subsets.data.size()); subset_index++)
           {
             auto &subset = subsets.data[subset_index];
-            auto &buffer = buffers[subset_index];
+            auto &buffer = lod_buffers[subset_index];
             if (!buffer.render_buffers->rendered)
             {
               read_points_t read_points(converter->processor.cache_file(), subset.input_id, 0);
               assert(read_points.data.size);
               convert_points_to_vertex_data(converter->tree_state, read_points, buffer);
               callbacks.do_create_buffer(buffer.render_buffers[0], points::render::buffer_type_vertex);
-              callbacks.do_initialize_buffer(buffer.render_buffers[0], points::type_r32, points::components_3, buffer.vertex_data_info.size, buffer.vertex_data_info.data);
+              callbacks.do_initialize_buffer(buffer.render_buffers[0], points::type_r32, points::components_3, int(buffer.vertex_data_info.size), buffer.vertex_data_info.data);
               buffer.render_buffers[0].rendered = true;
-              buffer.point_count = read_points.cache_item.header.public_header.point_count;
+              buffer.point_count = int(read_points.cache_item.header.public_header.point_count);
               callbacks.do_create_buffer(buffer.render_buffers[1], points::render::buffer_type_uniform);
               callbacks.do_initialize_buffer(buffer.render_buffers[1], type_r32, points::components_4x4, sizeof(buffer.camera_view), &buffer.camera_view);
             }

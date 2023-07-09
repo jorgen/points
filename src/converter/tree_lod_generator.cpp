@@ -235,7 +235,7 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
             continue;
           auto &sub_level = tree_iterator[!buffer_index];
           sub_level.names.push_back(morton::morton_get_name(parent_node_name, node_name_level, child_index));
-          sub_level.skips.push_back(tree->skips[level][tree_skip] + child_count);
+          sub_level.skips.push_back(uint16_t(tree->skips[level][tree_skip] + child_count));
           sub_level.parent_indecies.push_back(parent_index);
           child_count++;
         }
@@ -410,19 +410,23 @@ struct greater_than
 template<typename S_M, typename D_M>
 static typename std::enable_if<less_than<sizeof(S_M), sizeof(D_M)>::value, void>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, D_M &d)
 {
+  (void)morton_min;
+  (void)morton_max;
   morton::morton_upcast(s, morton_min, d);
 }
 
 template<typename S_M, typename D_M>
 static typename std::enable_if<greater_than<sizeof(S_M), sizeof(D_M)>::value, void>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, D_M &d)
 {
+  (void)morton_min;
+  (void)morton_max;
   morton::morton_downcast(s, d);
 #ifndef NDEBUG
   S_M upcasted;
   morton::morton_upcast(d, morton_min, upcasted);
   assert(upcasted == s);
 
-  for (int i = std::size(d.data); i < int(std::size(s.data)); i++)
+  for (int i = int(std::size(d.data)); i < int(std::size(s.data)); i++)
   {
     assert(s.data[i] == morton_min.data[i]);
   }
@@ -570,6 +574,8 @@ static bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
 
 static void quantize_to_parent(const points_subset_t &child, cache_file_handler_t &file_cache, std::vector<uint32_t> indecies_to_quantize, const std::vector<std::pair<type_t, components_t>> &destination_map, const attribute_lod_info_t &source_maping, int lod, const morton::morton192_t &min, const morton::morton192_t &max, offset_t destination_offset, attribute_buffers_t &destination_buffers, storage_header_t &destination_header)
 {
+  (void)destination_header;
+  (void)lod;
   auto &source_map = source_maping.source_attributes;
   assert(destination_map.size() == source_map.size()
          && destination_map.size() == destination_buffers.buffers.size());
@@ -603,8 +609,7 @@ void lod_worker_t::work()
 {
   uint64_t total_count = 0;
   attributes_t attributes;
-
-  int child_point_subset = int(std::accumulate(data.child_data.begin(), data.child_data.end(), 0, [](size_t acc, const points_collection_t &p) { return acc + p.data.size();}));
+  int child_point_subset = int(std::accumulate(data.child_data.begin(), data.child_data.end(), size_t(0), [](size_t acc, const points_collection_t &p) { return acc + p.data.size();}));
   std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[child_point_subset]);
 
   int child_data_count = 0;
@@ -671,7 +676,7 @@ void lod_worker_t::work()
   destination_header.point_format = {lod_format, components_1};
   destination_header.lod_span = data.lod;
   cache.write(destination_header, std::move(buffers), lod_attrib_mapping.destination_id);
-  data.generated_point_count.data = total_acc_count.data;
+  data.generated_point_count.data = uint32_t(total_acc_count.data);
 }
 
 void lod_worker_t::after_work(completion_t completion)
@@ -758,6 +763,7 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
 
 static void adjust_tree_after_lod(tree_cache_t &tree_cache, cache_file_handler_t &cache, const std::vector<lod_tree_worker_data_t> &to_adjust)
 {
+  (void)cache;
   for (auto &adjust_data : to_adjust)
   {
     tree_t *tree = tree_cache.get(adjust_data.tree_id);

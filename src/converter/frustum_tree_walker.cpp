@@ -27,7 +27,6 @@ namespace converter
 {
     inline bool frustum_contains_aabb2(const glm::dmat4 &view_perspective, const render::aabb_t &aabb)
     {
-      return true;
       glm::dvec4 min_vec(aabb.min[0], aabb.min[1], aabb.min[2], 1.0);
       glm::dvec4 max_vec(aabb.max[0], aabb.max[1], aabb.max[2], 1.0);
 

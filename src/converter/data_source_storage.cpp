@@ -59,9 +59,9 @@ void storage_data_source_t::set_item(uint32_t id, uint32_t sub)
   assert(read_points.data.size);
   convert_points_to_vertex_data(converter->tree_state, read_points, render_item.buffer);
   callbacks.do_create_buffer(render_item.buffer.render_buffers[0], points::render::buffer_type_vertex);
-  callbacks.do_initialize_buffer(render_item.buffer.render_buffers[0], points::type_r32, points::components_3, render_item.buffer.vertex_data_info.size, render_item.buffer.vertex_data_info.data);
+  callbacks.do_initialize_buffer(render_item.buffer.render_buffers[0], points::type_r32, points::components_3, int(render_item.buffer.vertex_data_info.size), render_item.buffer.vertex_data_info.data);
   render_item.buffer.render_buffers[0].rendered = true;
-  render_item.buffer.point_count = read_points.cache_item.header.public_header.point_count;
+  render_item.buffer.point_count = int(read_points.cache_item.header.public_header.point_count);
   callbacks.do_create_buffer(render_item.buffer.render_buffers[1], points::render::buffer_type_uniform);
   callbacks.do_initialize_buffer(render_item.buffer.render_buffers[1], type_r32, points::components_4x4, sizeof(render_item.buffer.camera_view), &render_item.buffer.camera_view);
   render_item.buffer.render_list[0].buffer_mapping = render::points_bm_vertex;
@@ -73,9 +73,9 @@ void storage_data_source_t::set_item(uint32_t id, uint32_t sub)
 
 }
 
-int storage_data_source_t::get_items(uint32_t **ids, uint32_t **subs, int buffer_size)
+int storage_data_source_t::get_items(uint32_t **input_ids, uint32_t **input_subs, int buffer_size)
 {
-  return converter->processor.cache_file().fill_ids(ids, subs, buffer_size);
+  return converter->processor.cache_file().fill_ids(input_ids, input_subs, buffer_size);
 }
 
 int storage_data_source_t::item_count()

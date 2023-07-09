@@ -232,6 +232,7 @@ attribute_source_lod_into_t create_attribute_source_lod_into (const attribute_t 
 
 attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end)
 {
+  (void)point_type;
   assert(begin < end);
 #ifndef NDEBUG
   assert(attributes_ids_increase(begin, end));

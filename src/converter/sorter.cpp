@@ -124,9 +124,9 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
     pos[0] = tmp[0] * smallest_scale + tree_state.offset[0];
     pos[1] = tmp[1] * smallest_scale + tree_state.offset[1];
     pos[2] = tmp[2] * smallest_scale + tree_state.offset[2];
-    orig[0] = (pos[0] - header.public_header.offset[0]) / header.public_header.scale[0];
-    orig[1] = (pos[1] - header.public_header.offset[1]) / header.public_header.scale[1];
-    orig[2] = (pos[2] - header.public_header.offset[2]) / header.public_header.scale[2];
+    orig[0] = T((pos[0] - header.public_header.offset[0]) / header.public_header.scale[0]);
+    orig[1] = T((pos[1] - header.public_header.offset[1]) / header.public_header.scale[1]);
+    orig[2] = T((pos[2] - header.public_header.offset[2]) / header.public_header.scale[2]);
     if (!fuzzy_comp(point.data, orig))
     {
       fprintf(stderr, "HELLO WORLD\n");
@@ -197,8 +197,8 @@ void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_
   convert_morton_to_pos(smallest_scale, tree_state.offset, global_max, global_max_pos);
 
   type_t target_format;
-  if (true ||(header.public_header.min[0] == -std::numeric_limits<double>::max() && header.public_header.min[1] == -std::numeric_limits<double>::max() && header.public_header.min[2] == -std::numeric_limits<double>::max()
-               && header.public_header.max[0] == std::numeric_limits<double>::max() && header.public_header.min[1] == std::numeric_limits<double>::max() && header.public_header.min[2] == std::numeric_limits<double>::max()))
+  if (header.public_header.min[0] == -std::numeric_limits<double>::max() && header.public_header.min[1] == -std::numeric_limits<double>::max() && header.public_header.min[2] == -std::numeric_limits<double>::max()
+               && header.public_header.max[0] == std::numeric_limits<double>::max() && header.public_header.min[1] == std::numeric_limits<double>::max() && header.public_header.min[2] == std::numeric_limits<double>::max())
   {
     target_format = type_t::type_m192;
   }

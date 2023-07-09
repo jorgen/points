@@ -570,12 +570,20 @@ inline void decode(const morton_t<uint64_t, 1> &morton, uint64_t (&decoded)[3])
 
 inline void decode(const morton32_t &morton, std::array<uint16_t,3> &decoded)
 {
-  libmorton::morton3D_32_decode(morton.data[0], decoded[0], decoded[1], decoded[2]);
+  uint_fast16_t tmp[3];
+  libmorton::morton3D_32_decode(morton.data[0], tmp[0], tmp[1], tmp[2]);
+  decoded[0] = uint16_t(tmp[0]);
+  decoded[1] = uint16_t(tmp[1]);
+  decoded[2] = uint16_t(tmp[2]);
 }
 
 inline void decode(const morton32_t &morton, uint16_t (&decoded)[3])
 {
-  libmorton::morton3D_32_decode(morton.data[0], decoded[0], decoded[1], decoded[2]);
+  uint_fast16_t tmp[3];
+  libmorton::morton3D_32_decode(morton.data[0], tmp[0], tmp[1], tmp[2]);
+  decoded[0] = uint16_t(tmp[0]);
+  decoded[1] = uint16_t(tmp[1]);
+  decoded[2] = uint16_t(tmp[2]);
 }
 
 inline void decode(const morton32_t &morton, uint64_t (&decoded)[3])
