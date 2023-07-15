@@ -24,6 +24,7 @@
 #include <fmt/printf.h>
 
 #include <laszip/laszip_api.h>
+
 namespace points
 {
 namespace render

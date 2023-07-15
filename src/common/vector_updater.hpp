@@ -62,7 +62,8 @@ void update_vector(std::vector<SOURCE_T> &source, std::vector<TARGET_T> &old, st
   using source_it = typename std::vector<SOURCE_T>::iterator;
   using target_it = typename std::vector<TARGET_T>::iterator;
 
-  auto update = [](target_it &target, source_it &source, std::vector<TARGET_T> &res) {
+  auto update = [](target_it &target, source_it &source, std::vector<TARGET_T> &res)
+  {
     (void)target;
     res.emplace_back(std::move(*source));
   };

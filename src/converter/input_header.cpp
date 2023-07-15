@@ -79,6 +79,28 @@ void attribute_buffers_initialize(const std::vector<std::pair<type_t, components
   }
 }
 
+void attribute_buffers_initialize(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count, std::unique_ptr<uint8_t[]> && morton_attribute_buffer)
+{
+  buffers.data.reserve(attributes_def.size());
+  buffers.buffers.reserve(attributes_def.size());
+  bool first = true;
+  for (auto &attribute : attributes_def)
+  {
+    uint64_t buffer_size = size_for_format(attribute.first) * uint64_t(attribute.second) * point_count;
+    if (first)
+    {
+      buffers.data.emplace_back(std::move(morton_attribute_buffer));
+      first = false;
+    }
+    else
+    {
+      buffers.data.emplace_back(new uint8_t[buffer_size]);
+    }
+    buffers.buffers.push_back({buffers.data.back().get(), buffer_size});
+  }
+
+}
+
 void attribute_buffers_adjust_buffers_to_size(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
 {
   assert(attributes_def.size() == buffers.buffers.size());

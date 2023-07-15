@@ -95,6 +95,7 @@ void header_p_adjust_to_sorted_data(const tree_global_state_t &state, storage_he
 }
 
 void attribute_buffers_initialize(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count);
+void attribute_buffers_initialize(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count, std::unique_ptr<uint8_t[]> && morton_attribute_buffer);
 void attribute_buffers_adjust_buffers_to_size(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count);
 void attributes_copy(const attributes_t &source, attributes_t &target);
 }

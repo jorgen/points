@@ -152,7 +152,13 @@ struct tree_global_state_t
 struct offset_t
 {
   explicit offset_t(uint64_t data) : data(data){}
+  offset_t() : data(0) {}
   uint64_t data;
+};
+struct index_t
+{
+  explicit index_t(uint32_t data) : data(data) { }
+  uint32_t data;
 };
 struct point_count_t
 {

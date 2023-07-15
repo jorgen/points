@@ -490,6 +490,22 @@ inline void morton_upcast(const morton_t<T1, C1> &a, const morton::morton192_t &
   }
 }
 
+template<typename T1, size_t C1, typename T2, size_t C2>
+inline void morton_cast(const morton_t<T1, C1>& a, const morton::morton192_t& min, morton_t<T2, C2>& b)
+{
+  if constexpr (sizeof(morton::morton_t<T1, C1>) > sizeof(morton::morton_t<T2, C2>))
+  {
+    morton_downcast(a, b);
+  }
+  else if constexpr (sizeof(morton::morton_t<T1, C1 >) < sizeof(morton::morton_t<T2, C2>))
+  {
+    morton_upcast(a, min, b);
+  }
+  else
+  {
+    b = a;
+  }
+}
 inline void decode(const morton192_t &morton, std::array<uint64_t,3> &decoded)
 {
   uint32_t lower[3];
