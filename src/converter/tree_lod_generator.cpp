@@ -624,12 +624,12 @@ static bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
 //}
 
 template<typename T, size_t N>
-static void quantize_subset(cache_file_handler_t& cache, const morton::morton192_t &point_collection_min, const points_subset_t &subset, int lod, std::vector<morton_to_lod_t<T,N>>& morton_to_lod)
+static void quantize_subset(cache_file_handler_t& cache, const points_subset_t &subset, int lod, std::vector<morton_to_lod_t<T,N>>& morton_to_lod)
 {
   read_points_t subset_data(cache, subset.input_id, 0);
   const buffer_t source_buffer = morton_buffer_for_subset(subset_data.data, subset_data.header.point_format.first, subset.offset, subset.count);
   assert(buffer_is_subset(subset_data.data, source_buffer));
-  find_indecies_to_quantize(subset.input_id, point_collection_min, subset_data.header.point_format.first, source_buffer, subset.offset, subset.count, lod - 3 * 3, morton_to_lod);
+  find_indecies_to_quantize(subset.input_id, subset_data.header.morton_min, subset_data.header.point_format.first, source_buffer, subset.offset, subset.count, lod - 3 * 3, morton_to_lod);
 }
 
 template<typename T, size_t N>
@@ -637,7 +637,7 @@ static void quantize_points_collection(cache_file_handler_t& cache, const points
 {
   for (auto& subset : point_collection.data)
   {
-    quantize_subset(cache, point_collection.min, subset, lod, morton_to_lod);
+    quantize_subset(cache, subset, lod, morton_to_lod);
   }
 }
 
@@ -720,13 +720,6 @@ void lod_worker_t::work()
     }
   }
 
-
-      //read_points_t subgroup_data(cache,subgroup.input_id, 0);
-      //if (subgroup.input_id.data == 0 && subgroup.input_id.sub == 135)
-      //  fprintf(stderr, "hello\n");
-      //const buffer_t source_buffer = morton_buffer_for_subset(subgroup_data.data,subgroup_data.header.point_format.first, subgroup.offset, subgroup.count);
-      //find_indecies_to_quantize(subgroup_data.header.point_format.first, source_buffer,subgroup.count, data.lod - (3 * 3), indecies_to_qunatize_subgroup[sub_group_index]);
-      //assert(indecies_to_qunatize_subgroup[sub_group_index].size() > 0);
   auto lod_format = morton_format_from_lod(data.lod);
   auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(data.lod, attribute_ids.get(), attribute_ids.get() + child_point_subset);
 
@@ -742,10 +735,9 @@ void lod_worker_t::work()
     attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, total_count, std::move(morton_attribute_buffer));
   }
 
+  //for (auto attribute_id : attribute_ids)
   destination_header.morton_min = data.node_min;
   destination_header.morton_max = morton::morton_or(data.node_min, morton::morton_mask_create<uint64_t, 3>(data.lod));
-
-  std::vector<std::vector<std::vector<uint32_t>>> indecies_to_quantize_point_group(data.child_data.size());
 
   //for (int i = 0; i < int(data.child_data.size()); i++)
   //{
