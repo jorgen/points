@@ -590,6 +590,14 @@ static bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
   return super.data <= sub.data && buffer_end(sub) <= buffer_end(super);
 }
 
+static void quantize_attributres(std::vector<std::pair<input_data_id_t, uint32_t>>& indecies, const attribute_lod_mapping_t &lod_attrib_mapping, attribute_buffers_t &buffers)
+{
+  for (int i = 1; i < int(lod_attrib_mapping.destination.size()); i++)
+  {
+
+  }
+}
+
 //static void quantize_to_parent(const points_subset_t &child, cache_file_handler_t &file_cache, std::vector<uint32_t> indecies_to_quantize, const std::vector<std::pair<type_t, components_t>> &destination_map, const attribute_lod_info_t &source_maping, int lod, const morton::morton192_t &min, const morton::morton192_t &max, offset_t destination_offset, attribute_buffers_t &destination_buffers, storage_header_t &destination_header)
 //{
 //  (void)destination_header;
@@ -698,7 +706,6 @@ static void quantize_morton_remember_indecies(cache_file_handler_t& cache, const
 
 void lod_worker_t::work()
 {
-  uint64_t total_count = 0;
   attributes_t attributes;
   int child_point_subset = int(std::accumulate(data.child_data.begin(), data.child_data.end(), size_t(0), [](size_t acc, const points_collection_t &p) { return acc + p.data.size();}));
   std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[child_point_subset]);
@@ -732,30 +739,15 @@ void lod_worker_t::work()
   {
     std::unique_ptr<uint8_t[]> morton_attribute_buffer;
     quantize_morton_remember_indecies(cache, data.child_data, data.lod, morton_attribute_buffer, indecies);
-    attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, total_count, std::move(morton_attribute_buffer));
+    attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, indecies.size(), std::move(morton_attribute_buffer));
   }
+
+  quantize_attributres(indecies, lod_attrib_mapping, buffers);
 
   //for (auto attribute_id : attribute_ids)
   destination_header.morton_min = data.node_min;
   destination_header.morton_max = morton::morton_or(data.node_min, morton::morton_mask_create<uint64_t, 3>(data.lod));
 
-  //for (int i = 0; i < int(data.child_data.size()); i++)
-  //{
-  //  auto &data_for_child_node = data.child_data[i];
-  //  auto &indecies_to_qunatize_group = indecies_to_quantize_point_group[i];
-  //  for (int subgroup_index = 0; subgroup_index < int(data_for_child_node.data.size()); subgroup_index++)
-  //  {
-  //    auto &subset = data_for_child_node.data[subgroup_index];
-  //    auto &indecies_to_quantize_subgroup = indecies_to_qunatize_group[subgroup_index];
-  //    if (subset.count.data)
-  //    {
-  //      auto &source_mapping = lod_attrib_mapping.get_source_mapping(attribute_ids.get()[i]);
-  //      quantize_to_parent(subset, cache, indecies_to_quantize_subgroup, lod_attrib_mapping.destination, source_mapping, data.lod, destination_header.morton_min, destination_header.morton_max, total_acc_count, buffers, destination_header);
-  //      (void) attributes_configs;
-  //    }
-  //    total_acc_count.data += uint64_t(indecies_to_quantize_subgroup.size());
-  //  }
-  //}
   if (indecies.empty())
     fmt::print(stderr, "Should not happend\n");
   attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, indecies.size());
