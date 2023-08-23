@@ -219,8 +219,8 @@ attribute_source_lod_into_t create_attribute_source_lod_into (const attribute_t 
     if (is_attribute_names_equal(attr, attributes.attributes[i]))
     {
       attribute_source_lod_into_t ret;
-      ret.format.first = attributes.attributes[i].format;
-      ret.format.second = attributes.attributes[i].components;
+      ret.source_format.first = attributes.attributes[i].format;
+      ret.source_format.second = attributes.attributes[i].components;
       ret.source_index = i;
       return ret;
     }

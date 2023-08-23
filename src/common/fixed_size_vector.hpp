@@ -35,6 +35,16 @@ public:
   using iterator = T*;
   using const_iterator = const T*;
 
+  template<typename T, typename P>
+  fixed_capacity_vector_t(const T &vec, P processor)
+    : fixed_capacity_vector_t(std::size(vec))
+  {
+    for (size_t i = 0; i < _capacity; i++)
+    {
+      initialize_at(i, processor(vec[i]));
+    }
+  }
+
   fixed_capacity_vector_t(std::size_t capacity)
     : _capacity(capacity)
     , _raw_buffer(malloc(_capacity * sizeof(T) + alignof(T) - 1))

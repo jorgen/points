@@ -37,7 +37,7 @@ struct attributes_extra_info_t
 struct attribute_source_lod_into_t
 {
   int source_index;
-  std::pair<type_t, components_t> format;
+  std::pair<type_t, components_t> source_format;
 };
 
 struct attribute_lod_info_t
