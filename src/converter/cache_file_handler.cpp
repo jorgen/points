@@ -134,6 +134,17 @@ int cache_file_handler_t::fill_ids(uint32_t **ids, uint32_t **subs, int buffer_s
   return to_process;
 }
 
+bool cache_file_handler_t::is_available(input_data_id_t id, int attribute_index)
+{
+  std::unique_lock<std::mutex> lock(_cache_map_mutex);
+  auto input_data = _cache_map.find(id);
+  if (input_data == _cache_map.end())
+    return false; 
+  if (attribute_index >= input_data->second.buffers.buffers.size())
+    return false;
+  return input_data->second.buffers.buffers[attribute_index].size > 0;
+}
+
 int cache_file_handler_t::item_count()
 {
   return int(_cache_map.size());

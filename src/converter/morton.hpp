@@ -22,6 +22,7 @@ struct morton_t
   static_assert(C > 0 && C < 4, "invalid number of components for  morton_t");
   T data[C];
 };
+
 template<>
 struct morton_t<uint64_t, 1>
 {
@@ -723,5 +724,15 @@ inline morton_t<T,S> create_max(int lod, const morton_t<T,S> &min)
 } // namespace converter
 }
 
+namespace std
+{
+template<typename T, size_t C>
+void swap(points::converter::morton::morton_t<T, C>& a, points::converter::morton::morton_t<T, C>& b) noexcept
 
+{
+  points::converter::morton::morton_t<T, C> tmp = a;
+  a = b;
+  b = tmp;
+}
 
+}

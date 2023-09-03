@@ -1,5 +1,6 @@
 #version 330
-out vec4 o_color;
+in vec4 v_color;
+out vec4 color;
 void main() {
-    o_color = vec4(0.0, 1.0, 0.0, 1.0);
+    color = v_color;
 }

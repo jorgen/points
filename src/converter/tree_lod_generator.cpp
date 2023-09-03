@@ -675,6 +675,10 @@ void lod_worker_t::work()
   destination_header.input_id = data.storage_name;
   attribute_buffers_t buffers;
 
+//  if (this->data.storage_name.data == 18 && this->data.storage_name.sub > 0)
+//  {
+//    fmt::print(stderr, "this is the broken\n");
+//  }
   std::vector<std::pair<input_data_id_t, uint32_t>> indecies;
   {
     std::unique_ptr<uint8_t[]> morton_attribute_buffer;

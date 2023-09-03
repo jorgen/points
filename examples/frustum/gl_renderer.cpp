@@ -241,7 +241,8 @@ void gl_dyn_points_handler::initialize()
 
   program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), vertex_shader.end() - vertex_shader.begin());
   glUseProgram(program);
-  attrib_position = glGetAttribLocation(program, "position");
+  rgb_position = glGetAttribLocation(program, "rgb");
+  vertex_position = glGetAttribLocation(program, "position");
   uniform_camera = glGetUniformLocation(program, "camera");
 
 
@@ -251,7 +252,8 @@ void gl_dyn_points_handler::initialize()
   GLuint tmp_buffer;
   glGenBuffers(1, &tmp_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, tmp_buffer);
-  glEnableVertexAttribArray(attrib_position);
+  glEnableVertexAttribArray(vertex_position);
+  glEnableVertexAttribArray(rgb_position);
   glBindVertexArray(0);
   glDeleteBuffers(1, &tmp_buffer);
   glBindVertexArray(0);
@@ -275,7 +277,13 @@ void gl_dyn_points_handler::draw(points::render::draw_group_t &group)
     case points::render::dyn_points_bm_vertex: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
-      glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
+      glVertexAttribPointer(vertex_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
+      break;
+    }
+    case points::render::dyn_points_bm_color: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+      glVertexAttribPointer(rgb_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
       break;
     }
     case points::render::dyn_points_bm_camera: {

@@ -225,6 +225,7 @@ int main(int, char **)
 
   while(loop)
   {
+    auto old_selected_storage = current_selected_storage;
     SDL_WaitEvent(nullptr);
     SDL_Event event;
     while (SDL_PollEvent(&event))
@@ -256,6 +257,15 @@ int main(int, char **)
             if (event.key.keysym.sym == SDLK_e)
               points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 1.3f, 0.0f);
           }
+          if (event.key.keysym.sym == SDLK_j && !storage_strings.empty() && current_selected_storage < storage_strings.size() - 1)
+          {
+            current_selected_storage++;
+          }
+          else if (event.key.keysym.sym == SDLK_k && !storage_strings.empty() && current_selected_storage > 0)
+          {
+            current_selected_storage--;
+          }
+
           if (event.key.keysym.sym == SDLK_LCTRL || event.key.keysym.sym == SDLK_RCTRL)
             ctrl_modifier = true;
           break;
@@ -412,7 +422,6 @@ int main(int, char **)
       }
       ImGui::EndCombo();
     }
-    auto old_selected_storage = current_selected_storage;
     if (ImGui::SliderInt("Current storage chunk", &current_selected_storage, 0, storage_count - 1))
     {
     }

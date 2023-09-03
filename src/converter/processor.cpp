@@ -91,6 +91,11 @@ void processor_t::about_to_block()
   }
 }
 
+const attributes_t& processor_t::get_attributes(attributes_id_t id)
+{
+  return _attributes_configs.get(id);
+}
+
 void processor_t::handle_new_files(std::vector<std::vector<input_data_source_t>> &&new_files_collection)
 {
   for (auto &new_files : new_files_collection)

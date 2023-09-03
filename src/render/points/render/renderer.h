@@ -61,6 +61,7 @@ enum points_buffer_mapping_t
 enum dyn_points_buffer_mapping_t
 {
   dyn_points_bm_vertex,
+  dyn_points_bm_color,
   dyn_points_bm_camera
 };
 

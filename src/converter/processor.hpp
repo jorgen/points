@@ -62,6 +62,7 @@ public:
   void about_to_block() override;
 
   cache_file_handler_t &cache_file() { return _cache_file_handler; }
+  const attributes_t &get_attributes(attributes_id_t id);
 
 private:
   converter_t &_converter;

@@ -82,7 +82,8 @@ public:
 
   GLuint vao;
   GLuint program;
-  GLint attrib_position;
+  GLint vertex_position;
+  GLint rgb_position;
   GLint uniform_camera;
   bool is_initialized;
 };

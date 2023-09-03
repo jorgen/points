@@ -35,9 +35,9 @@ struct dyn_points_draw_buffer_t
 {
   render::draw_buffer_t render_list[3];
   render::buffer_t render_buffers[3];
-  std::unique_ptr<uint8_t[]> vertex_data;
-  buffer_t vertex_data_info;
-  points::type_t point_type;
+  std::pair<type_t, components_t> format[2];
+  std::unique_ptr<uint8_t[]> data[2];
+  buffer_t data_info[2];
   int point_count;
   std::array<double,3> offset;
   std::array<double,3> scale;
@@ -102,28 +102,47 @@ inline void convert_points_to_vertex_data(const tree_global_state_t &global_stat
   case type_i64:
   case type_r64:
   {
-    draw_buffer.vertex_data.reset(new uint8_t[read_points.data.size]);
-    draw_buffer.vertex_data_info = buffer_t(draw_buffer.vertex_data.get(), read_points.data.size);
-    draw_buffer.point_type = pformat.first;
-    memcpy(draw_buffer.vertex_data.get(), read_points.data.data, read_points.data.size);
+    draw_buffer.data[0].reset(new uint8_t[read_points.data.size]);
+    draw_buffer.data_info[0] = buffer_t(draw_buffer.data[0].get(), read_points.data.size);
+    draw_buffer.format[0] = pformat;
+    memcpy(draw_buffer.data[0].get(), read_points.data.data, read_points.data.size);
     break;
   }
   case type_m32:
-    convert_points_to_vertex_data_morton<morton::morton32_t, std::array<uint16_t, 3>>(global_state, read_points, draw_buffer.vertex_data_info, draw_buffer.offset, draw_buffer.vertex_data);
-    draw_buffer.point_type = points::type_r32;
+    convert_points_to_vertex_data_morton<morton::morton32_t, std::array<uint16_t, 3>>(global_state, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    draw_buffer.format[0] = std::make_pair(type_r32, components_3);
     break;
   case type_m64:
-    convert_points_to_vertex_data_morton<morton::morton64_t, std::array<uint32_t, 3>>(global_state, read_points, draw_buffer.vertex_data_info, draw_buffer.offset, draw_buffer.vertex_data);
-    draw_buffer.point_type = points::type_r32;
+    convert_points_to_vertex_data_morton<morton::morton64_t, std::array<uint32_t, 3>>(global_state, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    draw_buffer.format[0] = std::make_pair(type_r32, components_3);
     break;
   case type_m128:
-    convert_points_to_vertex_data_morton<morton::morton128_t, std::array<uint64_t, 3>>(global_state, read_points, draw_buffer.vertex_data_info, draw_buffer.offset, draw_buffer.vertex_data);
-    draw_buffer.point_type = points::type_r32;
+    convert_points_to_vertex_data_morton<morton::morton128_t, std::array<uint64_t, 3>>(global_state, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    draw_buffer.format[0] = std::make_pair(type_r32, components_3);
     break;
   case type_m192:
-    convert_points_to_vertex_data_morton<morton::morton192_t, std::array<uint64_t, 3>>(global_state, read_points, draw_buffer.vertex_data_info, draw_buffer.offset, draw_buffer.vertex_data);
-    draw_buffer.point_type = points::type_r32;
+    convert_points_to_vertex_data_morton<morton::morton192_t, std::array<uint64_t, 3>>(global_state, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    draw_buffer.format[0] = std::make_pair(type_r32, components_3);
     break;
+  }
+}
+inline void convert_attribute_to_draw_buffer_data(const read_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer, int dataslot)
+{
+  auto count = read_points.header.public_header.point_count;
+  auto source_ptr = reinterpret_cast<std::array<uint16_t, 3> *>(read_points.data.data);
+  assert(read_points.data.size == count * sizeof(std::array<uint16_t, 3>));
+
+  auto target_size = count * sizeof(std::array<uint8_t, 3>);
+  draw_buffer.data[dataslot].reset(new uint8_t[target_size]);
+  draw_buffer.data_info[dataslot] = buffer_t(draw_buffer.data[dataslot].get(), target_size);
+  draw_buffer.format[dataslot] = std::make_pair(points::type_u8, components_3);
+  auto target_ptr = reinterpret_cast<std::array<uint8_t, 3> *>(draw_buffer.data[dataslot].get());
+  for (uint64_t i = 0; i < count; i++)
+  {
+    for (int n = 0; n < 3; n++)
+    {
+      target_ptr[i][n] = source_ptr[i][n] >> 8;
+    }
   }
 }
 }

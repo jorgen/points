@@ -39,13 +39,13 @@ void storage_data_source_t::add_to_frame(render::frame_camera_t *c_camera, rende
 {
   const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
 
-  if (render_item.buffer.vertex_data)
+  if (render_item.buffer.data[0])
   {
       render_item.buffer.camera_view = camera.projection * glm::translate(camera.view, to_glm(render_item.buffer.offset));
-      callbacks.do_modify_buffer(render_item.buffer.render_buffers[1], 0, sizeof(render_item.buffer.camera_view), &render_item.buffer.camera_view);
+      callbacks.do_modify_buffer(render_item.buffer.render_buffers[2], 0, sizeof(render_item.buffer.camera_view), &render_item.buffer.camera_view);
       render::draw_group_t draw_group;
       draw_group.buffers = render_item.buffer.render_list;
-      draw_group.buffers_size = 2;
+      draw_group.buffers_size = 3;
       draw_group.draw_type = render::dyn_points;
       draw_group.draw_size = render_item.buffer.point_count;
       to_render_add_render_group(to_render, draw_group);
@@ -57,17 +57,29 @@ void storage_data_source_t::set_item(uint32_t id, uint32_t sub)
   input_data_id_t input_id = {id, sub};
   read_points_t read_points(converter->processor.cache_file(), input_id, 0);
   assert(read_points.data.size);
-  convert_points_to_vertex_data(converter->tree_state, read_points, render_item.buffer);
-  callbacks.do_create_buffer(render_item.buffer.render_buffers[0], points::render::buffer_type_vertex);
-  callbacks.do_initialize_buffer(render_item.buffer.render_buffers[0], points::type_r32, points::components_3, int(render_item.buffer.vertex_data_info.size), render_item.buffer.vertex_data_info.data);
-  render_item.buffer.render_buffers[0].rendered = true;
-  render_item.buffer.point_count = int(read_points.cache_item.header.public_header.point_count);
-  callbacks.do_create_buffer(render_item.buffer.render_buffers[1], points::render::buffer_type_uniform);
-  callbacks.do_initialize_buffer(render_item.buffer.render_buffers[1], type_r32, points::components_4x4, sizeof(render_item.buffer.camera_view), &render_item.buffer.camera_view);
-  render_item.buffer.render_list[0].buffer_mapping = render::points_bm_vertex;
-  render_item.buffer.render_list[0].user_ptr = render_item.buffer.render_buffers[0].user_ptr;
-  render_item.buffer.render_list[1].buffer_mapping = render::points_bm_camera;
-  render_item.buffer.render_list[1].user_ptr = render_item.buffer.render_buffers[1].user_ptr;
+  auto &buffer = render_item.buffer;
+  convert_points_to_vertex_data(converter->tree_state, read_points, buffer);
+  callbacks.do_create_buffer(buffer.render_buffers[0], points::render::buffer_type_vertex);
+  callbacks.do_initialize_buffer(buffer.render_buffers[0], buffer.format[0].first, buffer.format[0].second, int(buffer.data_info[0].size), buffer.data_info[0].data);
+
+  read_points_t read_color(converter->processor.cache_file(), input_id, 8);
+  // auto &attributes = converter->processor.get_attributes(read_points.header.attributes_id);
+  //(void)attributes;
+  convert_attribute_to_draw_buffer_data(read_color, buffer, 1);
+  callbacks.do_create_buffer(buffer.render_buffers[1], points::render::buffer_type_vertex);
+  callbacks.do_initialize_buffer(buffer.render_buffers[1], buffer.format[1].first, buffer.format[1].second, int(buffer.data_info[1].size), buffer.data_info[1].data);
+
+  callbacks.do_create_buffer(buffer.render_buffers[2], points::render::buffer_type_uniform);
+  callbacks.do_initialize_buffer(buffer.render_buffers[2], type_r32, points::components_4x4, sizeof(buffer.camera_view), &buffer.camera_view);
+
+  buffer.render_buffers[0].rendered = true;
+  buffer.point_count = int(read_points.cache_item.header.public_header.point_count);
+  buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;
+  buffer.render_list[0].user_ptr = buffer.render_buffers[0].user_ptr;
+  buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;
+  buffer.render_list[1].user_ptr = buffer.render_buffers[1].user_ptr;
+  buffer.render_list[2].buffer_mapping = render::dyn_points_bm_camera;
+  buffer.render_list[2].user_ptr = buffer.render_buffers[2].user_ptr;
   render_item.id = id;
   render_item.sub = sub;
 
