@@ -51,7 +51,7 @@ class attributes_configs_t;
 class lod_worker_t : public worker_t
 {
 public:
-  lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, int &inc_on_completed);
+  lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets, int &inc_on_completed);
   void work() override;
   void after_work(completion_t completion) override;
 private:
@@ -59,6 +59,7 @@ private:
   cache_file_handler_t &cache;
   attributes_configs_t &attributes_configs;
   lod_node_worker_data_t &data;
+  const std::vector<float> &random_offsets;
   int &inc_on_completed;
 };
 
@@ -91,6 +92,8 @@ private:
   tree_cache_t &_tree_cache;
   cache_file_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;
+
+  std::vector<float> _random_offsets;
 
   std::deque<std::unique_ptr<lod_worker_batch_t>> _lod_batches;
 };

@@ -27,6 +27,7 @@
 #include <fixed_size_vector.hpp>
 #include <fmt/printf.h>
 #include <numeric>
+#include <random>
 
 namespace points::converter
 {
@@ -270,11 +271,12 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
 }
 
 
-lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, int &inc_on_completed)
+lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets, int &inc_on_completed)
   : lod_generator(lod_generator)
   , cache(cache)
   , attributes_configs(attributes_configs)
   , data(data)
+  , random_offsets(random_offsets)
   , inc_on_completed(inc_on_completed)
 {
 }
@@ -341,7 +343,7 @@ struct morton_to_lod_t
 
 
 template<typename S_M, typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, const buffer_t &source, offset_t offset, point_count_t point_count, int maskWidth,  std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
+static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, const buffer_t &source, offset_t offset, point_count_t point_count, int maskWidth, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
 {
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
   assert(source.size % sizeof(S_M) == 0);
@@ -354,7 +356,8 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
       continue;
 
     auto range_size = i - range_start;
-    auto index = range_start + (range_size / 2);
+    auto index_into_random_offsets = (range_start + (range_size / 2)) % random_offsets.size();
+    auto index = range_start + uint32_t(random_offsets[index_into_random_offsets] * (range_size));
     morton_to_lod.emplace_back();
     auto &to_lod = morton_to_lod.back();
     morton::morton_cast(source_it[index], min, to_lod.morton);
@@ -373,7 +376,7 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
 }
 
 template<typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, type_t source_type, const buffer_t &source, offset_t offset, point_count_t point_count, int maskWidth, std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
+static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, type_t source_type, const buffer_t &source, offset_t offset, point_count_t point_count, int maskWidth, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
 {
   assert(source_type == type_m32
          || source_type == type_m64
@@ -382,10 +385,10 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
 
   switch(source_type)
   {
-  case type_m32: return find_indecies_to_quantize<morton::morton32_t>(input_id, min, source, offset, point_count, maskWidth, morton_to_lod);
-  case type_m64: return find_indecies_to_quantize<morton::morton64_t>(input_id, min, source, offset, point_count, maskWidth, morton_to_lod);
-  case type_m128: return find_indecies_to_quantize<morton::morton128_t>(input_id, min, source, offset, point_count, maskWidth, morton_to_lod);
-  case type_m192: return find_indecies_to_quantize<morton::morton192_t>(input_id, min, source, offset, point_count, maskWidth, morton_to_lod);
+  case type_m32: return find_indecies_to_quantize<morton::morton32_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+  case type_m64: return find_indecies_to_quantize<morton::morton64_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+  case type_m128: return find_indecies_to_quantize<morton::morton128_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+  case type_m192: return find_indecies_to_quantize<morton::morton192_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
   default:
     break;
   }
@@ -573,32 +576,32 @@ static void quantize_attributres(cache_file_handler_t &cache, const std::vector<
 }
 
 template<typename T, size_t N>
-static void quantize_subset(cache_file_handler_t& cache, const points_subset_t &subset, int lod, std::vector<morton_to_lod_t<T,N>>& morton_to_lod)
+static void quantize_subset(cache_file_handler_t& cache, const points_subset_t &subset, int lod, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>>& morton_to_lod)
 {
   read_points_t subset_data(cache, subset.input_id, 0);
   const buffer_t source_buffer = morton_buffer_for_subset(subset_data.data, subset_data.header.point_format.first, subset.offset, subset.count);
   assert(buffer_is_subset(subset_data.data, source_buffer));
-  find_indecies_to_quantize(subset.input_id, subset_data.header.morton_min, subset_data.header.point_format.first, source_buffer, subset.offset, subset.count, lod - 3 * 3, morton_to_lod);
+  find_indecies_to_quantize(subset.input_id, subset_data.header.morton_min, subset_data.header.point_format.first, source_buffer, subset.offset, subset.count, lod - 3 * 3, random_offsets, morton_to_lod);
 }
 
 template<typename T, size_t N>
-static void quantize_points_collection(cache_file_handler_t& cache, const points_collection_t& point_collection, int lod, std::vector<morton_to_lod_t<T,N>>& morton_to_lod)
+static void quantize_points_collection(cache_file_handler_t& cache, const points_collection_t& point_collection, int lod, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>>& morton_to_lod)
 {
   for (auto& subset : point_collection.data)
   {
-    quantize_subset(cache, subset, lod, morton_to_lod);
+    quantize_subset(cache, subset, lod, random_offsets, morton_to_lod);
   }
 }
 
 template<typename T, size_t N>
-static void quantize_morton_remember_indecies_t(cache_file_handler_t& cache, const std::vector<points_collection_t>& child_data, int lod, std::unique_ptr<uint8_t[]>& morton_data, std::vector<std::pair<input_data_id_t, uint32_t>>& indecies)
+static void quantize_morton_remember_indecies_t(cache_file_handler_t& cache, const std::vector<points_collection_t>& child_data, int lod, const std::vector<float> &random_offsets, std::unique_ptr<uint8_t[]>& morton_data, std::vector<std::pair<input_data_id_t, uint32_t>>& indecies)
 {
   std::vector<morton_to_lod_t<T,N>> morton_to_lod;
   int maskWidth = lod - 3 * 3;
   morton_to_lod.reserve(1 << 16);
   for (auto& points_collection : child_data)
   {
-    quantize_points_collection(cache, points_collection, lod, morton_to_lod); 
+    quantize_points_collection(cache, points_collection, lod, random_offsets, morton_to_lod); 
   }
 
   std::sort(morton_to_lod.begin(), morton_to_lod.end(), [](const morton_to_lod_t<T, N> &a, const morton_to_lod_t<T, N> &b) { return a.morton < b.morton; });
@@ -627,19 +630,19 @@ static void quantize_morton_remember_indecies_t(cache_file_handler_t& cache, con
   indecies.emplace_back(morton_to_lod[index].id, uint32_t(morton_to_lod[index].index.data));
 }
 
-static void quantize_morton_remember_indecies(cache_file_handler_t& cache, const std::vector<points_collection_t>& child_data, int lod, std::unique_ptr<uint8_t[]>& morton_data, std::vector<std::pair<input_data_id_t, uint32_t>>& indecies)
+static void quantize_morton_remember_indecies(cache_file_handler_t& cache, const std::vector<points_collection_t>& child_data, int lod, const std::vector<float> &random_offsets, std::unique_ptr<uint8_t[]>& morton_data, std::vector<std::pair<input_data_id_t, uint32_t>>& indecies)
 {
   auto lod_format = morton_format_from_lod(lod);
   switch (lod_format)
   {
   case type_m32:
-    quantize_morton_remember_indecies_t<uint32_t, 1>(cache, child_data, lod, morton_data, indecies); break;
+    quantize_morton_remember_indecies_t<uint32_t, 1>(cache, child_data, lod, random_offsets, morton_data, indecies); break;
   case type_m64:
-    quantize_morton_remember_indecies_t<uint64_t, 1>(cache, child_data, lod, morton_data, indecies); break;
+    quantize_morton_remember_indecies_t<uint64_t, 1>(cache, child_data, lod, random_offsets, morton_data, indecies); break;
   case type_m128:
-    quantize_morton_remember_indecies_t<uint64_t, 2>(cache, child_data, lod, morton_data, indecies); break;
+    quantize_morton_remember_indecies_t<uint64_t, 2>(cache, child_data, lod, random_offsets, morton_data, indecies); break;
   case type_m192:
-    quantize_morton_remember_indecies_t<uint64_t, 3>(cache, child_data, lod, morton_data, indecies); break;
+    quantize_morton_remember_indecies_t<uint64_t, 3>(cache, child_data, lod, random_offsets, morton_data, indecies); break;
   default:
     assert("This should not happen");
   }
@@ -679,7 +682,7 @@ void lod_worker_t::work()
   std::vector<std::pair<input_data_id_t, uint32_t>> indecies;
   {
     std::unique_ptr<uint8_t[]> morton_attribute_buffer;
-    quantize_morton_remember_indecies(cache, data.child_data, data.lod, morton_attribute_buffer, indecies);
+    quantize_morton_remember_indecies(cache, data.child_data, data.lod, random_offsets, morton_attribute_buffer, indecies);
     attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, indecies.size(), std::move(morton_attribute_buffer));
   }
 
@@ -705,7 +708,7 @@ void lod_worker_t::after_work(completion_t completion)
   lod_generator.iterate_workers();
 }
 
-static void iterate_batch(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache_file, attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
+static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache_file, attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
 {
   batch.new_batch = false;
   batch.lod_workers.clear();
@@ -728,7 +731,7 @@ static void iterate_batch(tree_lod_generator_t &lod_generator, lod_worker_batch_
     for (auto &node : tree.nodes[batch.level])
     {
       assert(!node.child_data.empty());
-      batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, node, batch.completed);
+      batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, node, random_offsets, batch.completed);
       auto &lod_worker = batch.lod_workers.back();
       lod_worker.enqueue(loop);
     }
@@ -742,6 +745,13 @@ tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tr
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
 {
+  _random_offsets.resize(256);
+  std::mt19937 gen(4244);
+  std::uniform_real_distribution<float> dis(0.0, 1.0);
+  for (auto &offset : _random_offsets)
+  {
+    offset = dis(gen);
+  }
 }
 
 void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morton192_t &max)
@@ -813,7 +823,7 @@ void tree_lod_generator_t::iterate_workers()
     _lod_batches.pop_front();
   }
   if (!_lod_batches.empty() && (_lod_batches.front()->new_batch || _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size())))
-    iterate_batch(*this, *_lod_batches.front(), _file_cache, _attributes_configs, _loop);
+    iterate_batch(_random_offsets, *this, *_lod_batches.front(), _file_cache, _attributes_configs, _loop);
   if (_lod_batches.empty())
   {
     fmt::print(stderr, "Done\n");
