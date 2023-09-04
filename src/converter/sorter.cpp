@@ -290,10 +290,11 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
   auto &attributes = attributes_config.get(points.header.original_attributes_id);
   for (int i = 1; i < int(attributes.attributes.size()); i++)
   {
+    std::unique_ptr<uint8_t[]> new_attr_data;
     auto &attr = attributes.attributes[i];
     auto attr_format = std::make_pair(attr.format, attr.components);
-    reorder_buffer(count, indecies_begin, attr_format, points.buffers.data[i].get(), new_data, new_buffer_size);
-    points.buffers.data[i] = std::move(new_data);
+    reorder_buffer(count, indecies_begin, attr_format, points.buffers.data[i].get(), new_attr_data, new_buffer_size);
+    points.buffers.data[i] = std::move(new_attr_data);
     assert(new_buffer_size == points.buffers.buffers[i].size);
 
     points.buffers.buffers[i].data = points.buffers.data[i].get();

@@ -367,6 +367,7 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
   auto index = range_start + ((point_count.data - range_start)/ 2);
   morton_to_lod.emplace_back();
   auto &to_lod = morton_to_lod.back();
+  morton::morton_cast(source_it[index], min, to_lod.morton);
   to_lod.index.data = offset.data + index;
   to_lod.id = input_id;
 }
@@ -675,10 +676,6 @@ void lod_worker_t::work()
   destination_header.input_id = data.storage_name;
   attribute_buffers_t buffers;
 
-//  if (this->data.storage_name.data == 18 && this->data.storage_name.sub > 0)
-//  {
-//    fmt::print(stderr, "this is the broken\n");
-//  }
   std::vector<std::pair<input_data_id_t, uint32_t>> indecies;
   {
     std::unique_ptr<uint8_t[]> morton_attribute_buffer;
