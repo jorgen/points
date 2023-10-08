@@ -24,6 +24,7 @@
 #include <points/converter/default_attribute_names.h>
 #include <vector>
 #include <numeric>
+#include <limits>
 
 #include <fmt/printf.h>
 
@@ -39,8 +40,8 @@ struct vec_t
   T data[3];
 };
 
-template<typename T1, size_t C1, typename T2, size_t C2>
-typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) > sizeof(morton::morton_t<T2, C2>))>::type downcast_point_buffer(const uint64_t *indecies_begin, const std::unique_ptr<uint8_t[]> &source, uint64_t source_size, std::unique_ptr<uint8_t[]> &target, uint64_t &target_size)
+template<typename INDEX_T, typename T1, size_t C1, typename T2, size_t C2>
+typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) > sizeof(morton::morton_t<T2, C2>))>::type downcast_point_buffer(const INDEX_T *indecies_begin, const std::unique_ptr<uint8_t[]> &source, uint64_t source_size, std::unique_ptr<uint8_t[]> &target, uint64_t &target_size)
 {
   uint64_t point_count = source_size / sizeof(morton::morton_t<T1, C1>);
   target_size = point_count * sizeof(morton::morton_t<T2, C2>);
@@ -52,8 +53,8 @@ typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) > sizeof(morton::morto
     morton::morton_downcast(source_morton[indecies_begin[i]], target_morton[i]);
   }
 }
-template<typename T1, size_t C1, typename T2, size_t C2>
-typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) <= sizeof(morton::morton_t<T2, C2>))>::type downcast_point_buffer(const uint64_t *indecies_begin, const std::unique_ptr<uint8_t[]> &source, uint64_t source_size, std::unique_ptr<uint8_t[]> &target, uint64_t &target_size)
+template<typename INDEX_T, typename T1, size_t C1, typename T2, size_t C2>
+typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) <= sizeof(morton::morton_t<T2, C2>))>::type downcast_point_buffer(const INDEX_T *indecies_begin, const std::unique_ptr<uint8_t[]> &source, uint64_t source_size, std::unique_ptr<uint8_t[]> &target, uint64_t &target_size)
 {
   (void) indecies_begin;
   (void) source;
@@ -117,8 +118,8 @@ void reorderVectorInPlace(order_iterator indecies_begin, order_iterator indecies
   }
 }
 
-template<size_t C, typename T>
-void reorder_buffer_two(uint64_t count, const uint64_t* indecies_begin, const void* source, std::unique_ptr<uint8_t[]>& target, uint64_t &target_size)
+template<typename INDEX_T, size_t C, typename T>
+void reorder_buffer_two(uint64_t count, const INDEX_T * indecies_begin, const void* source, std::unique_ptr<uint8_t[]>& target, uint64_t &target_size)
 {
   using copy_t = std::array<T,C>;
   const copy_t* source_data = reinterpret_cast<const copy_t*>(source);
@@ -131,81 +132,82 @@ void reorder_buffer_two(uint64_t count, const uint64_t* indecies_begin, const vo
   }
 }
 
-template<size_t C>
-void reorder_buffer_one(uint64_t count, const uint64_t* indecies_begin, std::pair<type_t, components_t> format, const void* source, std::unique_ptr<uint8_t[]>& target, uint64_t &target_size)
+template<typename INDEX_T, size_t C>
+void reorder_buffer_one(uint64_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void* source, std::unique_ptr<uint8_t[]>& target, uint64_t &target_size)
 {
   switch (format.first)
   {
   case type_u8:
-    reorder_buffer_two<C, uint8_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, uint8_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_i8:
-    reorder_buffer_two<C, int8_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, int8_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_u16:
-    reorder_buffer_two<C, uint16_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, uint16_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_i16:
-    reorder_buffer_two<C, int16_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, int16_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_u32:
-    reorder_buffer_two<C, uint32_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, uint32_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_i32:
-    reorder_buffer_two<C, int32_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, int32_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_m32:
-    reorder_buffer_two<C, morton::morton32_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, morton::morton32_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_r32:
-    reorder_buffer_two<C, float>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, float>(count, indecies_begin, source, target, target_size);
     break;
   case type_u64:
-    reorder_buffer_two<C, uint64_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, uint64_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_i64:
-    reorder_buffer_two<C, int64_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, int64_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_m64:
-    reorder_buffer_two<C, morton::morton64_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, morton::morton64_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_r64:
-    reorder_buffer_two<C, double>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, double>(count, indecies_begin, source, target, target_size);
     break;
   case type_m128:
-    reorder_buffer_two<C, morton::morton128_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, morton::morton128_t>(count, indecies_begin, source, target, target_size);
     break;
   case type_m192:
-    reorder_buffer_two<C, morton::morton192_t>(count, indecies_begin, source, target, target_size);
+    reorder_buffer_two<INDEX_T, C, morton::morton192_t>(count, indecies_begin, source, target, target_size);
     break;
   }
   
 }
 
-static void reorder_buffer(uint64_t count, const uint64_t *indecies_begin, std::pair<type_t, components_t> format, const void *source, std::unique_ptr<uint8_t[]> &target, uint64_t &target_size)
+template <typename INDEX_T>
+static void reorder_buffer(uint64_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void *source, std::unique_ptr<uint8_t[]> &target, uint64_t &target_size)
 {
   switch (format.second)
   {
   case components_1:
-    reorder_buffer_one<1>(count, indecies_begin, format, source, target, target_size);
+    reorder_buffer_one<INDEX_T, 1>(count, indecies_begin, format, source, target, target_size);
     break;
   case components_2:
-    reorder_buffer_one<2>(count, indecies_begin, format, source, target, target_size);
+    reorder_buffer_one<INDEX_T, 2>(count, indecies_begin, format, source, target, target_size);
     break;
   case components_3:
-    reorder_buffer_one<3>(count, indecies_begin, format, source, target, target_size);
+    reorder_buffer_one<INDEX_T, 3>(count, indecies_begin, format, source, target, target_size);
     break;
   case components_4:
-    reorder_buffer_one<4>(count, indecies_begin, format, source, target, target_size);
+    reorder_buffer_one<INDEX_T, 4>(count, indecies_begin, format, source, target, target_size);
     break;
   case components_4x4:
-    reorder_buffer_one<16>(count, indecies_begin, format, source, target, target_size);
+    reorder_buffer_one<INDEX_T, 16>(count, indecies_begin, format, source, target, target_size);
     break;
   }
 
 }
 
-template <typename T, typename MT, size_t C>
+template <typename T, typename INDEX_T, typename MT, size_t C>
 void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_configs_t &attributes_config, points_t &points, double smallest_scale, type_t format, error_t &error)
 {
   (void)error;
@@ -236,12 +238,12 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
     morton::encode(tmp, morton_begin[i]);
   }
 
-  std::unique_ptr<uint8_t[]> indecies(new uint8_t[sizeof(uint64_t) * count]);
-  uint64_t *indecies_begin = reinterpret_cast<uint64_t *>(indecies.get());
-  uint64_t *indecies_end = indecies_begin + count;
-  std::iota(indecies_begin, indecies_end, uint64_t(0));
+  std::unique_ptr<uint8_t[]> indecies(new uint8_t[sizeof(INDEX_T) * count]);
+  INDEX_T *indecies_begin = reinterpret_cast<INDEX_T *>(indecies.get());
+  INDEX_T *indecies_end = indecies_begin + count;
+  std::iota(indecies_begin, indecies_end, INDEX_T(0));
 
-  std::stable_sort(indecies_begin, indecies_end, [morton_begin](uint64_t a, uint64_t b) 
+  std::stable_sort(indecies_begin, indecies_end, [morton_begin](INDEX_T a, INDEX_T b) 
     {
       return morton_begin[a] < morton_begin[b]; 
     });
@@ -258,26 +260,17 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
   std::unique_ptr<uint8_t[]> new_data;
   uint64_t new_buffer_size = 0;
   if (new_type == type_m32 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton32_t))
-    downcast_point_buffer<MT, C, uint32_t, 1>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
+    downcast_point_buffer<INDEX_T, MT, C, uint32_t, 1>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
   else if (new_type == type_m64 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton64_t))
-    downcast_point_buffer<MT, C, uint64_t, 1>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
+    downcast_point_buffer<INDEX_T, MT, C, uint64_t, 1>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
   else if (new_type == type_m128 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton128_t))
-    downcast_point_buffer<MT, C, uint64_t, 2>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
+    downcast_point_buffer<INDEX_T, MT, C, uint64_t, 2>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
   else
   {
     assert(format == new_type);
-    reorder_buffer(count, indecies_begin, std::make_pair(new_type,components_1), world_morton_unique_ptr.get(), new_data, new_buffer_size);
+    reorder_buffer<INDEX_T>(count, indecies_begin, std::make_pair(new_type,components_1), world_morton_unique_ptr.get(), new_data, new_buffer_size);
   }
   
-  //auto morton_it = morton_begin;
-  //auto morton_it_pluss_one = morton_it+1;
-  //while (morton_it_pluss_one < morton_end)
-  //{
-  //  assert(*morton_it <= *morton_it_pluss_one);
-  //  morton_it++;
-  //  morton_it_pluss_one++;
-  //}
-
   world_morton_unique_ptr = std::move(new_data);
   buffer_size = new_buffer_size;
   format = new_type;
@@ -293,7 +286,7 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
     std::unique_ptr<uint8_t[]> new_attr_data;
     auto &attr = attributes.attributes[i];
     auto attr_format = std::make_pair(attr.format, attr.components);
-    reorder_buffer(count, indecies_begin, attr_format, points.buffers.data[i].get(), new_attr_data, new_buffer_size);
+    reorder_buffer<INDEX_T>(count, indecies_begin, attr_format, points.buffers.data[i].get(), new_attr_data, new_buffer_size);
     points.buffers.data[i] = std::move(new_attr_data);
     assert(new_buffer_size == points.buffers.buffers[i].size);
 
@@ -306,7 +299,8 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
   morton::morton_upcast(last, base_morton, points.header.morton_max);
   assert(points.header.lod_span == morton::morton_lod(points.header.morton_min, points.header.morton_max));
 }
-template <typename T>
+
+template <typename T, typename INDEX_T>
 void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, points_t &points, error_t &error)
 {
   auto &header = points.header;
@@ -346,20 +340,31 @@ void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_
   switch (target_format)
   {
     case type_m32:
-      convert_and_sort_morton<T, uint32_t, 1>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, INDEX_T, uint32_t, 1>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
     break;
     case type_m64:
-      convert_and_sort_morton<T, uint64_t, 1>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, INDEX_T, uint64_t, 1>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
     break;
     case type_m128:
-      convert_and_sort_morton<T, uint64_t, 2>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, INDEX_T, uint64_t, 2>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
     break;
   case type_m192:
-      convert_and_sort_morton<T, uint64_t, 3>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, INDEX_T, uint64_t, 3>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
     break;
   default:
     assert(false);
     break;
+  }
+}
+
+template <typename T>
+void convert_and_sort_resolve_index_t(const tree_global_state_t& tree_state, attributes_configs_t& attributes_configs, points_t& points, error_t& error)
+{
+  if (points.header.public_header.point_count < std::numeric_limits<uint32_t>::max())
+    convert_and_sort<T, uint32_t>(tree_state, attributes_configs, points, error);
+  else
+  {
+    convert_and_sort<T, uint64_t>(tree_state, attributes_configs, points, error);
   }
 }
 
@@ -369,7 +374,7 @@ void sort_points(const tree_global_state_t &tree_state, attributes_configs_t &at
   switch (point_format.first)
   {
   case type_i32:
-    convert_and_sort<int32_t>(tree_state, attributes_configs, points, error);
+    convert_and_sort_resolve_index_t<int32_t>(tree_state, attributes_configs, points, error);
     break;
   default:
     assert(false);
