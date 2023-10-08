@@ -73,7 +73,6 @@ public:
   attributes_configs_t(const tree_global_state_t &global_state);
 
   attributes_id_t get_attribute_config_index(attributes_t &&attr);
-  attributes_id_t get_attribute_for_point_format(attributes_id_t id, type_t type, components_t components);
   attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end);
   attribute_lod_mapping_t get_lod_attribute_mapping(const type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end);
 

@@ -56,30 +56,6 @@ static bool compare_attributes(const attributes_t &a, const attributes_t &b)
   }
   return true;
 }
-static bool compare_attributrs_with_point_format(const attributes_t &a, type_t point_type, components_t point_components, const attributes_t &b)
-{
-  if (a.attributes.size() != b.attributes.size())
-    return false;
-  if (a.attributes.empty())
-    return true;
-  auto &b_point_attr = b.attributes.front();
-  if (a.attributes.front().name_size != b_point_attr.name_size)
-    return false;
-  if (point_type != b_point_attr.format)
-    return false;
-  if (point_components!= b_point_attr.components)
-    return false;
-  if (memcmp(a.attributes.front().name, b_point_attr.name, b_point_attr.name_size) != 0)
-    return false;
-  for (int i = 1; i < int(a.attributes.size()); i++)
-  {
-    if (!compare_attribute(a.attributes[i], b.attributes[i]))
-      return false;
-  }
-  return true;
-}
-
-
 
 attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&attr)
 {
@@ -95,32 +71,6 @@ attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&
   _attributes_configs.emplace_back();
   auto &new_config = _attributes_configs.back();
   new_config.attributes = std::move(attr);
-  return {uint32_t(ret)};
-}
-
-attributes_id_t attributes_configs_t::get_attribute_for_point_format(attributes_id_t id, type_t type, components_t components)
-{
-  std::unique_lock<std::mutex> lock(_mutex);
-  assert(id.data < _attributes_configs.size());
-  if (_attributes_configs.capacity() == _attributes_configs.size())
-  {
-    _attributes_configs.reserve(_attributes_configs.size() * 2);
-  }
-  auto &attr = _attributes_configs[id.data];
-  for (int i = 0; i < int(_attributes_configs.size()); i++)
-  {
-    auto &source = _attributes_configs[i];
-    if (compare_attributrs_with_point_format(attr.attributes, type, components, source.attributes))
-    {
-      return {uint32_t(i)};
-    }
-  }
-  int ret = int(_attributes_configs.size());
-  _attributes_configs.emplace_back();
-  auto &new_config = _attributes_configs.back();
-  attributes_copy(attr.attributes, new_config.attributes);
-  new_config.attributes.attributes[0].format = type;
-  new_config.attributes.attributes[0].components = components;
   return {uint32_t(ret)};
 }
 

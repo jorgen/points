@@ -22,6 +22,8 @@
 #include "attributes_configs.hpp"
 
 #include <points/converter/default_attribute_names.h>
+
+#include "type_from_type.hpp"
 #include <vector>
 #include <numeric>
 #include <limits>
@@ -280,8 +282,21 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
   points.buffers.buffers[0].size = buffer_size;
   points.header.original_attributes_id = points.header.attributes_id;
 
-  auto &attributes = attributes_config.get(points.header.original_attributes_id);
-  for (int i = 1; i < int(attributes.attributes.size()); i++)
+  auto &orig_attributes = attributes_config.get(points.header.original_attributes_id);
+  attributes_t attributes;
+  attributes_copy(orig_attributes, attributes);
+  attributes.attributes[0].format = format;
+  attributes.attribute_names.push_back(std::unique_ptr<char[]>(new char[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER) + 1]));
+  memcpy(attributes.attribute_names.back().get(), POINTS_ATTRIBUTE_ORIGINAL_ORDER, sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER));
+  attributes.attribute_names.back().get()[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)] = 0;
+  attributes.attributes.emplace_back();
+  auto &order_attr = attributes.attributes.back();
+  order_attr.components = components_1;
+  order_attr.name = attributes.attribute_names.back().get();
+  order_attr.name_size = sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER);
+  order_attr.format = type_from_type<INDEX_T>();
+
+  for (int i = 1; i < int(attributes.attributes.size()) - 1; i++)
   {
     std::unique_ptr<uint8_t[]> new_attr_data;
     auto &attr = attributes.attributes[i];
@@ -292,8 +307,10 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
 
     points.buffers.buffers[i].data = points.buffers.data[i].get();
   }
+  points.buffers.data.emplace_back(std::move(indecies));
+  points.buffers.buffers.emplace_back(points.buffers.data.back().get(), sizeof(INDEX_T) * count);
 
-  points.header.attributes_id = attributes_config.get_attribute_for_point_format(points.header.original_attributes_id, format, components_1);
+  points.header.attributes_id = attributes_config.get_attribute_config_index(std::move(attributes));
   points.header.point_format = std::make_pair(format, components_1);
   morton::morton_upcast(first, base_morton, points.header.morton_min);
   morton::morton_upcast(last, base_morton, points.header.morton_max);

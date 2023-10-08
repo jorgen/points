@@ -44,6 +44,7 @@
 
 #define POINTS_ATTRIBUTE_SCAN_ANGLE "scan_angle"
 #define POINTS_ATTRIBUTE_NEAR_INFRARED "near_infrared"
+#define POINTS_ATTRIBUTE_ORIGINAL_ORDER "original_order"
 
 //#define POINTS_ATTRIBUTE_RETURN_NUMBER_NUMBER_OF_RETURNES_SCAN_DIR_EDGE_OF_FLIGHT ""
 //  laszip_U8 number_of_returns : 3;
