@@ -360,8 +360,14 @@ void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_
 template <typename T>
 void convert_and_sort_resolve_index_t(const tree_global_state_t& tree_state, attributes_configs_t& attributes_configs, points_t& points, error_t& error)
 {
-  if (points.header.public_header.point_count < std::numeric_limits<uint32_t>::max())
+  if (points.header.public_header.point_count < std::numeric_limits<uint16_t>::max())
+  {
+    convert_and_sort<T, uint16_t>(tree_state, attributes_configs, points, error);
+  }
+  else if (points.header.public_header.point_count < std::numeric_limits<uint32_t>::max())
+  {
     convert_and_sort<T, uint32_t>(tree_state, attributes_configs, points, error);
+  }
   else
   {
     convert_and_sort<T, uint64_t>(tree_state, attributes_configs, points, error);
