@@ -14,6 +14,8 @@ add_executable(private_interface_unit_tests
     private/vector_updater_tests.cpp
     private/fixed_size_vector_tests.cpp
     private/converter_tests.cpp
+	private/deque_map_test.cpp
+	private/blob_manager_test.cpp
 	$<TARGET_OBJECTS:common_objects>
 	$<TARGET_OBJECTS:converter_objects>
 	$<TARGET_OBJECTS:points_render_objects>
