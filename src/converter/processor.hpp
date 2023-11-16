@@ -52,6 +52,7 @@ struct sorted_input_id_t
     return aabb_min < other.aabb_min;
   }
 };
+
 class frustum_tree_walker_t;
 class processor_t : public about_to_block_t
 {

@@ -23,58 +23,50 @@
 #include "threaded_event_loop.hpp"
 #include "worker.hpp"
 #include "attributes_configs.hpp"
+#include "deque_map.hpp"
 
 #include <memory>
 #include <unordered_map>
+#include <deque>
 
 namespace points
 {
 namespace converter
 {
 
-struct cache_file_t
+struct write_id_t
 {
-  cache_file_t(threaded_event_loop_t &event_loop, const std::string &file_name)
-    : _file_name(file_name)
-    , _uv_file(0)
-    , _event_loop(event_loop)
-  {
-  }
-  std::string _file_name;
-  uv_file _uv_file;
-  threaded_event_loop_t &_event_loop;
+  uint64_t data;
 };
 
-struct cache_file_read_request_t
+struct request_id_t
 {
-  cache_file_read_request_t(cache_file_t &cache_file, int64_t offset, int32_t size, std::function<void(std::unique_ptr<uint8_t[]> &&, error_t &&)> read_function)
-    : buffer(new uint8_t[size])
-  {
-    (void)read_function;
-    read_request.data = this;
-    uv_buffer.base = (char*) buffer.get();
-    uv_buffer.len = size;
-    uv_fs_read(cache_file._event_loop.loop(), &read_request, cache_file._uv_file, &uv_buffer, 1, offset, [](uv_fs_t *req) {
-      error_t error;
-      if (req->result < 0)
-      {
-        error.code = int(req->result);
-        error.msg = uv_strerror(int(req->result));
-      }
-      uv_fs_req_cleanup(req);
-      auto *read_request = static_cast<cache_file_read_request_t *>(req->data);
-      read_request->callback(std::move(read_request->buffer), std::move(error));
-      read_request->read_request.data = nullptr;
-    });
-  }
-  ~cache_file_read_request_t()
-  {
-  }
+  uint64_t data;
+};
 
-  std::unique_ptr<uint8_t[]> buffer;
+struct cache_entry_t
+{
+  uint64_t offset;
+  uint32_t size;
+};
+
+class cache_file_handler_t;
+
+struct cache_file_request_t
+{
+  cache_file_request_t(cache_file_handler_t &cache_file_handler);
+    
+  void do_read(request_id_t id, const std::weak_ptr<cache_file_request_t> &self, int64_t offset, int32_t size);
+  void do_write(request_id_t id, const std::weak_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, int64_t offset, int32_t size);
+  
+  cache_file_handler_t &cache_file_handler;
+ 
+  request_id_t id;
+  std::shared_ptr<uint8_t[]> buffer;
+  error_t error;
+
   uv_buf_t uv_buffer;
-  uv_fs_t read_request;
-  std::function<void(std::unique_ptr<uint8_t[]> &&, error_t &&)> callback;
+  uv_fs_t uv_request;
 };
 
 struct points_cache_item_t
@@ -90,7 +82,8 @@ public:
 
   void handle_open_cache_file(uv_fs_t *request);
 
-  void write(const storage_header_t &header, attribute_buffers_t &&buffers, attributes_id_t attributes);
+  std::vector<request_id_t> write(const storage_header_t &header, attribute_buffers_t &&buffers, std::function<void(request_id_t id, const error_t &error)> on_done);
+  request_id_t read(input_data_id_t id, int attribute_index);
 
   bool attribute_id_and_count_for_input_id(input_data_id_t input_id, attributes_id_t &attributes_id, point_count_t &count);
 
@@ -103,7 +96,8 @@ public:
   bool is_available(input_data_id_t id, int attribute_index);
 
 private:
-  void handle_write_events(std::vector<std::tuple<storage_header_t, attribute_buffers_t, attributes_id_t>> &&events);
+  void handle_write_events(std::vector<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> &&events);
+  void handle_request_done(request_id_t id);
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
 
@@ -115,7 +109,8 @@ private:
   uv_fs_t _open_request;
   event_pipe_t<error_t> &_cache_file_error;
   event_pipe_t<storage_header_t> &_write_done;
-  event_pipe_t<std::tuple<storage_header_t, attribute_buffers_t, attributes_id_t >> _write_event_pipe;
+  event_pipe_t<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> _write_event_pipe;
+
 
   struct hash_input_data_id_t
   {
@@ -135,8 +130,14 @@ private:
     attribute_buffers_t buffers;
   };
 
-  std::mutex _cache_map_mutex;
+  std::mutex _mutex;
+
+  deque_map_t<request_id_t, std::shared_ptr<cache_file_request_t>> _requests;
+
   std::unordered_map<input_data_id_t, cache_item_impl_t, hash_input_data_id_t> _cache_map;
+
+  friend struct cache_file_request_t;
+  friend static void request_done_callback(uv_fs_t *req);
 };
 
 struct read_points_t

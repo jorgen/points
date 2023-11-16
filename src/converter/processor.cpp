@@ -172,8 +172,7 @@ void processor_t::handle_sorted_points(std::vector<std::pair<points_t,error_t>> 
       source.max = event.first.header.morton_max;
 
     source.sub_count++;
-    auto attributes_id = source.attribute_id;
-    _cache_file_handler.write(event.first.header, std::move(event.first.buffers), attributes_id);
+    _cache_file_handler.write(event.first.header, std::move(event.first.buffers), [](request_id_t, const error_t &) {});
   }
 }
 

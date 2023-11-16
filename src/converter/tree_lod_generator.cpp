@@ -697,7 +697,9 @@ void lod_worker_t::work()
   destination_header.public_header.point_count = indecies.size();
   destination_header.point_format = {lod_format, components_1};
   destination_header.lod_span = data.lod;
-  cache.write(destination_header, std::move(buffers), lod_attrib_mapping.destination_id);
+  destination_header.attributes_id = lod_attrib_mapping.destination_id;
+  destination_header.original_attributes_id = lod_attrib_mapping.destination_id;
+  cache.write(destination_header, std::move(buffers), [](converter::request_id_t, const error_t &) {});
   data.generated_point_count.data = uint32_t(indecies.size());
 }
 

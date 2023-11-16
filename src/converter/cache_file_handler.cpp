@@ -26,6 +26,58 @@ namespace points
 {
 namespace converter
 {
+
+static request_id_t get_next_request_id()
+{
+  static std::atomic<uint64_t> next_id(1);
+  return request_id_t{next_id++};
+}
+
+cache_file_request_t::cache_file_request_t(cache_file_handler_t &cache_file_handler)
+  : cache_file_handler(cache_file_handler)
+  , id{0}
+{
+}
+
+static void request_done_callback(uv_fs_t *req)
+{
+  std::unique_ptr<std::weak_ptr<cache_file_request_t>> self_ptr(static_cast<std::weak_ptr<cache_file_request_t> *>(req->data));
+  auto self = self_ptr->lock();
+  if (!self)
+    return;
+  error_t error;
+  if (req->result < 0)
+  {
+    self->error.code = int(req->result);
+    self->error.msg = uv_strerror(int(req->result));
+  }
+  uv_fs_req_cleanup(req);
+  self->cache_file_handler.handle_request_done(self->id);
+}
+
+void cache_file_request_t::do_read(request_id_t request_id, const std::weak_ptr<cache_file_request_t> &self, int64_t offset, int32_t size)
+{
+  this->id = request_id;
+  auto self_ptr = new std::weak_ptr<cache_file_request_t>(self);
+  uv_request.data = self_ptr;
+  buffer = std::make_shared<uint8_t[]>(size);
+  uv_buffer.base = (char*) buffer.get();
+  uv_buffer.len = size;
+  uv_fs_read(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, offset, request_done_callback);
+
+}
+
+void cache_file_request_t::do_write(request_id_t request_id, const std::weak_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, int64_t offset, int32_t size)
+{
+  this->id = request_id;
+  auto self_ptr = new std::weak_ptr<cache_file_request_t>(self);
+  uv_request.data = self_ptr;
+  buffer = data;
+  uv_buffer.base = (char *)buffer.get();
+  uv_buffer.len = size;
+  uv_fs_write(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, offset, request_done_callback);
+}
+
 cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<storage_header_t> &write_done)
   : _cache_file_name(cache_file)
   , _state(state)
@@ -34,7 +86,8 @@ cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, con
   , _file_opened(false)
   , _cache_file_error(cache_file_error)
   , _write_done(write_done)
-  , _write_event_pipe(_event_loop, [this](std::vector<std::tuple<storage_header_t, attribute_buffers_t, attributes_id_t>> &&events){this->handle_write_events(std::move(events));})
+  , _write_event_pipe(_event_loop, [this](std::vector<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t,std::function<void(request_id_t id, const error_t &error)>>> &&events){this->handle_write_events(std::move(events));})
+  , _requests()
 {
   (void) _state;
   _open_request.data = this;
@@ -64,28 +117,50 @@ void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
   }
 }
 
-void cache_file_handler_t::write(const storage_header_t &header, attribute_buffers_t &&buffers, attributes_id_t attributes)
+std::vector<request_id_t> cache_file_handler_t::write(const storage_header_t &header, attribute_buffers_t &&buffers, std::function<void(request_id_t id, const error_t &error)> done)
 {
-  _write_event_pipe.post_event(std::make_tuple(header, std::move(buffers), attributes));
+  std::vector<request_id_t> ret;
+  ret.reserve(buffers.buffers.size());
+  for (int i = 0; i < int(buffers.buffers.size()); i++)
+  {
+    ret.push_back(get_next_request_id());
+  }
+  auto to_tuple = ret;
+  _write_event_pipe.post_event(std::make_tuple(std::move(to_tuple), header, std::move(buffers), done));
+  return ret;
+}
+  
+request_id_t cache_file_handler_t::read(input_data_id_t id, int attribute_index)
+{
+  (void)id;
+  (void)attribute_index;
+  auto read_id = get_next_request_id();
+  return read_id;
 }
 
-void cache_file_handler_t::handle_write_events(std::vector<std::tuple<storage_header_t, attribute_buffers_t, attributes_id_t>> &&events)
+void cache_file_handler_t::handle_write_events(std::vector<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> &&events)
 {
-  std::unique_lock<std::mutex> lock(_cache_map_mutex);
-  for (auto &event : events)
+  std::unique_lock<std::mutex> lock(_mutex);
+  for (auto& [request_ids, storage_header, attribute_buffers, callback] : events)
   {
-    auto &cache_item = _cache_map[std::get<0>(event).input_id];
+    auto request = std::make_shared<cache_file_request_t>(*this);
+//    request->do_write()
+//    
+    auto &cache_item = _cache_map[storage_header.input_id];
     cache_item.ref = 1;
-    cache_item.header = std::move(std::get<0>(event));
-    cache_item.buffers = std::move(std::get<1>(event));
-
+    cache_item.header = std::move(storage_header);
+    cache_item.buffers = std::move(attribute_buffers);
     _write_done.post_event(cache_item.header);
   }
+}
+void cache_file_handler_t::handle_request_done(request_id_t id)
+{
+  (void)id;
 }
 
 bool cache_file_handler_t::attribute_id_and_count_for_input_id(input_data_id_t input_id, attributes_id_t &attributes_id, point_count_t &count)
 {
-  std::unique_lock<std::mutex> lock(_cache_map_mutex);
+  std::unique_lock<std::mutex> lock(_mutex);
   auto it = _cache_map.find(input_id);
   if (it == _cache_map.end())
     return false;
@@ -97,7 +172,7 @@ bool cache_file_handler_t::attribute_id_and_count_for_input_id(input_data_id_t i
 
 points_cache_item_t cache_file_handler_t::ref_points(input_data_id_t id, int attribute_index)
 {
-  std::unique_lock<std::mutex> lock(_cache_map_mutex);
+  std::unique_lock<std::mutex> lock(_mutex);
   auto it = _cache_map.find(id);
   assert(it != _cache_map.end());
   it->second.ref++;
@@ -108,7 +183,7 @@ points_cache_item_t cache_file_handler_t::ref_points(input_data_id_t id, int att
 }
 void cache_file_handler_t::deref_points(input_data_id_t id)
 {
-  std::unique_lock<std::mutex> lock(_cache_map_mutex);
+  std::unique_lock<std::mutex> lock(_mutex);
   auto it = _cache_map.find(id);
   assert(it != _cache_map.end());
   it->second.ref--;
@@ -136,7 +211,7 @@ int cache_file_handler_t::fill_ids(uint32_t **ids, uint32_t **subs, int buffer_s
 
 bool cache_file_handler_t::is_available(input_data_id_t id, int attribute_index)
 {
-  std::unique_lock<std::mutex> lock(_cache_map_mutex);
+  std::unique_lock<std::mutex> lock(_mutex);
   auto input_data = _cache_map.find(id);
   if (input_data == _cache_map.end())
     return false; 
