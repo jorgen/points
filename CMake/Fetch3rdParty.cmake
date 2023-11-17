@@ -53,6 +53,7 @@ function(Fetch3rdParty)
   Fetch3rdParty_Package(curl      7.74.0     https://github.com/curl/curl/releases/download/curl-7_74_0/curl-7.74.0.tar.gz               SHA256=e56b3921eeb7a2951959c02db0912b5fcd5fdba5aca071da819e1accf338bbd7)
   Fetch3rdParty_Package(laszip    3.4.3      https://github.com/LASzip/LASzip/releases/download/3.4.3/laszip-src-3.4.3.tar.gz            SHA256=53f546a7f06fc969b38d1d71cceb1862b4fc2c4a0965191a0eee81a57c7b373d)
   Fetch3rdParty_Package(libmorton 0.2.10     https://github.com/Forceflow/libmorton/archive/v0.2.10.tar.gz                               SHA256=5f4a8dbf350222b0bec35ad1bee6b76fa22e16ea364e1e80ca47d8f5a7210d6f)
+  Fetch3rdParty_Package(unordered_dense 4.1.2     https://github.com/martinus/unordered_dense/archive/refs/tags/v4.1.2.tar.gz            SHA256=300410dbcd32800f83b2113dfecbdfe8cd256caa4cfeb117d646021d6e3209ae)
   Fetch3rdParty_File(stbimage  b42009b   https://raw.githubusercontent.com/nothings/stb/8b5f1f37b5b75829fc72d38e7b5d4bcbf8a26d55/stb_image.h stb_image.h SHA256=91f435e0fc6a620018b878b9859c74dff60d28046f87e649191ad6f35a98c722)
 
 

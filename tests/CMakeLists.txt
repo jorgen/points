@@ -20,7 +20,7 @@ add_executable(private_interface_unit_tests
 	$<TARGET_OBJECTS:converter_objects>
 	$<TARGET_OBJECTS:points_render_objects>
 )
-BuildExternalTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm libuv::libuv laszip::api)
+BuildExternalTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm unordered_dense libuv::libuv laszip::api)
 target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
 	#target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)

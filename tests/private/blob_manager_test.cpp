@@ -48,8 +48,8 @@ TEST_CASE("Registering blobs with no available space", "[blob_manager_t]")
 
   SECTION("Register a blob larger than any free section")
   {
-    manager.register_blob({10});
-    manager.register_blob({20});
+    auto offset1 = manager.register_blob({10});
+    auto offset2 = manager.register_blob({20});
     REQUIRE(manager.unregister_blob({0}, {10}) == true); // Unregister first blob to create a gap
     auto offset = manager.register_blob({15});
     REQUIRE(offset.data == 30); // Offset should be at the end of the first blob
@@ -88,7 +88,8 @@ TEST_CASE("Unregister blob that starts in free space", "[blob_manager_t]")
   REQUIRE(offset2.data == 10);
 
   // Create a free section
-  manager.unregister_blob(offset1, {10});
+  bool unregistered = manager.unregister_blob(offset1, {10});
+  REQUIRE(unregistered);
 
   SECTION("Unregister blob that starts in a free section")
   {
@@ -107,7 +108,8 @@ TEST_CASE("Unregister blob that ends in free space", "[blob_manager_t]")
   REQUIRE(offset3.data == 30);
 
   // Create a free section
-  manager.unregister_blob(offset2, {20});
+  bool unregistered = manager.unregister_blob(offset2, {20});
+  REQUIRE(unregistered);
 
   SECTION("Unregister blob that ends in a free section")
   {
@@ -123,8 +125,8 @@ TEST_CASE("Unregister blob that starts and ends in free space", "[blob_manager_t
   REQUIRE(offset1.data == 0);
   REQUIRE(offset2.data == 10);
 
-  // Create a free section
-  manager.unregister_blob(offset1, {10});
+  bool unregistered = manager.unregister_blob(offset1, {10});
+  REQUIRE(unregistered);
 
   SECTION("Unregister blob that encompasses a free section")
   {
@@ -145,11 +147,8 @@ TEST_CASE("Merging free spaces", "[blob_manager_t]")
     auto offset3 = manager.register_blob({20});
     REQUIRE(manager.unregister_blob(offset1, {10}) == true);
     REQUIRE(manager.unregister_blob(offset2, {20}) == true);
-    REQUIRE(manager.get_free_sections_count() == 2);
-    REQUIRE(manager.get_free_section(0).size.data + manager.get_free_section(1).size.data == 30); // Assuming that manager can retrieve a free section by index
-    manager.merge_free_sections();
     REQUIRE(manager.get_free_sections_count() == 1);
-    REQUIRE(manager.get_free_section(0).size.data == 30); // Assuming that manager can retrieve a free section by index
+    REQUIRE(manager.get_free_section(0,0).size.data == 30); // Assuming that manager can retrieve a free section by index
   }
 }
 TEST_CASE("File size decreases when the last blob is unregistered", "[blob_manager_t]")
@@ -202,13 +201,8 @@ TEST_CASE("Unregister blob should merge with adjacent free sections", "[blob_man
     // Now unregister the blob that is between two free sections
     REQUIRE(manager.unregister_blob(offset2, {20}) == true);
 
-    REQUIRE(manager.get_free_sections_count() == 3);
-
-    REQUIRE(manager.get_free_section(0).size.data + manager.get_free_section(1).size.data + manager.get_free_section(2).size.data == 60);
-    
-    manager.merge_free_sections();
     REQUIRE(manager.get_free_sections_count() == 1);
-    REQUIRE(manager.get_free_section(0).size.data == 60);
+    REQUIRE(manager.get_free_section(0, 0).size.data == 60);
   }
 }
 

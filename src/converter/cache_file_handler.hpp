@@ -24,6 +24,7 @@
 #include "worker.hpp"
 #include "attributes_configs.hpp"
 #include "deque_map.hpp"
+#include "blob_manager.hpp"
 
 #include <memory>
 #include <unordered_map>
@@ -103,6 +104,8 @@ private:
 
   const tree_global_state_t &_state;
   attributes_configs_t &_attributes_configs;
+  blob_manager_t _blob_manager;
+
   uv_file _file_handle;
   bool _file_opened;
 

@@ -16,16 +16,25 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include <iostream>
-#include <deque>
+#include <vector>
 #include <algorithm>
+#include <numeric>
 #include <fmt/core.h>  // Include the fmt library header
+#include <ankerl/unordered_dense.h>
 
 class blob_manager_t
 {
 public:
+  static constexpr uint64_t PAGE_SIZE = 100 * 1024 * 1024; // 100 MB
+  using page_t = uint64_t;
+
   struct offset_t
   {
     uint64_t data;
+    page_t page() const
+    {
+      return data / PAGE_SIZE;
+    }
     bool operator<(const offset_t &o) const
     {
       return data < o.data;
@@ -45,34 +54,39 @@ public:
   {
     offset_t offset;
     size_type_t size;
+    bool operator<(const section_t &rhs) const
+    {
+      return offset < rhs.offset;
+    }
+    page_t page() const
+    {
+      return offset.page();
+    }
   };
 
 private:
   offset_t _next_offset;
-  std::deque<section_t> _free_sections;
-  bool _needs_merging;
+  // Use ankerl::unordered_dense::map for the free sections container
+  ankerl::unordered_dense::map<page_t, std::vector<section_t>> _free_sections_by_page;
 
 public:
   blob_manager_t()
-    : _next_offset(0)
-    , _needs_merging(false)
+    : _next_offset{0}
   {
   }
-  
-  [[nodiscard]]
-  offset_t register_blob(size_type_t size)
-  {
-    if (_needs_merging)
-    {
-      merge_free_sections();
-      _needs_merging = false;
-    }
 
-    for (auto it = _free_sections.begin(); it != _free_sections.end(); ++it)
+  [[nodiscard]] offset_t register_blob(size_type_t size)
+  {
+    for (auto &[page_number, sections] : _free_sections_by_page)
     {
-      if (it->size.data >= size.data)
+      // Find a section that is big enough to hold the size requested
+      auto it = std::find_if(sections.begin(), sections.end(), [&size](const section_t &section) { return section.size.data >= size.data; });
+
+      if (it != sections.end())
       {
+        // Found a section, adjust its size or remove it if it matches exactly
         offset_t offset = it->offset;
+
         if (it->size.data > size.data)
         {
           it->offset.data += size.data;
@@ -80,112 +94,107 @@ public:
         }
         else
         {
-          _free_sections.erase(it);
+          // Erase by swapping with the last element (to avoid shifting elements)
+          std::swap(*it, sections.back());
+          sections.pop_back();
         }
+
+        // If no sections left, remove the page
+        if (sections.empty())
+        {
+          _free_sections_by_page.erase(page_number);
+        }
+
         return offset;
       }
     }
-    offset_t offset = _next_offset;
+
+    // No free section found in existing pages, allocate a new section at the end
+    offset_t new_offset = _next_offset;
     _next_offset.data += size.data;
-    return offset;
+    return new_offset;
   }
 
-  [[nodiscard]]
-  bool unregister_blob(offset_t offset, size_type_t size)
+  [[nodiscard]] bool unregister_blob(offset_t offset, size_type_t size)
   {
-    if (offset.data >= _next_offset.data || offset.data + size.data > _next_offset.data)
-    {
-      // The offset is not valid.
-      return false;
-    }
-    // Ensure we don't try to unregister a blob that starts in a free section.
-    auto it = std::lower_bound(_free_sections.begin(), _free_sections.end(), section_t{offset, size}, [](const section_t &a, const section_t &b) { return a.offset.data < b.offset.data; });
+    // Calculate the start and end page
+    page_t start_page = offset.page();
+    page_t end_page = (offset.data + size.data - 1) / PAGE_SIZE;
 
-    // If the iterator is not at the beginning and the previous section encapsulates the section to unregister, return false.
-    if (it != _free_sections.begin())
+    if (offset.data + size.data > _next_offset.data)
     {
-      auto prev_it = std::prev(it);
-      auto free_section_end = prev_it->offset.data + prev_it->size.data;
-      if (offset.data < free_section_end)
+      return false; // Trying to unregister a segment that goes beyond the allocated space
+    }
+
+    // Iterate over pages that the blob spans
+    for (page_t page = start_page; page <= end_page; ++page)
+    {
+      auto page_it = _free_sections_by_page.find(page);
+      if (page_it == _free_sections_by_page.end())
       {
-        // The blob to unregister is inside a free section.
-        return false;
+        // If the page doesn't exist, create it
+        page_it = _free_sections_by_page.emplace(page, std::vector<section_t>()).first;
       }
-    }
 
-    if (it != _free_sections.end())
-    {
-      auto free_section_start = it->offset.data;
-      auto free_section_end = it->offset.data + it->size.data;
-      auto end_offset = offset.data + size.data;
+      auto &sections = page_it->second;
+      // Find the position where the new free section should be inserted
+      auto it = std::lower_bound(sections.begin(), sections.end(), offset, [](const section_t &section, const offset_t &val) { return section.offset.data < val.data; });
 
-      // Check if the unregister section overlaps with the beginning of a free section.
-      if (offset.data < free_section_end && end_offset > free_section_start)
+      if (it != sections.begin() && (it - 1)->offset.data + (it - 1)->size.data > offset.data)
       {
-        return false;
+        return false; // Overlaps with the previous free section
       }
-    }
 
-    if (offset.data + size.data == _next_offset.data)
-    {
-      // The blob to unregister is at the end of the file.
-      _next_offset.data -= size.data;
-      if (_free_sections.size())
+      // Check for overlap with the next section, if it exists
+      if (it != sections.end() && it->offset.data < offset.data + size.data)
       {
-        auto last_free_section = _free_sections.back();
-        auto last_free_end = last_free_section.offset.data + last_free_section.size.data;
-        if (last_free_end == _next_offset.data)
+        return false; // Overlaps with the next free section
+      }
+
+      // If it's not at the beginning, try to merge with the previous section if adjacent
+      if (it != sections.begin() && (it - 1)->offset.data + (it - 1)->size.data == offset.data)
+      {
+        --it;                       // Move iterator to the previous section to merge
+        it->size.data += size.data; // Increase the size of the free section
+        offset = it->offset;        // Update the offset to the beginning of the merged section
+        // Try to merge with the next section if it is adjacent
+        auto next_it = it + 1;
+        if (next_it != sections.end() && offset.data + size.data == next_it->offset.data)
         {
-          _next_offset.data -= last_free_section.size.data;
-          _free_sections.pop_back();
+          it->size.data += next_it->size.data; // Increase the size of the free section
+          sections.erase(next_it);             // Erase the next section as it is now merged
         }
       }
-      return true;
+      else
+      {
+        // If it's at the end or sections is empty, simply append the new free section
+        sections.emplace_back(section_t{offset, size});
+        it = sections.end() - 1; // Update the iterator to point to the new element
+      }
+
+      // Remove the page if no sections left
+      if (sections.empty())
+      {
+        _free_sections_by_page.erase(page_it);
+      }
     }
 
-    // Now, we can safely unregister the blob.
-    // Assuming the offset is correct and the blob is not part of a free section, we can insert it into free sections.
-    _free_sections.insert(it, section_t{offset, size});
-    _needs_merging = true;
+    // Adjust _next_offset if the blob was at the end
+    if (offset.data + size.data == _next_offset.data)
+    {
+      _next_offset.data -= size.data;
+    }
 
     return true;
   }
 
-  //public for testing purposes
-  void merge_free_sections()
-  {
-    auto it = _free_sections.begin();
-    while (it != _free_sections.end())
-    {
-      auto next_it = std::next(it);
-      if (next_it != _free_sections.end() && it->offset.data + it->size.data == next_it->offset.data)
-      {
-        it->size.data += next_it->size.data; // Merge the two sections
-        it = _free_sections.erase(next_it) - 1;       // Remove the next section 
-      }
-      else
-      {
-        ++it; // Move to the next section
-      }
-    }
-  }
-
-  void print_status() const
-  {
-    fmt::print("Free Sections:\n");
-    for (const auto &section : _free_sections)
-    {
-      fmt::print("Offset: {}, Size: {}\n", section.offset.data, section.size.data);
-    }
-    fmt::print("Next Available Offset: {}\n", _next_offset.data);
-  }
   size_t get_free_sections_count()
   {
-    return _free_sections.size();
+    return std::accumulate(_free_sections_by_page.begin(), _free_sections_by_page.end(), size_t(0), [](size_t sum, const auto &page) { return sum + page.second.size(); });
   }
-  section_t get_free_section(size_t n)
+  section_t get_free_section(page_t page, size_t n)
   {
-    return _free_sections[n];
+    return _free_sections_by_page[page][n];
   }
 
   size_type_t get_file_size()
