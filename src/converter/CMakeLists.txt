@@ -34,6 +34,7 @@ set(private_headers
   data_source_converter.hpp
   data_source_storage.hpp
   frustum_tree_walker.hpp
+  blob_manager.cpp
   )
 
 set(sources
