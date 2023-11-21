@@ -308,9 +308,9 @@ TEST_CASE("Edge case: Unregister a blob at the boundary of two pages", "[blob_ma
     REQUIRE(manager.unregister_blob(offset2, {1}) == true);
     REQUIRE(manager.get_free_sections_count() == 1);
     REQUIRE(manager.unregister_blob(offset3, {1}) == true);
-    REQUIRE(manager.get_free_sections_count() == 2);
+    REQUIRE(manager.get_free_sections_count() == 1);
     REQUIRE(manager.unregister_blob(offset4, {1}) == true);
-    REQUIRE(manager.get_free_sections_count() == 2);
+    REQUIRE(manager.get_free_sections_count() == 1);
     REQUIRE(manager.unregister_blob(offset5, {1}) == true);
     REQUIRE(manager.get_free_sections_count() == 0);
 }
@@ -424,5 +424,47 @@ TEST_CASE("Sparse free sections on multiple pages", "[blob_manager_t]")
     REQUIRE(manager.unregister_blob(offset3, {blob_manager_t::PAGE_SIZE / 3}) == true);
     auto offset4 = manager.register_blob({blob_manager_t::PAGE_SIZE / 3}); // Should fit into the first free section
     REQUIRE(offset4.data == offset1.data);
+  }
+}
+
+TEST_CASE("Test reuse of section bigger than page size", "[blob_manager_t]") 
+{
+  blob_manager_t manager;
+
+  SECTION("Create contiguous free sections across multiple pages") {
+    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE / 2});
+    auto offset2 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+    auto offset3 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+    REQUIRE(manager.unregister_blob(offset2, {blob_manager_t::PAGE_SIZE * 3}) == true);
+    auto offset4 = manager.register_blob({blob_manager_t::PAGE_SIZE * 2});
+    auto offset5 = manager.register_blob({blob_manager_t::PAGE_SIZE / 3});
+    auto offset6 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+    
+    REQUIRE(offset4.data == offset2.data);
+    REQUIRE(manager.unregister_blob(offset3, {blob_manager_t::PAGE_SIZE * 3}) == true);
+    REQUIRE(manager.get_free_sections_count() == 1);
+  }
+}
+
+TEST_CASE("Test section merging", "[blob_manager_t]") 
+{
+  blob_manager_t manager;
+
+  SECTION("Create contiguous free sections across multiple pages doesnt ignore allocated space") {
+    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE / 2});
+    auto offset2 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+    auto offset3 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+    auto offset4 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+    auto offset5 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+    auto offset6 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+
+    REQUIRE(manager.unregister_blob(offset2, {blob_manager_t::PAGE_SIZE * 3}) == true);
+    REQUIRE(manager.unregister_blob(offset3, {blob_manager_t::PAGE_SIZE * 3}) == true);
+    REQUIRE(manager.unregister_blob(offset5, {blob_manager_t::PAGE_SIZE * 3}) == true);
+    
+    REQUIRE(manager.get_free_sections_count() == 2);
+
+    auto offset7 = manager.register_blob({blob_manager_t::PAGE_SIZE * 11});
+    REQUIRE(offset7.data > offset6.data);
   }
 }

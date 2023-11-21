@@ -65,7 +65,6 @@ public:
 
 private:
   offset_t _next_offset;
-  // Use ankerl::unordered_dense::map for the free sections container
   ankerl::unordered_dense::map<page_t, std::vector<section_t>> _free_sections_by_page;
 
 public:
