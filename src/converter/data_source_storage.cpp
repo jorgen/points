@@ -73,7 +73,7 @@ void storage_data_source_t::set_item(uint32_t id, uint32_t sub)
   callbacks.do_initialize_buffer(buffer.render_buffers[2], type_r32, points::components_4x4, sizeof(buffer.camera_view), &buffer.camera_view);
 
   buffer.render_buffers[0].rendered = true;
-  buffer.point_count = int(read_points.cache_item.header.public_header.point_count);
+  buffer.point_count = int(read_points.cache_item.header.point_count);
   buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;
   buffer.render_list[0].user_ptr = buffer.render_buffers[0].user_ptr;
   buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;

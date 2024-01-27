@@ -21,7 +21,7 @@
 #include <fmt/core.h>  // Include the fmt library header
 #include <ankerl/unordered_dense.h>
 
-class blob_manager_t
+class free_blob_manager_t
 {
 public:
   static constexpr uint64_t PAGE_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -68,7 +68,7 @@ private:
   ankerl::unordered_dense::map<page_t, std::vector<section_t>> _free_sections_by_page;
 
 public:
-  blob_manager_t();
+  free_blob_manager_t();
 
   [[nodiscard]] offset_t register_blob(size_type_t size);
   [[nodiscard]] bool unregister_blob(offset_t original_offset, size_type_t size);

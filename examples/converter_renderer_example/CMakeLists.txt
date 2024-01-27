@@ -10,8 +10,8 @@ configure_file(${imgui_SOURCE_DIR}/misc/fonts/ProggyClean.ttf ${CMAKE_CURRENT_SO
 configure_file(${imgui_SOURCE_DIR}/misc/fonts/ProggyTiny.ttf ${CMAKE_CURRENT_SOURCE_DIR}/fonts/ProggyTiny.ttf COPYONLY)
 configure_file(${imgui_SOURCE_DIR}/misc/fonts/Roboto-Medium.ttf ${CMAKE_CURRENT_SOURCE_DIR}/fonts/Roboto-Medium.ttf COPYONLY)
 
-add_executable(frustum
-  frustum.cpp
+add_executable(converter_renderer_example
+  converter_renderer_example.cpp
   gl_renderer.cpp
   gl_renderer.h
   glad.c
@@ -24,8 +24,8 @@ add_executable(frustum
   ${imgui_SOURCE_DIR}/examples/imgui_impl_opengl3.cpp
   )
 
-target_include_directories(frustum PRIVATE include ${imgui_SOURCE_DIR})
-cmrc_add_resource_library(frustum_shaders ALIAS frustum::shaders NAMESPACE shaders
+target_include_directories(converter_renderer_example PRIVATE include ${imgui_SOURCE_DIR})
+cmrc_add_resource_library(converter_renderer_example_shaders ALIAS converter_renderer_example::shaders NAMESPACE shaders
   shaders/aabb.frag
   shaders/aabb.vert
   shaders/skybox.frag
@@ -35,7 +35,7 @@ cmrc_add_resource_library(frustum_shaders ALIAS frustum::shaders NAMESPACE shade
   shaders/dynpoints.frag
   shaders/dynpoints.vert
   )
-cmrc_add_resource_library(frustum_fonts   ALIAS frustum::fonts NAMESPACE fonts
+cmrc_add_resource_library(converter_renderer_example_fonts   ALIAS converter_renderer_example::fonts NAMESPACE fonts
  fonts/Cousine-Regular.ttf
  fonts/DroidSans.ttf
  fonts/Karla-Regular.ttf
@@ -44,7 +44,7 @@ cmrc_add_resource_library(frustum_fonts   ALIAS frustum::fonts NAMESPACE fonts
  fonts/Roboto-Medium.ttf
 )
 
-cmrc_add_resource_library(frustum_textures ALIAS frustum::textures NAMESPACE textures
+cmrc_add_resource_library(converter_renderer_example_textures ALIAS converter_renderer_example::textures NAMESPACE textures
   textures/back.jpg
   textures/bottom.jpg
   textures/front.jpg
@@ -53,6 +53,6 @@ cmrc_add_resource_library(frustum_textures ALIAS frustum::textures NAMESPACE tex
   textures/top.jpg
   )
 
-BuildExternalTargetLinkLibrary(frustum PRIVATE points_render converter fmt glm OpenGL::GL frustum::shaders frustum::fonts frustum::textures SDL2::SDL2 SDL2::SDL2main)
-copy_dll_for_target(frustum points_render converter SDL2::SDL2)
-setWarningFlagsForTarget(frustum)
+BuildExternalTargetLinkLibrary(converter_renderer_example PRIVATE points_render converter fmt glm OpenGL::GL converter_renderer_example::shaders converter_renderer_example::fonts converter_renderer_example::textures SDL2::SDL2 SDL2::SDL2main)
+copy_dll_for_target(converter_renderer_example points_render converter SDL2::SDL2)
+setWarningFlagsForTarget(converter_renderer_example)

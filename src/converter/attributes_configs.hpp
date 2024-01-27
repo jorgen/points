@@ -29,11 +29,6 @@ namespace points
 namespace converter
 {
 
-struct attributes_extra_info_t
-{
-  bool is_accumulative;
-};
-
 struct attribute_source_lod_into_t
 {
   int source_index;

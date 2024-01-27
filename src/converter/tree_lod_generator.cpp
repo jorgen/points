@@ -691,14 +691,13 @@ void lod_worker_t::work()
   destination_header.morton_min = data.node_min;
   destination_header.morton_max = morton::morton_or(data.node_min, morton::morton_mask_create<uint64_t, 3>(data.lod));
 
-  if (indecies.empty())
-    fmt::print(stderr, "Should not happend\n");
+  assert(!indecies.empty());
+  
   attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, indecies.size());
-  destination_header.public_header.point_count = indecies.size();
+  destination_header.point_count = indecies.size();
   destination_header.point_format = {lod_format, components_1};
   destination_header.lod_span = data.lod;
   destination_header.attributes_id = lod_attrib_mapping.destination_id;
-  destination_header.original_attributes_id = lod_attrib_mapping.destination_id;
   cache.write(destination_header, std::move(buffers), [](converter::request_id_t, const error_t &) {});
   data.generated_point_count.data = uint32_t(indecies.size());
 }

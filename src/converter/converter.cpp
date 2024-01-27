@@ -52,15 +52,16 @@ void converter_add_runtime_callbacks(converter_t *converter, converter_runtime_c
 
 void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count)
 {
-  std::vector<input_data_source_t> input_files;
+  std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> input_files;
+  input_files.reserve(buffer_count);
   for (uint32_t i = 0; i < buffer_count; i++)
   {
     input_files.emplace_back();
     auto &input_data_source = input_files.back();
-    input_data_source.name.reset(new char[buffers[i].size + 1]);
-    memcpy(input_data_source.name.get(), buffers[i].data, buffers[i].size);
-    input_data_source.name_length = buffers[i].size;
-    input_data_source.name[buffers[i].size] = 0;
+    input_data_source.first.reset(new char[buffers[i].size + 1]);
+    memcpy(input_data_source.first.get(), buffers[i].data, buffers[i].size);
+    input_data_source.first.get()[buffers[i].size] = 0;
+    input_data_source.second = buffers[i].size;
   }
   converter->processor.add_files(std::move(input_files));
 }

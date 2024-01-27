@@ -210,27 +210,27 @@ static void reorder_buffer(uint64_t count, const INDEX_T *indecies_begin, std::p
 }
 
 template <typename T, typename INDEX_T, typename MT, size_t C>
-void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_configs_t &attributes_config, points_t &points, double smallest_scale, type_t format, error_t &error)
+void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_configs_t &attributes_config, const header_t &public_header, points_t &points, double smallest_scale, type_t format, error_t &error)
 {
   (void)error;
   auto &header = points.header;
-  uint64_t count = header.public_header.point_count;
+  uint64_t count = header.point_count;
   uint64_t buffer_size = sizeof(morton::morton_t<MT,C>) * count;
   std::unique_ptr<uint8_t[]> world_morton_unique_ptr(new uint8_t[buffer_size]);
   morton::morton_t<MT,C> *morton_begin = reinterpret_cast<morton::morton_t<MT,C>*>(world_morton_unique_ptr.get());
   uint64_t tmp[3];
   const vec_t<T> *point_data = reinterpret_cast<const vec_t<T>*>(points.buffers.buffers[0].data);
 
-  bool scale_is_same = smallest_scale == header.public_header.scale[0] && smallest_scale == header.public_header.scale[1] && smallest_scale == header.public_header.scale[2];
+  bool scale_is_same = smallest_scale == public_header.scale[0] && smallest_scale == public_header.scale[1] && smallest_scale == public_header.scale[2];
 
   if (scale_is_same)
   {
     double inv_scale = 1 / smallest_scale;
 
     int64_t local_offset_diff[3];
-    local_offset_diff[0] = -int64_t(header.public_header.offset[0] * inv_scale) + int64_t(tree_state.offset[0] * inv_scale);
-    local_offset_diff[1] = -int64_t(header.public_header.offset[1] * inv_scale) + int64_t(tree_state.offset[1] * inv_scale);
-    local_offset_diff[2] = -int64_t(header.public_header.offset[2] * inv_scale) + int64_t(tree_state.offset[2] * inv_scale);
+    local_offset_diff[0] = -int64_t(public_header.offset[0] * inv_scale) + int64_t(tree_state.offset[0] * inv_scale);
+    local_offset_diff[1] = -int64_t(public_header.offset[1] * inv_scale) + int64_t(tree_state.offset[1] * inv_scale);
+    local_offset_diff[2] = -int64_t(public_header.offset[2] * inv_scale) + int64_t(tree_state.offset[2] * inv_scale);
 
     for (uint64_t i = 0; i < count; i++)
     {
@@ -247,9 +247,9 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
     for (uint64_t i = 0; i < count; i++)
     {
       auto &point = point_data[i];
-      tmp[0] = int64_t((double(point.data[0] * header.public_header.scale[0]) + header.public_header.offset[0] - tree_state.offset[0]) * inv_scale);
-      tmp[1] = int64_t((double(point.data[1] * header.public_header.scale[1]) + header.public_header.offset[1] - tree_state.offset[1]) * inv_scale);
-      tmp[2] = int64_t((double(point.data[2] * header.public_header.scale[2]) + header.public_header.offset[2] - tree_state.offset[2]) * inv_scale);
+      tmp[0] = int64_t((double(point.data[0] * public_header.scale[0]) + public_header.offset[0] - tree_state.offset[0]) * inv_scale);
+      tmp[1] = int64_t((double(point.data[1] * public_header.scale[1]) + public_header.offset[1] - tree_state.offset[1]) * inv_scale);
+      tmp[2] = int64_t((double(point.data[2] * public_header.scale[2]) + public_header.offset[2] - tree_state.offset[2]) * inv_scale);
       morton::encode(tmp, morton_begin[i]);
     }
 
@@ -294,9 +294,8 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
   points.buffers.data[0] = std::move(world_morton_unique_ptr);
   points.buffers.buffers[0].data = points.buffers.data[0].get();
   points.buffers.buffers[0].size = buffer_size;
-  points.header.original_attributes_id = points.header.attributes_id;
 
-  auto &orig_attributes = attributes_config.get(points.header.original_attributes_id);
+  auto &orig_attributes = attributes_config.get(points.header.attributes_id);
   attributes_t attributes;
   attributes_copy(orig_attributes, attributes);
   attributes.attributes[0].format = format;
@@ -332,7 +331,7 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
 }
 
 template <typename T, typename INDEX_T>
-void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, points_t &points, error_t &error)
+void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
 {
   auto &header = points.header;
 
@@ -348,13 +347,13 @@ void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_
   convert_morton_to_pos(smallest_scale, tree_state.offset, global_max, global_max_pos);
 
   type_t target_format;
-  if (header.public_header.min[0] == -std::numeric_limits<double>::max() && header.public_header.min[1] == -std::numeric_limits<double>::max() && header.public_header.min[2] == -std::numeric_limits<double>::max()
-               && header.public_header.max[0] == std::numeric_limits<double>::max() && header.public_header.min[1] == std::numeric_limits<double>::max() && header.public_header.min[2] == std::numeric_limits<double>::max())
+  if (public_header.min[0] == -std::numeric_limits<double>::max() && public_header.min[1] == -std::numeric_limits<double>::max() && public_header.min[2] == -std::numeric_limits<double>::max()
+               && public_header.max[0] == std::numeric_limits<double>::max() && public_header.min[1] == std::numeric_limits<double>::max() && public_header.min[2] == std::numeric_limits<double>::max())
   {
     target_format = type_t::type_m192;
   }
-  else if (header.public_header.min[0] < global_min_pos[0] || header.public_header.min[1] < global_min_pos[1] || header.public_header.min[2] < global_min_pos[2]
-    || global_max_pos[0] < header.public_header.max[0] || global_max_pos[1] < header.public_header.max[1] || global_max_pos[2] < header.public_header.max[2])
+  else if (public_header.min[0] < global_min_pos[0] || public_header.min[1] < global_min_pos[1] || public_header.min[2] < global_min_pos[2]
+    || global_max_pos[0] < public_header.max[0] || global_max_pos[1] < public_header.max[1] || global_max_pos[2] < public_header.max[2])
   {
     error.msg = "Data for is outside the dataset range.";
     error.code = -1;
@@ -362,8 +361,8 @@ void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_
   }
   else
   {
-    convert_pos_to_morton(smallest_scale, tree_state.offset, header.public_header.min,  header.morton_min);
-    convert_pos_to_morton(smallest_scale, tree_state.offset, header.public_header.max,  header.morton_max);
+    convert_pos_to_morton(smallest_scale, tree_state.offset, public_header.min,  header.morton_min);
+    convert_pos_to_morton(smallest_scale, tree_state.offset, public_header.max,  header.morton_max);
     int lod = morton::morton_lod(header.morton_min, header.morton_max);
     target_format = morton_format_from_lod(lod);
   }
@@ -371,16 +370,16 @@ void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_
   switch (target_format)
   {
     case type_m32:
-      convert_and_sort_morton<T, INDEX_T, uint32_t, 1>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, INDEX_T, uint32_t, 1>(tree_state, attributes_configs, public_header, points, smallest_scale, target_format, error);
     break;
     case type_m64:
-      convert_and_sort_morton<T, INDEX_T, uint64_t, 1>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, INDEX_T, uint64_t, 1>(tree_state, attributes_configs, public_header, points, smallest_scale, target_format, error);
     break;
     case type_m128:
-      convert_and_sort_morton<T, INDEX_T, uint64_t, 2>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, INDEX_T, uint64_t, 2>(tree_state, attributes_configs, public_header, points, smallest_scale, target_format, error);
     break;
   case type_m192:
-      convert_and_sort_morton<T, INDEX_T, uint64_t, 3>(tree_state, attributes_configs, points, smallest_scale, target_format, error);
+      convert_and_sort_morton<T, INDEX_T, uint64_t, 3>(tree_state, attributes_configs, public_header, points, smallest_scale, target_format, error);
     break;
   default:
     assert(false);
@@ -389,29 +388,29 @@ void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_
 }
 
 template <typename T>
-void convert_and_sort_resolve_index_t(const tree_global_state_t& tree_state, attributes_configs_t& attributes_configs, points_t& points, error_t& error)
+void convert_and_sort_resolve_index_t(const tree_global_state_t& tree_state, attributes_configs_t& attributes_configs, const header_t &public_header, points_t& points, error_t& error)
 {
-  if (points.header.public_header.point_count < std::numeric_limits<uint16_t>::max())
+  if (points.header.point_count < std::numeric_limits<uint16_t>::max())
   {
-    convert_and_sort<T, uint16_t>(tree_state, attributes_configs, points, error);
+    convert_and_sort<T, uint16_t>(tree_state, attributes_configs, public_header, points, error);
   }
-  else if (points.header.public_header.point_count < std::numeric_limits<uint32_t>::max())
+  else if (points.header.point_count < std::numeric_limits<uint32_t>::max())
   {
-    convert_and_sort<T, uint32_t>(tree_state, attributes_configs, points, error);
+    convert_and_sort<T, uint32_t>(tree_state, attributes_configs, public_header, points, error);
   }
   else
   {
-    convert_and_sort<T, uint64_t>(tree_state, attributes_configs, points, error);
+    convert_and_sort<T, uint64_t>(tree_state, attributes_configs, public_header, points, error);
   }
 }
 
-void sort_points(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, points_t &points, error_t &error)
+void sort_points(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
 {
   auto point_format = attributes_configs.get_point_format(points.header.attributes_id);
   switch (point_format.first)
   {
   case type_i32:
-    convert_and_sort_resolve_index_t<int32_t>(tree_state, attributes_configs, points, error);
+    convert_and_sort_resolve_index_t<int32_t>(tree_state, attributes_configs, public_header, points, error);
     break;
   default:
     assert(false);

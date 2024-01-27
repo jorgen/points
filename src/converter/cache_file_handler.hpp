@@ -25,6 +25,7 @@
 #include "attributes_configs.hpp"
 #include "deque_map.hpp"
 #include "blob_manager.hpp"
+#include <ankerl/unordered_dense.h>
 
 #include <memory>
 #include <unordered_map>
@@ -79,7 +80,7 @@ struct points_cache_item_t
 class cache_file_handler_t
 {
 public:
-  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<storage_header_t> &write_done);
+  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_single_t<error_t> &cache_file_error, event_pipe_single_t<storage_header_t> &write_done);
 
   void handle_open_cache_file(uv_fs_t *request);
 
@@ -97,22 +98,46 @@ public:
   bool is_available(input_data_id_t id, int attribute_index);
 
 private:
-  void handle_write_events(std::vector<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> &&events);
+  void handle_write_events(std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>> &&event);
   void handle_request_done(request_id_t id);
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
 
   const tree_global_state_t &_state;
   attributes_configs_t &_attributes_configs;
-  blob_manager_t _blob_manager;
+  free_blob_manager_t _blob_manager;
+  struct attribute_index_t
+  {
+    int data;
+  };
+  
+  [[nodiscard]] inline auto hash(std::pair<input_data_id_t, attribute_index_t> x) -> uint64_t
+  {
+    using namespace ankerl::unordered_dense::detail;
+    uint64_t input;
+    memcpy(&input, &x.first, sizeof(input));
+    return wyhash::hash(wyhash::mix(input, uint64_t(x.second.data)));
+  }
+  struct hash_input_id_attribute_index_t
+  {
+    inline uint64_t operator()(const std::pair<input_data_id_t, attribute_index_t> &x) const
+    {
+      using namespace ankerl::unordered_dense::detail;
+      uint64_t input;
+      memcpy(&input, &x.first, sizeof(input));
+      return wyhash::hash(wyhash::mix(input, uint64_t(x.second.data)));
+    }
+  };
+
+  ankerl::unordered_dense::map<std::pair<input_data_id_t, attribute_index_t>, cache_entry_t, hash_input_id_attribute_index_t> _cache_entries;
 
   uv_file _file_handle;
   bool _file_opened;
 
   uv_fs_t _open_request;
-  event_pipe_t<error_t> &_cache_file_error;
-  event_pipe_t<storage_header_t> &_write_done;
-  event_pipe_t<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> _write_event_pipe;
+  event_pipe_single_t<error_t> &_cache_file_error;
+  event_pipe_single_t<storage_header_t> &_write_done;
+  event_pipe_single_t<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> _write_event_pipe;
 
 
   struct hash_input_data_id_t

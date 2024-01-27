@@ -34,7 +34,7 @@ set(private_headers
   data_source_converter.hpp
   data_source_storage.hpp
   frustum_tree_walker.hpp
-  blob_manager.cpp
+  input_data_source_registry.hpp
   )
 
 set(sources
@@ -54,9 +54,11 @@ set(sources
   data_source_storage.cpp
   data_source_converter.cpp
   frustum_tree_walker.cpp
+  blob_manager.cpp
+  input_data_source_registry.cpp
   )
 
-add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
+add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources} )
 target_link_libraries(converter_objects PRIVATE fmt glm unordered_dense points_render common)
 BuildExternalTargetLinkLibrary(converter_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
 target_include_directories(converter_objects

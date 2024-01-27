@@ -134,7 +134,7 @@ static void add_subset_to_child(input_data_id_t input_id, offset_t offset, point
 template<typename T, size_t C>
 void point_buffer_subdivide_type(const tree_global_state_t &state, const read_points_t &points, const points_subset_t &subset, int lod, const morton::morton192_t &node_min, points_collection_t (&children)[8])
 {
-  assert(points.data.size / sizeof(morton::morton_t<T,C>) == points.header.public_header.point_count);
+  assert(points.data.size / sizeof(morton::morton_t<T,C>) == points.header.point_count);
   const morton::morton_t<T,C>*morton_begin = static_cast<const morton::morton_t<T,C>*>(points.data.data) + subset.offset.data;
   const morton::morton_t<T,C>*morton_end = morton_begin + subset.count.data;
   const morton::morton_t<T,C>*morton_current_start = morton_begin;
@@ -155,9 +155,9 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
   if (lod * 3 + 3 > int(sizeof(T) * 8 * C))
   {
     auto child = morton::morton_get_child_mask(lod, points.header.morton_min);
-    assert(uint32_t(points.header.public_header.point_count) == subset.count.data);
+    assert(uint32_t(points.header.point_count) == subset.count.data);
     assert(child < 8);
-    add_subset_to_child(points.id, offset_t(0), point_count_t(uint32_t(points.header.public_header.point_count)), points.header.morton_min, points.header.morton_max, children[child]);
+    add_subset_to_child(points.id, offset_t(0), point_count_t(uint32_t(points.header.point_count)), points.header.morton_min, points.header.morton_max, children[child]);
   }
   else
   {

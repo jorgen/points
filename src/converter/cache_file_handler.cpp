@@ -82,7 +82,7 @@ void cache_file_request_t::do_write(request_id_t request_id, const std::weak_ptr
   uv_fs_write(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, offset, request_done_callback);
 }
 
-cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<storage_header_t> &write_done)
+cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_single_t<error_t> &cache_file_error, event_pipe_single_t<storage_header_t> &write_done)
   : _cache_file_name(cache_file)
   , _state(state)
   , _attributes_configs(attributes_configs)
@@ -90,7 +90,7 @@ cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, con
   , _file_opened(false)
   , _cache_file_error(cache_file_error)
   , _write_done(write_done)
-  , _write_event_pipe(_event_loop, [this](std::vector<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t,std::function<void(request_id_t id, const error_t &error)>>> &&events){this->handle_write_events(std::move(events));})
+  , _write_event_pipe(_event_loop, [this](std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t,std::function<void(request_id_t id, const error_t &error)>> &&event){this->handle_write_events(std::move(event));})
   , _requests()
 {
   (void) _state;
@@ -142,20 +142,20 @@ request_id_t cache_file_handler_t::read(input_data_id_t id, int attribute_index)
   return read_id;
 }
 
-void cache_file_handler_t::handle_write_events(std::vector<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> &&events)
+void cache_file_handler_t::handle_write_events(std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>> &&event)
 {
+  auto &storage_header = std::get<1>(event);
+  auto &attribute_buffers = std::get<2>(event);
   std::unique_lock<std::mutex> lock(_mutex);
-  for (auto& [request_ids, storage_header, attribute_buffers, callback] : events)
-  {
-    auto request = std::make_shared<cache_file_request_t>(*this);
-//    request->do_write()
-//    
-    auto &cache_item = _cache_map[storage_header.input_id];
-    cache_item.ref = 1;
-    cache_item.header = std::move(storage_header);
-    cache_item.buffers = std::move(attribute_buffers);
-    _write_done.post_event(cache_item.header);
-  }
+  auto request = std::make_shared<cache_file_request_t>(*this);
+  auto &cache_item = _cache_map[storage_header.input_id];
+  cache_item.ref = 1;
+  cache_item.header = std::move(storage_header);
+  cache_item.buffers = std::move(attribute_buffers);
+
+
+
+  _write_done.post_event(cache_item.header);
 }
 void cache_file_handler_t::handle_request_done(request_id_t id)
 {
@@ -170,7 +170,7 @@ bool cache_file_handler_t::attribute_id_and_count_for_input_id(input_data_id_t i
     return false;
 
   attributes_id = it->second.attribute_id;
-  count.data = uint32_t(it->second.header.public_header.point_count);
+  count.data = uint32_t(it->second.header.point_count);
   return true;
 }
 

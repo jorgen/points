@@ -29,7 +29,7 @@ class frustum_tree_walker_t;
 class tree_handler_t : public about_to_block_t
 {
 public:
-  tree_handler_t(const tree_global_state_t &global_state, cache_file_handler_t &file_cache, attributes_configs_t &attributrs_configs, event_pipe_t<input_data_id_t> &done_input);
+  tree_handler_t(const tree_global_state_t &global_state, cache_file_handler_t &file_cache, attributes_configs_t &attributrs_configs, event_pipe_single_t<input_data_id_t> &done_input);
 
   void about_to_block() override;
 
@@ -37,8 +37,8 @@ public:
   void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
   void generate_lod(morton::morton192_t &min);
 private:
-  void handle_add_points(std::vector<storage_header_t> &&events);
-  void handle_walk_tree(std::vector<std::shared_ptr<frustum_tree_walker_t>> &&events);
+  void handle_add_points(storage_header_t &&events);
+  void handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&events);
   threaded_event_loop_t _event_loop;
   bool _initialized;
 
@@ -51,9 +51,9 @@ private:
 
   tree_lod_generator_t _tree_lod_generator;
 
-  event_pipe_t<storage_header_t> _add_points;
-  event_pipe_t<std::shared_ptr<frustum_tree_walker_t>> _walk_tree;
-  event_pipe_t<input_data_id_t> &_done_with_input;
+  event_pipe_single_t<storage_header_t> _add_points;
+  event_pipe_single_t<std::shared_ptr<frustum_tree_walker_t>> _walk_tree;
+  event_pipe_single_t<input_data_id_t> &_done_with_input;
 };
 
 }

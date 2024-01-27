@@ -69,31 +69,6 @@ inline int size_for_format(std::pair<type_t, components_t> format)
   return size_for_format(format.first) * (int)format.second;
 }
 
-template<typename T, size_t C>
-void header_p_set_min_max(storage_header_t &header, const morton::morton_t<T, C> *begin, const morton::morton_t<T, C> *end)
-{
-  uint64_t final_min[3];
-  uint64_t final_max[3];
-  morton::decode(*begin, final_min);
-  morton::decode(*(end - 1),final_max);
-  header.public_header.min[0] = final_min[0] * header.public_header.scale[0] + header.public_header.offset[0];
-  header.public_header.min[1] = final_min[1] * header.public_header.scale[1] + header.public_header.offset[1];
-  header.public_header.min[2] = final_min[2] * header.public_header.scale[2] + header.public_header.offset[2];
-  
-  header.public_header.max[0] = final_max[0] * header.public_header.scale[0] + header.public_header.offset[0];
-  header.public_header.max[1] = final_max[1] * header.public_header.scale[1] + header.public_header.offset[1];
-  header.public_header.max[2] = final_max[2] * header.public_header.scale[2] + header.public_header.offset[2];
-}
-
-void header_p_set_morton_aabb(const tree_global_state_t &state, storage_header_t &header);
-
-template<typename T, size_t C>
-void header_p_adjust_to_sorted_data(const tree_global_state_t &state, storage_header_t &header, const morton::morton_t<T, C> *begin, const morton::morton_t<T,C> *end)
-{
-  header_p_set_min_max(header, begin, end);
-  header_p_set_morton_aabb(state, header);
-}
-
 void attribute_buffers_initialize(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count);
 void attribute_buffers_initialize(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count, std::unique_ptr<uint8_t[]> && morton_attribute_buffer);
 void attribute_buffers_adjust_buffers_to_size(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count);

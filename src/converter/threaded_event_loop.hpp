@@ -35,6 +35,12 @@ class about_to_block_t
 {
 public:
   virtual void about_to_block() = 0;
+
+  template<typename Ret, typename Class, typename... Args>
+  auto bind(Ret (Class::*f)(Args...))
+  {
+    return [this, f](Args... args) { return ((*static_cast<Class *>(this)).*f)(std::move(args)...); };
+  }
 };
 
 class threaded_event_loop_t
@@ -88,6 +94,13 @@ public:
 
   template<typename T>
   void add_event_pipe(event_pipe_t<T> &event_pipe)
+  {
+    std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
+    _add_pipe.post_event(func);
+  }
+  
+  template<typename T>
+  void add_event_pipe(event_pipe_single_t<T> &event_pipe)
   {
     std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
     _add_pipe.post_event(func);

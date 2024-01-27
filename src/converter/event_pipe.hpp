@@ -27,6 +27,103 @@ namespace points
 namespace converter
 {
 template <typename T>
+class event_pipe_single_t
+{
+public:
+  template<typename EventLoop>
+  event_pipe_single_t(EventLoop &eventLoop, std::function<void(T &&event)> event_callback)
+    : event_callback(event_callback)
+  {
+    pipe.data = this;
+    eventLoop.add_event_pipe(*this);
+  }
+  
+  event_pipe_single_t(std::function<void(T &&event)> event_callback)
+    : event_callback(event_callback)
+  {
+    pipe.data = this;
+  }
+
+  uv_handle_t *initialize_in_loop(uv_loop_t *loop)
+  {
+    auto on_event = [](uv_async_t *handle) {
+      event_pipe_single_t *event_pipe = static_cast<event_pipe_single_t*>(handle->data);
+      std::vector<T> event_vec;
+      event_pipe->swap_events(event_vec);
+      for (auto &event : event_vec)
+        event_pipe->event_callback(std::move(event));
+    };
+    uv_async_init(loop, &pipe, on_event);
+
+    return (uv_handle_t *)&pipe;
+  }
+
+  void post_event(const T &t)
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    events.push_back(t);
+    uv_async_send(&pipe);
+  }
+
+  void post_event(T &&t)
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    events.push_back(std::move(t));
+    uv_async_send(&pipe);
+  }
+
+  void swap_events(std::vector<T> &to_swap)
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    std::swap(events, to_swap);
+    events.reserve(to_swap.capacity());
+  }
+
+private:
+  std::function<void(T &&event)> event_callback;
+  std::vector<T> events;
+  uv_async_t pipe;
+  std::mutex mutex;
+};
+template <>
+class event_pipe_single_t<void>
+{
+public:
+  template<typename EventLoop>
+  event_pipe_single_t(EventLoop &eventLoop, std::function<void()> event_callback)
+    : event_callback(event_callback)
+  {
+    pipe.data = this;
+    eventLoop.add_event_pipe(*this);
+  }
+  
+  event_pipe_single_t(std::function<void()> event_callback)
+    : event_callback(event_callback)
+  {
+    pipe.data = this;
+  }
+
+  uv_handle_t *initialize_in_loop(uv_loop_t *loop)
+  {
+    auto on_event = [](uv_async_t *handle) {
+      event_pipe_single_t *event_pipe = static_cast<event_pipe_single_t*>(handle->data);
+      event_pipe->event_callback();
+    };
+    uv_async_init(loop, &pipe, on_event);
+
+    return (uv_handle_t *)&pipe;
+  }
+
+  void post_event()
+  {
+    uv_async_send(&pipe);
+  }
+
+private:
+  std::function<void()> event_callback;
+  uv_async_t pipe;
+};
+template <typename T>
 class event_pipe_t
 {
 public:

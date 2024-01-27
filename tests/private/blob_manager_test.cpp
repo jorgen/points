@@ -3,7 +3,7 @@
 
 TEST_CASE("Blob registration", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Register a single blob")
   {
@@ -22,7 +22,7 @@ TEST_CASE("Blob registration", "[blob_manager_t]")
 
 TEST_CASE("Blob unregistration and reuse of space", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
   auto offset1 = manager.register_blob({10});
   auto offset2 = manager.register_blob({20});
 
@@ -44,7 +44,7 @@ TEST_CASE("Blob unregistration and reuse of space", "[blob_manager_t]")
 
 TEST_CASE("Registering blobs with no available space", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Register a blob larger than any free section")
   {
@@ -58,7 +58,7 @@ TEST_CASE("Registering blobs with no available space", "[blob_manager_t]")
 
 TEST_CASE("Incorrect unregistration", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Unregister a blob that was not registered")
   {
@@ -68,7 +68,7 @@ TEST_CASE("Incorrect unregistration", "[blob_manager_t]")
 
 TEST_CASE("Unregister blob with end outside file size", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
   auto offset = manager.register_blob({50});
   REQUIRE(offset.data == 0); // Assuming initial file size is zero
 
@@ -81,7 +81,7 @@ TEST_CASE("Unregister blob with end outside file size", "[blob_manager_t]")
 
 TEST_CASE("Unregister blob that starts in free space", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
   auto offset1 = manager.register_blob({10});
   auto offset2 = manager.register_blob({20});
   REQUIRE(offset1.data == 0);
@@ -99,7 +99,7 @@ TEST_CASE("Unregister blob that starts in free space", "[blob_manager_t]")
 
 TEST_CASE("Unregister blob that ends in free space", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
   auto offset1 = manager.register_blob({10});
   auto offset2 = manager.register_blob({20});
   auto offset3 = manager.register_blob({30});
@@ -119,7 +119,7 @@ TEST_CASE("Unregister blob that ends in free space", "[blob_manager_t]")
 
 TEST_CASE("Unregister blob that starts and ends in free space", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
   auto offset1 = manager.register_blob({10});
   auto offset2 = manager.register_blob({20});
   REQUIRE(offset1.data == 0);
@@ -138,7 +138,7 @@ TEST_CASE("Unregister blob that starts and ends in free space", "[blob_manager_t
 
 TEST_CASE("Merging free spaces", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Unregister and merge adjacent blobs")
   {
@@ -153,7 +153,7 @@ TEST_CASE("Merging free spaces", "[blob_manager_t]")
 }
 TEST_CASE("File size decreases when the last blob is unregistered", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
   auto initial_size = manager.get_file_size(); // Assuming this method exists
 
   SECTION("Register and unregister blobs at the end")
@@ -182,7 +182,7 @@ TEST_CASE("File size decreases when the last blob is unregistered", "[blob_manag
 
 TEST_CASE("Unregister blob should merge with adjacent free sections", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   // Register and then unregister multiple blobs to create non-contiguous free sections.
   auto offset1 = manager.register_blob({10});
@@ -208,7 +208,7 @@ TEST_CASE("Unregister blob should merge with adjacent free sections", "[blob_man
 
 TEST_CASE("Unregistering blob overlapping with free section should fail", "[blob_manager_t]")
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   // Register blobs to set up the test.
   auto offset1 = manager.register_blob({10});
@@ -247,63 +247,63 @@ TEST_CASE("Unregistering blob overlapping with free section should fail", "[blob
 }
 
 TEST_CASE("Register blobs that fit within a single page", "[blob_manager_t]") {
-    blob_manager_t manager;
+    free_blob_manager_t manager;
 
     // Assuming PAGE_SIZE is large enough for these blobs.
-    REQUIRE_NOTHROW(manager.register_blob({blob_manager_t::PAGE_SIZE / 4}));
-    REQUIRE_NOTHROW(manager.register_blob({blob_manager_t::PAGE_SIZE / 4}));
-    REQUIRE_NOTHROW(manager.register_blob({blob_manager_t::PAGE_SIZE / 4}));
-    REQUIRE_NOTHROW(manager.register_blob({blob_manager_t::PAGE_SIZE / 4}));
+    REQUIRE_NOTHROW(manager.register_blob({free_blob_manager_t::PAGE_SIZE / 4}));
+    REQUIRE_NOTHROW(manager.register_blob({free_blob_manager_t::PAGE_SIZE / 4}));
+    REQUIRE_NOTHROW(manager.register_blob({free_blob_manager_t::PAGE_SIZE / 4}));
+    REQUIRE_NOTHROW(manager.register_blob({free_blob_manager_t::PAGE_SIZE / 4}));
 
     REQUIRE(manager.get_free_sections_count() == 0); // No unregistration has happened yet.
 }
 
 TEST_CASE("Register and unregister blobs causing overflow on pages", "[blob_manager_t]") {
-    blob_manager_t manager;
+    free_blob_manager_t manager;
 
-    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE - 1});
+    auto offset1 = manager.register_blob({free_blob_manager_t::PAGE_SIZE - 1});
     auto offset2 = manager.register_blob({2}); // This should cause an overflow to the next page
 
-    REQUIRE(manager.unregister_blob(offset1, {blob_manager_t::PAGE_SIZE - 1}) == true);
+    REQUIRE(manager.unregister_blob(offset1, {free_blob_manager_t::PAGE_SIZE - 1}) == true);
     REQUIRE(manager.unregister_blob(offset2, {2}) == true);
 
     REQUIRE(manager.get_free_sections_count() == 0); // There should be two free sections, one on each page
 }
 
 TEST_CASE("Unregister blobs to create a completely free page", "[blob_manager_t]") {
-    blob_manager_t manager;
+    free_blob_manager_t manager;
 
-    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE / 2});
-    auto offset2 = manager.register_blob({blob_manager_t::PAGE_SIZE / 2});
+    auto offset1 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 2});
+    auto offset2 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 2});
 
-    REQUIRE(manager.unregister_blob(offset1, {blob_manager_t::PAGE_SIZE / 2}) == true);
-    REQUIRE(manager.unregister_blob(offset2, {blob_manager_t::PAGE_SIZE / 2}) == true);
+    REQUIRE(manager.unregister_blob(offset1, {free_blob_manager_t::PAGE_SIZE / 2}) == true);
+    REQUIRE(manager.unregister_blob(offset2, {free_blob_manager_t::PAGE_SIZE / 2}) == true);
 
     REQUIRE(manager.get_free_sections_count() == 0); 
 }
 
 TEST_CASE("Unregister blobs that span multiple pages", "[blob_manager_t]") {
-    blob_manager_t manager;
+    free_blob_manager_t manager;
 
-    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE / 2});
-    auto offset2 = manager.register_blob({blob_manager_t::PAGE_SIZE}); // This blob spans two pages
+    auto offset1 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 2});
+    auto offset2 = manager.register_blob({free_blob_manager_t::PAGE_SIZE}); // This blob spans two pages
 
-    REQUIRE(manager.unregister_blob(offset1, {blob_manager_t::PAGE_SIZE / 2}) == true);
-    REQUIRE(manager.unregister_blob(offset2, {blob_manager_t::PAGE_SIZE}) == true);
+    REQUIRE(manager.unregister_blob(offset1, {free_blob_manager_t::PAGE_SIZE / 2}) == true);
+    REQUIRE(manager.unregister_blob(offset2, {free_blob_manager_t::PAGE_SIZE}) == true);
 
     REQUIRE(manager.get_free_sections_count() == 0);
 }
 
 TEST_CASE("Edge case: Unregister a blob at the boundary of two pages", "[blob_manager_t]") {
-    blob_manager_t manager;
+    free_blob_manager_t manager;
 
-    auto offset = manager.register_blob({blob_manager_t::PAGE_SIZE - 1});
+    auto offset = manager.register_blob({free_blob_manager_t::PAGE_SIZE - 1});
     auto offset2 = manager.register_blob({1});
     auto offset3 = manager.register_blob({1});
     auto offset4 = manager.register_blob({1});
     auto offset5 = manager.register_blob({1});
 
-    REQUIRE(manager.unregister_blob(offset, {blob_manager_t::PAGE_SIZE - 1}) == true);
+    REQUIRE(manager.unregister_blob(offset, {free_blob_manager_t::PAGE_SIZE - 1}) == true);
     REQUIRE(manager.get_free_sections_count() == 1);
     REQUIRE(manager.unregister_blob(offset2, {1}) == true);
     REQUIRE(manager.get_free_sections_count() == 1);
@@ -317,21 +317,21 @@ TEST_CASE("Edge case: Unregister a blob at the boundary of two pages", "[blob_ma
 
 TEST_CASE("Registering blob that spans multiple pages", "[blob_manager_t]")
 {
-    blob_manager_t manager;
+    free_blob_manager_t manager;
 
     SECTION("Register blob spanning across pages")
     {
-    auto large_blob_size = uint64_t(blob_manager_t::PAGE_SIZE * 1.5);
+    auto large_blob_size = uint64_t(free_blob_manager_t::PAGE_SIZE * 1.5);
     auto offset = manager.register_blob({large_blob_size});
     REQUIRE(offset.page() == 0);                                          // Starts on the first page
-    REQUIRE((offset.data + large_blob_size) > blob_manager_t::PAGE_SIZE); // Spans to the next page
+    REQUIRE((offset.data + large_blob_size) > free_blob_manager_t::PAGE_SIZE); // Spans to the next page
     }
 }
 
 TEST_CASE("Unregistering blob that spans multiple pages", "[blob_manager_t]")
 {
-    blob_manager_t manager;
-    auto large_blob_size = uint64_t(blob_manager_t::PAGE_SIZE * 1.5);
+    free_blob_manager_t manager;
+    auto large_blob_size = uint64_t(free_blob_manager_t::PAGE_SIZE * 1.5);
     auto offset = manager.register_blob({large_blob_size});
 
     SECTION("Unregister blob spanning across pages")
@@ -343,44 +343,44 @@ TEST_CASE("Unregistering blob that spans multiple pages", "[blob_manager_t]")
 }
 
 TEST_CASE("Page removal upon blob unregistration", "[blob_manager_t]") {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Unregister all blobs on a page") {
-    auto offset = manager.register_blob({blob_manager_t::PAGE_SIZE});
-    REQUIRE(manager.unregister_blob(offset, {blob_manager_t::PAGE_SIZE}) == true);
+    auto offset = manager.register_blob({free_blob_manager_t::PAGE_SIZE});
+    REQUIRE(manager.unregister_blob(offset, {free_blob_manager_t::PAGE_SIZE}) == true);
     REQUIRE(manager.get_pages_count() == 0); // The page should be removed
   }
 }
 
 TEST_CASE("Page addition upon blob registration", "[blob_manager_t]") {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Register blob causing new page to be added") {
-    auto offset = manager.register_blob({blob_manager_t::PAGE_SIZE + 2});
-    manager.unregister_blob(offset, {blob_manager_t::PAGE_SIZE + 1});
+    auto offset = manager.register_blob({free_blob_manager_t::PAGE_SIZE + 2});
+    manager.unregister_blob(offset, {free_blob_manager_t::PAGE_SIZE + 1});
     REQUIRE(manager.get_pages_count() == 2); // Should now track more than one page
   }
 }
 
 TEST_CASE("Merging across pages", "[blob_manager_t]") {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Unregister blobs to create non-contiguous free space across pages") {
-    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE - 1});
+    auto offset1 = manager.register_blob({free_blob_manager_t::PAGE_SIZE - 1});
     auto offset2 = manager.register_blob({2}); // This will start at the end of page 0 and spill over to page 1
-    REQUIRE(manager.unregister_blob(offset1, {blob_manager_t::PAGE_SIZE - 1}) == true);
+    REQUIRE(manager.unregister_blob(offset1, {free_blob_manager_t::PAGE_SIZE - 1}) == true);
     REQUIRE(manager.unregister_blob(offset2, {2}) == true);
     REQUIRE(manager.get_pages_count() == 0); // Ensure that two pages are tracked separately
   }
 }
 
 TEST_CASE("Fragmentation within a page", "[blob_manager_t]") {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Create fragmented free space within a page") {
     auto offset1 = manager.register_blob({10});
     auto offset2 = manager.register_blob({10});
-    auto offset3 = manager.register_blob({blob_manager_t::PAGE_SIZE - 20});
+    auto offset3 = manager.register_blob({free_blob_manager_t::PAGE_SIZE - 20});
     REQUIRE(manager.unregister_blob(offset1, {10}) == true);
     REQUIRE(manager.unregister_blob(offset2, {10}) == true);
     auto offset4 = manager.register_blob({20}); // This should fit into the fragmented space
@@ -389,82 +389,82 @@ TEST_CASE("Fragmentation within a page", "[blob_manager_t]") {
 }
 
 TEST_CASE("Handling of full pages", "[blob_manager_t]") {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Completely fill a page then unregister some blobs") {
-    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE / 2});
-    auto offset2 = manager.register_blob({blob_manager_t::PAGE_SIZE / 2});
-    REQUIRE(manager.unregister_blob(offset1, {blob_manager_t::PAGE_SIZE / 2}) == true);
-    REQUIRE(manager.unregister_blob(offset2, {blob_manager_t::PAGE_SIZE / 2}) == true);
+    auto offset1 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 2});
+    auto offset2 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 2});
+    REQUIRE(manager.unregister_blob(offset1, {free_blob_manager_t::PAGE_SIZE / 2}) == true);
+    REQUIRE(manager.unregister_blob(offset2, {free_blob_manager_t::PAGE_SIZE / 2}) == true);
     REQUIRE(manager.get_pages_count() == 0); // The page should have been removed
   }
 }
 
 TEST_CASE("Consecutive page filling and freeing", "[blob_manager_t]") {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Fill and free multiple pages consecutively") {
-    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE});
-    auto offset2 = manager.register_blob({blob_manager_t::PAGE_SIZE});
-    REQUIRE(manager.unregister_blob(offset2, {blob_manager_t::PAGE_SIZE}) == true);
-    REQUIRE(manager.unregister_blob(offset1, {blob_manager_t::PAGE_SIZE}) == true);
+    auto offset1 = manager.register_blob({free_blob_manager_t::PAGE_SIZE});
+    auto offset2 = manager.register_blob({free_blob_manager_t::PAGE_SIZE});
+    REQUIRE(manager.unregister_blob(offset2, {free_blob_manager_t::PAGE_SIZE}) == true);
+    REQUIRE(manager.unregister_blob(offset1, {free_blob_manager_t::PAGE_SIZE}) == true);
     REQUIRE(manager.get_pages_count() == 0); // Both pages should have been removed
   }
 }
 
 TEST_CASE("Sparse free sections on multiple pages", "[blob_manager_t]") 
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Create non-contiguous free sections across multiple pages") {
-    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE / 3});
-    auto offset2 = manager.register_blob({blob_manager_t::PAGE_SIZE / 3});
-    auto offset3 = manager.register_blob({blob_manager_t::PAGE_SIZE / 3});
-    REQUIRE(manager.unregister_blob(offset1, {blob_manager_t::PAGE_SIZE / 3}) == true);
-    REQUIRE(manager.unregister_blob(offset3, {blob_manager_t::PAGE_SIZE / 3}) == true);
-    auto offset4 = manager.register_blob({blob_manager_t::PAGE_SIZE / 3}); // Should fit into the first free section
+    auto offset1 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 3});
+    auto offset2 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 3});
+    auto offset3 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 3});
+    REQUIRE(manager.unregister_blob(offset1, {free_blob_manager_t::PAGE_SIZE / 3}) == true);
+    REQUIRE(manager.unregister_blob(offset3, {free_blob_manager_t::PAGE_SIZE / 3}) == true);
+    auto offset4 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 3}); // Should fit into the first free section
     REQUIRE(offset4.data == offset1.data);
   }
 }
 
 TEST_CASE("Test reuse of section bigger than page size", "[blob_manager_t]") 
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Create contiguous free sections across multiple pages") {
-    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE / 2});
-    auto offset2 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
-    auto offset3 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
-    REQUIRE(manager.unregister_blob(offset2, {blob_manager_t::PAGE_SIZE * 3}) == true);
-    auto offset4 = manager.register_blob({blob_manager_t::PAGE_SIZE * 2});
-    auto offset5 = manager.register_blob({blob_manager_t::PAGE_SIZE / 3});
-    auto offset6 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+    auto offset1 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 2});
+    auto offset2 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 3});
+    auto offset3 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 3});
+    REQUIRE(manager.unregister_blob(offset2, {free_blob_manager_t::PAGE_SIZE * 3}) == true);
+    auto offset4 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 2});
+    auto offset5 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 3});
+    auto offset6 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 3});
     
     REQUIRE(offset4.data == offset2.data);
-    REQUIRE(manager.unregister_blob(offset3, {blob_manager_t::PAGE_SIZE * 3}) == true);
+    REQUIRE(manager.unregister_blob(offset3, {free_blob_manager_t::PAGE_SIZE * 3}) == true);
     REQUIRE(manager.get_free_sections_count() == 1);
   }
 }
 
 TEST_CASE("Test section merging", "[blob_manager_t]") 
 {
-  blob_manager_t manager;
+  free_blob_manager_t manager;
 
   SECTION("Create contiguous free sections across multiple pages doesnt ignore allocated space") {
-    auto offset1 = manager.register_blob({blob_manager_t::PAGE_SIZE / 2});
-    auto offset2 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
-    auto offset3 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
-    auto offset4 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
-    auto offset5 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
-    auto offset6 = manager.register_blob({blob_manager_t::PAGE_SIZE * 3});
+    auto offset1 = manager.register_blob({free_blob_manager_t::PAGE_SIZE / 2});
+    auto offset2 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 3});
+    auto offset3 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 3});
+    auto offset4 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 3});
+    auto offset5 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 3});
+    auto offset6 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 3});
 
-    REQUIRE(manager.unregister_blob(offset2, {blob_manager_t::PAGE_SIZE * 3}) == true);
-    REQUIRE(manager.unregister_blob(offset3, {blob_manager_t::PAGE_SIZE * 3}) == true);
-    REQUIRE(manager.unregister_blob(offset5, {blob_manager_t::PAGE_SIZE * 3}) == true);
+    REQUIRE(manager.unregister_blob(offset2, {free_blob_manager_t::PAGE_SIZE * 3}) == true);
+    REQUIRE(manager.unregister_blob(offset3, {free_blob_manager_t::PAGE_SIZE * 3}) == true);
+    REQUIRE(manager.unregister_blob(offset5, {free_blob_manager_t::PAGE_SIZE * 3}) == true);
     
     REQUIRE(manager.get_free_sections_count() == 2);
 
-    auto offset7 = manager.register_blob({blob_manager_t::PAGE_SIZE * 11});
+    auto offset7 = manager.register_blob({free_blob_manager_t::PAGE_SIZE * 11});
     REQUIRE(offset7.data > offset6.data);
   }
 }

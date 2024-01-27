@@ -48,9 +48,9 @@ template <typename MORTON_TYPE, typename DECODED_T>
 void convert_points_to_vertex_data_morton(const tree_global_state_t &state, const read_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset, std::unique_ptr<uint8_t[]> &vertex_data)
 {
   assert(read_points.data.size % sizeof(MORTON_TYPE) == 0);
-  assert(read_points.header.public_header.point_count == read_points.data.size / sizeof(MORTON_TYPE));
+  assert(read_points.header.point_count == read_points.data.size / sizeof(MORTON_TYPE));
   MORTON_TYPE *morton_array = static_cast<MORTON_TYPE *>(read_points.data.data);
-  auto point_count = read_points.header.public_header.point_count;
+  auto point_count = read_points.header.point_count;
 
   uint64_t buffer_size = point_count * sizeof(DECODED_T);
   vertex_data.reset(new uint8_t[buffer_size]);
@@ -128,7 +128,7 @@ inline void convert_points_to_vertex_data(const tree_global_state_t &global_stat
 }
 inline void convert_attribute_to_draw_buffer_data(const read_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer, int dataslot)
 {
-  auto count = read_points.header.public_header.point_count;
+  auto count = read_points.header.point_count;
   auto source_ptr = reinterpret_cast<std::array<uint16_t, 3> *>(read_points.data.data);
   assert(read_points.data.size == count * sizeof(std::array<uint16_t, 3>));
 

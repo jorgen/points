@@ -36,6 +36,7 @@ struct input_data_id_t
   uint32_t data;
   uint32_t sub;
 };
+
 inline bool operator<(const input_data_id_t &a, const input_data_id_t &b)
 {
   return a.data < b.data || (a.data == b.data && a.sub < b.sub);
@@ -70,7 +71,6 @@ struct input_name_ref_t
   uint32_t name_length;
 };
 
-
 struct attributes_t
 {
   std::vector<attribute_t> attributes;
@@ -87,8 +87,7 @@ struct storage_header_t
 {
   input_data_id_t input_id;
   attributes_id_t attributes_id;
-  attributes_id_t original_attributes_id;
-  header_t public_header;
+  uint64_t point_count;
   std::pair<type_t, components_t> point_format;
   morton::morton192_t morton_min;
   morton::morton192_t morton_max;
@@ -97,19 +96,7 @@ struct storage_header_t
 
 inline void storage_header_initialize(storage_header_t &header)
 {
-  header.public_header.point_count = 0;
-  header.public_header.offset[0] = 0.0;
-  header.public_header.offset[1] = 0.0;
-  header.public_header.offset[2] = 0.0;
-  header.public_header.scale[0] = 0.0;
-  header.public_header.scale[1] = 0.0;
-  header.public_header.scale[2] = 0.0;
-  header.public_header.min[0] = std::numeric_limits<double>::max();
-  header.public_header.min[1] = std::numeric_limits<double>::max();
-  header.public_header.min[2] = std::numeric_limits<double>::max();
-  header.public_header.max[0] = -std::numeric_limits<double>::max();
-  header.public_header.max[1] = -std::numeric_limits<double>::max();
-  header.public_header.max[2] = -std::numeric_limits<double>::max();
+  header.point_count = 0;
 
   morton::morton_init_min(header.morton_max);
   morton::morton_init_max(header.morton_min);
@@ -121,30 +108,6 @@ struct points_t
   storage_header_t header;
   attribute_buffers_t buffers;
 };
-
-struct input_data_source_t
-{
-  input_data_id_t input_id;
-  attributes_id_t attribute_id;
-  std::unique_ptr<char[]> name;
-  uint32_t name_length;
-  morton::morton192_t min;
-  morton::morton192_t max;
-  bool read_started;
-  bool read_finished;
-  bool inserted_into_tree;
-  uint8_t approximate_point_size_bytes;
-  uint32_t sub_count;
-  uint32_t tree_done_count;
-  uint64_t approximate_point_count;
-  uint64_t assigned_memory_usage;
-};
-
-inline input_name_ref_t input_name_ref_from_input_data_source(const input_data_source_t &source)
-{
-  return {source.name.get(), source.name_length};
-}
-
 
 struct tree_global_state_t
 {
