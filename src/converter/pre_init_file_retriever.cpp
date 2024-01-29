@@ -40,26 +40,28 @@ void get_pre_init_info_worker_t::work()
   if (local_error)
   {
     std::unique_ptr<error_t> error(local_error);
-    file_error_t file_error;
-    file_error.input_id = input_id;
-    file_error.error = std::move(*error);
-    file_errors.post_event(std::move(file_error));
+    _file_error.input_id = input_id;
+    _file_error.error = std::move(*error);
   }
   else
   {
-    pre_init_info_file_result_t pre_init_file;
-    pre_init_file.id = input_id;
-    pre_init_file.found_min = pre_init_info.found_aabb_min;
-    memcpy(pre_init_file.min, pre_init_info.aabb_min, sizeof(pre_init_file.min));
-    pre_init_file.approximate_point_count = pre_init_info.approximate_point_count;
-    pre_init_file.approximate_point_size_bytes = pre_init_info.approximate_point_size_bytes;
-    pre_init_info_file_result.post_event(std::move(pre_init_file));
+    _file_error.error.code = 0;
+    _pre_init_file.id = input_id;
+    _pre_init_file.found_min = pre_init_info.found_aabb_min;
+    memcpy(_pre_init_file.min, pre_init_info.aabb_min, sizeof(_pre_init_file.min));
+    _pre_init_file.approximate_point_count = pre_init_info.approximate_point_count;
+    _pre_init_file.approximate_point_size_bytes = pre_init_info.approximate_point_size_bytes;
   }
 }
 
 void get_pre_init_info_worker_t::after_work(completion_t completion)
 {
   (void)completion;
+  if (_file_error.error.code != 0)
+    file_errors.post_event(std::move(_file_error));
+  else
+    pre_init_info_file_result.post_event(std::move(_pre_init_file));
+
 }
 
 }

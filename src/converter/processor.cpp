@@ -95,6 +95,7 @@ void processor_t::handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>
   {
     auto input_ref = _input_data_source_registry.register_file(std::move(new_file.first), new_file.second);
     _pre_init_info_workers.emplace_back(new get_pre_init_info_worker_t(_converter.tree_state, input_ref.input_id, input_ref.name, _converter.convert_callbacks, _pre_init_info_file_result, _pre_init_file_errors));
+    _pre_init_info_workers.back()->enqueue(_event_loop);
   }
 }
 

@@ -152,9 +152,6 @@ void cache_file_handler_t::handle_write_events(std::tuple<std::vector<request_id
   cache_item.ref = 1;
   cache_item.header = std::move(storage_header);
   cache_item.buffers = std::move(attribute_buffers);
-
-
-
   _write_done.post_event(cache_item.header);
 }
 void cache_file_handler_t::handle_request_done(request_id_t id)

@@ -61,22 +61,10 @@ struct get_pre_init_info_worker_t : worker_t
   converter_file_convert_callbacks_t &converter_callbacks;
   event_pipe_single_t<pre_init_info_file_result_t> &pre_init_info_file_result;
   event_pipe_single_t<file_error_t> &file_errors;
-};
-struct get_pre_init_file_batch_t
-{
-  get_pre_init_file_batch_t(event_pipe_single_t<pre_init_info_file_result_t> &pre_init_info_result_pipe, event_pipe_single_t<file_error_t> &file_errors)
-    : convert_callbacks(convert_callbacks)
-    , pre_init_info_result_pipe(pre_init_info_result_pipe)
-    , file_errors(file_errors)
-    , input_done(0)
-  {
-  }
-  std::vector<get_file_pre_init_t> input;
-  converter_file_convert_callbacks_t &convert_callbacks;
-  event_pipe_single_t<pre_init_info_file_result_t> &pre_init_info_result_pipe;
-  event_pipe_single_t<file_error_t> &file_errors;
-  std::vector<std::unique_ptr<worker_t>> workers;
-  uint32_t input_done;
+
+  std::unique_ptr<error_t> _error;
+  file_error_t _file_error;
+  pre_init_info_file_result_t _pre_init_file;
 };
 
 } // namespace converter
