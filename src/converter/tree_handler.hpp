@@ -35,7 +35,7 @@ public:
 
   void add_points(storage_header_t &&header);
   void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
-  void generate_lod(morton::morton192_t &min);
+  void generate_lod(const morton::morton192_t &max);
 private:
   void handle_add_points(storage_header_t &&events);
   void handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&events);

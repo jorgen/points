@@ -75,12 +75,18 @@ void input_data_source_registry_t::handle_input_init(input_data_id_t id, attribu
   item.public_header = public_header;
 }
 
+void input_data_source_registry_t::handle_sub_added(input_data_id_t id)
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  auto &item = _registry[id];
+  item.sub_count++;
+  _input_data_with_sub_parts++; 
+}
+
 void input_data_source_registry_t::handle_sorted_points(input_data_id_t id, const morton::morton192_t& min, const morton::morton192_t& max)
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  _input_data_with_sub_parts++; 
   auto &item = _registry[id];
-  item.sub_count++;
 
 
   if (min < item.morton_min)
@@ -100,7 +106,7 @@ void input_data_source_registry_t::handle_tree_done_with_input(input_data_id_t i
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = _registry[id];
-  item.inserted_into_tree = true;
+  item.inserted_into_tree++;
   _input_data_inserted_to_tree++;
 }
   
@@ -132,6 +138,7 @@ std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_
   std::pop_heap(_unsorted_input_sources.begin(), _unsorted_input_sources.end());
   auto id = _unsorted_input_sources.back();
   _unsorted_input_sources.pop_back();
+  _sorted_input_sources.push_back(id);
   auto &item = _registry[id];
   input_data_next_input_t ret;
   ret.approximate_point_count = item.approximate_point_count;
@@ -140,6 +147,20 @@ std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_
   ret.name.name = item.name.get();
   ret.name.name_length = item.name_length;
   return ret;
+}
+
+std::optional<morton::morton192_t> input_data_source_registry_t::get_done_morton()
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  for (auto it = _sorted_input_sources.rbegin(); it != _sorted_input_sources.rend(); ++it)
+  {
+    auto &item = _registry[*it];
+    if (item.read_finished && item.inserted_into_tree == item.sub_count)
+    {
+      return item.morton_min;
+    }
+  }
+  return {};
 }
 
 input_data_source_t input_data_source_registry_t::get(input_data_id_t input_id)

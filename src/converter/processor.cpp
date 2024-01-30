@@ -41,13 +41,14 @@ processor_t::processor_t(converter_t &converter)
   , _pre_init_info_file_result(_event_loop, bind(&processor_t::handle_pre_init_info_for_files))
   , _pre_init_file_errors(_event_loop, bind(&processor_t::handle_file_errors_headers))
   , _input_init(_event_loop, bind(&processor_t::handle_input_init_done)) 
+  , _sub_added(_event_loop, bind(&processor_t::handle_sub_added))
   , _sorted_points(_event_loop, bind(&processor_t::handle_sorted_points))
   , _point_reader_file_errors(_event_loop, bind(&processor_t::handle_file_errors))
   , _point_reader_done_with_file(_event_loop, bind(&processor_t::handle_file_reading_done))
   , _cache_file_error(_event_loop, bind(&processor_t::handle_cache_file_error))
   , _points_written(_event_loop, bind(&processor_t::handle_points_written))
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
-  , _point_reader(_converter.tree_state, _input_event_loop, _attributes_configs, _input_init, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
+  , _point_reader(_converter.tree_state, _input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _attributes_configs(_converter.tree_state)
   , _input_sources_inserted_into_tree(0)
   , _read_sort_budget(uint64_t(1) << 20)
@@ -116,6 +117,11 @@ void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_
   _input_data_source_registry.handle_input_init(std::get<0>(event), std::get<1>(event), std::get<2>(event));
 }
 
+void processor_t::handle_sub_added(input_data_id_t&& event)
+{
+  _input_data_source_registry.handle_sub_added(event);
+}
+
 void processor_t::handle_sorted_points(std::pair<points_t,error_t> &&event)
 {
   _input_data_source_registry.handle_sorted_points(event.first.header.input_id, event.first.header.morton_min, event.first.header.morton_max);
@@ -146,10 +152,9 @@ void processor_t::handle_points_written(storage_header_t &&event)
 void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
 {
   _input_data_source_registry.handle_tree_done_with_input(event);
-  if (_input_data_source_registry.all_inserted_into_tree())
-  {
-
-  }
+  auto min = _input_data_source_registry.get_done_morton();
+  if (min)
+    _tree_handler.generate_lod(*min);
 }
 
 }

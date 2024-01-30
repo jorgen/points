@@ -44,8 +44,8 @@ struct input_data_source_impl_t
   morton::morton192_t input_order;
   bool read_started = false;
   bool read_finished = false;
-  bool inserted_into_tree = false;
   uint8_t approximate_point_size_bytes = 0;
+  uint32_t inserted_into_tree = 0;
   uint32_t sub_count = 0;
   uint32_t tree_done_count = 0;
   uint64_t assigned_memory_usage = 0;
@@ -75,12 +75,15 @@ public:
   input_data_reference_t register_file(std::unique_ptr<char[]> &&name, uint32_t name_length);
   void register_pre_init_result(const tree_global_state_t &global_state, input_data_id_t id, bool found_min, double (&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes);
   void handle_input_init(input_data_id_t id, attributes_id_t attributes_id, header_t public_header);
+  void handle_sub_added(input_data_id_t id);
   void handle_sorted_points(input_data_id_t id, const morton::morton192_t &min, const morton::morton192_t &max);
   void handle_reading_done(input_data_id_t id);
   void handle_tree_done_with_input(input_data_id_t id);
   bool all_inserted_into_tree() const;
 
   std::optional<input_data_next_input_t> next_input_to_process();
+
+  std::optional<morton::morton192_t> get_done_morton();
 
   input_data_source_t get(input_data_id_t input_id);
 
@@ -100,6 +103,7 @@ private:
   uint32_t _input_data_with_sub_parts;
   uint32_t _input_data_inserted_to_tree;
   std::vector<input_data_id_t> _unsorted_input_sources;
+  std::vector<input_data_id_t> _sorted_input_sources;
   bool _unsorted_input_sources_dirty;
 };
 } // namespace points::converter

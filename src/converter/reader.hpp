@@ -68,13 +68,14 @@ struct unsorted_points_event_t
 class get_data_worker_t : public worker_t
 {
 public:
-  get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, const get_points_file_t &file, event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_single_t<unsorted_points_event_t> &unsorted_points_queue);
+  get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, const get_points_file_t &file, event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_single_t<input_data_id_t> &sub_added, event_pipe_single_t<unsorted_points_event_t> &unsorted_points_queue);
   void work() override;
   void after_work(completion_t completion) override;
 
   point_reader_file_t &point_reader_file;
   attributes_configs_t &attribute_configs;
   event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe;
+  event_pipe_single_t<input_data_id_t> &sub_added;
   event_pipe_single_t<unsorted_points_event_t> &unsorted_points_queue;
   std::unique_ptr<error_t> error;
   get_points_file_t file;
@@ -100,10 +101,10 @@ public:
 
 struct point_reader_file_t
 {
-  point_reader_file_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs, const get_points_file_t &file, event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_single_t<unsorted_points_event_t> &unsorted_points, event_pipe_single_t<std::pair<points_t,error_t>> &sorted_points_pipe)
+  point_reader_file_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs, const get_points_file_t &file, event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_single_t<input_data_id_t> &sub_added, event_pipe_single_t<unsorted_points_event_t> &unsorted_points, event_pipe_single_t<std::pair<points_t,error_t>> &sorted_points_pipe)
     : tree_state(tree_state)
     , event_loop(event_loop)
-    , input_reader(new get_data_worker_t(*this, attributes_configs, file, input_init_pipe, unsorted_points))
+    , input_reader(new get_data_worker_t(*this, attributes_configs, file, input_init_pipe, sub_added, unsorted_points))
     , sorted_points_pipe(sorted_points_pipe)
   {
     input_reader->enqueue(event_loop);
@@ -156,7 +157,7 @@ private:
 class point_reader_t : public about_to_block_t
 {
 public:
-  point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs, event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_single_t<std::pair<points_t,error_t>> &sorted_points_pipe, event_pipe_single_t<input_data_id_t> &done_with_file, event_pipe_single_t<file_error_t> &file_errors);
+  point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs, event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_single_t<input_data_id_t> &sub_added, event_pipe_single_t<std::pair<points_t,error_t>> &sorted_points_pipe, event_pipe_single_t<input_data_id_t> &done_with_file, event_pipe_single_t<file_error_t> &file_errors);
   void add_file(get_points_file_t &&new_file);
 
   void about_to_block() override;
@@ -169,6 +170,7 @@ private:
   threaded_event_loop_t &_event_loop;
   attributes_configs_t &_attributes_configs;
   event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &_input_init_pipe;
+  event_pipe_single_t<input_data_id_t> &_sub_added;
   event_pipe_single_t<std::pair<points_t, error_t>> &_sorted_points_pipe;
   event_pipe_single_t<input_data_id_t> &_done_with_file;
   event_pipe_single_t<file_error_t> &_file_errors;

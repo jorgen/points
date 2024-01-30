@@ -81,6 +81,7 @@ private:
   std::vector<std::unique_ptr<get_pre_init_info_worker_t>> _pre_init_info_workers;
 
   event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> _input_init;
+  event_pipe_single_t<input_data_id_t> _sub_added;
   event_pipe_single_t<std::pair<points_t, error_t>> _sorted_points;
   event_pipe_single_t<file_error_t> _point_reader_file_errors;
   event_pipe_single_t<input_data_id_t> _point_reader_done_with_file;
@@ -106,6 +107,7 @@ private:
   void handle_file_errors_headers(file_error_t &&error);
 
   void handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t> &&event);
+  void handle_sub_added(input_data_id_t &&event);
   void handle_sorted_points(std::pair<points_t, error_t> &&event);
   void handle_file_errors(file_error_t &&error);
   void handle_file_reading_done(input_data_id_t &&file);

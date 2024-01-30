@@ -73,9 +73,9 @@ void tree_handler_t::handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&e
   event->walk_tree(_global_state, _tree_cache, _tree_root);
 }
 
-void tree_handler_t::generate_lod(morton::morton192_t &min)
+void tree_handler_t::generate_lod(const morton::morton192_t &max)
 {
- _tree_lod_generator.generate_lods(_tree_root, min);
+ _tree_lod_generator.generate_lods(_tree_root, max);
 }
 
 }
