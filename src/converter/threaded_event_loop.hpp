@@ -93,14 +93,14 @@ public:
   }
 
   template<typename T>
-  void add_event_pipe(event_pipe_t<T> &event_pipe)
+  void add_event_pipe(event_pipe_multi_t<T> &event_pipe)
   {
     std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
     _add_pipe.post_event(func);
   }
   
   template<typename T>
-  void add_event_pipe(event_pipe_single_t<T> &event_pipe)
+  void add_event_pipe(event_pipe_t<T> &event_pipe)
   {
     std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
     _add_pipe.post_event(func);
@@ -160,8 +160,8 @@ private:
   std::mutex _mutex;
   std::vector<uv_handle_t *> _to_close_handles;
   std::vector<uv_work_t *> _to_cancel_work_handles;
-  event_pipe_t<std::function<uv_handle_t *(uv_loop_t*)>> _add_pipe;
-  event_pipe_t<std::function<void()>> _run_in_loop;
+  event_pipe_multi_t<std::function<uv_handle_t *(uv_loop_t*)>> _add_pipe;
+  event_pipe_multi_t<std::function<void()>> _run_in_loop;
 
   uv_prepare_t _about_to_block;
   std::vector<about_to_block_t *> _about_to_block_listeners;

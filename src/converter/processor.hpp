@@ -74,21 +74,21 @@ private:
   cache_file_handler_t _cache_file_handler;
   tree_handler_t _tree_handler;
 
-  event_pipe_single_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
+  event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
 
-  event_pipe_single_t<pre_init_info_file_result_t> _pre_init_info_file_result;
-  event_pipe_single_t<file_error_t> _pre_init_file_errors;
+  event_pipe_t<pre_init_info_file_result_t> _pre_init_info_file_result;
+  event_pipe_t<file_error_t> _pre_init_file_errors;
   std::vector<std::unique_ptr<get_pre_init_info_worker_t>> _pre_init_info_workers;
 
-  event_pipe_single_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> _input_init;
-  event_pipe_single_t<input_data_id_t> _sub_added;
-  event_pipe_single_t<std::pair<points_t, error_t>> _sorted_points;
-  event_pipe_single_t<file_error_t> _point_reader_file_errors;
-  event_pipe_single_t<input_data_id_t> _point_reader_done_with_file;
+  event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> _input_init;
+  event_pipe_t<input_data_id_t> _sub_added;
+  event_pipe_t<std::pair<points_t, error_t>> _sorted_points;
+  event_pipe_t<file_error_t> _point_reader_file_errors;
+  event_pipe_t<input_data_id_t> _point_reader_done_with_file;
 
-  event_pipe_single_t<error_t> _cache_file_error;
-  event_pipe_single_t<storage_header_t> _points_written;
-  event_pipe_single_t<input_data_id_t> _tree_done_with_input;
+  event_pipe_t<error_t> _cache_file_error;
+  event_pipe_t<storage_header_t> _points_written;
+  event_pipe_t<input_data_id_t> _tree_done_with_input;
 
   threaded_event_loop_t _input_event_loop;
   point_reader_t _point_reader;

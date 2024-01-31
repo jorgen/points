@@ -50,8 +50,8 @@ struct get_pre_init_info_worker_t : worker_t
                             , input_data_id_t input_id
                             , const input_name_ref_t &file_name
                             , converter_file_convert_callbacks_t &convert_callbacks
-                            , event_pipe_single_t<pre_init_info_file_result_t> &pre_init_for_file
-                            , event_pipe_single_t<file_error_t> &file_errors);
+                            , event_pipe_t<pre_init_info_file_result_t> &pre_init_for_file
+                            , event_pipe_t<file_error_t> &file_errors);
   void work() override;
   void after_work(completion_t completion) override;
 
@@ -59,8 +59,8 @@ struct get_pre_init_info_worker_t : worker_t
   input_data_id_t input_id;
   input_name_ref_t file_name;
   converter_file_convert_callbacks_t &converter_callbacks;
-  event_pipe_single_t<pre_init_info_file_result_t> &pre_init_info_file_result;
-  event_pipe_single_t<file_error_t> &file_errors;
+  event_pipe_t<pre_init_info_file_result_t> &pre_init_info_file_result;
+  event_pipe_t<file_error_t> &file_errors;
 
   std::unique_ptr<error_t> _error;
   file_error_t _file_error;
