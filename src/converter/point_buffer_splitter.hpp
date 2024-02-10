@@ -100,7 +100,7 @@ ForwardIt inhouse_lower_bound(ForwardIt first, ForwardIt last, Compare comp)
 }
 
 
-static void add_subset_to_child(input_data_id_t input_id, offset_t offset, point_count_t point_count, const morton::morton192_t &start, const morton::morton192_t &end, points_collection_t &child)
+static void add_subset_to_child(input_data_id_t input_id, offset_in_subset_t offset, point_count_t point_count, const morton::morton192_t &start, const morton::morton192_t &end, points_collection_t &child)
 {
   if (child.point_count == 0)
   {
@@ -157,7 +157,7 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
     auto child = morton::morton_get_child_mask(lod, points.header.morton_min);
     assert(uint32_t(points.header.point_count) == subset.count.data);
     assert(child < 8);
-    add_subset_to_child(points.id, offset_t(0), point_count_t(uint32_t(points.header.point_count)), points.header.morton_min, points.header.morton_max, children[child]);
+    add_subset_to_child(points.id, offset_in_subset_t(0), point_count_t(uint32_t(points.header.point_count)), points.header.morton_min, points.header.morton_max, children[child]);
   }
   else
   {
@@ -189,7 +189,8 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_po
             morton::morton192_t global_current_end;
             convert_local_morton_to_world(*(morton_current_end - 1), node_min, global_current_end);
             assert(new_size != 0);
-            add_subset_to_child(subset.input_id, offset_t(new_offset), point_count_t(uint32_t(new_size)), global_current_start, global_current_end, children[i]);
+            assert(new_offset >= 0 && new_offset <= std::numeric_limits<decltype(offset_in_subset_t().data)>::max());
+            add_subset_to_child(subset.input_id, offset_in_subset_t(uint32_t(new_offset)), point_count_t(uint32_t(new_size)), global_current_start, global_current_end, children[i]);
 
 #ifndef NDEBUG
             verify_points_range<T, C>(state, points, int(new_offset), int(new_offset + new_size), node_min, node_max);

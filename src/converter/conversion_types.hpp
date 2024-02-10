@@ -123,6 +123,19 @@ struct offset_t
   offset_t() : data(0) {}
   uint64_t data;
 };
+
+struct offset_in_subset_t
+{
+  explicit offset_in_subset_t(uint32_t data)
+    : data(data)
+  {
+  }
+  offset_in_subset_t()
+    : data(0)
+  {
+  }
+  uint32_t data;
+};
 struct index_t
 {
   explicit index_t(uint32_t data) : data(data) { }
@@ -137,13 +150,13 @@ struct point_count_t
 
 struct points_subset_t
 {
-  points_subset_t(input_data_id_t id, offset_t offset, point_count_t count)
+  points_subset_t(input_data_id_t id, offset_in_subset_t offset, point_count_t count)
     : input_id(id)
     , offset(offset)
     , count(count)
   {}
   input_data_id_t input_id;
-  offset_t offset;
+  offset_in_subset_t offset;
   point_count_t count;
 };
 

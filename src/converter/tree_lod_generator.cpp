@@ -89,7 +89,7 @@ std::pair<int,int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler
       return std::make_pair(1,1);
     }
     skip_index = int(to_lod.skips.size());
-    node_data.data.emplace_back(get_next_input_id(tree_cache), offset_t(~uint64_t(0)), point_count_t(0));
+    node_data.data.emplace_back(get_next_input_id(tree_cache), offset_in_subset_t(~uint32_t(0)), point_count_t(0));
     node_data.min = parent_min;
     node_data.max = parent_max;
     to_lod.data.emplace_back(node_data.data.back());
@@ -218,7 +218,7 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
         assert(data.data.size() <= 1);
         if (data.data.empty())
         {
-          data.data.emplace_back(get_next_input_id(tree_cache), offset_t(~uint64_t(0)), point_count_t(0));
+          data.data.emplace_back(get_next_input_id(tree_cache), offset_in_subset_t(~uint32_t(0)), point_count_t(0));
         }
         uint16_t parent_index = uint16_t(tree_iterator[!buffer_index].parents.size());
         tree_iterator[!buffer_index].parents.emplace_back();
@@ -343,7 +343,7 @@ struct morton_to_lod_t
 
 
 template<typename S_M, typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, const buffer_t &source, offset_t offset, point_count_t point_count, int maskWidth, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
+static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, const buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
 {
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
   assert(source.size % sizeof(S_M) == 0);
@@ -376,7 +376,7 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
 }
 
 template<typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, type_t source_type, const buffer_t &source, offset_t offset, point_count_t point_count, int maskWidth, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
+static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, type_t source_type, const buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
 {
   assert(source_type == type_m32
          || source_type == type_m64
@@ -427,7 +427,7 @@ static void quantize_morton_one(const morton::morton192_t &morton_min, const mor
   }
 }
 
-static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_t offset, point_count_t count)
+static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_in_subset_t offset, point_count_t count)
 {
   auto format_byte_size = uint64_t(size_for_format(format));
   buffer_t ret;
