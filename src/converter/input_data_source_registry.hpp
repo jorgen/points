@@ -50,6 +50,7 @@ struct input_data_source_impl_t
   uint32_t tree_done_count = 0;
   uint64_t assigned_memory_usage = 0;
   uint64_t approximate_point_count = 0;
+  std::vector<storage_location_t> storage_locations;
 };
 
 struct input_data_reference_t
@@ -77,6 +78,7 @@ public:
   void handle_input_init(input_data_id_t id, attributes_id_t attributes_id, header_t public_header);
   void handle_sub_added(input_data_id_t id);
   void handle_sorted_points(input_data_id_t id, const morton::morton192_t &min, const morton::morton192_t &max);
+  void handle_points_written(input_data_id_t id, storage_location_t &&location);
   void handle_reading_done(input_data_id_t id);
   void handle_tree_done_with_input(input_data_id_t id);
   bool all_inserted_into_tree() const;
@@ -88,22 +90,12 @@ public:
   input_data_source_t get(input_data_id_t input_id);
 
 private:
-  struct hash_input_id_t
-  {
-    inline uint64_t operator()(const input_data_id_t &x) const
-    {
-      using namespace ankerl::unordered_dense::detail;
-      uint64_t input;
-      memcpy(&input, &x, sizeof(input));
-      return wyhash::hash(input);
-    }
-  };
   mutable std::mutex _mutex;
-  ankerl::unordered_dense::map<input_data_id_t, input_data_source_impl_t, hash_input_id_t> _registry;
+  ankerl::unordered_dense::map<uint32_t, input_data_source_impl_t> _registry;
   uint32_t _input_data_with_sub_parts;
   uint32_t _input_data_inserted_to_tree;
-  std::vector<input_data_id_t> _unsorted_input_sources;
-  std::vector<input_data_id_t> _sorted_input_sources;
+  std::vector<uint32_t> _unsorted_input_sources;
+  std::vector<uint32_t> _sorted_input_sources;
   bool _unsorted_input_sources_dirty;
 };
 } // namespace points::converter

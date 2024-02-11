@@ -21,6 +21,13 @@
 
 namespace points::converter
 {
+static auto &get_item(input_data_id_t id, ankerl::unordered_dense::map<uint32_t, input_data_source_impl_t> &registry)
+{
+  assert(id.data < uint32_t(1) << 31);
+  assert(registry.contains(id.data));
+  return registry[id.data];
+}
+
 input_data_source_registry_t::input_data_source_registry_t()
   : _input_data_with_sub_parts(0)
   , _input_data_inserted_to_tree(0)
@@ -44,7 +51,7 @@ input_data_reference_t input_data_source_registry_t::register_file(std::unique_p
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto input_id = get_next_input_id();
-  auto &item = _registry[input_id];
+  auto &item = _registry[input_id.data];
   item.input_id = input_id;
   item.name = std::move(name);
   item.name_length = name_length;
@@ -56,7 +63,7 @@ input_data_reference_t input_data_source_registry_t::register_file(std::unique_p
 void input_data_source_registry_t::register_pre_init_result(const tree_global_state_t &global_state, input_data_id_t id, bool found_min, double(&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes)
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  auto &item = _registry[id];
+  auto &item = get_item(id, _registry);
   item.approximate_point_count = approximate_point_count;
   item.approximate_point_size_bytes = approximate_point_size_bytes;
   if (found_min)
@@ -70,7 +77,7 @@ void input_data_source_registry_t::register_pre_init_result(const tree_global_st
 void input_data_source_registry_t::handle_input_init(input_data_id_t id, attributes_id_t attributes_id, header_t public_header)
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  auto &item = _registry[id];
+  auto &item = get_item(id, _registry);
   item.attribute_id = attributes_id;
   item.public_header = public_header;
 }
@@ -78,7 +85,7 @@ void input_data_source_registry_t::handle_input_init(input_data_id_t id, attribu
 void input_data_source_registry_t::handle_sub_added(input_data_id_t id)
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  auto &item = _registry[id];
+  auto &item = get_item(id, _registry);
   item.sub_count++;
   _input_data_with_sub_parts++; 
 }
@@ -86,8 +93,7 @@ void input_data_source_registry_t::handle_sub_added(input_data_id_t id)
 void input_data_source_registry_t::handle_sorted_points(input_data_id_t id, const morton::morton192_t& min, const morton::morton192_t& max)
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  auto &item = _registry[id];
-
+  auto &item = get_item(id, _registry);
 
   if (min < item.morton_min)
     item.morton_min = min;
@@ -95,17 +101,28 @@ void input_data_source_registry_t::handle_sorted_points(input_data_id_t id, cons
     item.morton_max = max;
 }
 
+void input_data_source_registry_t::handle_points_written(input_data_id_t id, storage_location_t&& location)
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  auto &item = get_item(id, _registry);
+  if (id.sub >= item.storage_locations.size())
+  {
+    item.storage_locations.resize(item.sub_count);
+  }
+  item.storage_locations[id.sub] = std::move(location);
+}
+
 void input_data_source_registry_t::handle_reading_done(input_data_id_t id)
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  auto &item = _registry[id];
+  auto &item = get_item(id, _registry);
   item.read_finished = true;
 }
   
 void input_data_source_registry_t::handle_tree_done_with_input(input_data_id_t id)
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  auto &item = _registry[id];
+  auto &item = get_item(id, _registry);
   item.inserted_into_tree++;
   _input_data_inserted_to_tree++;
 }
@@ -130,7 +147,7 @@ std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_
         _unsorted_input_sources.push_back(item.first);
       }
     }
-    std::make_heap(_unsorted_input_sources.begin(), _unsorted_input_sources.end(), [&](input_data_id_t a, input_data_id_t b) { return _registry[a].input_order > _registry[b].input_order; });
+    std::make_heap(_unsorted_input_sources.begin(), _unsorted_input_sources.end(), [&](uint32_t a, uint32_t b) { return _registry[a].input_order > _registry[b].input_order; });
   }
   if (_unsorted_input_sources.empty())
     return {};
@@ -143,7 +160,7 @@ std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_
   input_data_next_input_t ret;
   ret.approximate_point_count = item.approximate_point_count;
   ret.approximate_point_size_bytes = item.approximate_point_size_bytes;
-  ret.id = id;
+  ret.id = {id, 0};
   ret.name.name = item.name.get();
   ret.name.name_length = item.name_length;
   return ret;
@@ -166,13 +183,13 @@ std::optional<morton::morton192_t> input_data_source_registry_t::get_done_morton
 input_data_source_t input_data_source_registry_t::get(input_data_id_t input_id)
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  auto it = _registry.find(input_id);
-  assert(it != _registry.end());
+  auto &item = get_item(input_id, _registry);
+
   input_data_source_t ret;
-  ret.input_id = it->second.input_id;
-  ret.attribute_id = it->second.attribute_id;
-  ret.name = input_name_ref_t(it->second.name.get(), it->second.name_length);
-  ret.public_header = it->second.public_header;
+  ret.input_id = item.input_id;
+  ret.attribute_id = item.attribute_id;
+  ret.name = input_name_ref_t(item.name.get(), item.name_length);
+  ret.public_header = item.public_header;
   return ret;
 }
 
