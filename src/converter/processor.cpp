@@ -143,10 +143,10 @@ void processor_t::handle_cache_file_error(error_t &&error)
   fmt::print(stderr, "Cache file error {} {}\n", error.code, error.msg);
 }
 
-void processor_t::handle_points_written(storage_header_t &&event)
+void processor_t::handle_points_written(std::pair<storage_location_t, storage_header_t> &&event)
 {
-  if (input_data_id_is_leaf(event.input_id))
-    _tree_handler.add_points(std::move(event));
+  if (input_data_id_is_leaf(event.second.input_id))
+    _tree_handler.add_points(std::move(event.second));
 }
 
 void processor_t::handle_tree_done_with_input(input_data_id_t &&event)

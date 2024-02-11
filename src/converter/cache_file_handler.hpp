@@ -80,7 +80,7 @@ struct points_cache_item_t
 class cache_file_handler_t
 {
 public:
-  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<storage_header_t> &write_done);
+  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::pair<storage_location_t, storage_header_t>> &write_done);
 
   void handle_open_cache_file(uv_fs_t *request);
 
@@ -136,7 +136,7 @@ private:
 
   uv_fs_t _open_request;
   event_pipe_t<error_t> &_cache_file_error;
-  event_pipe_t<storage_header_t> &_write_done;
+  event_pipe_t<std::pair<storage_location_t, storage_header_t>> &_write_done;
   event_pipe_t<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> _write_event_pipe;
 
 

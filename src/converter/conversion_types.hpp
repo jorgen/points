@@ -83,6 +83,13 @@ struct attribute_buffers_t
   std::vector<std::unique_ptr<uint8_t[]>> data;
 };
 
+struct storage_location_t
+{
+  uint32_t file_id;
+  uint32_t size;
+  uint64_t offset;
+};
+
 struct storage_header_t
 {
   input_data_id_t input_id;

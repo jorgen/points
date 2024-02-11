@@ -82,7 +82,7 @@ void cache_file_request_t::do_write(request_id_t request_id, const std::weak_ptr
   uv_fs_write(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, offset, request_done_callback);
 }
 
-cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<storage_header_t> &write_done)
+cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::pair<storage_location_t, storage_header_t>> &write_done)
   : _cache_file_name(cache_file)
   , _state(state)
   , _attributes_configs(attributes_configs)
@@ -152,7 +152,7 @@ void cache_file_handler_t::handle_write_events(std::tuple<std::vector<request_id
   cache_item.ref = 1;
   cache_item.header = std::move(storage_header);
   cache_item.buffers = std::move(attribute_buffers);
-  _write_done.post_event(cache_item.header);
+  _write_done.post_event(std::pair<storage_location_t, storage_header_t>({}, cache_item.header));
 }
 void cache_file_handler_t::handle_request_done(request_id_t id)
 {
