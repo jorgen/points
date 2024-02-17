@@ -37,8 +37,6 @@ tree_handler_t::tree_handler_t(const tree_global_state_t &global_state, cache_fi
   , _done_with_input(done_with_input)
 {
   _event_loop.add_about_to_block_listener(this);
-  _tree_cache.current_id = 0;
-  _tree_cache.current_lod_node_id = uint64_t(1) << 63;
 }
 
 void tree_handler_t::about_to_block()

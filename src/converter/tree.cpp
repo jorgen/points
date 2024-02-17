@@ -160,7 +160,7 @@ static void sub_tree_split_points_to_children(const tree_global_state_t &state, 
   points = points_collection_t();
 }
 
-static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, int current_level, int skip, int16_t current_name, points_collection_t &&points)
+static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, int current_level, int skip, uint16_t current_name, points_collection_t &&points)
 {
   auto *tree = tree_cache.get(tree_id);
   assert(tree->id.data < tree_cache.current_id);
@@ -372,7 +372,7 @@ static tree_id_t reparent_tree(tree_cache_t &tree_cache, tree_id_t tree_id, cons
 }
 
 
-tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, const storage_header_t &header)
+tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header)
 {
   tree_id_t ret = tree_id;
   auto *tree = tree_cache.get(tree_id);

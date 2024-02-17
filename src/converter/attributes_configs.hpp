@@ -65,7 +65,7 @@ struct attribute_config_t
 class attributes_configs_t
 {
 public:
-  attributes_configs_t(const tree_global_state_t &global_state);
+  explicit attributes_configs_t(const tree_global_state_t &global_state);
 
   attributes_id_t get_attribute_config_index(attributes_t &&attr);
   attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end);

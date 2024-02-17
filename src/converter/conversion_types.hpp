@@ -118,7 +118,7 @@ struct points_t
 
 struct tree_global_state_t
 {
-  uint64_t node_limit = 100000;
+  uint32_t node_limit = 100000;
   double scale;
   double inv_scale;
   double offset[3];

@@ -78,28 +78,6 @@ void verify_points_less_than(const tree_global_state_t &state, const read_points
   assert(count == 0);
 }
 
-template<class ForwardIt, class Compare>
-ForwardIt inhouse_lower_bound(ForwardIt first, ForwardIt last, Compare comp)
-{
-    ForwardIt it;
-    typename std::iterator_traits<ForwardIt>::difference_type count, step;
-    count = std::distance(first, last);
- 
-    while (count > 0) {
-        it = first;
-        step = count / 2;
-        std::advance(it, step);
-        if (comp(*it)) {
-            first = ++it;
-            count -= step + 1;
-        }
-        else
-            count = step;
-    }
-    return first;
-}
-
-
 static void add_subset_to_child(input_data_id_t input_id, offset_in_subset_t offset, point_count_t point_count, const morton::morton192_t &start, const morton::morton192_t &end, points_collection_t &child)
 {
   if (child.point_count == 0)
