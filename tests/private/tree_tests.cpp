@@ -87,7 +87,7 @@ void attributes_add_attributecpp(points::converter::attributes_t  &attr, const s
   attributes_add_attribute(&attr, name.c_str(), uint32_t(name.size()), format, components);
 }
 
-points::converter::points_t create_points(tree_test_infrastructure &test_util, uint64_t min, uint64_t max, double scale, double offset = 0.0, uint64_t point_count = 256)
+points::converter::points_t create_points(tree_test_infrastructure &test_util, uint64_t min, uint64_t max, uint64_t point_count = 256)
 {
   points::converter::attributes_t attrs;
   attributes_add_attributecpp(attrs, POINTS_ATTRIBUTE_XYZ, points::type_m64, points::components_1);
@@ -111,13 +111,17 @@ points::converter::points_t create_points(tree_test_infrastructure &test_util, u
   auto *intensity_buffer = reinterpret_cast<uint8_t *>(points.buffers.data[1].get());
   assert(points.buffers.buffers[0].size == point_count * 8);
   assert(points.buffers.buffers[1].size == point_count);
-  uint64_t step_size = std::max((points.header.morton_max.data[0] - points.header.morton_min.data[0]) / (point_count - 1), uint64_t(1));
+  uint64_t step_size = std::max((max - min) / (point_count - 1), uint64_t(1));
   uint64_t last_value = min;
-  for (int i = 0; i < point_count; i++, last_value += step_size)
+  for (int i = 0; i < point_count; i++)
   {
     morton_buffer[i].data[0] = last_value;
     intensity_buffer[i] = uint8_t(i);
+    if (last_value + step_size < max)
+      last_value += step_size;
   }
+  test_util.write(points.header, std::move(points.buffers), [](points::converter::request_id_t id, const points::error_t &error) { fmt::print("error: {}\n", error.msg); });
+  test_util.wait_for_write_done();
   return points;
 }
 
@@ -125,7 +129,7 @@ TEST_CASE("initialize empty tree", "[converter, tree_t]")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   tree_test_infrastructure test_util;
-  auto points = create_points(test_util, 0, morton_max, 0.001, 0.0, 256);
+  auto points = create_points(test_util, 0, morton_max, 256);
 
   points::converter::tree_cache_t tree_cache;
   auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, points.header);
@@ -144,12 +148,12 @@ TEST_CASE("add inclusion", "[converter, tree_t]")
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   tree_test_infrastructure test_util;
   points::converter::tree_cache_t tree_cache;
-  auto points = create_points(test_util, 0, morton_max, 0.001, 0.0, 256);
+  auto points = create_points(test_util, 0, morton_max, 256);
 
   auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, points.header);
 
   uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
-  auto second_points = create_points(test_util, morton_min, morton_max, 0.001, 0.0, 256);
+  auto second_points = create_points(test_util, morton_min, morton_max, 256);
 
   root_id = points::converter::tree_add_points(test_util.global_state, tree_cache, test_util.cache_file_handler, root_id, second_points.header);
   auto tree = *tree_cache.get(root_id);
@@ -171,98 +175,118 @@ TEST_CASE("add_new_node", "[converter, tree_t]")
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   tree_test_infrastructure test_util(256);
   points::converter::tree_cache_t tree_cache;
-  auto points = create_points(test_util, 0, morton_max, 0.001, 0.0, 256);
-  test_util.write(points.header, std::move(points.buffers), [](points::converter::request_id_t id, const points::error_t &error) { fmt::print("error: {}\n", error.msg); });
-  test_util.wait_for_write_done();
+  auto points = create_points(test_util, 0, morton_max, 256);
 
   auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, points.header);
 
   uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
-  auto second_points = create_points(test_util, morton_min, morton_max, 0.001, 0.0, 256);
-  test_util.write(second_points.header, std::move(second_points.buffers), [](points::converter::request_id_t id, const points::error_t &error) { fmt::print("error: {}\n", error.msg); });
-  test_util.wait_for_write_done();
+  auto second_points = create_points(test_util, morton_min, morton_max, 256);
 
   root_id = points::converter::tree_add_points(test_util.global_state, tree_cache, test_util.cache_file_handler, root_id, second_points.header);
-  auto tree = *tree_cache.get(root_id);
+  auto &tree = *tree_cache.get(root_id);
   REQUIRE(tree.nodes[0][0] > 0);
   REQUIRE(tree.data[0][0].data.empty());
 }
 
-//test_case("add_new_subtree", "[converter, tree_t]")
-//{
-//  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
-//  auto tree_gs = create_tree_global_state(256, 0.001);
-//  auto points = create_points(tree_gs, 0, morton_max, 0.001);
-//  points::converter::tree_t tree;
-//  points::converter::tree_initialize(tree_gs, tree, std::move(points));
-//
-//  require(tree.nodes[0][0] == 0);
-//  require(tree.data[0][0].data.size() == 1);
-//
-//  morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
-//  auto second_points = create_points(tree_gs, 0, morton_max, 0.001);
-//  void *buffer_ptr = second_points.buffers.buffers.back().data;
-//  points::converter::tree_add_points(tree_gs, tree, std::move(second_points));
-//
-//  require(tree.nodes[0].size() == 1);
-//  require(tree.nodes[1].size() == 8);
-//
-//}
-//test_case("add_new_subtree_offsets", "[converter, tree_t]")
-//{
-//  for (int i = 1; i < 11; i++)
-//  {
-//    uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
-//    auto tree_gs = create_tree_global_state(256, 0.001);
-//    auto points = create_points(tree_gs, 0, morton_max, 0.001);
-//    points::converter::tree_t tree;
-//    points::converter::tree_initialize(tree_gs, tree, std::move(points));
-//
-//    require(tree.nodes[0][0] == 0);
-//    require(tree.data[0][0].data.size() == 1);
-//
-//    morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
-//    double scale = 0.001;
-//    uint64_t offset = (uint64_t(1) << 6) * i ;
-//    auto second_points = create_points(tree_gs, 0, morton_max, scale, offset * scale);
-//    points::converter::tree_add_points(tree_gs, tree, std::move(second_points));
-//
-//    require(tree.nodes[0].size() == 1);
-//    require(tree.nodes[1].size() == 8);
-//  }
-//}
-//test_case("reparent", "[converter, tree_t]")
-//{
-//  auto tree_gs = create_tree_global_state(256, 0.001);
-//
-//  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
-//
-//  auto first_points = create_points(tree_gs, 0, morton_max, 0.001);
-//  points::converter::tree_t tree;
-//  points::converter::tree_initialize(tree_gs, tree, std::move(first_points));
-//
-//  morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
-//  auto second_points = create_points(tree_gs, 0, morton_max, 0.001);
-//  points::converter::tree_add_points(tree_gs, tree, std::move(second_points));
-//
-//  require(tree.data[0][0].data.size() == 0);
-//
-//  require(tree.sub_trees.size() == 1);
-//  auto third_points = create_points(tree_gs, 1, morton_max, 0.001);
-//  points::converter::tree_add_points(tree_gs, tree, std::move(third_points));
-//  require(tree.sub_trees.size() == 1);
-//
-//  uint64_t splitting_max = morton_max + morton_max / 2;
-//  uint64_t splitting_min = morton_max / 2;
-//  auto fourth_points = create_points(tree_gs, splitting_min, splitting_max, 0.001);
-//  points::converter::tree_add_points(tree_gs, tree, std::move(fourth_points));
-//  require(tree.sub_trees.size() == 2);
-//  require(tree.magnitude == 2);
-//
-//  uint64_t very_large_max = morton_max / 2;
-//  auto fifth_points = create_points(tree_gs, 0, very_large_max, 0.001, -(tree_gs.offset[0] * 4));
-//  points::converter::tree_add_points(tree_gs, tree, std::move(fifth_points));
-//  require(tree.sub_trees.size() == 2);
-//  require(tree.magnitude == 6);
-//}
+TEST_CASE("add_new_subtree", "[converter, tree_t]")
+{
+  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
+  tree_test_infrastructure test_util(256);
+  points::converter::tree_cache_t tree_cache;
+  auto points = create_points(test_util, 0, morton_max, 256);
+  auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, points.header);
+  auto &tree = *tree_cache.get(root_id);
+
+  REQUIRE(tree.nodes[0][0] == 0);
+  REQUIRE(tree.data[0][0].data.size() == 1);
+
+  morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
+  auto second_points = create_points(test_util, 0, morton_max, 256);
+  root_id = points::converter::tree_add_points(test_util.global_state, tree_cache, test_util.cache_file_handler, root_id, second_points.header);
+  auto &second_tree = *tree_cache.get(root_id);
+
+  REQUIRE(second_tree.nodes[0].size() == 1);
+  REQUIRE(second_tree.nodes[4].size() == 1);
+  REQUIRE(second_tree.skips[4].size() == 1);
+  REQUIRE(second_tree.sub_trees.size() == 1);
+  auto &added_tree = second_tree.sub_trees[second_tree.skips[4][0]];
+  auto &sub_tree = *tree_cache.get(added_tree);
+  REQUIRE(sub_tree.nodes[1].size() == 8);
+}
+
+TEST_CASE("add_new_subtree_offsets", "[converter, tree_t]")
+{
+  for (int i = 1; i < 11; i++)
+  {
+    tree_test_infrastructure test_util(256);
+    uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2 + i)) - 1);
+    auto points = create_points(test_util, 0, morton_max, 256);
+    points::converter::tree_cache_t tree_cache;
+    auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, points.header);
+    auto &tree = *tree_cache.get(root_id);
+
+    REQUIRE(tree.nodes[0][0] == 0);
+    REQUIRE(tree.data[0][0].data.size() == 1);
+
+    morton_max = ((uint64_t(1) << (1 * 3 * 5 + i)) - 1);
+    auto second_points = create_points(test_util, 0, morton_max, 256);
+    root_id = points::converter::tree_add_points(test_util.global_state, tree_cache, test_util.cache_file_handler, root_id, second_points.header);
+    auto &second_tree = *tree_cache.get(root_id);
+
+    REQUIRE(second_tree.nodes[0].size() == 1);
+    REQUIRE(second_tree.nodes[4].size() == 1);
+    REQUIRE(second_tree.skips[4].size() == 1);
+    REQUIRE(second_tree.sub_trees.size() == 1);
+    auto &added_tree = second_tree.sub_trees[second_tree.skips[4][0]];
+    auto &sub_tree = *tree_cache.get(added_tree);
+    REQUIRE(sub_tree.nodes[0].size() == 1);
+  }
+}
+TEST_CASE("reparent", "[converter, tree_t]")
+{
+  tree_test_infrastructure test_util(256);
+
+  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
+
+  auto first_points = create_points(test_util, 0, morton_max);
+  points::converter::tree_cache_t tree_cache;
+  auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, first_points.header);
+
+  morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
+  auto second_points = create_points(test_util, 0, morton_max);
+  root_id = points::converter::tree_add_points(test_util.global_state, tree_cache, test_util.cache_file_handler, root_id, second_points.header);
+
+  {
+    auto &tree = *tree_cache.get(root_id);
+    REQUIRE(tree.data[0][0].data.size() == 0);
+
+    REQUIRE(tree.sub_trees.size() == 1);
+  }
+
+  auto third_points = create_points(test_util, 1, morton_max);
+  root_id = points::converter::tree_add_points(test_util.global_state, tree_cache, test_util.cache_file_handler, root_id, third_points.header);
+  {
+    auto &tree = *tree_cache.get(root_id);
+    REQUIRE(tree.sub_trees.size() == 1);
+  }
+
+  uint64_t splitting_max = morton_max + morton_max / 2;
+  uint64_t splitting_min = morton_max / 2;
+  auto fourth_points = create_points(test_util, splitting_min, splitting_max);
+  root_id = points::converter::tree_add_points(test_util.global_state, tree_cache, test_util.cache_file_handler, root_id, fourth_points.header);
+  {
+    auto &tree = *tree_cache.get(root_id);
+    REQUIRE(tree.sub_trees.size() == 2);
+    REQUIRE(tree.magnitude == 2);
+  }
+
+  uint64_t very_large_max = morton_max / 2;
+  auto fifth_points = create_points(test_util, 0, very_large_max);
+  root_id = points::converter::tree_add_points(test_util.global_state, tree_cache, test_util.cache_file_handler, root_id, fifth_points.header);
+  {
+    auto &tree = *tree_cache.get(root_id);
+    REQUIRE(tree.sub_trees.size() == 2);
+    REQUIRE(tree.magnitude == 6);
+  }
+}
 }
