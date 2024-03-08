@@ -44,7 +44,7 @@ struct attribute_lod_info_t
 struct attribute_lod_mapping_t
 {
   attributes_id_t destination_id;
-  std::vector<std::pair<type_t, components_t>> destination;
+  std::vector<point_format_t> destination;
   std::vector<attribute_lod_info_t> source;
   const attribute_lod_info_t &get_source_mapping(attributes_id_t id) const
   {
@@ -73,8 +73,8 @@ public:
 
   const attributes_t &get(attributes_id_t id);
 
-  std::vector<std::pair<type_t, components_t>> get_format_components(attributes_id_t id);
-  std::pair<type_t, components_t> get_point_format(attributes_id_t id);
+  std::vector<point_format_t> get_format_components(attributes_id_t id);
+  point_format_t get_point_format(attributes_id_t id);
 private:
   const tree_global_state_t &_global_state;
   std::mutex _mutex;

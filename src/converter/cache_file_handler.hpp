@@ -28,9 +28,9 @@
 #include <ankerl/unordered_dense.h>
 
 #include <memory>
-#include <unordered_map>
 #include <deque>
 
+#include <stdint.h>
 namespace points
 {
 namespace converter
@@ -73,24 +73,21 @@ struct cache_file_request_t
 
 struct points_cache_item_t
 {
-  storage_header_t header;
   buffer_t data;
 };
 
 class cache_file_handler_t
 {
 public:
-  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::pair<storage_location_t, storage_header_t>> &write_done);
+  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::pair<std::vector<storage_location_t>, storage_header_t>> &write_done);
 
   void handle_open_cache_file(uv_fs_t *request);
 
   std::vector<request_id_t> write(const storage_header_t &header, attribute_buffers_t &&buffers, std::function<void(request_id_t id, const error_t &error)> on_done);
   request_id_t read(input_data_id_t id, int attribute_index);
 
-  bool attribute_id_and_count_for_input_id(input_data_id_t input_id, attributes_id_t &attributes_id, point_count_t &count);
-
-  points_cache_item_t ref_points(input_data_id_t id, int attribute_index);
-  void deref_points(input_data_id_t id);
+  points_cache_item_t ref_points(const storage_location_t &location);
+  void deref_points(const storage_location_t &location);
 
   int fill_ids(uint32_t **ids, uint32_t **subs, int buffer_size);
   int item_count();
@@ -129,64 +126,95 @@ private:
     }
   };
 
-  ankerl::unordered_dense::map<std::pair<input_data_id_t, attribute_index_t>, cache_entry_t, hash_input_id_attribute_index_t> _cache_entries;
 
   uv_file _file_handle;
   bool _file_opened;
 
   uv_fs_t _open_request;
   event_pipe_t<error_t> &_cache_file_error;
-  event_pipe_t<std::pair<storage_location_t, storage_header_t>> &_write_done;
+  event_pipe_t<std::pair<std::vector<storage_location_t>, storage_header_t>> &_write_done;
   event_pipe_t<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> _write_event_pipe;
 
 
-  struct hash_input_data_id_t
+  struct hash_storage_location_t
   {
-    size_t operator()(const input_data_id_t &a) const
+    uint64_t operator()(const storage_location_t &a) const
     {
-      uint64_t b;
+      std::pair<uint64_t, uint64_t> b;
       static_assert(sizeof(a) == sizeof(b), "hash function is invalid");
       memcpy(&b, &a, sizeof(b));
-      return std::hash<decltype (b)>()(b);
+      b.first ^= b.second + 0x517cc1b727220a95 + (b.first << 6) + (b.first >> 2);
+      return b.first;
     }
   };
   struct cache_item_impl_t
   {
     int ref;
-    storage_header_t header;
-    attributes_id_t attribute_id;
-    attribute_buffers_t buffers;
+    buffer_t buffer;
+    std::unique_ptr<uint8_t[]> data;
   };
 
   std::mutex _mutex;
 
   deque_map_t<request_id_t, std::shared_ptr<cache_file_request_t>> _requests;
 
-  std::unordered_map<input_data_id_t, cache_item_impl_t, hash_input_data_id_t> _cache_map;
+  ankerl::unordered_dense::map<storage_location_t, cache_item_impl_t, hash_storage_location_t> _cache_map;
 
   friend struct cache_file_request_t;
-  friend static void request_done_callback(uv_fs_t *req);
+  friend void request_done_callback(uv_fs_t *req);
 };
+
+static bool deserialize_points(const buffer_t &data, storage_header_t &header, buffer_t &point_data, error_t &error)
+{
+  uint8_t magic[] = { 'J', 'L', 'P', 0};
+  if (data.size < sizeof(magic) + sizeof(header))
+  {
+    error.code = 2;
+    error.msg = "Invalid input size";
+    return false;
+  }
+  auto cmp_result = memcmp(magic, data.data, sizeof(magic));
+  if (cmp_result != 0)
+  {
+    error.code = 1;
+    error.msg = "Invalid magic";
+    return false;
+  }
+  auto input_bytes = static_cast<uint8_t*>(data.data);
+  memcpy(&header, input_bytes + sizeof(magic), sizeof(header));
+  point_data.size = data.size - sizeof(magic) - sizeof(header);
+  point_data.data = input_bytes + sizeof(magic) + sizeof(header);
+  return true;
+}
 
 struct read_points_t
 {
-  read_points_t(cache_file_handler_t &cache_file_handler, input_data_id_t id, int attribute_index)
+  read_points_t(cache_file_handler_t &cache_file_handler, const storage_location_t &location)
     : cache_file_handler(cache_file_handler)
-    , id(id)
-    , cache_item(cache_file_handler.ref_points(id, attribute_index))
-    , header(cache_item.header)
-    , data(cache_item.data)
-  {}
+    , location(location)
+    , cache_item(cache_file_handler.ref_points(location))
+    , serialize_data(cache_item.data)
+  {
+    if (!deserialize_points(serialize_data, header, point_data, error))
+    {
+      cache_file_handler.deref_points(location);
+    }
+  }
   ~read_points_t()
   {
-    cache_file_handler.deref_points(id);
+    if (error.code == 0)
+    {
+      cache_file_handler.deref_points(location);
+    }
   }
 
   cache_file_handler_t &cache_file_handler;
-  input_data_id_t id;
+  storage_location_t location;
   points_cache_item_t cache_item;
-  storage_header_t &header;
-  buffer_t &data;
+  buffer_t &serialize_data;
+  storage_header_t header;
+  buffer_t point_data;
+  error_t error;
 };
 }
 } // namespace points

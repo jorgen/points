@@ -88,12 +88,12 @@ void get_data_worker_t::work()
   }
 
   storage_header.input_id = file.id;
-  storage_header.attributes_id = attribute_configs.get_attribute_config_index(std::move(tmp_attributes));
-  auto &attributes = attribute_configs.get(storage_header.attributes_id);
-  auto attribute_info = attribute_configs.get_format_components(storage_header.attributes_id);
-  input_init_pipe.post_event(std::make_tuple(storage_header.input_id, storage_header.attributes_id, public_header));
+  attributes_id_t attributes_id = attribute_configs.get_attribute_config_index(std::move(tmp_attributes));
+  auto &attributes = attribute_configs.get(attributes_id);
+  auto attribute_info = attribute_configs.get_format_components(attributes_id);
+  input_init_pipe.post_event(std::make_tuple(storage_header.input_id, attributes_id, public_header));
 
-  int convert_size = 20000;
+  uint32_t convert_size = 20000;
   uint8_t done_read_file = false;
   uint64_t local_points_read;
   uint32_t sub_part = 0;

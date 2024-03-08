@@ -52,14 +52,14 @@ struct get_points_file_t
 struct point_reader_file_t;
 struct unsorted_points_event_t
 {
-  unsorted_points_event_t(std::vector<std::pair<type_t, components_t>> attributes_def, const header_t &public_header, points_t &&points, point_reader_file_t &reader_file)
+  unsorted_points_event_t(std::vector<point_format_t> attributes_def, const header_t &public_header, points_t &&points, point_reader_file_t &reader_file)
     : attributes_def(attributes_def)
     , public_header(public_header)
     , points(std::move(points))
     , reader_file(reader_file)
   {}
 
-  std::vector<std::pair<type_t, components_t>> attributes_def;
+  std::vector<point_format_t> attributes_def;
   header_t public_header;
   points_t points;
   point_reader_file_t &reader_file;

@@ -429,11 +429,11 @@ static void quantize_morton_one(const morton::morton192_t &morton_min, const mor
 
 static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_in_subset_t offset, point_count_t count)
 {
-  auto format_byte_size = uint64_t(size_for_format(format));
+  auto format_byte_size = size_for_format(format);
   buffer_t ret;
   auto offset_bytes = offset.data * format_byte_size;
   ret.data = ((uint8_t *)buffer.data) + offset_bytes;
-  ret.size = uint64_t(count.data) * format_byte_size;
+  ret.size = count.data * format_byte_size;
   assert(ret.size + offset.data <= buffer.size);
   return ret;
 }
@@ -553,9 +553,6 @@ static void copy_attribute_for_input(input_data_id_t input_id, const std::vector
 
 static void quantize_attributres(cache_file_handler_t &cache, const std::vector<std::pair<input_data_id_t, uint32_t>>& indecies, const attribute_lod_mapping_t &lod_attrib_mapping, attribute_buffers_t &buffers)
 {
-  (void)indecies;
-  (void)buffers;
-
   fixed_capacity_vector_t<input_data_id_t> inputs(indecies, [](const std::pair<input_data_id_t, uint32_t> &a) { return a.first; });
   std::sort(inputs.begin(), inputs.end());
   auto inputs_end = std::unique(inputs.begin(), inputs.end());
@@ -563,7 +560,7 @@ static void quantize_attributres(cache_file_handler_t &cache, const std::vector<
   {
     attributes_id_t attr_id;
     point_count_t point_count;
-    cache.attribute_id_and_count_for_input_id(*inputs_it, attr_id, point_count);
+    cache.atribute_id_and_count_for_input_id(*inputs_it, attr_id, point_count);
     auto mapping = lod_attrib_mapping.get_source_mapping(attr_id);
     for (int destination_buffer_index = 1; destination_buffer_index < int(buffers.buffers.size()); destination_buffer_index++)
     {
@@ -658,14 +655,15 @@ void lod_worker_t::work()
   for (int i = 0; i < int(data.child_data.size()); i++)
   {
     auto &child_data = data.child_data[i];
+    auto &child_storage_info = data.child_storage_info[i];
     for (int sub_group_index = 0; sub_group_index < int(child_data.data.size()); sub_group_index++)
     {
       auto &subgroup = child_data.data[sub_group_index];
-      point_count_t count;
-      cache.attribute_id_and_count_for_input_id(subgroup.input_id, attribute_ids[child_data_count++], count);
+      auto &sub_info_group = child_storage_info[sub_group_index];
+      attribute_ids[child_data_count++] = sub_info_group.attributes_id;
       if (subgroup.count.data == 0) // This is a lod so just take the full stored data
       {
-        subgroup.count.data = count.data;
+        assert(false);
         subgroup.offset.data = 0;
       }
     }
@@ -679,7 +677,7 @@ void lod_worker_t::work()
   destination_header.input_id = data.storage_name;
   attribute_buffers_t buffers;
 
-  std::vector<std::pair<input_data_id_t, uint32_t>> indecies;
+  std::vector<std::pair<storage_location_t, uint32_t>> indecies;
   {
     std::unique_ptr<uint8_t[]> morton_attribute_buffer;
     quantize_morton_remember_indecies(cache, data.child_data, data.lod, random_offsets, morton_attribute_buffer, indecies);
@@ -709,7 +707,25 @@ void lod_worker_t::after_work(completion_t completion)
   lod_generator.iterate_workers();
 }
 
-static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache_file, attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
+static void get_storage_info(tree_cache_t &tree_cache, tree_id_t tree_id, lod_node_worker_data_t &node)
+{
+  auto *tree = tree_cache.get(tree_id);
+  node.child_storage_info.reserve(node.child_data.size());
+  for (int i = 0; i < int(node.child_data.size()); i++)
+  {
+    node.child_storage_info[i].resize(node.child_data[i].data.size());
+    for (int j = 0; j < int(node.child_data[i].data.size()); j++)
+    {
+      auto &child_data = node.child_data[i].data[j];
+      auto &storage_info = node.child_storage_info[i][j];
+      auto info = tree->storage_map.info(child_data.input_id);
+      storage_info.attributes_id = info.first;
+      storage_info.location = std::move(info.second);
+    }
+  }
+}
+
+static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_cache_t &tree_cache, cache_file_handler_t &cache_file, attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
 {
   batch.new_batch = false;
   batch.lod_workers.clear();
@@ -732,8 +748,8 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
     for (auto &node : tree.nodes[batch.level])
     {
       assert(!node.child_data.empty());
-      batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, node, random_offsets, batch.completed);
-      auto &lod_worker = batch.lod_workers.back();
+      get_storage_info(tree_cache, tree.tree_id,node);
+      auto &lod_worker = batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, node, random_offsets, batch.completed);
       lod_worker.enqueue(loop);
     }
   }
@@ -757,8 +773,6 @@ tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tr
 
 void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morton192_t &max)
 {
-  (void)tree_id;
-  (void)max;
   //auto &worker_data = batch.worker_data;
   std::vector<lod_tree_worker_data_t> to_lod;
   lod_node_worker_data_t fake_parent;
@@ -810,7 +824,9 @@ static void adjust_tree_after_lod(tree_cache_t &tree_cache, cache_file_handler_t
         while (tree_index < int(node_ids.size()) && node_ids[tree_index] < current)
           tree_index++;
         assert(node_ids[tree_index] == current);
-        tree->data[level][tree_index].point_count = adjust_data.nodes[level][node_index].generated_point_count.data;
+        const auto &done_node = adjust_data.nodes[level][node_index];
+        tree->data[level][tree_index].point_count = done_node.generated_point_count.data;
+        tree->storage_map.add_storage(done_node.storage_name, done_node.generated_attributes_id, done_node.generated_locations);
       }
     }
   }

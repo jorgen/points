@@ -90,12 +90,16 @@ struct storage_location_t
   uint64_t offset;
 };
 
+struct point_format_t
+{
+    type_t type;
+    components_t components;
+};
 struct storage_header_t
 {
   input_data_id_t input_id;
-  attributes_id_t attributes_id;
   uint64_t point_count;
-  std::pair<type_t, components_t> point_format;
+  point_format_t point_format;
   morton::morton192_t morton_min;
   morton::morton192_t morton_max;
   int lod_span;
@@ -113,6 +117,7 @@ inline void storage_header_initialize(storage_header_t &header)
 struct points_t
 {
   storage_header_t header;
+  attributes_id_t attributes_id;
   attribute_buffers_t buffers;
 };
 
@@ -150,9 +155,9 @@ struct index_t
 };
 struct point_count_t
 {
+  explicit point_count_t() : data(0){}
   explicit point_count_t(uint32_t data) : data(data){}
-  explicit point_count_t() {}
-  uint32_t data;
+  uint32_t data = 0;
 };
 
 struct points_subset_t

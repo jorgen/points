@@ -24,15 +24,15 @@
 class free_blob_manager_t
 {
 public:
-  static constexpr uint64_t PAGE_SIZE = 100 * 1024 * 1024; // 100 MB
-  using page_t = uint64_t;
+  static constexpr uint32_t PAGE_SIZE = 100 * 1024 * 1024; // 100 MB
+  using page_t = uint32_t;
 
   struct offset_t
   {
     uint64_t data;
-    page_t page() const
+    [[nodiscard]] page_t page() const
     {
-      return data / PAGE_SIZE;
+      return page_t(data / PAGE_SIZE);
     }
     bool operator<(const offset_t &o) const
     {
@@ -40,10 +40,10 @@ public:
     }
   };
 
-  struct size_type_t
+  struct blob_size_t
   {
-    uint64_t data;
-    bool operator<(const size_type_t &s) const
+    uint32_t data;
+    bool operator<(const blob_size_t &s) const
     {
       return data < s.data;
     }
@@ -52,7 +52,7 @@ public:
   struct section_t
   {
     offset_t offset;
-    size_type_t size;
+    blob_size_t size;
     bool operator<(const section_t &rhs) const
     {
       return offset < rhs.offset;
@@ -70,10 +70,10 @@ private:
 public:
   free_blob_manager_t();
 
-  [[nodiscard]] offset_t register_blob(size_type_t size);
-  [[nodiscard]] bool unregister_blob(offset_t original_offset, size_type_t size);
+  [[nodiscard]] offset_t register_blob(blob_size_t size);
+  [[nodiscard]] bool unregister_blob(offset_t original_offset, blob_size_t size);
   size_t get_free_sections_count() const;
   size_t get_pages_count() const;
   section_t get_free_section(page_t page, size_t n) const;
-  size_type_t get_file_size() const;
+  offset_t get_file_size() const;
 };

@@ -295,7 +295,7 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
   points.buffers.buffers[0].data = points.buffers.data[0].get();
   points.buffers.buffers[0].size = buffer_size;
 
-  auto &orig_attributes = attributes_config.get(points.header.attributes_id);
+  auto &orig_attributes = attributes_config.get(points.attributes_id);
   attributes_t attributes;
   attributes_copy(orig_attributes, attributes);
   attributes.attributes[0].format = format;
@@ -323,8 +323,8 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
   points.buffers.data.emplace_back(std::move(indecies));
   points.buffers.buffers.emplace_back(points.buffers.data.back().get(), sizeof(INDEX_T) * count);
 
-  points.header.attributes_id = attributes_config.get_attribute_config_index(std::move(attributes));
-  points.header.point_format = std::make_pair(format, components_1);
+  points.attributes_id = attributes_config.get_attribute_config_index(std::move(attributes));
+  points.header.point_format = { format, components_1 };
   morton::morton_upcast(first, base_morton, points.header.morton_min);
   morton::morton_upcast(last, base_morton, points.header.morton_max);
   assert(points.header.lod_span == morton::morton_lod(points.header.morton_min, points.header.morton_max));
@@ -406,8 +406,8 @@ void convert_and_sort_resolve_index_t(const tree_global_state_t& tree_state, att
 
 void sort_points(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
 {
-  auto point_format = attributes_configs.get_point_format(points.header.attributes_id);
-  switch (point_format.first)
+  auto point_format = attributes_configs.get_point_format(points.attributes_id);
+  switch (point_format.type)
   {
   case type_i32:
     convert_and_sort_resolve_index_t<int32_t>(tree_state, attributes_configs, public_header, points, error);

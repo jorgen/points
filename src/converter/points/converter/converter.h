@@ -56,12 +56,12 @@ struct buffer_t
     : data(nullptr)
     , size(0)
   {}
-  buffer_t(void *data, uint64_t size)
+  buffer_t(void *data, uint32_t size)
     : data(data)
     , size(size)
   {}
   void *data;
-  uint64_t size;
+  uint32_t size;
 };
 
 struct converter_file_pre_init_info_t

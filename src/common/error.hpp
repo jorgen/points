@@ -23,7 +23,7 @@ namespace points
 {
 struct error_t 
 {
-  int code;
+  int code = 0;
   std::string msg;
 };
 

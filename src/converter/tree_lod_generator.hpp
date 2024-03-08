@@ -28,6 +28,12 @@ namespace points
 namespace converter
 {
 
+struct lod_child_storage_info_t
+{
+  attributes_id_t attributes_id;
+  std::vector<storage_location_t> location;
+};
+
 struct lod_node_worker_data_t
 {
   morton::morton192_t node_min;
@@ -35,7 +41,10 @@ struct lod_node_worker_data_t
   uint16_t lod;
   input_data_id_t storage_name;
   std::vector<points_collection_t> child_data;
+  std::vector<std::vector<lod_child_storage_info_t>> child_storage_info;
   point_count_t generated_point_count;
+  attributes_id_t generated_attributes_id;
+  std::vector<storage_location_t> generated_locations;
 };
 
 struct lod_tree_worker_data_t

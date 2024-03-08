@@ -48,26 +48,26 @@ void attributes_copy(const attributes_t &source, attributes_t &target)
   }
 }
 
-void attribute_buffers_initialize(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
+void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count)
 {
   buffers.data.reserve(attributes_def.size());
   buffers.buffers.reserve(attributes_def.size());
   for (auto &attribute : attributes_def)
   {
-    uint64_t buffer_size = size_for_format(attribute.first) * uint64_t(attribute.second) * point_count;
+    uint32_t buffer_size = size_for_format(attribute.type) * uint32_t(attribute.components) * point_count;
     buffers.data.emplace_back(new uint8_t[buffer_size]);
-    buffers.buffers.push_back({buffers.data.back().get(), buffer_size});
+    buffers.buffers.emplace_back(buffers.data.back().get(), buffer_size);
   }
 }
 
-void attribute_buffers_initialize(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count, std::unique_ptr<uint8_t[]> && morton_attribute_buffer)
+void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count, std::unique_ptr<uint8_t[]> && morton_attribute_buffer)
 {
   buffers.data.reserve(attributes_def.size());
   buffers.buffers.reserve(attributes_def.size());
   bool first = true;
   for (auto &attribute : attributes_def)
   {
-    uint64_t buffer_size = size_for_format(attribute.first) * uint64_t(attribute.second) * point_count;
+    uint32_t buffer_size = size_for_format(attribute.type) * uint64_t(attribute.components) * point_count;
     if (first)
     {
       buffers.data.emplace_back(std::move(morton_attribute_buffer));
@@ -77,19 +77,19 @@ void attribute_buffers_initialize(const std::vector<std::pair<type_t, components
     {
       buffers.data.emplace_back(new uint8_t[buffer_size]);
     }
-    buffers.buffers.push_back({buffers.data.back().get(), buffer_size});
+    buffers.buffers.emplace_back(buffers.data.back().get(), buffer_size);
   }
 
 }
 
-void attribute_buffers_adjust_buffers_to_size(const std::vector<std::pair<type_t, components_t>> &attributes_def, attribute_buffers_t &buffers, uint64_t point_count)
+void attribute_buffers_adjust_buffers_to_size(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count)
 {
   assert(attributes_def.size() == buffers.buffers.size());
 
   for (int i = 0; i < int(attributes_def.size()); i++)
   {
     auto &buffer = buffers.buffers[i];
-    buffer.size = size_for_format(attributes_def[i].first) * uint64_t(attributes_def[i].second) * point_count;
+    buffer.size = size_for_format(attributes_def[i].type) * uint32_t(attributes_def[i].components) * point_count;
   }
 }
 }

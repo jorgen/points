@@ -21,6 +21,7 @@
 #include <list>
 
 #include "conversion_types.hpp"
+#include "input_storage_map.hpp"
 #include "morton.hpp"
 
 #include <ankerl/unordered_dense.h>
@@ -89,11 +90,6 @@ struct tree_id_t
   uint32_t data;
 };
 
-struct storage_location_with_ref_t : storage_location_t
-{
-  int ref;
-};
-
 struct tree_t
 {
   morton::morton192_t morton_min;
@@ -108,7 +104,7 @@ struct tree_t
 #endif
   tree_id_t id;
   uint8_t magnitude;
-  ankerl::unordered_dense::map<uint32_t, storage_location_with_ref_t> storage_locations;
+  input_storage_map_t storage_map;
 };
 
 struct tree_cache_t
@@ -120,8 +116,8 @@ struct tree_cache_t
 
 };
 
-tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header);
-tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header);
+tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header, std::vector<storage_location_t> &&locations);
+tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
 }
 }
 

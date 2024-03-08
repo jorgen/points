@@ -321,7 +321,7 @@ TEST_CASE("Registering blob that spans multiple pages", "[blob_manager_t]")
 
     SECTION("Register blob spanning across pages")
     {
-    auto large_blob_size = uint64_t(free_blob_manager_t::PAGE_SIZE * 1.5);
+    auto large_blob_size = uint32_t(free_blob_manager_t::PAGE_SIZE * 1.5);
     auto offset = manager.register_blob({large_blob_size});
     REQUIRE(offset.page() == 0);                                          // Starts on the first page
     REQUIRE((offset.data + large_blob_size) > free_blob_manager_t::PAGE_SIZE); // Spans to the next page
@@ -331,7 +331,7 @@ TEST_CASE("Registering blob that spans multiple pages", "[blob_manager_t]")
 TEST_CASE("Unregistering blob that spans multiple pages", "[blob_manager_t]")
 {
     free_blob_manager_t manager;
-    auto large_blob_size = uint64_t(free_blob_manager_t::PAGE_SIZE * 1.5);
+    auto large_blob_size = uint32_t(free_blob_manager_t::PAGE_SIZE * 1.5);
     auto offset = manager.register_blob({large_blob_size});
 
     SECTION("Unregister blob spanning across pages")

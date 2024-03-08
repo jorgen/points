@@ -35,6 +35,7 @@ set(private_headers
   data_source_storage.hpp
   frustum_tree_walker.hpp
   input_data_source_registry.hpp
+  input_storage_map.hpp
   )
 
 set(sources
@@ -56,6 +57,7 @@ set(sources
   frustum_tree_walker.cpp
   blob_manager.cpp
   input_data_source_registry.cpp
+  input_storage_map.cpp
   )
 
 add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources} )
