@@ -32,7 +32,7 @@ namespace converter
 struct attribute_source_lod_into_t
 {
   int source_index;
-  std::pair<type_t, components_t> source_format;
+  point_format_t source_format;
 };
 
 struct attribute_lod_info_t
@@ -75,9 +75,11 @@ public:
 
   std::vector<point_format_t> get_format_components(attributes_id_t id);
   point_format_t get_point_format(attributes_id_t id);
+
+  int get_attribute_index(attributes_id_t id, const std::string &name) const;
 private:
   const tree_global_state_t &_global_state;
-  std::mutex _mutex;
+  mutable  std::mutex _mutex;
   std::vector<attribute_config_t> _attributes_configs;
 };
 

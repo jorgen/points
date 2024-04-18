@@ -79,23 +79,23 @@ struct points_cache_item_t
 class cache_file_handler_t
 {
 public:
-  cache_file_handler_t(const tree_global_state_t &state, const std::string &cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::pair<std::vector<storage_location_t>, storage_header_t>> &write_done);
+  cache_file_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error, event_pipe_t<std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>>> &write_done);
 
   void handle_open_cache_file(uv_fs_t *request);
 
-  std::vector<request_id_t> write(const storage_header_t &header, attribute_buffers_t &&buffers, std::function<void(request_id_t id, const error_t &error)> on_done);
+  std::vector<request_id_t> write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers, std::function<void(request_id_t id, const error_t &error)> on_done);
   request_id_t read(input_data_id_t id, int attribute_index);
 
   points_cache_item_t ref_points(const storage_location_t &location);
   void deref_points(const storage_location_t &location);
 
-  int fill_ids(uint32_t **ids, uint32_t **subs, int buffer_size);
   int item_count();
 
   bool is_available(input_data_id_t id, int attribute_index);
 
 private:
-  void handle_write_events(std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>> &&event);
+  static void request_done_callback(uv_fs_t *req);
+  void handle_write_events(std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>> &&event);
   void handle_request_done(request_id_t id);
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
@@ -130,10 +130,10 @@ private:
   uv_file _file_handle;
   bool _file_opened;
 
-  uv_fs_t _open_request;
+  uv_fs_t _open_request{};
   event_pipe_t<error_t> &_cache_file_error;
-  event_pipe_t<std::pair<std::vector<storage_location_t>, storage_header_t>> &_write_done;
-  event_pipe_t<std::tuple<std::vector<request_id_t>, storage_header_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> _write_event_pipe;
+  event_pipe_t<std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>>> &_write_done;
+  event_pipe_t<std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> _write_event_pipe;
 
 
   struct hash_storage_location_t
@@ -161,7 +161,6 @@ private:
   ankerl::unordered_dense::map<storage_location_t, cache_item_impl_t, hash_storage_location_t> _cache_map;
 
   friend struct cache_file_request_t;
-  friend void request_done_callback(uv_fs_t *req);
 };
 
 static bool deserialize_points(const buffer_t &data, storage_header_t &header, buffer_t &point_data, error_t &error)

@@ -23,6 +23,7 @@
 #include "fixed_size_vector.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 #include <algorithm>
+#include <mutex>
 
 namespace points
 {
@@ -169,8 +170,8 @@ attribute_source_lod_into_t create_attribute_source_lod_into (const attribute_t 
     if (is_attribute_names_equal(attr, attributes.attributes[i]))
     {
       attribute_source_lod_into_t ret;
-      ret.source_format.first = attributes.attributes[i].format;
-      ret.source_format.second = attributes.attributes[i].components;
+      ret.source_format.type = attributes.attributes[i].format;
+      ret.source_format.components = attributes.attributes[i].components;
       ret.source_index = i;
       return ret;
     }
@@ -237,5 +238,19 @@ point_format_t attributes_configs_t::get_point_format(attributes_id_t id)
   std::unique_lock<std::mutex> lock(_mutex);
   auto &attrib = _attributes_configs[id.data].attributes.attributes[0];
   return { attrib.format, attrib.components };
+}
+int attributes_configs_t::get_attribute_index(attributes_id_t id, const std::string &name) const
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  if (id.data >= _attributes_configs.size())
+    return -1;
+  if (_attributes_configs[id.data].attributes.attributes.empty())
+    return -1;
+  for (int i = 0; i < int(_attributes_configs[id.data].attributes.attributes.size()); i++)
+  {
+    if (_attributes_configs[id.data].attributes.attribute_names[i].get() == name)
+      return i;
+  }
+  return -1;
 }
 }}

@@ -20,9 +20,9 @@
 
 #include <stdint.h>
 
-#include <points/converter/export.h>
 #include <points/common/error.h>
 #include <points/common/format.h>
+#include <points/converter/export.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,11 +55,13 @@ struct buffer_t
   buffer_t()
     : data(nullptr)
     , size(0)
-  {}
+  {
+  }
   buffer_t(void *data, uint32_t size)
     : data(data)
     , size(size)
-  {}
+  {
+  }
   void *data;
   uint32_t size;
 };
@@ -75,7 +77,8 @@ struct converter_file_pre_init_info_t
 
 typedef converter_file_pre_init_info_t (*converter_file_pre_init_callback_t)(const char *filename, size_t filename_size, struct error_t **error);
 typedef void (*converter_file_init_callback_t)(const char *filename, size_t filename_size, header_t *header, attributes_t *attributes, void **user_ptr, struct error_t **error);
-typedef void (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, uint64_t max_points_to_convert, buffer_t *buffers, uint64_t buffers_size, uint64_t *points_read, uint8_t *done, struct error_t **error);
+typedef void (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint32_t attributes_size, uint32_t max_points_to_convert, buffer_t *buffers,
+                                                       uint32_t buffers_size, uint32_t *points_read, uint8_t *done, struct error_t **error);
 typedef void (*converter_file_destroy_user_ptr_t)(void *user_ptr);
 
 struct converter_file_convert_callbacks_t
@@ -99,10 +102,9 @@ struct converter_runtime_callbacks_t
   converter_done_callback_t done;
 };
 
-
 struct converter_buffer_callbacks_t
 {
- int tmp;
+  int tmp;
 };
 
 struct str_buffer
@@ -113,7 +115,7 @@ struct str_buffer
 
 enum converter_conversion_status_t
 {
-  conversion_status_error, 
+  conversion_status_error,
   conversion_status_in_progress,
   conversion_status_completed
 };
@@ -127,7 +129,7 @@ POINTS_CONVERTER_EXPORT void converter_add_data_file(converter_t *converter, str
 POINTS_CONVERTER_EXPORT void converter_wait_finish(converter_t *converter);
 POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter_t *converter, error_t **errors, size_t *error_count);
 
-}
+} // namespace converter
 
 } // namespace points
 #ifdef __cplusplus

@@ -22,6 +22,7 @@
 #include "threaded_event_loop.hpp"
 
 #include <deque>
+#include <ankerl/unordered_dense.h>
 
 namespace points
 {
@@ -31,9 +32,20 @@ namespace converter
 struct lod_child_storage_info_t
 {
   attributes_id_t attributes_id;
-  std::vector<storage_location_t> location;
+  std::vector<storage_location_t> locations;
 };
 
+struct input_data_id_hash_t {
+  using is_avalanching = void;
+  auto operator()(input_data_id_t id) const noexcept -> uint64_t {
+    uint64_t data;
+    static_assert(sizeof(data) == sizeof(id), "size mismatch");
+    memcpy(&data, &id, sizeof(data));
+    return ankerl::unordered_dense::detail::wyhash::hash(data);
+  }
+};
+
+using child_storage_map_t = ankerl::unordered_dense::map<input_data_id_t, lod_child_storage_info_t, input_data_id_hash_t>;
 struct lod_node_worker_data_t
 {
   morton::morton192_t node_min;
@@ -41,7 +53,7 @@ struct lod_node_worker_data_t
   uint16_t lod;
   input_data_id_t storage_name;
   std::vector<points_collection_t> child_data;
-  std::vector<std::vector<lod_child_storage_info_t>> child_storage_info;
+  child_storage_map_t child_storage_info;
   point_count_t generated_point_count;
   attributes_id_t generated_attributes_id;
   std::vector<storage_location_t> generated_locations;
@@ -70,11 +82,6 @@ private:
   lod_node_worker_data_t &data;
   const std::vector<float> &random_offsets;
   int &inc_on_completed;
-};
-
-struct lod_tree_worker_batch
-{
-
 };
 
 struct lod_worker_batch_t

@@ -26,20 +26,22 @@ namespace points
 {
 namespace converter
 {
-template <typename T>
+template <typename... ARGS>
 class event_pipe_t
 {
 public:
   template<typename EventLoop>
-  event_pipe_t(EventLoop &eventLoop, std::function<void(T &&event)> event_callback)
+  event_pipe_t(EventLoop &eventLoop, std::function<void(ARGS &&... event)> event_callback)
     : event_callback(event_callback)
+    , pipe{}
   {
     pipe.data = this;
     eventLoop.add_event_pipe(*this);
   }
   
-  event_pipe_t(std::function<void(T &&event)> event_callback)
+  event_pipe_t(std::function<void(ARGS &&... event)> event_callback)
     : event_callback(event_callback)
+    , pipe{}
   {
     pipe.data = this;
   }
@@ -48,31 +50,24 @@ public:
   {
     auto on_event = [](uv_async_t *handle) {
       event_pipe_t *event_pipe = static_cast<event_pipe_t*>(handle->data);
-      std::vector<T> event_vec;
+      std::vector<std::tuple<ARGS &&...>> event_vec;
       event_pipe->swap_events(event_vec);
       for (auto &event : event_vec)
-        event_pipe->event_callback(std::move(event));
+        std::apply(event_pipe->event_callback, std::move(event));
     };
     uv_async_init(loop, &pipe, on_event);
 
     return (uv_handle_t *)&pipe;
   }
 
-  void post_event(const T &t)
+  void post_event(ARGS  &&...args)
   {
     std::unique_lock<std::mutex> lock(mutex);
-    events.push_back(t);
+    events.push_back(std::make_tuple(std::forward<ARGS>(args)...));
     uv_async_send(&pipe);
   }
 
-  void post_event(T &&t)
-  {
-    std::unique_lock<std::mutex> lock(mutex);
-    events.push_back(std::move(t));
-    uv_async_send(&pipe);
-  }
-
-  void swap_events(std::vector<T> &to_swap)
+  void swap_events(std::vector<std::tuple<ARGS &&...>> &to_swap)
   {
     std::unique_lock<std::mutex> lock(mutex);
     std::swap(events, to_swap);
@@ -80,8 +75,8 @@ public:
   }
 
 private:
-  std::function<void(T &&event)> event_callback;
-  std::vector<T> events;
+  std::function<void(ARGS &&...args)> event_callback;
+  std::vector<std::tuple<ARGS &&...>> events;
   uv_async_t pipe;
   std::mutex mutex;
 };

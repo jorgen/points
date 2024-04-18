@@ -1,25 +1,24 @@
 #include <fmt/printf.h>
 
-#include <SDL.h>
 #include "include/glad/glad.h"
+#include <SDL.h>
 #include <fmt/printf.h>
 #include <stdio.h>
 
 #include "gl_renderer.h"
 
-#include <examples/imgui_impl_sdl.h>
 #include <examples/imgui_impl_opengl3.h>
+#include <examples/imgui_impl_sdl.h>
 
-#include <points/render/renderer.h>
-#include <points/render/camera.h>
 #include <points/render/aabb.h>
 #include <points/render/aabb_data_source.h>
-#include <points/render/skybox_data_source.h>
+#include <points/render/camera.h>
 #include <points/render/flat_points_data_source.h>
+#include <points/render/renderer.h>
+#include <points/render/skybox_data_source.h>
 
 #include <points/converter/converter.h>
 #include <points/converter/converter_data_source.h>
-#include <points/converter/storage_data_source.h>
 
 #include <vector>
 
@@ -29,14 +28,13 @@
 CMRC_DECLARE(fonts);
 CMRC_DECLARE(textures);
 
-
 template <typename T, typename Deleter>
 std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
 {
   return std::unique_ptr<T, Deleter>(t, d);
 }
 
-template<size_t N>
+template <size_t N>
 static void get_texture_data_size(const char (&name)[N], void *&data, int &size)
 {
   auto texturefs = cmrc::textures::get_filesystem();
@@ -63,24 +61,6 @@ points::converter::str_buffer make_str_buffer(const char (&data)[N])
   return {data, N};
 }
 
-static void update_storage(points::converter::storage_data_source_t *storage_datasource, int &storage_count,  std::vector<uint32_t> &storage_ids, std::vector<uint32_t> &storage_subs,  std::vector<std::string> &storage_strings)
-{
-  int new_storage_count = points::converter::storage_data_source_ids_count(storage_datasource);
-  if (storage_count == new_storage_count)
-      return;
-  storage_count = new_storage_count;
-  storage_ids.resize(storage_count);
-  storage_subs.resize(storage_count);
-  storage_strings.resize(storage_count);
-  uint32_t *sids = storage_ids.data();
-  uint32_t *subs = storage_subs.data();
-  points::converter::storage_data_source_ids(storage_datasource, &sids, &subs, storage_count);
-  for (int i = 0; i < storage_count; i++)
-  {
-      storage_strings[i] = fmt::format("{} - {}", sids[i], subs[i]);
-  }
-}
-
 int main(int, char **)
 {
   if (SDL_Init(SDL_INIT_VIDEO) < 0)
@@ -103,9 +83,7 @@ int main(int, char **)
   int width = 800;
   int height = 600;
 
-  SDL_Window *window =
-    SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height,
-                     SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+  SDL_Window *window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
   SDL_GLContext context = SDL_GL_CreateContext(window);
 
   if (!gladLoadGL())
@@ -154,63 +132,58 @@ int main(int, char **)
   get_texture_data_size("textures/bottom.jpg", skybox_data.negative_y, skybox_data.negative_y_size);
   get_texture_data_size("textures/front.jpg", skybox_data.positive_z, skybox_data.positive_z_size);
   get_texture_data_size("textures/back.jpg", skybox_data.negative_z, skybox_data.negative_z_size);
-  auto skybox = create_unique_ptr(points::render::skybox_data_source_create(renderer.get(), skybox_data),
-                                  &points::render::skybox_data_source_destroy);
-  //points::render::renderer_add_data_source(renderer.get(), points::render::skybox_data_source_get(skybox.get()));
+  auto skybox = create_unique_ptr(points::render::skybox_data_source_create(renderer.get(), skybox_data), &points::render::skybox_data_source_destroy);
+  // points::render::renderer_add_data_source(renderer.get(), points::render::skybox_data_source_get(skybox.get()));
 
   std::vector<points::converter::str_buffer> input_files;
-  //input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
-  //input_files.push_back(make_str_buffer("D:/LazData/Kosciol_Libusza/K_Libusza_ext_18.laz"));
-  //input_files.push_back(make_str_buffer("D:/LazData/Palac_Moszna/Palac_Moszna.laz"));
+  // input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
+  // input_files.push_back(make_str_buffer("D:/LazData/Kosciol_Libusza/K_Libusza_ext_18.laz"));
+  // input_files.push_back(make_str_buffer("D:/LazData/Palac_Moszna/Palac_Moszna.laz"));
   input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
-  //input_files.push_back(make_str_buffer("D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-63.laz"));
-  //input_files.push_back(make_str_buffer("/Users/jlind/Downloads/Palac_Moszna.laz"));
+  // input_files.push_back(make_str_buffer("D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-63.laz"));
+  // input_files.push_back(make_str_buffer("/Users/jlind/Downloads/Palac_Moszna.laz"));
 
   const char cache_file[] = "tmp_file.tmp";
   auto converter = create_unique_ptr(points::converter::converter_create(cache_file, sizeof(cache_file)), &points::converter::converter_destroy);
   points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
 
-
   bool render_flat_points = true;
-  auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size),
-                                   &points::render::flat_points_data_source_destroy);
+  auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size), &points::render::flat_points_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
   points::render::aabb_t aabb;
   points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
 
   bool render_converter_points = true;
-  auto converter_points = create_unique_ptr(points::converter::converter_data_source_create(converter.get(), renderer.get()),
-                                            &points::converter::converter_data_source_destroy);
+  auto converter_points = create_unique_ptr(points::converter::converter_data_source_create(converter.get(), renderer.get()), &points::converter::converter_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
 
-  auto storage_datasource = create_unique_ptr(points::converter::storage_data_source_create(converter.get(), renderer.get()),
-                                              &points::converter::storage_data_source_destroy);
-  points::render::renderer_add_data_source(renderer.get(), points::converter::storage_data_source_get(storage_datasource.get()));
-
-  int storage_count = 0;
-  int  current_selected_storage = -1;
   std::vector<uint32_t> storage_ids;
   std::vector<uint32_t> storage_subs;
   std::vector<std::string> storage_strings;
   // auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get(), aabb.min),
- //                                  &points::render::aabb_data_source_destroy);
- // points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
-  //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
-  //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  //                                  &points::render::aabb_data_source_destroy);
+  // points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
+  // points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  // points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
   //(void)points;
-
 
   double aabb_center[3] = {5.0, 0.0, 5.0};
   double up[3];
-  up[0] = 0.0; up[1] = 1.0; up[2] = 0.0;
+  up[0] = 0.0;
+  up[1] = 1.0;
+  up[2] = 0.0;
 
   points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
   points::render::camera_look_at_aabb(camera.get(), &aabb, aabb_center, up);
 
   points::render::aabb_t aabb2;
-  aabb2.min[0] = 0.0; aabb2.min[1] = 0.0; aabb2.min[2] = 0.0;
-  aabb2.max[0] = 0.0; aabb2.max[1] = 0.0; aabb2.max[2] = 0.0;
-  //int aabb2_id =  -1; //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  aabb2.min[0] = 0.0;
+  aabb2.min[1] = 0.0;
+  aabb2.min[2] = 0.0;
+  aabb2.max[0] = 0.0;
+  aabb2.max[1] = 0.0;
+  aabb2.max[2] = 0.0;
+  // int aabb2_id =  -1; //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
 
   auto error = glGetError();
   (void)error;
@@ -224,21 +197,18 @@ int main(int, char **)
   auto arcball = create_unique_ptr(points::render::camera_manipulator::arcball_create(camera.get(), arcball_center), &points::render::camera_manipulator::arcball_destroy);
   auto fps = create_unique_ptr((points::render::camera_manipulator::fps_t *)nullptr, &points::render::camera_manipulator::fps_destroy);
 
-  while(loop)
+  while (loop)
   {
-    auto old_selected_storage = current_selected_storage;
     SDL_WaitEvent(nullptr);
     SDL_Event event;
     while (SDL_PollEvent(&event))
     {
       if (event.type == SDL_QUIT)
         loop = false;
-      if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE &&
-          event.window.windowID == SDL_GetWindowID(window))
+      if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
         loop = false;
       ImGui_ImplSDL2_ProcessEvent(&event);
-      if (!(io.WantCaptureKeyboard && (event.type & 0x300))
-        && !(io.WantCaptureMouse && (event.type & 0x400)))
+      if (!(io.WantCaptureKeyboard && (event.type & 0x300)) && !(io.WantCaptureMouse && (event.type & 0x400)))
       {
         switch (event.type)
         {
@@ -258,14 +228,6 @@ int main(int, char **)
             if (event.key.keysym.sym == SDLK_e)
               points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 1.3f, 0.0f);
           }
-          if (event.key.keysym.sym == SDLK_j && !storage_strings.empty() && current_selected_storage < storage_strings.size() - 1)
-          {
-            current_selected_storage++;
-          }
-          else if (event.key.keysym.sym == SDLK_k && !storage_strings.empty() && current_selected_storage > 0)
-          {
-            current_selected_storage--;
-          }
 
           if (event.key.keysym.sym == SDLK_LCTRL || event.key.keysym.sym == SDLK_RCTRL)
             ctrl_modifier = true;
@@ -282,10 +244,10 @@ int main(int, char **)
             left_pressed = true;
             if (arcball)
               points::render::camera_manipulator::arcball_detect_upside_down(arcball.get());
-            //if (arcball)
-            //  points::render::camera_manipulator::arcball_reset(arcball.get());
-            //else
-            //  points::render::camera_manipulator::fps_reset(fps.get());
+            // if (arcball)
+            //   points::render::camera_manipulator::arcball_reset(arcball.get());
+            // else
+            //   points::render::camera_manipulator::fps_reset(fps.get());
           }
           else if (event.button.button == SDL_BUTTON_RIGHT)
           {
@@ -317,7 +279,8 @@ int main(int, char **)
           if (event.button.button == SDL_BUTTON_LEFT)
           {
             left_pressed = false;
-          } else if (event.button.button == SDL_BUTTON_RIGHT)
+          }
+          else if (event.button.button == SDL_BUTTON_RIGHT)
           {
             right_pressed = false;
             if (arcball)
@@ -326,10 +289,10 @@ int main(int, char **)
               points::render::camera_manipulator::fps_reset(fps.get());
           }
           break;
-        case SDL_MOUSEWHEEL: 
+        case SDL_MOUSEWHEEL:
           if (arcball && event.wheel.y)
           {
-            points::render::camera_manipulator::arcball_zoom(arcball.get(), -float(event.wheel.y)/30); 
+            points::render::camera_manipulator::arcball_zoom(arcball.get(), -float(event.wheel.y) / 30);
           }
           break;
         case SDL_WINDOWEVENT:
@@ -356,12 +319,12 @@ int main(int, char **)
     diff[0] = converter_max[0] - converter_min[0];
     diff[1] = converter_max[1] - converter_min[1];
     diff[2] = converter_max[2] - converter_min[2];
-   // if (converter_min[0] != aabb2.min[0] && aabb2_id == -1)
-   // {
-   //   aabb2_id = points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
-   //   memcpy(aabb2.min, converter_min, sizeof(converter_min));
-   //   memcpy(aabb2.max, converter_max, sizeof(converter_max));
-   // }
+    // if (converter_min[0] != aabb2.min[0] && aabb2_id == -1)
+    // {
+    //   aabb2_id = points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
+    //   memcpy(aabb2.min, converter_min, sizeof(converter_min));
+    //   memcpy(aabb2.max, converter_max, sizeof(converter_max));
+    // }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(window);
@@ -409,32 +372,11 @@ int main(int, char **)
         points::render::renderer_remove_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
       }
     }
-    update_storage(storage_datasource.get(), storage_count, storage_ids, storage_subs, storage_strings);
-    if (ImGui::BeginCombo("storage to render", current_selected_storage < 0 ? "pick one" : storage_strings[current_selected_storage].c_str()))
-    {
-      for (int i = 0; i < storage_count; i++)
-      {
-        bool is_selected = false;
-        if (ImGui::Selectable(storage_strings[i].c_str(), is_selected))
-        {
-          current_selected_storage = i;
-          points::converter::storage_data_source_render(storage_datasource.get(), storage_ids[current_selected_storage], storage_subs[current_selected_storage]);
-        }
-      }
-      ImGui::EndCombo();
-    }
-    if (ImGui::SliderInt("Current storage chunk", &current_selected_storage, 0, storage_count - 1))
-    {
-    }
-    if (old_selected_storage != current_selected_storage)
-    {
-      points::converter::storage_data_source_render(storage_datasource.get(), storage_ids[current_selected_storage], storage_subs[current_selected_storage]);
-    }
     ImGui::EndGroup();
     ImGui::SetItemDefaultFocus();
     ImGui::End();
-   
-    //ImGui::ShowDemoWindow();
+
+    // ImGui::ShowDemoWindow();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

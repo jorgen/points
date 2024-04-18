@@ -33,11 +33,11 @@ public:
 
   void about_to_block() override;
 
-  void add_points(storage_header_t &&header);
-  void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
+  void add_points(storage_header_t &&header, attributes_id_t &&attributes_id, std::vector<storage_location_t> &&storage);
+  void walk_tree(std::shared_ptr<frustum_tree_walker_t> event);
   void generate_lod(const morton::morton192_t &max);
 private:
-  void handle_add_points(storage_header_t &&events);
+  void handle_add_points(std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>> &&event);
   void handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&events);
   threaded_event_loop_t _event_loop;
   bool _initialized;
@@ -51,7 +51,7 @@ private:
 
   tree_lod_generator_t _tree_lod_generator;
 
-  event_pipe_t<storage_header_t> _add_points;
+  event_pipe_t<std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>>> _add_points;
   event_pipe_t<std::shared_ptr<frustum_tree_walker_t>> _walk_tree;
   event_pipe_t<input_data_id_t> &_done_with_input;
 };

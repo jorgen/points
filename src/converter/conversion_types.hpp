@@ -22,9 +22,9 @@
 #include "error.hpp"
 #include "morton.hpp"
 
-#include <vector>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace points
 {
@@ -37,15 +37,15 @@ struct input_data_id_t
   uint32_t sub;
 };
 
-inline bool operator<(const input_data_id_t &a, const input_data_id_t &b)
+inline bool operator<(const input_data_id_t a, const input_data_id_t b)
 {
   return a.data < b.data || (a.data == b.data && a.sub < b.sub);
 }
-inline bool operator==(const input_data_id_t &a, const input_data_id_t &b)
+inline bool operator==(const input_data_id_t a, const input_data_id_t b)
 {
   return a.data == b.data && a.sub == b.sub;
 }
-inline bool operator!=(const input_data_id_t &a, const input_data_id_t &b)
+inline bool operator!=(const input_data_id_t a, const input_data_id_t b)
 {
   return !(a == b);
 }
@@ -64,6 +64,14 @@ struct attributes_id_t
 {
   uint32_t data;
 };
+inline bool operator==(const attributes_id_t a, const attributes_id_t b)
+{
+  return memcmp(&a, &b, sizeof(a)) == 0;
+}
+inline bool operator!=(const attributes_id_t a, const attributes_id_t b)
+{
+  return memcmp(&a, &b, sizeof(a)) != 0;
+}
 
 struct input_name_ref_t
 {
@@ -90,15 +98,24 @@ struct storage_location_t
   uint64_t offset;
 };
 
+inline bool operator==(const storage_location_t a, const storage_location_t b)
+{
+  return memcmp(&a, &b, sizeof(a)) == 0;
+}
+inline bool operator!=(const storage_location_t a, const storage_location_t b)
+{
+  return memcmp(&a, &b, sizeof(a)) != 0;
+}
+
 struct point_format_t
 {
-    type_t type;
-    components_t components;
+  type_t type;
+  components_t components;
 };
 struct storage_header_t
 {
   input_data_id_t input_id;
-  uint64_t point_count;
+  uint32_t point_count;
   point_format_t point_format;
   morton::morton192_t morton_min;
   morton::morton192_t morton_max;
@@ -131,8 +148,14 @@ struct tree_global_state_t
 
 struct offset_t
 {
-  explicit offset_t(uint64_t data) : data(data){}
-  offset_t() : data(0) {}
+  explicit offset_t(uint64_t data)
+    : data(data)
+  {
+  }
+  offset_t()
+    : data(0)
+  {
+  }
   uint64_t data;
 };
 
@@ -150,13 +173,22 @@ struct offset_in_subset_t
 };
 struct index_t
 {
-  explicit index_t(uint32_t data) : data(data) { }
+  explicit index_t(uint32_t data)
+    : data(data)
+  {
+  }
   uint32_t data;
 };
 struct point_count_t
 {
-  explicit point_count_t() : data(0){}
-  explicit point_count_t(uint32_t data) : data(data){}
+  explicit point_count_t()
+    : data(0)
+  {
+  }
+  explicit point_count_t(uint32_t data)
+    : data(data)
+  {
+  }
   uint32_t data = 0;
 };
 
@@ -166,7 +198,8 @@ struct points_subset_t
     : input_id(id)
     , offset(offset)
     , count(count)
-  {}
+  {
+  }
   input_data_id_t input_id;
   offset_in_subset_t offset;
   point_count_t count;

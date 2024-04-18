@@ -78,7 +78,7 @@ public:
   void handle_input_init(input_data_id_t id, attributes_id_t attributes_id, header_t public_header);
   void handle_sub_added(input_data_id_t id);
   void handle_sorted_points(input_data_id_t id, const morton::morton192_t &min, const morton::morton192_t &max);
-  void handle_points_written(input_data_id_t id, storage_location_t &&location);
+  void handle_points_written(input_data_id_t id, std::vector<storage_location_t> &&location);
   void handle_reading_done(input_data_id_t id);
   void handle_tree_done_with_input(input_data_id_t id);
   bool all_inserted_into_tree() const;

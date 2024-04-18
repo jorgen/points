@@ -101,7 +101,7 @@ void input_data_source_registry_t::handle_sorted_points(input_data_id_t id, cons
     item.morton_max = max;
 }
 
-void input_data_source_registry_t::handle_points_written(input_data_id_t id, storage_location_t&& location)
+void input_data_source_registry_t::handle_points_written(input_data_id_t id, std::vector<storage_location_t> && location)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = get_item(id, _registry);
@@ -109,7 +109,7 @@ void input_data_source_registry_t::handle_points_written(input_data_id_t id, sto
   {
     item.storage_locations.resize(item.sub_count);
   }
-  item.storage_locations[id.sub] = std::move(location);
+  item.storage_locations = std::move(location);
 }
 
 void input_data_source_registry_t::handle_reading_done(input_data_id_t id)

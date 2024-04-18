@@ -37,9 +37,9 @@ public:
   virtual void about_to_block() = 0;
 
   template<typename Ret, typename Class, typename... Args>
-  auto bind(Ret (Class::*f)(Args...))
+  std::function<void(Args &&...)> bind(Ret (Class::*f)(Args &&...))
   {
-    return [this, f](Args... args) { return ((*static_cast<Class *>(this)).*f)(std::move(args)...); };
+    return [this, f](Args &&... args) { return ((*static_cast<Class *>(this)).*f)(std::move(args)...); };
   }
 };
 

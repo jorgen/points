@@ -18,10 +18,10 @@
 #include "reader.hpp"
 
 #include "input_header.hpp"
-#include "threaded_event_loop.hpp"
 #include "morton.hpp"
-#include "sorter.hpp"
 #include "morton_tree_coordinate_transform.hpp"
+#include "sorter.hpp"
+#include "threaded_event_loop.hpp"
 
 #include <fmt/printf.h>
 
@@ -33,7 +33,9 @@ namespace points
 {
 namespace converter
 {
-get_data_worker_t::get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, const get_points_file_t &file, event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_t<input_data_id_t> &sub_added, event_pipe_t<unsorted_points_event_t> &unsorted_points_queue)
+get_data_worker_t::get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, const get_points_file_t &file,
+                                     event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_t<input_data_id_t> &sub_added,
+                                     event_pipe_t<unsorted_points_event_t> &unsorted_points_queue)
   : point_reader_file(point_reader_file)
   , attribute_configs(attribute_configs)
   , input_init_pipe(input_init_pipe)
@@ -50,7 +52,8 @@ struct callback_closer
   callback_closer(converter_file_convert_callbacks_t &callbacks, void *user_ptr)
     : callbacks(callbacks)
     , user_ptr(user_ptr)
-  {}
+  {
+  }
   ~callback_closer()
   {
     if (callbacks.destroy_user_ptr && user_ptr)
@@ -78,8 +81,7 @@ void get_data_worker_t::work()
     return;
   }
 
-  if (tmp_attributes.attributes[0].name_size != strlen(POINTS_ATTRIBUTE_XYZ)
-      || memcmp(tmp_attributes.attributes[0].name, POINTS_ATTRIBUTE_XYZ, tmp_attributes.attributes[0].name_size) != 0)
+  if (tmp_attributes.attributes[0].name_size != strlen(POINTS_ATTRIBUTE_XYZ) || memcmp(tmp_attributes.attributes[0].name, POINTS_ATTRIBUTE_XYZ, tmp_attributes.attributes[0].name_size) != 0)
   {
     error.reset(new error_t());
     error->code = -1;
@@ -95,22 +97,24 @@ void get_data_worker_t::work()
 
   uint32_t convert_size = 20000;
   uint8_t done_read_file = false;
-  uint64_t local_points_read;
+  uint32_t local_points_read;
   uint32_t sub_part = 0;
-  while(!done_read_file)
+  while (!done_read_file)
   {
     points_t points;
     points.header = storage_header;
     points.header.input_id.sub = sub_part++;
     points.header.point_count = convert_size;
     attribute_buffers_initialize(attribute_info, points.buffers, convert_size);
-    file.callbacks.convert_data(user_ptr, &public_header, attributes.attributes.data(), attributes.attributes.size(), convert_size, points.buffers.buffers.data(), points.buffers.buffers.size(), &local_points_read, &done_read_file, &local_error);
+    file.callbacks.convert_data(user_ptr, &public_header, attributes.attributes.data(), uint32_t(attributes.attributes.size()), convert_size, points.buffers.buffers.data(), uint32_t(points.buffers.buffers.size()),
+                                &local_points_read, &done_read_file, &local_error);
     if (local_error)
     {
       error.reset(local_error);
       return;
     }
-    sub_added.post_event(points.header.input_id);
+    auto input_to_send = points.header.input_id;
+    sub_added.post_event(std::move(input_to_send));
     attribute_buffers_adjust_buffers_to_size(attribute_info, points.buffers, local_points_read);
     points_read += local_points_read;
     points.header.point_count = local_points_read;
@@ -125,7 +129,7 @@ void get_data_worker_t::after_work(completion_t completion)
   (void)completion;
   point_reader_file.input_split = split;
 }
-  
+
 sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, header_t public_header, points_t &&points)
   : tree_state(tree_state)
   , reader_file(reader_file)
@@ -147,7 +151,9 @@ void sort_worker_t::after_work(completion_t completion)
   reader_file.sorted_points_pipe.post_event(std::make_pair(std::move(points), std::move(error)));
 }
 
-point_reader_t::point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs, event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_t<input_data_id_t> &sub_added, event_pipe_t<std::pair<points_t,error_t>> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors)
+point_reader_t::point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs,
+                               event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_t<input_data_id_t> &sub_added,
+                               event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors)
   : _tree_state(tree_state)
   , _event_loop(event_loop)
   , _attributes_configs(attributes_configs)
@@ -169,7 +175,7 @@ void point_reader_t::add_file(get_points_file_t &&new_file)
 
 void point_reader_t::about_to_block()
 {
-  auto finished = std::partition(_point_reader_files.begin(), _point_reader_files.end(), [](const std::unique_ptr<point_reader_file_t> &a) { return !a->input_reader->done() || a->input_split != a->sort_done;});
+  auto finished = std::partition(_point_reader_files.begin(), _point_reader_files.end(), [](const std::unique_ptr<point_reader_file_t> &a) { return !a->input_reader->done() || a->input_split != a->sort_done; });
   for (auto it = finished; it != _point_reader_files.end(); ++it)
   {
     auto &input_reader = it->get()->input_reader;
@@ -181,7 +187,9 @@ void point_reader_t::about_to_block()
       file_error.input_id = input_reader->file.id;
       _file_errors.post_event(std::move(file_error));
     }
-    _done_with_file.post_event(it->get()->input_reader->storage_header.input_id);
+
+    auto to_send = it->get()->input_reader->storage_header.input_id;
+    _done_with_file.post_event(std::move(to_send));
   }
   _point_reader_files.erase(finished, _point_reader_files.end());
 }
@@ -199,6 +207,5 @@ void point_reader_t::handle_unsorted_points(unsorted_points_event_t &&unsorted_p
   unsorted_points.reader_file.sort_workers.back()->enqueue(unsorted_points.reader_file.event_loop);
 }
 
-  
-}
+} // namespace converter
 } // namespace points

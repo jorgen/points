@@ -17,8 +17,8 @@
 ************************************************************************/
 #include "tree_handler.hpp"
 
-#include "tree_lod_generator.hpp"
 #include "frustum_tree_walker.hpp"
+#include "tree_lod_generator.hpp"
 
 #include <fmt/printf.h>
 
@@ -43,27 +43,30 @@ void tree_handler_t::about_to_block()
 {
 }
 
-void tree_handler_t::add_points(storage_header_t &&header)
+void tree_handler_t::add_points(storage_header_t &&header, attributes_id_t &&attributes_id, std::vector<storage_location_t> &&storage)
 {
-  _add_points.post_event(std::move(header));
+  _add_points.post_event(std::make_tuple(std::move(header), std::move(attributes_id), std::move(storage)));
 }
 
-void tree_handler_t::walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event)
+void tree_handler_t::walk_tree(std::shared_ptr<frustum_tree_walker_t> event)
 {
-  _walk_tree.post_event(event);
+  _walk_tree.post_event(std::move(event));
 }
-void tree_handler_t::handle_add_points(storage_header_t &&event)
+
+void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>> &&event)
 {
+  auto &&[header, attributes_id, storage] = event;
   if (!_initialized)
   {
     _initialized = true;
-    _tree_root = tree_initialize(_global_state, _tree_cache, _file_cache, event);
+    _tree_root = tree_initialize(_global_state, _tree_cache, _file_cache, header, attributes_id, std::move(storage));
   }
   else
   {
-    _tree_root = tree_add_points(_global_state, _tree_cache, _file_cache, _tree_root, event);
+    _tree_root = tree_add_points(_global_state, _tree_cache, _file_cache, _tree_root, header, attributes_id, std::move(storage));
   }
-  _done_with_input.post_event(event.input_id);
+  auto to_send = header.input_id;
+  _done_with_input.post_event(std::move(to_send));
 }
 
 void tree_handler_t::handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event)
@@ -73,8 +76,8 @@ void tree_handler_t::handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&e
 
 void tree_handler_t::generate_lod(const morton::morton192_t &max)
 {
- _tree_lod_generator.generate_lods(_tree_root, max);
+  _tree_lod_generator.generate_lods(_tree_root, max);
 }
 
-}
-}
+} // namespace converter
+} // namespace points

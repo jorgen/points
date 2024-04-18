@@ -46,16 +46,17 @@ std::pair<attributes_id_t, std::vector<storage_location_t>> input_storage_map_t:
   return std::make_pair(value.attributes_id, value.storage);
 }
 
-std::pair<attributes_id_t, std::vector<storage_location_t>> input_storage_map_t::info(input_data_id_t id)
+std::pair<attributes_id_t, std::vector<storage_location_t>> input_storage_map_t::info(input_data_id_t id) const
 {
-  auto &value = _map[id];
+  assert(_map.contains(id));
+  auto &value = _map.at(id);
   return std::make_pair(value.attributes_id, value.storage);
 }
 
-storage_location_t input_storage_map_t::location(input_data_id_t id, int attribute_index)
+storage_location_t input_storage_map_t::location(input_data_id_t id, int attribute_index) const
 {
   assert(_map.contains(id));
-  auto &value = _map[id];
+  auto &value = _map.at(id);
   return value.storage[attribute_index];
 }
 void input_storage_map_t::add_ref(input_data_id_t id)

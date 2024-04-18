@@ -17,12 +17,12 @@
 ************************************************************************/
 #include "tree_lod_generator.hpp"
 
-#include "worker.hpp"
-#include "cache_file_handler.hpp"
 #include "attributes_configs.hpp"
-#include "morton_tree_coordinate_transform.hpp"
+#include "cache_file_handler.hpp"
 #include "input_header.hpp"
 #include "morton.hpp"
+#include "morton_tree_coordinate_transform.hpp"
+#include "worker.hpp"
 
 #include <fixed_size_vector.hpp>
 #include <fmt/printf.h>
@@ -32,9 +32,9 @@
 namespace points::converter
 {
 
-const void *buffer_end(const buffer_t &buffer)
+static const void *buffer_end(const buffer_t &buffer)
 {
-  return ((const uint8_t*)buffer.data) + buffer.size;
+  return ((const uint8_t *)buffer.data) + buffer.size;
 }
 struct children_subset_t
 {
@@ -47,14 +47,15 @@ struct children_subset_t
 
 static input_data_id_t get_next_input_id(tree_cache_t &tree_cache)
 {
-  input_data_id_t ret;
+  input_data_id_t ret; // NOLINT(*-pro-type-member-init)
   static_assert(sizeof(ret) == sizeof(tree_cache.current_lod_node_id), "input_data_id_t is incompatible with tree_cache_t::current_lod_node_id");
   memcpy(&ret, &tree_cache.current_lod_node_id, sizeof(ret));
   tree_cache.current_lod_node_id++;
   return ret;
 }
 
-std::pair<int,int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t tree_id,  const morton::morton192_t &min, const morton::morton192_t &max, const morton::morton192_t &parent_min, const morton::morton192_t &parent_max, int current_level, int skip, children_subset_t &to_lod)
+std::pair<int, int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, const morton::morton192_t &max, const morton::morton192_t &parent_min,
+                                     const morton::morton192_t &parent_max, int current_level, int skip, children_subset_t &to_lod) // NOLINT(*-no-recursion)
 {
   auto tree = tree_cache.get(tree_id);
   assert(skip < int(tree->nodes[current_level].size()));
@@ -74,7 +75,7 @@ std::pair<int,int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler
   }
 
   int skip_index = 0;
-  auto ret_pair = std::make_pair(0,0);
+  auto ret_pair = std::make_pair(0, 0);
   if (min <= parent_min && parent_max <= max)
   {
     auto &node_data = tree->data[current_level][skip];
@@ -86,7 +87,7 @@ std::pair<int,int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler
       to_lod.data_skips.emplace_back(1);
       to_lod.skips.emplace_back(1);
       to_lod.lods.push_back(lod);
-      return std::make_pair(1,1);
+      return std::make_pair(1, 1);
     }
     skip_index = int(to_lod.skips.size());
     node_data.data.emplace_back(get_next_input_id(tree_cache), offset_in_subset_t(~uint32_t(0)), point_count_t(0));
@@ -96,7 +97,7 @@ std::pair<int,int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler
     to_lod.data_skips.emplace_back(1);
     to_lod.skips.emplace_back(1);
     to_lod.lods.push_back(lod);
-    ret_pair = std::make_pair(1,1);
+    ret_pair = std::make_pair(1, 1);
   }
   int child_count = 0;
   int sub_skip_parent = tree->skips[current_level][skip];
@@ -185,7 +186,7 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
   bool buffer_index = false;
 
   size_t capasity = std::max(tree->sub_trees.size(), std::max(std::max(tree->skips[4].size(), tree->skips[3].size()), tree->skips[2].size()));
-  tree_iterator_t tree_iterator[2] = { capasity, capasity };
+  tree_iterator_t tree_iterator[2] = {capasity, capasity};
 
   auto *parent_buffer = &parent_node;
   tree_iterator[buffer_index].parent_indecies.emplace_back(0);
@@ -246,7 +247,6 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
       {
         parent.child_data.push_back(data);
       }
-
     }
 
     if (level > 0)
@@ -257,7 +257,7 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
     buffer_index = !buffer_index;
     parent_buffer = tree_iterator[buffer_index].parents.data();
   }
-  //sub-trees
+  // sub-trees
   for (int to_process_index = 0; to_process_index < int(tree_iterator[buffer_index].skips.size()); to_process_index++)
   {
     auto tree_skip = tree_iterator[buffer_index].skips[to_process_index];
@@ -270,8 +270,8 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
     to_lod.push_back(std::move(lod_tree_worker_data));
 }
 
-
-lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets, int &inc_on_completed)
+lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets,
+                           int &inc_on_completed)
   : lod_generator(lod_generator)
   , cache(cache)
   , attributes_configs(attributes_configs)
@@ -281,7 +281,7 @@ lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handl
 {
 }
 
-template<typename S_M, typename D_M>
+template <typename S_M, typename D_M>
 static typename std::enable_if<sizeof(S_M) == sizeof(D_M), void>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, D_M &d)
 {
   (void)morton_min;
@@ -296,18 +296,24 @@ static typename std::enable_if<sizeof(S_M) == sizeof(D_M), void>::type copy_mort
 #endif
 }
 
-template<size_t A, size_t B>
+template <size_t A, size_t B>
 struct less_than
 {
-  enum the_value { value = A < B };
+  enum the_value
+  {
+    value = A < B
+  };
 };
-template<size_t A, size_t B>
+template <size_t A, size_t B>
 struct greater_than
 {
-  enum the_value { value = A > B };
+  enum the_value
+  {
+    value = A > B
+  };
 };
 
-template<typename S_M, typename D_M>
+template <typename S_M, typename D_M>
 static typename std::enable_if<less_than<sizeof(S_M), sizeof(D_M)>::value, void>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, D_M &d)
 {
   (void)morton_min;
@@ -315,7 +321,7 @@ static typename std::enable_if<less_than<sizeof(S_M), sizeof(D_M)>::value, void>
   morton::morton_upcast(s, morton_min, d);
 }
 
-template<typename S_M, typename D_M>
+template <typename S_M, typename D_M>
 static typename std::enable_if<greater_than<sizeof(S_M), sizeof(D_M)>::value, void>::type copy_morton(const S_M &s, const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, D_M &d)
 {
   (void)morton_min;
@@ -333,17 +339,24 @@ static typename std::enable_if<greater_than<sizeof(S_M), sizeof(D_M)>::value, vo
 #endif
 }
 
-template<typename T, size_t N>
+template <typename T, size_t N>
 struct morton_to_lod_t
 {
   morton::morton_t<T, N> morton;
-  offset_t index;
+  offset_in_subset_t index;
   input_data_id_t id;
 };
 
+struct storage_location_range_t
+{
+  const std::vector<storage_location_t> &location;
+  attributes_id_t attributes_id;
+  uint32_t end;
+};
 
-template<typename S_M, typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, const buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
+template <typename S_M, typename T, size_t N>
+static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, const buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+                                      const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
   assert(source.size % sizeof(S_M) == 0);
@@ -358,8 +371,7 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
     auto range_size = i - range_start;
     auto index_into_random_offsets = (range_start + (range_size / 2)) % random_offsets.size();
     auto index = range_start + uint32_t(random_offsets[index_into_random_offsets] * (range_size));
-    morton_to_lod.emplace_back();
-    auto &to_lod = morton_to_lod.back();
+    auto &to_lod = morton_to_lod.emplace_back();
     morton::morton_cast(source_it[index], min, to_lod.morton);
     to_lod.index.data = offset.data + index;
     to_lod.id = input_id;
@@ -367,34 +379,35 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
     range_start = i;
     currentMaxVal = morton::create_max(maskWidth, source_it[i]);
   }
-  auto index = range_start + ((point_count.data - range_start)/ 2);
-  morton_to_lod.emplace_back();
-  auto &to_lod = morton_to_lod.back();
+  auto index = range_start + ((point_count.data - range_start) / 2);
+  auto &to_lod = morton_to_lod.emplace_back();
   morton::morton_cast(source_it[index], min, to_lod.morton);
   to_lod.index.data = offset.data + index;
-  to_lod.id = input_id;
 }
 
-template<typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, type_t source_type, const buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>> &morton_to_lod)
+template <typename T, size_t N>
+static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &min, type_t source_type, const buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+                                      const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
-  assert(source_type == type_m32
-         || source_type == type_m64
-         || source_type == type_m128
-         || source_type == type_m192);
+  assert(source_type == type_m32 || source_type == type_m64 || source_type == type_m128 || source_type == type_m192);
 
-  switch(source_type)
+  switch (source_type)
   {
-  case type_m32: return find_indecies_to_quantize<morton::morton32_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
-  case type_m64: return find_indecies_to_quantize<morton::morton64_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
-  case type_m128: return find_indecies_to_quantize<morton::morton128_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
-  case type_m192: return find_indecies_to_quantize<morton::morton192_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+  case type_m32:
+    return find_indecies_to_quantize<morton::morton32_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+  case type_m64:
+    return find_indecies_to_quantize<morton::morton64_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+  case type_m128:
+    return find_indecies_to_quantize<morton::morton128_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+  case type_m192:
+    return find_indecies_to_quantize<morton::morton192_t>(input_id, min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
   default:
     break;
   }
 }
-template<typename S_M, typename D_M>
-static void quantize_morton_two(const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, type_t source_type, const std::vector<uint32_t> &indecies_to_quantize, const buffer_t &source, type_t destination_type, buffer_t &destination)
+template <typename S_M, typename D_M>
+static void quantize_morton_two(const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, type_t source_type, const std::vector<uint32_t> &indecies_to_quantize, const buffer_t &source,
+                                type_t destination_type, buffer_t &destination)
 {
   (void)source_type;
   (void)destination_type;
@@ -409,19 +422,25 @@ static void quantize_morton_two(const morton::morton192_t &morton_min, const mor
   }
 }
 
-template<typename S_M>
-static void quantize_morton_one(const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, type_t source_type, const std::vector<uint32_t> &indecies_to_quantize, const buffer_t &source, type_t destination_type, buffer_t &destination)
+template <typename S_M>
+static void quantize_morton_one(const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, type_t source_type, const std::vector<uint32_t> &indecies_to_quantize, const buffer_t &source,
+                                type_t destination_type, buffer_t &destination)
 {
-  assert(destination_type == type_m32
-         || destination_type == type_m64
-         || destination_type == type_m128
-         || destination_type == type_m192);
-  switch(destination_type)
+  assert(destination_type == type_m32 || destination_type == type_m64 || destination_type == type_m128 || destination_type == type_m192);
+  switch (destination_type)
   {
-  case type_m32: quantize_morton_two<S_M, morton::morton32_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination); break;
-  case type_m64: quantize_morton_two<S_M, morton::morton64_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination); break;
-  case type_m128: quantize_morton_two<S_M, morton::morton128_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination); break;
-  case type_m192: quantize_morton_two<S_M, morton::morton192_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination); break;
+  case type_m32:
+    quantize_morton_two<S_M, morton::morton32_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination);
+    break;
+  case type_m64:
+    quantize_morton_two<S_M, morton::morton64_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination);
+    break;
+  case type_m128:
+    quantize_morton_two<S_M, morton::morton128_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination);
+    break;
+  case type_m192:
+    quantize_morton_two<S_M, morton::morton192_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination);
+    break;
   default:
     break;
   }
@@ -443,14 +462,15 @@ static bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
   return super.data <= sub.data && buffer_end(sub) <= buffer_end(super);
 }
 
-template<typename T, size_t S>
+template <typename T, size_t S>
 struct structured_data_t
 {
   T data[S];
 };
 
-template<size_t S_S, typename S, size_t D_S, typename D>
-void convert_points_impl(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>>& indecies, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+template <size_t S_S, typename S, size_t D_S, typename D>
+void convert_points_impl(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source, const point_format_t &destination_format,
+                         buffer_t &destination)
 {
   (void)source_format;
   (void)destination_format;
@@ -458,7 +478,7 @@ void convert_points_impl(input_data_id_t input_id, const std::vector<std::pair<i
   using destination_data_type_t = structured_data_t<D, D_S>;
   auto *source_begin = reinterpret_cast<const source_data_type_t *>(source.data);
   auto *destination_begin = reinterpret_cast<destination_data_type_t *>(destination.data);
-  //assert(source.size % sizeof(source_data_type_t) == 0);
+  // assert(source.size % sizeof(source_data_type_t) == 0);
   assert(destination.size % sizeof(destination_data_type_t) == 0);
   assert(indecies.size() <= destination.size / sizeof(destination_data_type_t));
 
@@ -482,123 +502,230 @@ void convert_points_impl(input_data_id_t input_id, const std::vector<std::pair<i
   }
 }
 
-template<size_t S_S, typename S, size_t D_S>
-void convert_points_three(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>>& indecies, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+template <size_t S_S, typename S, size_t D_S>
+void convert_points_three(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source,
+                          const point_format_t &destination_format, buffer_t &destination)
 {
-  switch(destination_format.first)
+  switch (destination_format.type)
   {
-  case type_u8: convert_points_impl<S_S, S, D_S, uint8_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_i8: convert_points_impl<S_S, S, D_S, int8_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_u16: convert_points_impl<S_S,S, D_S,  uint16_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_i16: convert_points_impl<S_S,S, D_S,  int16_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_u32: convert_points_impl<S_S,S, D_S,  uint32_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_i32: convert_points_impl<S_S,S, D_S,  int32_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_r32: convert_points_impl<S_S,S, D_S,  float>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_u64: convert_points_impl<S_S,S, D_S,  uint64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_i64: convert_points_impl<S_S,S, D_S,  int64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_r64: convert_points_impl<S_S,S, D_S,  double>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_m32: convert_points_impl<S_S, S, 1, uint32_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_m64: convert_points_impl<S_S, S, 1, uint64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_m128: convert_points_impl<S_S, S, 2, uint64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_m192: convert_points_impl<S_S, S, 3, uint64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
+  case type_u8:
+    convert_points_impl<S_S, S, D_S, uint8_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_i8:
+    convert_points_impl<S_S, S, D_S, int8_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_u16:
+    convert_points_impl<S_S, S, D_S, uint16_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_i16:
+    convert_points_impl<S_S, S, D_S, int16_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_u32:
+    convert_points_impl<S_S, S, D_S, uint32_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_i32:
+    convert_points_impl<S_S, S, D_S, int32_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_r32:
+    convert_points_impl<S_S, S, D_S, float>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_u64:
+    convert_points_impl<S_S, S, D_S, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_i64:
+    convert_points_impl<S_S, S, D_S, int64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_r64:
+    convert_points_impl<S_S, S, D_S, double>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_m32:
+    convert_points_impl<S_S, S, 1, uint32_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_m64:
+    convert_points_impl<S_S, S, 1, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_m128:
+    convert_points_impl<S_S, S, 2, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_m192:
+    convert_points_impl<S_S, S, 3, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
   }
 }
 
-template<size_t S_S, typename S>
-void convert_points_two(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>>& indecies, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+template <size_t S_S, typename S>
+void convert_points_two(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source, const point_format_t &destination_format,
+                        buffer_t &destination)
 {
-  switch(destination_format.second)
+  switch (destination_format.components)
   {
-  case components_1: convert_points_three<S_S, S, 1>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case components_2: convert_points_three<S_S, S, 2>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case components_3: convert_points_three<S_S, S, 3>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case components_4: convert_points_three<S_S, S, 4>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case components_4x4: convert_points_three<S_S, S, 4*4>(input_id, indecies, source_format, source, destination_format, destination); break;
+  case components_1:
+    convert_points_three<S_S, S, 1>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case components_2:
+    convert_points_three<S_S, S, 2>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case components_3:
+    convert_points_three<S_S, S, 3>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case components_4:
+    convert_points_three<S_S, S, 4>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case components_4x4:
+    convert_points_three<S_S, S, 4 * 4>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
   }
 }
-template<size_t S_S>
-void convert_points_one(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>>& indecies, const std::pair<type_t, components_t> &source_format, const buffer_t &source, const std::pair<type_t, components_t> &destination_format, buffer_t &destination)
+template <size_t S_S>
+void convert_points_one(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source, const point_format_t &destination_format,
+                        buffer_t &destination)
 {
-  switch(source_format.first)
+  switch (source_format.type)
   {
-  case type_u8:  convert_points_two<S_S, uint8_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_i8:  convert_points_two<S_S, int8_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_u16: convert_points_two<S_S, uint16_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_i16: convert_points_two<S_S, int16_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_u32: convert_points_two<S_S, uint32_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_i32: convert_points_two<S_S, int32_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_r32: convert_points_two<S_S, float>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_u64: convert_points_two<S_S, uint64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_i64: convert_points_two<S_S, int64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_r64: convert_points_two<S_S, double>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_m32: convert_points_two<1, uint32_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_m64: convert_points_two<1, uint64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_m128: convert_points_two<2, uint64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
-  case type_m192: convert_points_two<3, uint64_t>(input_id, indecies, source_format, source, destination_format, destination); break;
+  case type_u8:
+    convert_points_two<S_S, uint8_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_i8:
+    convert_points_two<S_S, int8_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_u16:
+    convert_points_two<S_S, uint16_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_i16:
+    convert_points_two<S_S, int16_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_u32:
+    convert_points_two<S_S, uint32_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_i32:
+    convert_points_two<S_S, int32_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_r32:
+    convert_points_two<S_S, float>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_u64:
+    convert_points_two<S_S, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_i64:
+    convert_points_two<S_S, int64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_r64:
+    convert_points_two<S_S, double>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_m32:
+    convert_points_two<1, uint32_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_m64:
+    convert_points_two<1, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_m128:
+    convert_points_two<2, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
+  case type_m192:
+    convert_points_two<3, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
+    break;
   }
 }
 
-static void copy_attribute_for_input(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>>& indecies, const std::pair<type_t, components_t>& source_format, const buffer_t& source_buffer, const std::pair<type_t, components_t>& target_format, buffer_t& target_buffer)
+static void copy_attribute_for_input(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source_buffer,
+                                     const point_format_t &target_format, buffer_t &target_buffer)
 {
-  switch(source_format.second)
+  switch (source_format.components)
   {
-  case components_1: convert_points_one<1>(input_id, indecies, source_format, source_buffer, target_format, target_buffer); break;
-  case components_2: convert_points_one<2>(input_id, indecies, source_format, source_buffer, target_format, target_buffer); break;
-  case components_3: convert_points_one<3>(input_id, indecies, source_format, source_buffer, target_format, target_buffer); break;
-  case components_4: convert_points_one<4>(input_id, indecies, source_format, source_buffer, target_format, target_buffer); break;
-  case components_4x4: convert_points_one<4*4>(input_id, indecies, source_format, source_buffer, target_format, target_buffer); break;
+  case components_1:
+    convert_points_one<1>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
+    break;
+  case components_2:
+    convert_points_one<2>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
+    break;
+  case components_3:
+    convert_points_one<3>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
+    break;
+  case components_4:
+    convert_points_one<4>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
+    break;
+  case components_4x4:
+    convert_points_one<4 * 4>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
+    break;
   }
-
 }
 
-static void quantize_attributres(cache_file_handler_t &cache, const std::vector<std::pair<input_data_id_t, uint32_t>>& indecies, const attribute_lod_mapping_t &lod_attrib_mapping, attribute_buffers_t &buffers)
+static void quantize_attributres(cache_file_handler_t &cache, const child_storage_map_t &child_storage_map, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies,
+                                 const attribute_lod_mapping_t &lod_attrib_mapping, attribute_buffers_t &buffers)
 {
   fixed_capacity_vector_t<input_data_id_t> inputs(indecies, [](const std::pair<input_data_id_t, uint32_t> &a) { return a.first; });
   std::sort(inputs.begin(), inputs.end());
   auto inputs_end = std::unique(inputs.begin(), inputs.end());
   for (auto inputs_it = inputs.begin(); inputs_it != inputs_end; ++inputs_it)
   {
-    attributes_id_t attr_id;
-    point_count_t point_count;
-    cache.atribute_id_and_count_for_input_id(*inputs_it, attr_id, point_count);
-    auto mapping = lod_attrib_mapping.get_source_mapping(attr_id);
+    const auto &storage_info = child_storage_map.at(*inputs_it);
+    auto mapping = lod_attrib_mapping.get_source_mapping(storage_info.attributes_id);
     for (int destination_buffer_index = 1; destination_buffer_index < int(buffers.buffers.size()); destination_buffer_index++)
     {
       auto target_buffer = buffers.buffers[destination_buffer_index];
       auto attr_mapping = mapping.source_attributes[destination_buffer_index];
-      read_points_t source_attrib_data(cache, *inputs_it, attr_mapping.source_index);
-      copy_attribute_for_input(*inputs_it, indecies, attr_mapping.source_format, source_attrib_data.data, lod_attrib_mapping.destination[destination_buffer_index], buffers.buffers[destination_buffer_index]);
+      read_points_t source_attrib_data(cache, storage_info.locations[attr_mapping.source_index]);
+      copy_attribute_for_input(*inputs_it, indecies, attr_mapping.source_format, source_attrib_data.point_data, lod_attrib_mapping.destination[destination_buffer_index], buffers.buffers[destination_buffer_index]);
     }
   }
 }
 
-template<typename T, size_t N>
-static void quantize_subset(cache_file_handler_t& cache, const points_subset_t &subset, int lod, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>>& morton_to_lod)
+template <typename T, size_t N>
+static void quantize_subset(cache_file_handler_t &cache, const points_subset_t &subset, const lod_child_storage_info_t &storage_info, int lod, const std::vector<float> &random_offsets,
+                            std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
-  read_points_t subset_data(cache, subset.input_id, 0);
-  const buffer_t source_buffer = morton_buffer_for_subset(subset_data.data, subset_data.header.point_format.first, subset.offset, subset.count);
-  assert(buffer_is_subset(subset_data.data, source_buffer));
-  find_indecies_to_quantize(subset.input_id, subset_data.header.morton_min, subset_data.header.point_format.first, source_buffer, subset.offset, subset.count, lod - 3 * 3, random_offsets, morton_to_lod);
+  read_points_t subset_data(cache, storage_info.locations[0]);
+  const buffer_t source_buffer = morton_buffer_for_subset(subset_data.point_data, subset_data.header.point_format.type, subset.offset, subset.count);
+  assert(buffer_is_subset(subset_data.point_data, source_buffer));
+  find_indecies_to_quantize(subset.input_id, subset_data.header.morton_min, subset_data.header.point_format.type, source_buffer, subset.offset, subset.count, lod - 3 * 3, random_offsets, morton_to_lod);
 }
 
-template<typename T, size_t N>
-static void quantize_points_collection(cache_file_handler_t& cache, const points_collection_t& point_collection, int lod, const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T,N>>& morton_to_lod)
+template <typename T, size_t N>
+static void quantize_points_collection(cache_file_handler_t &cache, const points_collection_t &point_collection, const child_storage_map_t &child_storage_map, int lod, const std::vector<float> &random_offsets,
+                                       std::vector<morton_to_lod_t<T, N>> &morton_to_lod, std::vector<storage_location_range_t> &storage_ranges)
 {
-  for (auto& subset : point_collection.data)
+  for (int i = 0; i < int(point_collection.data.size()); i++)
   {
-    quantize_subset(cache, subset, lod, random_offsets, morton_to_lod);
+    auto &subset = point_collection.data[i];
+    const auto &storage = child_storage_map.at(subset.input_id);
+    quantize_subset(cache, subset, storage, lod, random_offsets, morton_to_lod);
+    storage_ranges.emplace_back(storage.locations, storage.attributes_id, uint32_t(morton_to_lod.size()));
   }
 }
 
-template<typename T, size_t N>
-static void quantize_morton_remember_indecies_t(cache_file_handler_t& cache, const std::vector<points_collection_t>& child_data, int lod, const std::vector<float> &random_offsets, std::unique_ptr<uint8_t[]>& morton_data, std::vector<std::pair<input_data_id_t, uint32_t>>& indecies)
+struct calculate_child_buffer_size_t
 {
-  std::vector<morton_to_lod_t<T,N>> morton_to_lod;
-  int maskWidth = lod - 3 * 3;
-  morton_to_lod.reserve(1 << 16);
-  for (auto& points_collection : child_data)
+  calculate_child_buffer_size_t(const std::vector<points_collection_t> &child_data)
   {
-    quantize_points_collection(cache, points_collection, lod, random_offsets, morton_to_lod); 
+    for (auto &child : child_data)
+    {
+      storage_range_size += int(child.data.size());
+      for (auto &subset : child.data)
+      {
+        morton_to_lod_size += int(subset.count.data / 8 + 1);
+      }
+    }
+  }
+
+  int morton_to_lod_size = 0;
+  int storage_range_size = 0;
+};
+
+template <typename T, size_t N>
+static void quantize_morton_remember_indecies_t(cache_file_handler_t &cache, const std::vector<points_collection_t> &child_data, const child_storage_map_t &child_storage_map, int lod,
+                                                const std::vector<float> &random_offsets, std::unique_ptr<uint8_t[]> &morton_data, std::vector<std::pair<input_data_id_t, uint32_t>> &indecies)
+{
+  std::vector<morton_to_lod_t<T, N>> morton_to_lod;
+  std::vector<storage_location_range_t> storage_ranges;
+  int maskWidth = lod - 3 * 3;
+  {
+    calculate_child_buffer_size_t child_buffer_sizes(child_data);
+    morton_to_lod.reserve(child_buffer_sizes.morton_to_lod_size);
+    storage_ranges.reserve(child_buffer_sizes.storage_range_size);
+  }
+  for (const auto &points_collection : child_data)
+  {
+    quantize_points_collection(cache, points_collection, child_storage_map, lod, random_offsets, morton_to_lod, storage_ranges);
   }
 
   std::sort(morton_to_lod.begin(), morton_to_lod.end(), [](const morton_to_lod_t<T, N> &a, const morton_to_lod_t<T, N> &b) { return a.morton < b.morton; });
@@ -627,19 +754,24 @@ static void quantize_morton_remember_indecies_t(cache_file_handler_t& cache, con
   indecies.emplace_back(morton_to_lod[index].id, uint32_t(morton_to_lod[index].index.data));
 }
 
-static void quantize_morton_remember_indecies(cache_file_handler_t& cache, const std::vector<points_collection_t>& child_data, int lod, const std::vector<float> &random_offsets, std::unique_ptr<uint8_t[]>& morton_data, std::vector<std::pair<input_data_id_t, uint32_t>>& indecies)
+static void quantize_morton_remember_indecies(cache_file_handler_t &cache, const std::vector<points_collection_t> &child_data, const child_storage_map_t &child_storage_map, int lod,
+                                              const std::vector<float> &random_offsets, std::unique_ptr<uint8_t[]> &morton_data, std::vector<std::pair<input_data_id_t, uint32_t>> &indecies)
 {
   auto lod_format = morton_format_from_lod(lod);
   switch (lod_format)
   {
   case type_m32:
-    quantize_morton_remember_indecies_t<uint32_t, 1>(cache, child_data, lod, random_offsets, morton_data, indecies); break;
+    quantize_morton_remember_indecies_t<uint32_t, 1>(cache, child_data, child_storage_map, lod, random_offsets, morton_data, indecies);
+    break;
   case type_m64:
-    quantize_morton_remember_indecies_t<uint64_t, 1>(cache, child_data, lod, random_offsets, morton_data, indecies); break;
+    quantize_morton_remember_indecies_t<uint64_t, 1>(cache, child_data, child_storage_map, lod, random_offsets, morton_data, indecies);
+    break;
   case type_m128:
-    quantize_morton_remember_indecies_t<uint64_t, 2>(cache, child_data, lod, random_offsets, morton_data, indecies); break;
+    quantize_morton_remember_indecies_t<uint64_t, 2>(cache, child_data, child_storage_map, lod, random_offsets, morton_data, indecies);
+    break;
   case type_m192:
-    quantize_morton_remember_indecies_t<uint64_t, 3>(cache, child_data, lod, random_offsets, morton_data, indecies); break;
+    quantize_morton_remember_indecies_t<uint64_t, 3>(cache, child_data, child_storage_map, lod, random_offsets, morton_data, indecies);
+    break;
   default:
     assert("This should not happen");
   }
@@ -648,55 +780,40 @@ static void quantize_morton_remember_indecies(cache_file_handler_t& cache, const
 void lod_worker_t::work()
 {
   attributes_t attributes;
-  int child_point_subset = int(std::accumulate(data.child_data.begin(), data.child_data.end(), size_t(0), [](size_t acc, const points_collection_t &p) { return acc + p.data.size();}));
-  std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[child_point_subset]);
-
+  std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[data.child_storage_info.size()]);
   int child_data_count = 0;
-  for (int i = 0; i < int(data.child_data.size()); i++)
+  for (auto const &storage_info : data.child_storage_info)
   {
-    auto &child_data = data.child_data[i];
-    auto &child_storage_info = data.child_storage_info[i];
-    for (int sub_group_index = 0; sub_group_index < int(child_data.data.size()); sub_group_index++)
-    {
-      auto &subgroup = child_data.data[sub_group_index];
-      auto &sub_info_group = child_storage_info[sub_group_index];
-      attribute_ids[child_data_count++] = sub_info_group.attributes_id;
-      if (subgroup.count.data == 0) // This is a lod so just take the full stored data
-      {
-        assert(false);
-        subgroup.offset.data = 0;
-      }
-    }
+    attribute_ids[child_data_count++] = storage_info.second.attributes_id;
   }
 
   auto lod_format = morton_format_from_lod(data.lod);
-  auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(data.lod, attribute_ids.get(), attribute_ids.get() + child_point_subset);
+  auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(data.lod, attribute_ids.get(), attribute_ids.get() + data.child_storage_info.size());
 
   storage_header_t destination_header;
   storage_header_initialize(destination_header);
   destination_header.input_id = data.storage_name;
   attribute_buffers_t buffers;
 
-  std::vector<std::pair<storage_location_t, uint32_t>> indecies;
+  std::vector<std::pair<input_data_id_t, uint32_t>> indecies;
   {
     std::unique_ptr<uint8_t[]> morton_attribute_buffer;
-    quantize_morton_remember_indecies(cache, data.child_data, data.lod, random_offsets, morton_attribute_buffer, indecies);
-    attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, indecies.size(), std::move(morton_attribute_buffer));
+    quantize_morton_remember_indecies(cache, data.child_data, data.child_storage_info, data.lod, random_offsets, morton_attribute_buffer, indecies);
+    attribute_buffers_initialize(lod_attrib_mapping.destination, buffers, uint32_t(indecies.size()), std::move(morton_attribute_buffer));
   }
 
-  quantize_attributres(cache, indecies, lod_attrib_mapping, buffers);
+  quantize_attributres(cache, data.child_storage_info, indecies, lod_attrib_mapping, buffers);
 
   destination_header.morton_min = data.node_min;
   destination_header.morton_max = morton::morton_or(data.node_min, morton::morton_mask_create<uint64_t, 3>(data.lod));
 
   assert(!indecies.empty());
-  
-  attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, indecies.size());
-  destination_header.point_count = indecies.size();
+
+  attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, uint32_t(indecies.size()));
+  destination_header.point_count = uint32_t(indecies.size());
   destination_header.point_format = {lod_format, components_1};
   destination_header.lod_span = data.lod;
-  destination_header.attributes_id = lod_attrib_mapping.destination_id;
-  cache.write(destination_header, std::move(buffers), [](converter::request_id_t, const error_t &) {});
+  cache.write(destination_header, lod_attrib_mapping.destination_id, std::move(buffers), [](converter::request_id_t, const error_t &) {});
   data.generated_point_count.data = uint32_t(indecies.size());
 }
 
@@ -710,22 +827,25 @@ void lod_worker_t::after_work(completion_t completion)
 static void get_storage_info(tree_cache_t &tree_cache, tree_id_t tree_id, lod_node_worker_data_t &node)
 {
   auto *tree = tree_cache.get(tree_id);
-  node.child_storage_info.reserve(node.child_data.size());
   for (int i = 0; i < int(node.child_data.size()); i++)
   {
-    node.child_storage_info[i].resize(node.child_data[i].data.size());
     for (int j = 0; j < int(node.child_data[i].data.size()); j++)
     {
       auto &child_data = node.child_data[i].data[j];
-      auto &storage_info = node.child_storage_info[i][j];
-      auto info = tree->storage_map.info(child_data.input_id);
-      storage_info.attributes_id = info.first;
-      storage_info.location = std::move(info.second);
+
+      auto &storage_info = node.child_storage_info[child_data.input_id];
+      if (storage_info.locations.empty())
+      {
+        auto info = tree->storage_map.info(child_data.input_id);
+        storage_info.attributes_id = info.first;
+        storage_info.locations = std::move(info.second);
+      }
     }
   }
 }
 
-static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_cache_t &tree_cache, cache_file_handler_t &cache_file, attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
+static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_cache_t &tree_cache, cache_file_handler_t &cache_file,
+                          attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
 {
   batch.new_batch = false;
   batch.lod_workers.clear();
@@ -748,7 +868,7 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
     for (auto &node : tree.nodes[batch.level])
     {
       assert(!node.child_data.empty());
-      get_storage_info(tree_cache, tree.tree_id,node);
+      get_storage_info(tree_cache, tree.tree_id, node);
       auto &lod_worker = batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, node, random_offsets, batch.completed);
       lod_worker.enqueue(loop);
     }
@@ -773,7 +893,8 @@ tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tr
 
 void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morton192_t &max)
 {
-  //auto &worker_data = batch.worker_data;
+  (void)max;
+  // auto &worker_data = batch.worker_data;
   std::vector<lod_tree_worker_data_t> to_lod;
   lod_node_worker_data_t fake_parent;
   fake_parent.node_min = _tree_cache.data[tree_id.data].morton_min;
@@ -805,7 +926,7 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
   iterate_workers();
 }
 
-static void adjust_tree_after_lod(tree_cache_t &tree_cache, cache_file_handler_t &cache, const std::vector<lod_tree_worker_data_t> &to_adjust)
+static void adjust_tree_after_lod(tree_cache_t &tree_cache, cache_file_handler_t &cache, std::vector<lod_tree_worker_data_t> &to_adjust)
 {
   (void)cache;
   for (auto &adjust_data : to_adjust)
@@ -824,9 +945,9 @@ static void adjust_tree_after_lod(tree_cache_t &tree_cache, cache_file_handler_t
         while (tree_index < int(node_ids.size()) && node_ids[tree_index] < current)
           tree_index++;
         assert(node_ids[tree_index] == current);
-        const auto &done_node = adjust_data.nodes[level][node_index];
+        auto &done_node = adjust_data.nodes[level][node_index];
         tree->data[level][tree_index].point_count = done_node.generated_point_count.data;
-        tree->storage_map.add_storage(done_node.storage_name, done_node.generated_attributes_id, done_node.generated_locations);
+        tree->storage_map.add_storage(done_node.storage_name, done_node.generated_attributes_id, std::move(done_node.generated_locations));
       }
     }
   }
@@ -840,11 +961,11 @@ void tree_lod_generator_t::iterate_workers()
     _lod_batches.pop_front();
   }
   if (!_lod_batches.empty() && (_lod_batches.front()->new_batch || _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size())))
-    iterate_batch(_random_offsets, *this, *_lod_batches.front(), _file_cache, _attributes_configs, _loop);
+    iterate_batch(_random_offsets, *this, *_lod_batches.front(), _tree_cache, _file_cache, _attributes_configs, _loop);
   if (_lod_batches.empty())
   {
     fmt::print(stderr, "Done\n");
   }
 }
 
-}//namespace
+} // namespace points::converter

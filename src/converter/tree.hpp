@@ -17,14 +17,12 @@
 ************************************************************************/
 #pragma once
 
-#include <vector>
 #include <list>
+#include <vector>
 
 #include "conversion_types.hpp"
 #include "input_storage_map.hpp"
 #include "morton.hpp"
-
-#include <ankerl/unordered_dense.h>
 
 namespace points
 {
@@ -40,7 +38,7 @@ struct points_collection_t
   morton::morton192_t max;
   int min_lod;
   std::vector<points_subset_t> data;
- };
+};
 
 inline void points_data_initialize(points_collection_t &to_init, const storage_header_t &header)
 {
@@ -110,14 +108,17 @@ struct tree_t
 struct tree_cache_t
 {
   std::vector<tree_t> data;
-  uint32_t current_id  = 0;
+  uint32_t current_id = 0;
   uint64_t current_lod_node_id = uint64_t(1) << 63;
-  tree_t *get(tree_id_t id) { return &data[id.data]; }
-
+  tree_t *get(tree_id_t id)
+  {
+    return &data[id.data];
+  }
 };
 
-tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header, std::vector<storage_location_t> &&locations);
-tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
-}
-}
-
+tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id,
+                          std::vector<storage_location_t> &&locations);
+tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
+                          std::vector<storage_location_t> &&locations);
+} // namespace converter
+} // namespace points

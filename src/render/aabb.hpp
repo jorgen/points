@@ -20,9 +20,7 @@
 #include <points/render/aabb.h>
 #include "glm_include.hpp"
 
-namespace points
-{
-namespace render
+namespace points::render
 {
 inline glm::dvec3 aabb_center(const aabb_t &aabb)
 {
@@ -32,5 +30,5 @@ inline glm::dvec3 aabb_center(const aabb_t &aabb)
   return glm::dvec3(aabb.min[0] + half_x, aabb.min[1] + half_y, aabb.min[2] + half_z);
 }
 
-} // namespace render
-} // namespace points
+} // namespace points::render
+

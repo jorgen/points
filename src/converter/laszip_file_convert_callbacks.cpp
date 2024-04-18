@@ -15,9 +15,9 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <points/converter/laszip_file_convert_callbacks.h>
-#include <points/converter/default_attribute_names.h>
 #include <points/converter/converter.h>
+#include <points/converter/default_attribute_names.h>
+#include <points/converter/laszip_file_convert_callbacks.h>
 
 #include "error.hpp"
 
@@ -68,7 +68,7 @@ struct laszip_handle_t
   }
 };
 
-template<size_t N>
+template <size_t N>
 void add_attribute(attributes_t *attributes, const char (&name)[N], type_t format, components_t components)
 {
   attributes_add_attribute(attributes, name, N - 1, format, components);
@@ -178,7 +178,7 @@ static converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(const c
     e->msg = "Failed to create laszip reader.";
     return ret;
   }
-  
+
   laszip_BOOL is_compressed = 0;
   std::string filename_str(filename, filename_size);
   laszip_handle->filename = filename_str;
@@ -312,7 +312,6 @@ static void laszip_converter_file_init(const char *filename, size_t filename_siz
     assert(false);
   }
 
-
   *user_ptr = laszip_handle.get();
   laszip_handle.release();
 }
@@ -337,21 +336,21 @@ static uint8_t make_classification(laszip_point *point)
   return uint8_t(point->classification) | uint8_t(point->synthetic_flag) << 5 | uint8_t(point->keypoint_flag) << 6 | uint8_t(point->withheld_flag) << 7;
 }
 
-template<size_t FORMAT>
+template <size_t FORMAT>
 static void copy_point_for_format(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert(false);
-  //default should never be instansiated
+  // default should never be instansiated
 }
 
 void assert_copy(buffer_t &buffer, uint64_t i, size_t size, void *source)
 {
-  assert(static_cast<uint8_t *>(buffer.data) + i * size < static_cast<uint8_t *>(buffer.data) + buffer.size); \
-  assert(static_cast<uint8_t *>(buffer.data) + i * size + size <= static_cast<uint8_t *>(buffer.data) + buffer.size); \
+  assert(static_cast<uint8_t *>(buffer.data) + i * size < static_cast<uint8_t *>(buffer.data) + buffer.size);
+  assert(static_cast<uint8_t *>(buffer.data) + i * size + size <= static_cast<uint8_t *>(buffer.data) + buffer.size);
   memcpy(static_cast<uint8_t *>(buffer.data) + i * size, source, size);
 }
 
-template<>
+template <>
 inline void copy_point_for_format<0>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert_copy(buffers[0], i, sizeof(uint32_t[3]), &point->X);
@@ -363,28 +362,28 @@ inline void copy_point_for_format<0>(buffer_t *buffers, uint64_t i, laszip_point
   assert_copy(buffers[6], i, sizeof(uint16_t), &point->point_source_ID);
 }
 
-template<>
+template <>
 inline void copy_point_for_format<1>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<0>(buffers, i, point);
   assert_copy(buffers[7], i, sizeof(double), &point->gps_time);
 }
 
-template<>
+template <>
 inline void copy_point_for_format<2>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<0>(buffers, i, point);
   assert_copy(buffers[7], i, sizeof(uint16_t[3]), point->rgb);
 }
 
-template<>
+template <>
 inline void copy_point_for_format<3>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<1>(buffers, i, point);
   assert_copy(buffers[8], i, sizeof(uint16_t[3]), &point->rgb);
 }
 
-template<size_t OFFSET>
+template <size_t OFFSET>
 inline void copy_wave_packet(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert_copy(buffers[OFFSET], i, sizeof(uint8_t), &point->wave_packet);
@@ -394,21 +393,21 @@ inline void copy_wave_packet(buffer_t *buffers, uint64_t i, laszip_point *point)
   assert_copy(buffers[OFFSET + 4], i, sizeof(float[3]), &point->wave_packet + sizeof(uint8_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(float));
 }
 
-template<>
+template <>
 inline void copy_point_for_format<4>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<1>(buffers, i, point);
   copy_wave_packet<8>(buffers, i, point);
 }
 
-template<>
+template <>
 inline void copy_point_for_format<5>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<3>(buffers, i, point);
   copy_wave_packet<9>(buffers, i, point);
 }
 
-template<>
+template <>
 inline void copy_point_for_format<6>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert_copy(buffers[0], i, sizeof(uint32_t[3]), &point->X);
@@ -422,36 +421,35 @@ inline void copy_point_for_format<6>(buffer_t *buffers, uint64_t i, laszip_point
   assert_copy(buffers[8], i, sizeof(double), &point->gps_time);
 }
 
-template<>
+template <>
 inline void copy_point_for_format<7>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<6>(buffers, i, point);
   assert_copy(buffers[9], i, sizeof(uint16_t[3]), &point->rgb);
 }
 
-template<>
+template <>
 inline void copy_point_for_format<8>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<7>(buffers, i, point);
   assert_copy(buffers[10], i, sizeof(uint16_t[3]), &point->rgb);
-
 }
 
-template<>
+template <>
 inline void copy_point_for_format<9>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<6>(buffers, i, point);
   copy_wave_packet<9>(buffers, i, point);
 }
 
-template<>
+template <>
 inline void copy_point_for_format<10>(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<7>(buffers, i, point);
   copy_wave_packet<10>(buffers, i, point);
 }
 
-template<size_t FORMAT>
+template <size_t FORMAT>
 void copy_points_for_format(laszip_handle_t *laszip_handle, uint64_t point_count_to_stop_at, buffer_t *buffers, uint64_t buffers_size, struct error_t **error)
 {
   (void)buffers_size;
@@ -472,17 +470,18 @@ void copy_points_for_format(laszip_handle_t *laszip_handle, uint64_t point_count
   }
 }
 
-static void laszip_converter_file_convert_data(void *user_ptr, const header_t *header, const attribute_t *attributes, uint64_t attributes_size, uint64_t max_points_to_convert, buffer_t *buffers, uint64_t buffers_size, uint64_t *points_read, uint8_t *done, struct error_t **error)
+static void laszip_converter_file_convert_data(void *user_ptr, const header_t *header, const attribute_t *attributes, uint32_t attributes_size, uint32_t max_points_to_convert, buffer_t *buffers, uint32_t buffers_size,
+                                               uint32_t *points_read, uint8_t *done, struct error_t **error)
 {
   (void)header;
   (void)attributes;
   (void)attributes_size;
   laszip_handle_t *laszip_handle = static_cast<laszip_handle_t *>(user_ptr);
-  uint64_t points_to_read;
+  uint32_t points_to_read;
   uint64_t points_left = laszip_handle->point_count - laszip_handle->point_read;
   if (points_left < max_points_to_convert)
   {
-    points_to_read = points_left;
+    points_to_read = uint32_t(points_left);
     *done = 1;
   }
   else
@@ -547,5 +546,5 @@ struct converter_file_convert_callbacks_t laszip_callbacks()
   ret.destroy_user_ptr = &laszip_converter_file_destroy_user_ptr;
   return ret;
 }
-}
+} // namespace converter
 } // namespace points

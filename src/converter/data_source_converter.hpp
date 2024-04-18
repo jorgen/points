@@ -17,32 +17,25 @@
 ************************************************************************/
 #pragma once
 
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
-#include <points/render/data_source.h>
-#include <points/render/aabb_data_source.h>
-#include <points/render/draw_group.h>
 #include "buffer.hpp"
-#include "renderer_callbacks.hpp"
 #include "converter.hpp"
 #include "frustum_tree_walker.hpp"
 #include "point_buffer_render_helper.h"
+#include "renderer_callbacks.hpp"
+#include <points/render/aabb_data_source.h>
+#include <points/render/camera.h>
+#include <points/render/data_source.h>
+#include <points/render/draw_group.h>
+#include <points/render/renderer.h>
 
-#include <vector>
-#include <memory>
 #include <array>
+#include <memory>
+#include <vector>
 
 namespace points
 {
 namespace converter
 {
-
-struct buffers_t
-{
-  std::vector<dyn_points_draw_buffer_t> data;
-  bool fetching_data = false;
-  bool has_data = false;
-};
 
 struct tree_walker_with_buffer_t
 {
@@ -58,7 +51,7 @@ struct tree_walker_with_buffer_t
   tree_walker_with_buffer_t(tree_walker_with_buffer_t &&) = default;
   ~tree_walker_with_buffer_t() = default;
   tree_walker_nodes_t node_data;
-  std::vector<buffers_t> buffers[5];
+  std::vector<dyn_points_draw_buffer_t> buffers[5];
 };
 
 struct converter_data_source_t
@@ -80,7 +73,6 @@ struct converter_data_source_t
   bool current_tree_nodes_index = false;
 
   std::vector<dyn_points_draw_buffer_t> buffers;
-
 };
-} // namespace render
+} // namespace converter
 } // namespace points

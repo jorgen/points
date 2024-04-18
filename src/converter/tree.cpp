@@ -16,12 +16,10 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "tree.hpp"
-#include <assert.h>
-#include <points/converter/default_attribute_names.h>
 #include "point_buffer_splitter.hpp"
-namespace points
-{
-namespace converter
+#include <cassert>
+
+namespace points::converter
 {
 
 tree_t &tree_cache_create_root_tree(tree_cache_t &tree_cache)
@@ -40,7 +38,8 @@ tree_t &tree_cache_add_tree(tree_cache_t &tree_cache, tree_t *(&parent))
   return tree_cache.data.back();
 }
 
-tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations)
+tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header, attributes_id_t attributes,
+                          std::vector<storage_location_t> &&locations)
 {
   tree_t &tree = tree_cache_create_root_tree(tree_cache);
   morton::morton192_t mask = morton::morton_xor(header.morton_min, header.morton_max);
@@ -100,7 +99,7 @@ static void tree_initialize_new_parent(const tree_t &some_child, const morton::m
 
   int lod = morton::morton_lod(new_min, new_max);
   new_parent.magnitude = uint8_t(morton::morton_magnitude_from_lod(uint8_t(lod)));
-  morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t,3>(lod);
+  morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t, 3>(lod);
   morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
   new_parent.morton_min = morton::morton_and(new_tree_mask_inv, new_min);
   new_parent.morton_max = morton::morton_or(new_parent.morton_min, new_tree_mask);
@@ -148,7 +147,8 @@ static void sub_tree_increase_skips(tree_t &tree, int level, int skip)
   }
 }
 
-static void sub_tree_split_points_to_children(const tree_global_state_t &state, cache_file_handler_t &cache, input_storage_map_t &storage_map, points_collection_t &&points, int lod, const morton::morton192_t &node_min, points_collection_t (&children)[8])
+static void sub_tree_split_points_to_children(const tree_global_state_t &state, cache_file_handler_t &cache, input_storage_map_t &storage_map, points_collection_t &&points, int lod, const morton::morton192_t &node_min,
+                                              points_collection_t (&children)[8])
 {
   deref_on_destruct_t to_deref(storage_map);
   for (auto &p : points.data)
@@ -166,12 +166,13 @@ static void move_storage_locations_to_subtree(const points_collection_t &collect
 {
   for (auto &p : collection.data)
   {
-    auto attrib_locations_pair= parent.storage_map.dereference(p.input_id);
+    auto attrib_locations_pair = parent.storage_map.dereference(p.input_id);
     sub_tree.storage_map.add_storage(p.input_id, attrib_locations_pair.first, std::move(attrib_locations_pair.second));
   }
 }
 
-static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, int current_level, int skip, uint16_t current_name, points_collection_t &&points)
+static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, int current_level, int skip,
+                                   uint16_t current_name, points_collection_t &&points) // NOLINT(*-no-recursion)
 {
   auto *tree = tree_cache.get(tree_id);
   assert(tree->id.data < tree_cache.current_id);
@@ -179,7 +180,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_
   assert(tree->mins[current_level][skip] == min);
   assert(tree->node_ids[current_level][skip] == current_name);
   assert(skip == 0 || tree->mins[current_level][skip - 1] < tree->mins[current_level][skip]);
-  assert(int(tree->mins[current_level].size() -1) == skip || tree->mins[current_level][skip] < tree->mins[current_level][skip + 1]);
+  assert(int(tree->mins[current_level].size() - 1) == skip || tree->mins[current_level][skip] < tree->mins[current_level][skip + 1]);
 
   auto &node = tree->nodes[current_level][skip];
   int lod = morton::morton_tree_level_to_lod(tree->magnitude, current_level);
@@ -221,7 +222,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_
         auto &sub_tree = tree_cache_add_tree(tree_cache, tree);
         tree->sub_trees.emplace(tree->sub_trees.begin() + sub_skip, sub_tree.id);
         sub_tree_increase_skips(*tree, current_level, skip);
-        tree_initialize_sub(*tree,tree_cache, points.min, sub_tree);
+        tree_initialize_sub(*tree, tree_cache, points.min, sub_tree);
         uint16_t sub_tree_name = morton::morton_get_name(0, 0, child_mask);
         move_storage_locations_to_subtree(points, *tree, sub_tree);
         sub_tree_insert_points(state, tree_cache, cache, sub_tree.id, new_min, 0, 0, sub_tree_name, std::move(points));
@@ -262,7 +263,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_
     }
 
     int child_count = 0;
-    for (int i= 0; i < 8; i++)
+    for (int i = 0; i < 8; i++)
     {
       auto &child_data = children_data[i];
       const bool has_this_child = node & (1 << i);
@@ -316,7 +317,6 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_
           tree->mins[current_level + 1][sub_skip] = new_min;
 #endif
           sub_tree_insert_points(state, tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(child_data));
-
         }
       }
       child_count++;
@@ -324,7 +324,7 @@ static void sub_tree_insert_points(const tree_global_state_t &state, tree_cache_
   }
 }
 
-static void insert_tree_in_tree(tree_cache_t &tree_cache, tree_id_t &parent_id, const tree_id_t &child_id)
+static void insert_tree_in_tree(tree_cache_t &tree_cache, tree_id_t &parent_id, const tree_id_t &child_id) // NOLINT(*-no-recursion)
 {
   tree_t *parent = tree_cache.get(parent_id);
   tree_t *child = tree_cache.get(child_id);
@@ -390,13 +390,13 @@ static tree_id_t reparent_tree(tree_cache_t &tree_cache, tree_id_t tree_id, cons
   return new_parent.id;
 }
 
-
-tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations)
+tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
+                          std::vector<storage_location_t> &&locations)
 {
   tree_id_t ret = tree_id;
   auto *tree = tree_cache.get(tree_id);
-  //assert(validate_points_offset(header));
-  if (header.morton_min < tree->morton_min || tree->morton_max < header.morton_max )
+  // assert(validate_points_offset(header));
+  if (header.morton_min < tree->morton_min || tree->morton_max < header.morton_max)
   {
     ret = reparent_tree(tree_cache, tree_id, header.morton_min, header.morton_max);
     tree = tree_cache.get(ret);
@@ -411,5 +411,4 @@ tree_id_t tree_add_points(const tree_global_state_t &state, tree_cache_t &tree_c
   sub_tree_insert_points(state, tree_cache, cache, tree->id, min, 0, 0, name, std::move(points_data));
   return ret;
 }
-}
-} // namespace points
+} // namespace points::converter

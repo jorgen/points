@@ -125,7 +125,7 @@ void processor_t::handle_sub_added(input_data_id_t&& event)
 void processor_t::handle_sorted_points(std::pair<points_t,error_t> &&event)
 {
   _input_data_source_registry.handle_sorted_points(event.first.header.input_id, event.first.header.morton_min, event.first.header.morton_max);
-  _cache_file_handler.write(event.first.header, std::move(event.first.buffers), [](request_id_t, const error_t &) {});
+  _cache_file_handler.write(event.first.header, event.first.attributes_id, std::move(event.first.buffers), [](request_id_t, const error_t &) {});
 }
 
 void processor_t::handle_file_errors(file_error_t &&errors)
@@ -143,12 +143,14 @@ void processor_t::handle_cache_file_error(error_t &&error)
   fmt::print(stderr, "Cache file error {} {}\n", error.code, error.msg);
 }
 
-void processor_t::handle_points_written(std::pair<storage_location_t, storage_header_t> &&event)
+void processor_t::handle_points_written(std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>> &&event)
 {
-  if (input_data_id_is_leaf(event.second.input_id))
+  auto &&[header, attributes_id, locations] = event;
+  if (input_data_id_is_leaf(header.input_id))
   {
-    _input_data_source_registry.handle_points_written(event.second.input_id, std::move(event.first));
-    _tree_handler.add_points(std::move(event.second));
+    auto locations_copy = locations;
+    _input_data_source_registry.handle_points_written(header.input_id, std::move(locations));
+    _tree_handler.add_points(std::move(header), std::move(attributes_id), std::move(locations_copy));
   }
 }
 
