@@ -17,12 +17,12 @@
 ************************************************************************/
 #pragma once
 
-#include <uv.h>
-#include <memory>
-#include <thread>
 #include <functional>
+#include <memory>
 #include <mutex>
+#include <thread>
 #include <utility>
+#include <uv.h>
 
 #include "event_pipe.hpp"
 
@@ -36,10 +36,10 @@ class about_to_block_t
 public:
   virtual void about_to_block() = 0;
 
-  template<typename Ret, typename Class, typename... Args>
+  template <typename Ret, typename Class, typename... Args>
   std::function<void(Args &&...)> bind(Ret (Class::*f)(Args &&...))
   {
-    return [this, f](Args &&... args) { return ((*static_cast<Class *>(this)).*f)(std::move(args)...); };
+    return [this, f](Args &&...args) { return ((*static_cast<Class *>(this)).*f)(std::move(args)...); };
   }
 };
 
@@ -48,8 +48,11 @@ class threaded_event_loop_t
 public:
   threaded_event_loop_t()
     : _loop(nullptr)
-    , _add_pipe([this] (std::vector<std::function<uv_handle_t *(uv_loop_t*)>> &&events) { add_event_pipe_cb(std::move(events)); })
-    , _run_in_loop([](std::vector<std::function<void()>> &&events) { for (auto &to_run : events) to_run(); })
+    , _add_pipe([this](std::vector<std::function<uv_handle_t *(uv_loop_t *)>> &&events) { add_event_pipe_cb(std::move(events)); })
+    , _run_in_loop([](std::vector<std::function<void()>> &&events) {
+      for (auto &to_run : events)
+        to_run();
+    })
   {
     _to_close_handles.reserve(16);
     barrier_t barrier;
@@ -64,7 +67,7 @@ public:
       _to_close_handles.push_back((uv_handle_t *)&_async_stop);
       _to_close_handles.push_back(_add_pipe.initialize_in_loop(_loop));
       _to_close_handles.push_back(_run_in_loop.initialize_in_loop(_loop));
-    
+
       uv_prepare_init(_loop, &_about_to_block);
       _about_to_block.data = this;
       uv_prepare_start(&_about_to_block, &about_to_block_cb);
@@ -92,14 +95,14 @@ public:
     _thread->join();
   }
 
-  template<typename T>
+  template <typename T>
   void add_event_pipe(event_pipe_multi_t<T> &event_pipe)
   {
     std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
     _add_pipe.post_event(func);
   }
-  
-  template<typename T>
+
+  template <typename T>
   void add_event_pipe(event_pipe_t<T> &event_pipe)
   {
     std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
@@ -121,7 +124,7 @@ public:
   }
 
 private:
-  void add_event_pipe_cb(std::vector<std::function<uv_handle_t *(uv_loop_t*)>> &&events)
+  void add_event_pipe_cb(std::vector<std::function<uv_handle_t *(uv_loop_t *)>> &&events)
   {
     for (auto f : events)
     {
@@ -148,7 +151,7 @@ private:
   {
     threaded_event_loop_t *event_loop = static_cast<threaded_event_loop_t *>(handle->data);
     uv_prepare_stop(&event_loop->_about_to_block);
-    for (auto close_handle: event_loop->_to_close_handles)
+    for (auto close_handle : event_loop->_to_close_handles)
       uv_close(close_handle, nullptr);
     for (auto cancel_handle : event_loop->_to_cancel_work_handles)
       uv_cancel((uv_req_t *)cancel_handle);
@@ -160,7 +163,7 @@ private:
   std::mutex _mutex;
   std::vector<uv_handle_t *> _to_close_handles;
   std::vector<uv_work_t *> _to_cancel_work_handles;
-  event_pipe_multi_t<std::function<uv_handle_t *(uv_loop_t*)>> _add_pipe;
+  event_pipe_multi_t<std::function<uv_handle_t *(uv_loop_t *)>> _add_pipe;
   event_pipe_multi_t<std::function<void()>> _run_in_loop;
 
   uv_prepare_t _about_to_block;

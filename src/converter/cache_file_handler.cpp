@@ -17,6 +17,8 @@
 ************************************************************************/
 #include "cache_file_handler.hpp"
 
+#include "event_pipe.hpp"
+
 #include <uv.h>
 
 #include <fmt/printf.h>
@@ -90,10 +92,7 @@ cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, std
   , _file_opened(false)
   , _cache_file_error(cache_file_error)
   , _write_done(write_done)
-  , _write_event_pipe(_event_loop,
-                      [this](std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>> &&event) {
-                        this->handle_write_events(std::move(event));
-                      })
+  , _write_event_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_events))
   , _requests()
 {
   (void)_state;
