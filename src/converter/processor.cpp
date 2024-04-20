@@ -7,9 +7,9 @@
 
 #include "morton_tree_coordinate_transform.hpp"
 
-#include <stdlib.h>
 #include <algorithm>
 #include <functional>
+#include <stdlib.h>
 
 namespace points
 {
@@ -20,10 +20,10 @@ struct thread_count_env_setter_t
 {
   thread_count_env_setter_t()
   {
-    std::string count = std::to_string(int(std::thread::hardware_concurrency() * 1.5)); 
-    //uv_os_setenv("UV_THREADPOOL_SIZE", count.c_str()); 
+    std::string count = std::to_string(int(std::thread::hardware_concurrency() * 1.5));
+    // uv_os_setenv("UV_THREADPOOL_SIZE", count.c_str());
 #if (WIN32)
-    _putenv(fmt::format("UV_THREADPOOL_SIZE={}", count.c_str()).c_str()); 
+    _putenv(fmt::format("UV_THREADPOOL_SIZE={}", count.c_str()).c_str());
 #else
     std::string env_name = fmt::format("UV_THREADPOOL_SIZE={}", count.c_str());
     char *env_name_c = &env_name[0];
@@ -40,7 +40,7 @@ processor_t::processor_t(converter_t &converter)
   , _files_added(_event_loop, bind(&processor_t::handle_new_files))
   , _pre_init_info_file_result(_event_loop, bind(&processor_t::handle_pre_init_info_for_files))
   , _pre_init_file_errors(_event_loop, bind(&processor_t::handle_file_errors_headers))
-  , _input_init(_event_loop, bind(&processor_t::handle_input_init_done)) 
+  , _input_init(_event_loop, bind(&processor_t::handle_input_init_done))
   , _sub_added(_event_loop, bind(&processor_t::handle_sub_added))
   , _sorted_points(_event_loop, bind(&processor_t::handle_sorted_points))
   , _point_reader_file_errors(_event_loop, bind(&processor_t::handle_file_errors))
@@ -54,9 +54,8 @@ processor_t::processor_t(converter_t &converter)
   , _read_sort_budget(uint64_t(1) << 20)
   , _read_sort_active_approximate_size(0)
 {
-  (void) _converter;
+  (void)_converter;
   _event_loop.add_about_to_block_listener(this);
-
 }
 
 void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files)
@@ -85,7 +84,7 @@ void processor_t::about_to_block()
   }
 }
 
-const attributes_t& processor_t::get_attributes(attributes_id_t id)
+const attributes_t &processor_t::get_attributes(attributes_id_t id)
 {
   return _attributes_configs.get(id);
 }
@@ -104,7 +103,8 @@ void processor_t::handle_pre_init_info_for_files(pre_init_info_file_result_t &&p
 {
   assert(std::count_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == pre_init_for_file.id; }) == 1);
   _pre_init_info_workers.erase(std::find_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == pre_init_for_file.id; }));
-  _input_data_source_registry.register_pre_init_result(_converter.tree_state, pre_init_for_file.id, pre_init_for_file.found_min, pre_init_for_file.min, pre_init_for_file.approximate_point_count, pre_init_for_file.approximate_point_size_bytes);
+  _input_data_source_registry.register_pre_init_result(_converter.tree_state, pre_init_for_file.id, pre_init_for_file.found_min, pre_init_for_file.min, pre_init_for_file.approximate_point_count,
+                                                       pre_init_for_file.approximate_point_size_bytes);
 }
 
 void processor_t::handle_file_errors_headers(file_error_t &&error)
@@ -112,17 +112,17 @@ void processor_t::handle_file_errors_headers(file_error_t &&error)
   assert(std::count_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == error.input_id; }) == 1);
   _pre_init_info_workers.erase(std::find_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == error.input_id; }));
 }
-void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t>&& event)
+void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t> &&event)
 {
   _input_data_source_registry.handle_input_init(std::get<0>(event), std::get<1>(event), std::get<2>(event));
 }
 
-void processor_t::handle_sub_added(input_data_id_t&& event)
+void processor_t::handle_sub_added(input_data_id_t &&event)
 {
   _input_data_source_registry.handle_sub_added(event);
 }
 
-void processor_t::handle_sorted_points(std::pair<points_t,error_t> &&event)
+void processor_t::handle_sorted_points(std::pair<points_t, error_t> &&event)
 {
   _input_data_source_registry.handle_sorted_points(event.first.header.input_id, event.first.header.morton_min, event.first.header.morton_max);
   _cache_file_handler.write(event.first.header, event.first.attributes_id, std::move(event.first.buffers), [](request_id_t, const error_t &) {});
@@ -162,5 +162,5 @@ void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
     _tree_handler.generate_lod(*min);
 }
 
-}
+} // namespace converter
 } // namespace points

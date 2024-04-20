@@ -39,6 +39,7 @@ template <typename... ARGS>
 class event_pipe_t
 {
 public:
+  using tuple_t = std::tuple<std::decay_t<ARGS>...>;
   template <typename EventLoop>
   event_pipe_t(EventLoop &eventLoop, std::function<void(ARGS &&...event)> event_callback)
     : event_callback(event_callback)
@@ -55,11 +56,16 @@ public:
     pipe.data = this;
   }
 
+  ~event_pipe_t()
+  {
+    uv_close((uv_handle_t *)&pipe, nullptr);
+  }
+
   uv_handle_t *initialize_in_loop(uv_loop_t *loop)
   {
     auto on_event = [](uv_async_t *handle) {
       event_pipe_t *event_pipe = static_cast<event_pipe_t *>(handle->data);
-      std::vector<std::tuple<ARGS &&...>> event_vec;
+      std::vector<tuple_t> event_vec;
       event_pipe->swap_events(event_vec);
       for (auto &event : event_vec)
         std::apply(event_pipe->event_callback, std::move(event));
@@ -72,11 +78,11 @@ public:
   void post_event(ARGS &&...args)
   {
     std::unique_lock<std::mutex> lock(mutex);
-    events.push_back(std::make_tuple(std::forward<ARGS>(args)...));
+    events.emplace_back(std::move(args)...);
     uv_async_send(&pipe);
   }
 
-  void swap_events(std::vector<std::tuple<ARGS &&...>> &to_swap)
+  void swap_events(std::vector<tuple_t> &to_swap)
   {
     std::unique_lock<std::mutex> lock(mutex);
     std::swap(events, to_swap);
@@ -85,7 +91,7 @@ public:
 
 private:
   std::function<void(ARGS &&...args)> event_callback;
-  std::vector<std::tuple<ARGS &&...>> events;
+  std::vector<tuple_t> events;
   uv_async_t pipe;
   std::mutex mutex;
 };
