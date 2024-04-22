@@ -20,7 +20,7 @@ struct thread_count_env_setter_t
 {
   thread_count_env_setter_t()
   {
-    std::string count = std::to_string(int(std::thread::hardware_concurrency() * 1.5));
+    std::string count = "2"; //std::to_string(int(std::thread::hardware_concurrency() * 1.5));
     // uv_os_setenv("UV_THREADPOOL_SIZE", count.c_str());
 #if (WIN32)
     _putenv(fmt::format("UV_THREADPOOL_SIZE={}", count.c_str()).c_str());
@@ -125,7 +125,7 @@ void processor_t::handle_sub_added(input_data_id_t &&event)
 void processor_t::handle_sorted_points(std::pair<points_t, error_t> &&event)
 {
   _input_data_source_registry.handle_sorted_points(event.first.header.input_id, event.first.header.morton_min, event.first.header.morton_max);
-  _cache_file_handler.write(event.first.header, event.first.attributes_id, std::move(event.first.buffers), [](request_id_t, const error_t &) {});
+  _cache_file_handler.write(event.first.header, event.first.attributes_id, std::move(event.first.buffers), [](const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &) {});
 }
 
 void processor_t::handle_file_errors(file_error_t &&errors)

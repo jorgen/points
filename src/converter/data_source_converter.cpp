@@ -110,7 +110,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
       //          callbacks.do_initialize_buffer(buffer.render_buffers[2], type_r32, points::components_4x4, sizeof(buffer.camera_view), &buffer.camera_view);
       //
       //          buffer.render_buffers[0].rendered = true;
-      //          buffer.point_count = int(read_points.cache_item.header.point_count);
+      //          buffer.point_count = int(read_points.cache_items.header.point_count);
       //          if (buffer.render_buffers[0].rendered)
       //          {
       //            buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;

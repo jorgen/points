@@ -51,7 +51,7 @@ struct tree_test_infrastructure : points::converter::about_to_block_t
   }
 
   std::vector<points::converter::request_id_t> write(const points::converter::storage_header_t &header, points::converter::attributes_id_t attribute_id, points::converter::attribute_buffers_t &&buffers,
-                                                     std::function<void(points::converter::request_id_t id, const points::error_t &error)> on_done)
+                                                     std::function<void(const points::converter::storage_header_t &id, points::converter::attributes_id_t, std::vector<points::converter::storage_location_t>,  const points::error_t &error)> on_done)
   {
     std::unique_lock<std::mutex> lock(wait_for_write_done_mutex);
     write_done_state = false;
@@ -134,7 +134,7 @@ write_done_event_t create_points(tree_test_infrastructure &test_util, uint64_t m
     if (last_value + step_size < max)
       last_value += step_size;
   }
-  test_util.write(points.header, attr_id, std::move(points.buffers), [](points::converter::request_id_t id, const points::error_t &error) { fmt::print("error: {}\n", error.msg); });
+  test_util.write(points.header, attr_id, std::move(points.buffers), [](const points::converter::storage_header_t &, points::converter::attributes_id_t, std::vector<points::converter::storage_location_t>, const points::error_t &error) { fmt::print("error: {}\n", error.msg); });
   return test_util.wait_for_write_done();
 }
 

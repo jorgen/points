@@ -83,7 +83,7 @@ public:
 
   void handle_open_cache_file(uv_fs_t *request);
 
-  std::vector<request_id_t> write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers, std::function<void(request_id_t id, const error_t &error)> on_done);
+  std::vector<request_id_t> write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)> done);
   request_id_t read(input_data_id_t id, int attribute_index);
 
   points_cache_item_t ref_points(const storage_location_t &location);
@@ -95,7 +95,7 @@ public:
 
 private:
   static void request_done_callback(uv_fs_t *req);
-  void handle_write_events(std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>> &&event);
+  void handle_write_events(std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>> &&event);
   void handle_request_done(request_id_t id);
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
@@ -133,7 +133,7 @@ private:
   uv_fs_t _open_request{};
   event_pipe_t<error_t> &_cache_file_error;
   event_pipe_t<std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>>> &_write_done;
-  event_pipe_t<std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>>> _write_event_pipe;
+  event_pipe_t<std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>>> _write_event_pipe;
 
 
   struct hash_storage_location_t
@@ -186,34 +186,77 @@ static bool deserialize_points(const buffer_t &data, storage_header_t &header, b
   return true;
 }
 
-struct read_points_t
+struct read_only_points_t
 {
-  read_points_t(cache_file_handler_t &cache_file_handler, const storage_location_t &location)
+  read_only_points_t(cache_file_handler_t &cache_file_handler, storage_location_t location)
     : cache_file_handler(cache_file_handler)
     , location(location)
     , cache_item(cache_file_handler.ref_points(location))
-    , serialize_data(cache_item.data)
   {
-    if (!deserialize_points(serialize_data, header, point_data, error))
-    {
-      cache_file_handler.deref_points(location);
-    }
+    deserialize_points(cache_item.data, header, data, error);
   }
-  ~read_points_t()
+  ~read_only_points_t()
   {
-    if (error.code == 0)
-    {
-      cache_file_handler.deref_points(location);
-    }
+    cache_file_handler.deref_points(location);
   }
 
   cache_file_handler_t &cache_file_handler;
   storage_location_t location;
   points_cache_item_t cache_item;
-  buffer_t &serialize_data;
   storage_header_t header;
-  buffer_t point_data;
+  buffer_t data;
   error_t error;
 };
+
+struct read_attribute_t
+{
+  read_attribute_t(cache_file_handler_t &cache_file_handler, storage_location_t location)
+  : cache_file_handler(cache_file_handler)
+  , location(location)
+  , cache_item(cache_file_handler.ref_points(location))
+  , data(cache_item.data)
+  {
+  }
+  ~read_attribute_t()
+  {
+    cache_file_handler.deref_points(location);
+  }
+
+  cache_file_handler_t &cache_file_handler;
+  storage_location_t location;
+  points_cache_item_t cache_item;
+  buffer_t data;
+  error_t error;
+};
+
+struct read_points_with_data_t
+{
+  read_points_with_data_t(cache_file_handler_t &cache_file_handler, std::vector<storage_location_t> locations)
+    : cache_file_handler(cache_file_handler)
+    , locations(std::move(locations))
+    , cache_items(this->locations.size())
+    , data(this->locations.size())
+  {
+    for (auto &location : this->locations)
+    {
+      cache_items.push_back(cache_file_handler.ref_points(location));
+    }
+    deserialize_points(cache_items[0].data, header, data[0], error);
+  }
+  ~read_points_with_data_t()
+  {
+    for (auto &location : locations)
+    {
+      cache_file_handler.deref_points(location);
+    }
+  }
+  cache_file_handler_t &cache_file_handler;
+  std::vector<storage_location_t> locations;
+  std::vector<points_cache_item_t> cache_items;
+  storage_header_t header;
+  std::vector<buffer_t> data;
+  error_t error;
+};
+
 }
 } // namespace points

@@ -27,6 +27,7 @@ namespace converter
 {
 void input_storage_map_t::add_storage(input_data_id_t id, attributes_id_t attributes_id, std::vector<storage_location_t> &&storage)
 {
+  assert(storage.size());
   auto &value = _map[id];
   value.attributes_id = attributes_id;
   value.storage = std::move(storage);
@@ -39,9 +40,9 @@ std::pair<attributes_id_t, std::vector<storage_location_t>> input_storage_map_t:
   value.ref_count--;
   if (value.ref_count == 0)
   {
-    auto vec = std::move(value.storage);
+    auto ret = std::make_pair(value.attributes_id, std::move(value.storage));
     _map.erase(id);
-    return std::make_pair(value.attributes_id, std::move(value.storage));
+    return ret;
   }
   return std::make_pair(value.attributes_id, value.storage);
 }

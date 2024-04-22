@@ -381,6 +381,7 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
   }
   auto index = range_start + ((point_count.data - range_start) / 2);
   auto &to_lod = morton_to_lod.emplace_back();
+  to_lod.id = input_id;
   morton::morton_cast(source_it[index], min, to_lod.morton);
   to_lod.index.data = offset.data + index;
 }
@@ -664,8 +665,8 @@ static void quantize_attributres(cache_file_handler_t &cache, const child_storag
     {
       auto target_buffer = buffers.buffers[destination_buffer_index];
       auto attr_mapping = mapping.source_attributes[destination_buffer_index];
-      read_points_t source_attrib_data(cache, storage_info.locations[attr_mapping.source_index]);
-      copy_attribute_for_input(*inputs_it, indecies, attr_mapping.source_format, source_attrib_data.point_data, lod_attrib_mapping.destination[destination_buffer_index], buffers.buffers[destination_buffer_index]);
+      read_attribute_t source_attrib_data(cache, storage_info.locations[attr_mapping.source_index]);
+      copy_attribute_for_input(*inputs_it, indecies, attr_mapping.source_format, source_attrib_data.data, lod_attrib_mapping.destination[destination_buffer_index], buffers.buffers[destination_buffer_index]);
     }
   }
 }
@@ -674,22 +675,21 @@ template <typename T, size_t N>
 static void quantize_subset(cache_file_handler_t &cache, const points_subset_t &subset, const lod_child_storage_info_t &storage_info, int lod, const std::vector<float> &random_offsets,
                             std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
-  read_points_t subset_data(cache, storage_info.locations[0]);
-  const buffer_t source_buffer = morton_buffer_for_subset(subset_data.point_data, subset_data.header.point_format.type, subset.offset, subset.count);
-  assert(buffer_is_subset(subset_data.point_data, source_buffer));
+  read_only_points_t subset_data(cache, storage_info.locations[0]);
+  const buffer_t source_buffer = morton_buffer_for_subset(subset_data.data, subset_data.header.point_format.type, subset.offset, subset.count);
+  assert(buffer_is_subset(subset_data.data, source_buffer));
   find_indecies_to_quantize(subset.input_id, subset_data.header.morton_min, subset_data.header.point_format.type, source_buffer, subset.offset, subset.count, lod - 3 * 3, random_offsets, morton_to_lod);
 }
 
 template <typename T, size_t N>
 static void quantize_points_collection(cache_file_handler_t &cache, const points_collection_t &point_collection, const child_storage_map_t &child_storage_map, int lod, const std::vector<float> &random_offsets,
-                                       std::vector<morton_to_lod_t<T, N>> &morton_to_lod, std::vector<storage_location_range_t> &storage_ranges)
+                                       std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   for (int i = 0; i < int(point_collection.data.size()); i++)
   {
     auto &subset = point_collection.data[i];
     const auto &storage = child_storage_map.at(subset.input_id);
     quantize_subset(cache, subset, storage, lod, random_offsets, morton_to_lod);
-    storage_ranges.emplace_back(storage.locations, storage.attributes_id, uint32_t(morton_to_lod.size()));
   }
 }
 
@@ -716,16 +716,14 @@ static void quantize_morton_remember_indecies_t(cache_file_handler_t &cache, con
                                                 const std::vector<float> &random_offsets, std::unique_ptr<uint8_t[]> &morton_data, std::vector<std::pair<input_data_id_t, uint32_t>> &indecies)
 {
   std::vector<morton_to_lod_t<T, N>> morton_to_lod;
-  std::vector<storage_location_range_t> storage_ranges;
   int maskWidth = lod - 3 * 3;
   {
     calculate_child_buffer_size_t child_buffer_sizes(child_data);
     morton_to_lod.reserve(child_buffer_sizes.morton_to_lod_size);
-    storage_ranges.reserve(child_buffer_sizes.storage_range_size);
   }
   for (const auto &points_collection : child_data)
   {
-    quantize_points_collection(cache, points_collection, child_storage_map, lod, random_offsets, morton_to_lod, storage_ranges);
+    quantize_points_collection(cache, points_collection, child_storage_map, lod, random_offsets, morton_to_lod);
   }
 
   std::sort(morton_to_lod.begin(), morton_to_lod.end(), [](const morton_to_lod_t<T, N> &a, const morton_to_lod_t<T, N> &b) { return a.morton < b.morton; });
@@ -813,7 +811,13 @@ void lod_worker_t::work()
   destination_header.point_count = uint32_t(indecies.size());
   destination_header.point_format = {lod_format, components_1};
   destination_header.lod_span = data.lod;
-  cache.write(destination_header, lod_attrib_mapping.destination_id, std::move(buffers), [](converter::request_id_t, const error_t &) {});
+  cache.write(destination_header, lod_attrib_mapping.destination_id, std::move(buffers), [this](const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &)
+              {
+                (void)storageheader;
+                (void)attrib_id;
+                (void)locations;
+                this->inc_on_completed++;
+              });
   data.generated_point_count.data = uint32_t(indecies.size());
 }
 

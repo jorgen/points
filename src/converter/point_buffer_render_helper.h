@@ -45,11 +45,11 @@ struct dyn_points_draw_buffer_t
 };
 
 template <typename MORTON_TYPE, typename DECODED_T>
-void convert_points_to_vertex_data_morton(const tree_global_state_t &state, const read_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset, std::unique_ptr<uint8_t[]> &vertex_data)
+void convert_points_to_vertex_data_morton(const tree_global_state_t &state, const read_only_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset, std::unique_ptr<uint8_t[]> &vertex_data)
 {
-  assert(read_points.point_data.size % sizeof(MORTON_TYPE) == 0);
-  assert(read_points.header.point_count == read_points.point_data.size / sizeof(MORTON_TYPE));
-  MORTON_TYPE *morton_array = static_cast<MORTON_TYPE *>(read_points.point_data.data);
+  assert(read_points.data.size % sizeof(MORTON_TYPE) == 0);
+  assert(read_points.header.point_count == read_points.data.size / sizeof(MORTON_TYPE));
+  MORTON_TYPE *morton_array = static_cast<MORTON_TYPE *>(read_points.data.data);
   auto point_count = read_points.header.point_count;
 
   uint32_t buffer_size = uint32_t(point_count * sizeof(DECODED_T));
@@ -85,7 +85,7 @@ void convert_points_to_vertex_data_morton(const tree_global_state_t &state, cons
   }
 }
 
-inline void convert_points_to_vertex_data(const tree_global_state_t &global_state, const read_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer)
+inline void convert_points_to_vertex_data(const tree_global_state_t &global_state, const read_only_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer)
 {
   auto pformat = read_points.header.point_format;
   switch (pformat.type)
@@ -100,10 +100,10 @@ inline void convert_points_to_vertex_data(const tree_global_state_t &global_stat
   case type_u64:
   case type_i64:
   case type_r64: {
-    draw_buffer.data[0].reset(new uint8_t[read_points.point_data.size]);
-    draw_buffer.data_info[0] = buffer_t(draw_buffer.data[0].get(), read_points.point_data.size);
+    draw_buffer.data[0].reset(new uint8_t[read_points.data.size]);
+    draw_buffer.data_info[0] = buffer_t(draw_buffer.data[0].get(), read_points.data.size);
     draw_buffer.format[0] = pformat;
-    memcpy(draw_buffer.data[0].get(), read_points.point_data.data, read_points.point_data.size);
+    memcpy(draw_buffer.data[0].get(), read_points.data.data, read_points.data.size);
     break;
   }
   case type_m32:
@@ -124,11 +124,11 @@ inline void convert_points_to_vertex_data(const tree_global_state_t &global_stat
     break;
   }
 }
-inline void convert_attribute_to_draw_buffer_data(const read_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer, int dataslot)
+inline void convert_attribute_to_draw_buffer_data(const read_only_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer, int dataslot)
 {
   auto count = read_points.header.point_count;
-  auto source_ptr = reinterpret_cast<std::array<uint16_t, 3> *>(read_points.point_data.data);
-  assert(read_points.point_data.size == count * sizeof(std::array<uint16_t, 3>));
+  auto source_ptr = reinterpret_cast<std::array<uint16_t, 3> *>(read_points.data.data);
+  assert(read_points.data.size == count * sizeof(std::array<uint16_t, 3>));
 
   auto target_size = uint32_t(count * sizeof(std::array<uint8_t, 3>));
   draw_buffer.data[dataslot].reset(new uint8_t[target_size]);

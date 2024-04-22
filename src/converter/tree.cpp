@@ -154,8 +154,8 @@ static void sub_tree_split_points_to_children(const tree_global_state_t &state, 
   for (auto &p : points.data)
   {
     to_deref.add(p.input_id);
-    read_points_t p_read(cache, storage_map.location(p.input_id, 0));
-    assert(p_read.point_data.size);
+    read_only_points_t p_read(cache, storage_map.location(p.input_id, 0));
+    assert(p_read.data.size);
 
     point_buffer_subdivide(state, p_read, storage_map, p, lod, node_min, children);
   }

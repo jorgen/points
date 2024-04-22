@@ -122,7 +122,7 @@ void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
   }
 }
 
-std::vector<request_id_t> cache_file_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers, std::function<void(request_id_t id, const error_t &error)> done)
+std::vector<request_id_t> cache_file_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers, std::function<void(const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)> done)
 {
   std::vector<request_id_t> ret;
   ret.reserve(buffers.buffers.size());
@@ -156,27 +156,36 @@ static bool serialize_points(const storage_header_t &header, const buffer_t &poi
   return true;
 }
 
-void cache_file_handler_t::handle_write_events(std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(request_id_t id, const error_t &error)>> &&event)
+void cache_file_handler_t::handle_write_events(std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>> &&event)
 {
   auto &&[requests, storage_header, attributes_id, attribute_buffers, done] = std::move(event);
   std::unique_lock<std::mutex> lock(_mutex);
   std::vector<storage_location_t> locations(attribute_buffers.buffers.size());
   for (int i = 0; i < int(attribute_buffers.buffers.size()); i++)
   {
+    buffer_t serialize_data;
+    std::unique_ptr<uint8_t[]> data_owner;
+    if (i == 0)
+    {
+      serialize_points(storage_header, attribute_buffers.buffers[i], serialize_data, data_owner);
+    }
+    else
+    {
+        serialize_data = attribute_buffers.buffers[i];
+        data_owner = std::move(attribute_buffers.data[i]);
+    }
     auto &location = locations[i];
     location.file_id = 0;
-    location.size = attribute_buffers.buffers[i].size;
+    location.size = serialize_data.size;
     free_blob_manager_t::blob_size_t size = {location.size};
     location.offset = this->_blob_manager.register_blob(size).data;
     auto &cache_item = _cache_map[location];
-    if (i == 0)
-    {
-      serialize_points(storage_header, attribute_buffers.buffers[i], cache_item.buffer, cache_item.data);
-    }
     cache_item.ref = 1;
-    cache_item.buffer = attribute_buffers.buffers[i];
-    cache_item.data = std::move(attribute_buffers.data[i]);
+    cache_item.buffer = serialize_data;
+    cache_item.data = std::move(data_owner);
   }
+
+  done(storage_header, attributes_id, locations, error_t{});
   auto request = std::make_shared<cache_file_request_t>(*this);
   _write_done.post_event(std::make_tuple(std::move(storage_header), std::move(attributes_id), std::move(locations)));
 }

@@ -105,6 +105,7 @@ void get_data_worker_t::work()
     points.header = storage_header;
     points.header.input_id.sub = sub_part++;
     points.header.point_count = convert_size;
+    points.attributes_id = attributes_id;
     attribute_buffers_initialize(attribute_info, points.buffers, convert_size);
     file.callbacks.convert_data(user_ptr, &public_header, attributes.attributes.data(), uint32_t(attributes.attributes.size()), convert_size, points.buffers.buffers.data(), uint32_t(points.buffers.buffers.size()),
                                 &local_points_read, &done_read_file, &local_error);
