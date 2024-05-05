@@ -53,6 +53,7 @@ struct lod_node_worker_data_t
   uint16_t lod;
   input_data_id_t storage_name;
   std::vector<points_collection_t> child_data;
+  std::vector<tree_id_t> child_trees;
   child_storage_map_t child_storage_info;
   point_count_t generated_point_count;
   attributes_id_t generated_attributes_id;
@@ -68,27 +69,28 @@ struct lod_tree_worker_data_t
 
 class tree_lod_generator_t;
 class attributes_configs_t;
-
+struct lod_worker_batch_t;
 class lod_worker_t : public worker_t
 {
 public:
-  lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets, int &inc_on_completed);
+  lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets);
   void work() override;
   void after_work(completion_t completion) override;
 private:
   tree_lod_generator_t &lod_generator;
+  lod_worker_batch_t &batch;
   cache_file_handler_t &cache;
   attributes_configs_t &attributes_configs;
   lod_node_worker_data_t &data;
   const std::vector<float> &random_offsets;
-  int &inc_on_completed;
 };
 
 struct lod_worker_batch_t
 {
   std::vector<lod_tree_worker_data_t> worker_data;
   std::vector<lod_worker_t> lod_workers;
-  int completed = 0;
+  std::atomic_int completed = 0;
+  int batch_size = 0;
   int level = 5;
   bool new_batch = true;
 };
@@ -102,12 +104,22 @@ public:
   void iterate_workers();
 
   const tree_global_state_t &global_state() const { return _tree_global_state; }
+
+  void add_worker_done(lod_worker_batch_t &batch)
+  {
+    if (++batch.completed == batch.batch_size)
+    {
+      _iterate_workers.post_event();
+    }
+
+  }
 private:
   threaded_event_loop_t &_loop;
   const tree_global_state_t &_tree_global_state;
   tree_cache_t &_tree_cache;
   cache_file_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;
+  event_pipe_t<void> _iterate_workers;
 
   std::vector<float> _random_offsets;
 

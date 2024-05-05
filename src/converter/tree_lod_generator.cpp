@@ -246,6 +246,7 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
       if (data.data.size())
       {
         parent.child_data.push_back(data);
+        parent.child_trees.push_back(tree_id);
       }
     }
 
@@ -270,14 +271,13 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
     to_lod.push_back(std::move(lod_tree_worker_data));
 }
 
-lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets,
-                           int &inc_on_completed)
+lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets)
   : lod_generator(lod_generator)
+  , batch(batch)
   , cache(cache)
   , attributes_configs(attributes_configs)
   , data(data)
   , random_offsets(random_offsets)
-  , inc_on_completed(inc_on_completed)
 {
 }
 
@@ -676,9 +676,22 @@ static void quantize_subset(cache_file_handler_t &cache, const points_subset_t &
                             std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   read_only_points_t subset_data(cache, storage_info.locations[0]);
-  const buffer_t source_buffer = morton_buffer_for_subset(subset_data.data, subset_data.header.point_format.type, subset.offset, subset.count);
+  offset_in_subset_t offset;
+  point_count_t point_count;
+  if (subset.count.data == uint32_t(0))
+  {
+    offset = offset_in_subset_t(0);
+    point_count = point_count_t(subset_data.header.point_count);
+  }
+  else
+  {
+    offset = subset.offset;
+    point_count = subset.count;
+  }
+  const buffer_t source_buffer = morton_buffer_for_subset(subset_data.data, subset_data.header.point_format.type, offset, point_count);
+
   assert(buffer_is_subset(subset_data.data, source_buffer));
-  find_indecies_to_quantize(subset.input_id, subset_data.header.morton_min, subset_data.header.point_format.type, source_buffer, subset.offset, subset.count, lod - 3 * 3, random_offsets, morton_to_lod);
+  find_indecies_to_quantize(subset.input_id, subset_data.header.morton_min, subset_data.header.point_format.type, source_buffer, offset, point_count, lod - 3 * 3, random_offsets, morton_to_lod);
 }
 
 template <typename T, size_t N>
@@ -811,28 +824,28 @@ void lod_worker_t::work()
   destination_header.point_count = uint32_t(indecies.size());
   destination_header.point_format = {lod_format, components_1};
   destination_header.lod_span = data.lod;
-  cache.write(destination_header, lod_attrib_mapping.destination_id, std::move(buffers), [this](const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &)
+  cache.write(destination_header, lod_attrib_mapping.destination_id, std::move(buffers), [this](const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)
               {
                 (void)storageheader;
-                (void)attrib_id;
-                (void)locations;
-                this->inc_on_completed++;
+                (void)error;
+                this->data.generated_attributes_id = attrib_id;
+                this->data.generated_locations = std::move(locations);
+                this->lod_generator.add_worker_done(this->batch);
               });
   data.generated_point_count.data = uint32_t(indecies.size());
 }
 
 void lod_worker_t::after_work(completion_t completion)
 {
-  (void)completion;
-  inc_on_completed++;
-  lod_generator.iterate_workers();
+    (void)completion;
 }
 
-static void get_storage_info(tree_cache_t &tree_cache, tree_id_t tree_id, lod_node_worker_data_t &node)
+static void get_storage_info(tree_cache_t &tree_cache, lod_node_worker_data_t &node)
 {
-  auto *tree = tree_cache.get(tree_id);
   for (int i = 0; i < int(node.child_data.size()); i++)
   {
+    auto tree_id = node.child_trees[i];
+    auto tree = tree_cache.get(tree_id);
     for (int j = 0; j < int(node.child_data[i].data.size()); j++)
     {
       auto &child_data = node.child_data[i].data[j];
@@ -848,22 +861,49 @@ static void get_storage_info(tree_cache_t &tree_cache, tree_id_t tree_id, lod_no
   }
 }
 
+static void adjust_tree_after_lod(tree_cache_t &tree_cache, std::vector<lod_tree_worker_data_t> &to_adjust, int level)
+{
+  for (auto &adjust_data : to_adjust)
+  {
+    tree_t *tree = tree_cache.get(adjust_data.tree_id);
+    if (adjust_data.nodes[level].empty())
+      continue;
+    int tree_index = 0;
+    for (int node_index = 0; node_index < int(adjust_data.nodes[level].size()); node_index++)
+    {
+      auto current = adjust_data.nodes[level][node_index].id;
+      auto &node_ids = tree->node_ids[level];
+
+      while (tree_index < int(node_ids.size()) && node_ids[tree_index] < current)
+        tree_index++;
+      assert(node_ids[tree_index] == current);
+      auto &done_node = adjust_data.nodes[level][node_index];
+      tree->data[level][tree_index].point_count = done_node.generated_point_count.data;
+      tree->storage_map.add_storage(done_node.storage_name, done_node.generated_attributes_id, std::move(done_node.generated_locations));
+    }
+  }
+}
+
 static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_cache_t &tree_cache, cache_file_handler_t &cache_file,
                           attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
 {
+  if (!batch.new_batch)
+    adjust_tree_after_lod(tree_cache, batch.worker_data, batch.level);
+
   batch.new_batch = false;
   batch.lod_workers.clear();
   batch.level--;
   batch.completed = 0;
 
   size_t batch_size = 0;
-  while (batch_size == 0 && batch.level > 0)
+  while (batch_size == 0 && batch.level >= 0)
   {
     for (auto &tree : batch.worker_data)
       batch_size += tree.nodes[batch.level].size();
     if (batch_size == 0)
       batch.level--;
   }
+  batch.batch_size = int(batch_size);
 
   batch.lod_workers.reserve(batch_size);
 
@@ -872,8 +912,8 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
     for (auto &node : tree.nodes[batch.level])
     {
       assert(!node.child_data.empty());
-      get_storage_info(tree_cache, tree.tree_id, node);
-      auto &lod_worker = batch.lod_workers.emplace_back(lod_generator, cache_file, attributes_configs, node, random_offsets, batch.completed);
+      get_storage_info(tree_cache, node);
+      auto &lod_worker = batch.lod_workers.emplace_back(lod_generator, batch, cache_file, attributes_configs, node, random_offsets);
       lod_worker.enqueue(loop);
     }
   }
@@ -885,6 +925,7 @@ tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tr
   , _tree_cache(tree_cache)
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
+  , _iterate_workers(_loop, event_bind_t::bind(*this, &tree_lod_generator_t::iterate_workers))
 {
   _random_offsets.resize(256);
   std::mt19937 gen(4244);
@@ -930,38 +971,12 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
   iterate_workers();
 }
 
-static void adjust_tree_after_lod(tree_cache_t &tree_cache, cache_file_handler_t &cache, std::vector<lod_tree_worker_data_t> &to_adjust)
-{
-  (void)cache;
-  for (auto &adjust_data : to_adjust)
-  {
-    tree_t *tree = tree_cache.get(adjust_data.tree_id);
-    for (int level = 0; level < 5; level++)
-    {
-      if (adjust_data.nodes[level].empty())
-        break;
-      int tree_index = 0;
-      for (int node_index = 0; node_index < int(adjust_data.nodes[level].size()); node_index++)
-      {
-        auto current = adjust_data.nodes[level][node_index].id;
-        auto &node_ids = tree->node_ids[level];
-
-        while (tree_index < int(node_ids.size()) && node_ids[tree_index] < current)
-          tree_index++;
-        assert(node_ids[tree_index] == current);
-        auto &done_node = adjust_data.nodes[level][node_index];
-        tree->data[level][tree_index].point_count = done_node.generated_point_count.data;
-        tree->storage_map.add_storage(done_node.storage_name, done_node.generated_attributes_id, std::move(done_node.generated_locations));
-      }
-    }
-  }
-}
 
 void tree_lod_generator_t::iterate_workers()
 {
   if (!_lod_batches.empty() && _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size()) && _lod_batches.front()->level == 0)
   {
-    adjust_tree_after_lod(_tree_cache, _file_cache, _lod_batches.front()->worker_data);
+    adjust_tree_after_lod(_tree_cache, _lod_batches.front()->worker_data, 0);
     _lod_batches.pop_front();
   }
   if (!_lod_batches.empty() && (_lod_batches.front()->new_batch || _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size())))
@@ -971,5 +986,6 @@ void tree_lod_generator_t::iterate_workers()
     fmt::print(stderr, "Done\n");
   }
 }
+
 
 } // namespace points::converter

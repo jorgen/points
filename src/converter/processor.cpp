@@ -20,7 +20,7 @@ struct thread_count_env_setter_t
 {
   thread_count_env_setter_t()
   {
-    std::string count = "2"; //std::to_string(int(std::thread::hardware_concurrency() * 1.5));
+    std::string count = std::to_string(int(std::thread::hardware_concurrency() * 1.5));
     // uv_os_setenv("UV_THREADPOOL_SIZE", count.c_str());
 #if (WIN32)
     _putenv(fmt::format("UV_THREADPOOL_SIZE={}", count.c_str()).c_str());
