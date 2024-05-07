@@ -35,7 +35,7 @@ static thread_count_env_setter_t thread_pool_size_setter;
 
 processor_t::processor_t(converter_t &converter)
   : _converter(converter)
-  , _cache_file_handler(_converter.tree_state, converter.cache_filename, _attributes_configs, _cache_file_error, _points_written)
+  , _cache_file_handler(_converter.tree_state, converter.cache_filename, _attributes_configs, _cache_file_error)
   , _tree_handler(_converter.tree_state, _cache_file_handler, _attributes_configs, _tree_done_with_input)
   , _files_added(_event_loop, bind(&processor_t::handle_new_files))
   , _pre_init_info_file_result(_event_loop, bind(&processor_t::handle_pre_init_info_for_files))
@@ -46,7 +46,6 @@ processor_t::processor_t(converter_t &converter)
   , _point_reader_file_errors(_event_loop, bind(&processor_t::handle_file_errors))
   , _point_reader_done_with_file(_event_loop, bind(&processor_t::handle_file_reading_done))
   , _cache_file_error(_event_loop, bind(&processor_t::handle_cache_file_error))
-  , _points_written(_event_loop, bind(&processor_t::handle_points_written))
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
   , _point_reader(_converter.tree_state, _input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _attributes_configs(_converter.tree_state)
@@ -125,7 +124,12 @@ void processor_t::handle_sub_added(input_data_id_t &&event)
 void processor_t::handle_sorted_points(std::pair<points_t, error_t> &&event)
 {
   _input_data_source_registry.handle_sorted_points(event.first.header.input_id, event.first.header.morton_min, event.first.header.morton_max);
-  _cache_file_handler.write(event.first.header, event.first.attributes_id, std::move(event.first.buffers), [](const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &) {});
+  _cache_file_handler.write(event.first.header, event.first.attributes_id, std::move(event.first.buffers),
+                            [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations, const error_t &)
+                            {
+                              this->handle_points_written(header,attributes, std::move(locations));
+                            }
+  );
 }
 
 void processor_t::handle_file_errors(file_error_t &&errors)
@@ -143,14 +147,14 @@ void processor_t::handle_cache_file_error(error_t &&error)
   fmt::print(stderr, "Cache file error {} {}\n", error.code, error.msg);
 }
 
-void processor_t::handle_points_written(std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>> &&event)
+void processor_t::handle_points_written(const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations)
 {
-  auto &&[header, attributes_id, locations] = event;
   if (input_data_id_is_leaf(header.input_id))
   {
     auto locations_copy = locations;
     _input_data_source_registry.handle_points_written(header.input_id, std::move(locations));
-    _tree_handler.add_points(std::move(header), std::move(attributes_id), std::move(locations_copy));
+    storage_header_t header_copy(header);
+    _tree_handler.add_points(std::move(header_copy), std::move(attributes_id), std::move(locations_copy));
   }
 }
 

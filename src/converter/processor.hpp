@@ -87,7 +87,6 @@ private:
   event_pipe_t<input_data_id_t> _point_reader_done_with_file;
 
   event_pipe_t<error_t> _cache_file_error;
-  event_pipe_t<std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>>> _points_written;
   event_pipe_t<input_data_id_t> _tree_done_with_input;
 
   threaded_event_loop_t _input_event_loop;
@@ -113,7 +112,7 @@ private:
   void handle_file_reading_done(input_data_id_t &&file);
 
   void handle_cache_file_error(error_t &&errors);
-  void handle_points_written(std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>> &&event);
+  void handle_points_written(const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations);
   void handle_tree_done_with_input(input_data_id_t &&events);
 
 };

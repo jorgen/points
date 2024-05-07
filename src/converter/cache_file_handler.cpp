@@ -27,30 +27,23 @@
 #include <fcntl.h>
 
 #include <utility>
+#include <algorithm>
 
 namespace points
 {
 namespace converter
 {
 
-static request_id_t get_next_request_id()
-{
-  static std::atomic<uint64_t> next_id(1);
-  return request_id_t{next_id++};
-}
-
-cache_file_request_t::cache_file_request_t(cache_file_handler_t &cache_file_handler)
+cache_file_request_t::cache_file_request_t(cache_file_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback)
   : cache_file_handler(cache_file_handler)
-  , id{0}
+  , done_callback(std::move(done_callback))
 {
 }
 
-void cache_file_handler_t::request_done_callback(uv_fs_t *req)
+static void request_done_callback(uv_fs_t *req)
 {
-  std::unique_ptr<std::weak_ptr<cache_file_request_t>> self_ptr(static_cast<std::weak_ptr<cache_file_request_t> *>(req->data));
-  auto self = self_ptr->lock();
-  if (!self)
-    return;
+  std::unique_ptr<std::shared_ptr<cache_file_request_t>> self_ptr(static_cast<std::shared_ptr<cache_file_request_t> *>(req->data));
+  auto self = *self_ptr;
   error_t error;
   if (req->result < 0)
   {
@@ -58,42 +51,37 @@ void cache_file_handler_t::request_done_callback(uv_fs_t *req)
     self->error.msg = uv_strerror(int(req->result));
   }
   uv_fs_req_cleanup(req);
-  self->cache_file_handler.handle_request_done(self->id);
+  self->done_callback(*self);
 }
 
-void cache_file_request_t::do_read(request_id_t request_id, const std::weak_ptr<cache_file_request_t> &self, int64_t offset, int32_t size)
+void cache_file_request_t::do_read(const std::weak_ptr<cache_file_request_t> &self, int64_t offset, int32_t size)
 {
-  this->id = request_id;
   auto self_ptr = new std::weak_ptr<cache_file_request_t>(self);
   uv_request.data = self_ptr;
   buffer = std::make_shared<uint8_t[]>(size);
   uv_buffer.base = (char *)buffer.get();
   uv_buffer.len = size;
-  uv_fs_read(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, offset, cache_file_handler_t::request_done_callback);
+  uv_fs_read(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, offset, request_done_callback);
 }
 
-void cache_file_request_t::do_write(request_id_t request_id, const std::weak_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, int64_t offset, int32_t size)
+void cache_file_request_t::do_write(const std::weak_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size)
 {
-  this->id = request_id;
-  auto self_ptr = new std::weak_ptr<cache_file_request_t>(self);
+  auto self_ptr = new std::shared_ptr<cache_file_request_t>(self);
   uv_request.data = self_ptr;
   buffer = data;
   uv_buffer.base = (char *)buffer.get();
   uv_buffer.len = size;
-  uv_fs_write(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, offset, cache_file_handler_t::request_done_callback);
+  uv_fs_write(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, int64_t(offset), request_done_callback);
 }
 
-cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error,
-                                           event_pipe_t<std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>>> &write_done)
+cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error)
   : _cache_file_name(std::move(cache_file))
   , _state(state)
   , _attributes_configs(attributes_configs)
   , _file_handle(0)
   , _file_opened(false)
   , _cache_file_error(cache_file_error)
-  , _write_done(write_done)
   , _write_event_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_events))
-  , _requests()
 {
   (void)_state;
   _open_request.data = this;
@@ -122,32 +110,22 @@ void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
   }
 }
 
-std::vector<request_id_t> cache_file_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers, std::function<void(const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)> done)
+void cache_file_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers, std::function<void(const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)> done)
 {
-  std::vector<request_id_t> ret;
-  ret.reserve(buffers.buffers.size());
-  for (int i = 0; i < int(buffers.buffers.size()); i++)
-  {
-    ret.push_back(get_next_request_id());
-  }
-  auto to_tuple = ret;
-  _write_event_pipe.post_event(std::make_tuple(std::move(to_tuple), header, attributes_id, std::move(buffers), done));
-  return ret;
+  _write_event_pipe.post_event(std::make_tuple(header, attributes_id, std::move(buffers), done));
 }
 
-request_id_t cache_file_handler_t::read(input_data_id_t id, int attribute_index)
+void cache_file_handler_t::read(input_data_id_t id, int attribute_index)
 {
   (void)id;
   (void)attribute_index;
-  auto read_id = get_next_request_id();
-  return read_id;
 }
 
-static bool serialize_points(const storage_header_t &header, const buffer_t &points, buffer_t &serialize_data, std::unique_ptr<uint8_t[]> &data_owner)
+static bool serialize_points(const storage_header_t &header, const buffer_t &points, buffer_t &serialize_data, std::shared_ptr<uint8_t[]> &data_owner)
 {
   uint8_t magic[] = {'J', 'L', 'P', 0};
   serialize_data.size = sizeof(magic) + sizeof(header) + points.size;
-  data_owner.reset(new uint8_t[serialize_data.size]);
+  data_owner = std::make_shared<uint8_t[]>(serialize_data.size);
   serialize_data.data = data_owner.get();
   auto output_bytes = static_cast<uint8_t *>(serialize_data.data);
   memcpy(output_bytes, magic, sizeof(magic));
@@ -156,23 +134,29 @@ static bool serialize_points(const storage_header_t &header, const buffer_t &poi
   return true;
 }
 
-void cache_file_handler_t::handle_write_events(std::tuple<std::vector<request_id_t>, storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>> &&event)
+void cache_file_handler_t::handle_write_events(std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event)
 {
-  auto &&[requests, storage_header, attributes_id, attribute_buffers, done] = std::move(event);
+  auto &&[storage_header, attributes_id, attribute_buffers, done] = std::move(event);
   std::unique_lock<std::mutex> lock(_mutex);
-  std::vector<storage_location_t> locations(attribute_buffers.buffers.size());
+  auto &write_requests = this->_write_requests.emplace_back(new write_requests_t());
+  write_requests->target_count = int(attribute_buffers.buffers.size());
+  std::vector<storage_location_t> &locations = write_requests->locations;
+  locations.resize(attribute_buffers.buffers.size());
+  write_requests->header = storage_header;
+  write_requests->attributes_id = attributes_id;
+  write_requests->done_callback = std::move(done);
   for (int i = 0; i < int(attribute_buffers.buffers.size()); i++)
   {
     buffer_t serialize_data;
-    std::unique_ptr<uint8_t[]> data_owner;
+    std::shared_ptr<uint8_t[]> data_owner;
     if (i == 0)
     {
       serialize_points(storage_header, attribute_buffers.buffers[i], serialize_data, data_owner);
     }
     else
     {
-        serialize_data = attribute_buffers.buffers[i];
-        data_owner = std::move(attribute_buffers.data[i]);
+      serialize_data = attribute_buffers.buffers[i];
+      data_owner = std::move(attribute_buffers.data[i]);
     }
     auto &location = locations[i];
     location.file_id = 0;
@@ -182,16 +166,26 @@ void cache_file_handler_t::handle_write_events(std::tuple<std::vector<request_id
     auto &cache_item = _cache_map[location];
     cache_item.ref = 1;
     cache_item.buffer = serialize_data;
-    cache_item.data = std::move(data_owner);
-  }
+    cache_item.data = data_owner;
 
-  done(storage_header, attributes_id, locations, error_t{});
-  auto request = std::make_shared<cache_file_request_t>(*this);
-  _write_done.post_event(std::make_tuple(std::move(storage_header), std::move(attributes_id), std::move(locations)));
-}
-void cache_file_handler_t::handle_request_done(request_id_t id)
-{
-  (void)id;
+    auto write_requests_prt = write_requests.get();
+    auto request = std::make_shared<cache_file_request_t>(*this, [this, write_requests_prt](const cache_file_request_t &request) {
+      if (request.error.code != 0 && write_requests_prt->error.code == 0)
+      {
+        write_requests_prt->error = request.error;
+      }
+      write_requests_prt->done++;
+      if (write_requests_prt->done == write_requests_prt->target_count)
+      {
+        if (write_requests_prt->done_callback)
+        {
+          write_requests_prt->done_callback(write_requests_prt->header, write_requests_prt->attributes_id, std::move(write_requests_prt->locations), write_requests_prt->error);
+        }
+        remove_write_requests(write_requests_prt);
+      }
+    });
+    request->do_write(request, data_owner, location.offset, location.size);
+  }
 }
 
 points_cache_item_t cache_file_handler_t::ref_points(const storage_location_t &location)
@@ -223,6 +217,14 @@ bool cache_file_handler_t::is_available(input_data_id_t id, int attribute_index)
 int cache_file_handler_t::item_count()
 {
   return int(_cache_map.size());
+}
+
+void cache_file_handler_t::remove_write_requests(write_requests_t *write_requests)
+{
+    std::unique_lock<std::mutex> lock(_mutex);
+    auto it = std::find_if(_write_requests.begin(), _write_requests.end(), [&](const std::unique_ptr<write_requests_t> &a) { return a.get() == write_requests; });
+    assert(it != _write_requests.end());
+    _write_requests.erase(it);
 }
 
 } // namespace converter
