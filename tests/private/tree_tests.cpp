@@ -44,28 +44,28 @@ struct tree_test_infrastructure : points::converter::about_to_block_t
     : global_state(create_tree_global_state(node_limit, 0.001, 0.0))
     , attributes_config(global_state)
     , cache_file_error(event_loop, bind(&tree_test_infrastructure::handle_file_error))
-    , write_done(event_loop, bind(&tree_test_infrastructure::handle_write_done))
-    , cache_file_handler(global_state, "test_cache_file", attributes_config, cache_file_error, write_done)
+    , cache_file_handler(global_state, "test_cache_file", attributes_config, cache_file_error)
   {
     event_loop.add_about_to_block_listener(this);
   }
 
-  std::vector<points::converter::request_id_t> write(const points::converter::storage_header_t &header, points::converter::attributes_id_t attribute_id, points::converter::attribute_buffers_t &&buffers,
-                                                     std::function<void(const points::converter::storage_header_t &id, points::converter::attributes_id_t, std::vector<points::converter::storage_location_t>,  const points::error_t &error)> on_done)
+  void write(const points::converter::storage_header_t &header, points::converter::attributes_id_t attribute_id, points::converter::attribute_buffers_t &&buffers)
   {
     std::unique_lock<std::mutex> lock(wait_for_write_done_mutex);
     write_done_state = false;
-    return cache_file_handler.write(header, attribute_id, std::move(buffers), std::move(on_done));
+
+    cache_file_handler.write(header, attribute_id, std::move(buffers), [this](const points::converter::storage_header_t &header, points::converter::attributes_id_t attributes_id, std::vector<points::converter::storage_location_t> &&location, const points::error_t &error) {
+      handle_write_done(header, attributes_id, std::move(location));
+    });
   }
 
   void handle_file_error(const points::error_t &&error)
   {
     fmt::print("error: {}\n", error.msg);
   }
-  void handle_write_done(std::tuple<points::converter::storage_header_t, points::converter::attributes_id_t, std::vector<points::converter::storage_location_t>> &&event)
+  void handle_write_done(const points::converter::storage_header_t &header, points::converter::attributes_id_t attributes_id, std::vector<points::converter::storage_location_t> &&location)
   {
     std::unique_lock<std::mutex> lock(wait_for_write_done_mutex);
-    auto &[header, attributes_id, location] = event;
     write_done_state = true;
     fmt::print("write done: {}\n", header.input_id.data);
     write_done_event = {header, attributes_id, std::move(location)};
@@ -87,7 +87,6 @@ struct tree_test_infrastructure : points::converter::about_to_block_t
   points::converter::tree_global_state_t global_state;
   points::converter::attributes_configs_t attributes_config;
   points::converter::event_pipe_t<points::error_t> cache_file_error;
-  points::converter::event_pipe_t<std::tuple<points::converter::storage_header_t, points::converter::attributes_id_t, std::vector<points::converter::storage_location_t>>> write_done;
   points::converter::cache_file_handler_t cache_file_handler;
 
   bool write_done_state = false;
@@ -134,7 +133,7 @@ write_done_event_t create_points(tree_test_infrastructure &test_util, uint64_t m
     if (last_value + step_size < max)
       last_value += step_size;
   }
-  test_util.write(points.header, attr_id, std::move(points.buffers), [](const points::converter::storage_header_t &, points::converter::attributes_id_t, std::vector<points::converter::storage_location_t>, const points::error_t &error) { fmt::print("error: {}\n", error.msg); });
+  test_util.write(points.header, attr_id, std::move(points.buffers));
   return test_util.wait_for_write_done();
 }
 
