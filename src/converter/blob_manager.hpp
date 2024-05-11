@@ -24,7 +24,7 @@
 class free_blob_manager_t
 {
 public:
-  static constexpr uint32_t PAGE_SIZE = 100 * 1024 * 1024; // 100 MB
+  static constexpr uint32_t FREE_BLOB_MANAGER_PAGE_SIZE = 100 * 1024 * 1024; // 100 MB
   using page_t = uint32_t;
 
   struct offset_t
@@ -32,7 +32,7 @@ public:
     uint64_t data;
     [[nodiscard]] page_t page() const
     {
-      return page_t(data / PAGE_SIZE);
+      return page_t(data / FREE_BLOB_MANAGER_PAGE_SIZE);
     }
     bool operator<(const offset_t &o) const
     {

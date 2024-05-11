@@ -18,6 +18,7 @@
 #pragma once
 
 #include <points/render/renderer.h>
+#include <points/render/data_source.h>
 
 #include "renderer_callbacks.hpp"
 #include "camera.hpp"

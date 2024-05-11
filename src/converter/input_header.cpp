@@ -17,9 +17,6 @@
 ************************************************************************/
 #include "input_header.hpp"
 
-#include "morton.hpp"
-#include "reader.hpp"
-
 #include <assert.h>
 
 namespace points
@@ -41,8 +38,8 @@ void attributes_copy(const attributes_t &source, attributes_t &target)
   target.attributes = source.attributes;
   for (int i = 0; i < int(source.attributes.size()); i++)
   {
-    target.attribute_names.emplace_back(new char[source.attributes[i].name_size + 1]); 
-    memcpy(target.attribute_names[i].get(), source.attribute_names[i].get(), source.attributes[i].name_size);
+    auto &target_attrib_name = target.attribute_names.emplace_back(new char[source.attributes[i].name_size + 1]);
+    memcpy(target_attrib_name.get(), source.attribute_names[i].get(), source.attributes[i].name_size);
     target.attribute_names[i].get()[source.attributes[i].name_size] = 0;
     target.attributes[i].name = target.attribute_names[i].get();
   }
@@ -60,7 +57,7 @@ void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_
   }
 }
 
-void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count, std::unique_ptr<uint8_t[]> && morton_attribute_buffer)
+void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count, std::unique_ptr<uint8_t[]> &&morton_attribute_buffer)
 {
   buffers.data.reserve(attributes_def.size());
   buffers.buffers.reserve(attributes_def.size());
@@ -79,7 +76,6 @@ void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_
     }
     buffers.buffers.emplace_back(buffers.data.back().get(), buffer_size);
   }
-
 }
 
 void attribute_buffers_adjust_buffers_to_size(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count)
@@ -92,5 +88,5 @@ void attribute_buffers_adjust_buffers_to_size(const std::vector<point_format_t> 
     buffer.size = size_for_format(attributes_def[i].type) * uint32_t(attributes_def[i].components) * point_count;
   }
 }
-}
+} // namespace converter
 } // namespace points

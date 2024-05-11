@@ -35,7 +35,7 @@ get_pre_init_info_worker_t::get_pre_init_info_worker_t(const tree_global_state_t
 
 void get_pre_init_info_worker_t::work()
 {
-  error_t *local_error = nullptr;
+        error_t *local_error = nullptr;
   auto pre_init_info = converter_callbacks.pre_init(file_name.name, file_name.name_length, &local_error);
   if (local_error)
   {
@@ -61,8 +61,7 @@ void get_pre_init_info_worker_t::after_work(completion_t completion)
     file_errors.post_event(std::move(_file_error));
   else
     pre_init_info_file_result.post_event(std::move(_pre_init_file));
-
 }
 
-}
+} // namespace converter
 } // namespace points

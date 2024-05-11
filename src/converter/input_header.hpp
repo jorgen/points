@@ -19,10 +19,8 @@
 
 #include <stdint.h>
 
-#include <limits>
 #include <vector>
 #include <memory>
-#include <string>
 
 #include <points/converter/converter.h>
 

@@ -19,11 +19,11 @@
 
 #include "input_header.hpp"
 
-#include <points/converter/default_attribute_names.h>
 #include "fixed_size_vector.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 #include <algorithm>
 #include <mutex>
+#include <points/converter/default_attribute_names.h>
 
 namespace points
 {
@@ -33,7 +33,7 @@ namespace converter
 attributes_configs_t::attributes_configs_t(const tree_global_state_t &global_state)
   : _global_state(global_state)
 {
-  (void) _global_state;
+  (void)_global_state;
 }
 
 static bool compare_attribute(const attribute_t &a, const attribute_t &b)
@@ -77,10 +77,9 @@ attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&
 
 static bool contains_attribute(const attributes_t &attributes, const attribute_t &attribute)
 {
-  for (auto &to_check_attrib :attributes.attributes)
+  for (auto &to_check_attrib : attributes.attributes)
   {
-    if (to_check_attrib.name_size == attribute.name_size
-        && memcmp(to_check_attrib.name, attribute.name, attribute.name_size) == 0)
+    if (to_check_attrib.name_size == attribute.name_size && memcmp(to_check_attrib.name, attribute.name, attribute.name_size) == 0)
     {
       return true;
     }
@@ -94,7 +93,7 @@ static void add_missing_attributes(const attributes_t &source, attributes_t &tar
   {
     if (contains_attribute(target, source_attrib))
     {
-        continue;
+      continue;
     }
     target.attributes.push_back(source_attrib);
     auto &target_attrib = target.attributes.back();
@@ -145,7 +144,7 @@ static bool attributes_ids_increase(const attributes_id_t *begin, const attribut
 
   auto prev_id = begin->data;
   begin++;
-  while(begin < end)
+  while (begin < end)
   {
     if (begin->data <= prev_id)
       return false;
@@ -163,7 +162,7 @@ static bool is_attribute_names_equal(const attribute_t &a, const attribute_t &b)
   return memcmp(a.name, b.name, a.name_size) == 0;
 }
 
-attribute_source_lod_into_t create_attribute_source_lod_into (const attribute_t &attr, const attributes_t &attributes)
+attribute_source_lod_into_t create_attribute_source_lod_into(const attribute_t &attr, const attributes_t &attributes)
 {
   for (int i = 0; i < int(attributes.attributes.size()); i++)
   {
@@ -237,7 +236,7 @@ point_format_t attributes_configs_t::get_point_format(attributes_id_t id)
   assert(id.data < _attributes_configs.size());
   std::unique_lock<std::mutex> lock(_mutex);
   auto &attrib = _attributes_configs[id.data].attributes.attributes[0];
-  return { attrib.format, attrib.components };
+  return {attrib.format, attrib.components};
 }
 int attributes_configs_t::get_attribute_index(attributes_id_t id, const std::string &name) const
 {
@@ -253,4 +252,5 @@ int attributes_configs_t::get_attribute_index(attributes_id_t id, const std::str
   }
   return -1;
 }
-}}
+} // namespace converter
+} // namespace points

@@ -64,7 +64,8 @@ static void combine_buffers(std::vector<tree_walker_nodes_t> &new_nodes, render:
 void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, render::to_render_t *to_render)
 {
   (void)to_render;
-  const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
+  //const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
+  (void)c_camera;
 
   if (back_buffer && back_buffer->done() && !has_rendered)
   {

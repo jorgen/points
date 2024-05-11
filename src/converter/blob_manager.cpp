@@ -29,7 +29,7 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
   for (auto page_it = _free_sections_by_page.begin(); page_it != _free_sections_by_page.end(); ++page_it)
   {
     auto &[page_number, sections] = *page_it;
-    auto page_offset = page_number * PAGE_SIZE;
+    auto page_offset = page_number * FREE_BLOB_MANAGER_PAGE_SIZE;
     if (spillover_page + 1 != page_number
       || (sections.size() && sections.front().offset.data != page_offset))
     {
@@ -60,7 +60,7 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
 
         if (spillover_from_last_page.data > 0)
         {
-          auto spillover_page_count = size.data / PAGE_SIZE;
+          auto spillover_page_count = size.data / FREE_BLOB_MANAGER_PAGE_SIZE;
           auto remove_back_free_section_it = page_it - 1;
           for (uint64_t spillover_page_index = 0; spillover_page_index < spillover_page_count; spillover_page_index++)
           {
@@ -82,7 +82,7 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
       }
     }
 
-    if (sections.size() && sections.back().offset.data + sections.back().size.data == page_offset + free_blob_manager_t::PAGE_SIZE)
+    if (sections.size() && sections.back().offset.data + sections.back().size.data == page_offset + free_blob_manager_t::FREE_BLOB_MANAGER_PAGE_SIZE)
     {
       spillover_from_last_page.data += sections.back().size.data;
       spillover_page = page_number;
@@ -102,7 +102,7 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
 [[nodiscard]] bool free_blob_manager_t::unregister_blob(offset_t total_offset, blob_size_t total_size)
 {
   page_t start_page = total_offset.page();
-  page_t end_page = page_t((total_offset.data + total_size.data - 1) / PAGE_SIZE);
+  page_t end_page = page_t((total_offset.data + total_size.data - 1) / FREE_BLOB_MANAGER_PAGE_SIZE);
 
   if (total_offset.data + total_size.data > _next_offset.data)
   {
@@ -116,8 +116,8 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
     {
       page_it = _free_sections_by_page.emplace(page, std::vector<section_t>()).first;
     }
-    offset_t page_start = {page * PAGE_SIZE};
-    offset_t page_end = {page_start.data + PAGE_SIZE};
+    offset_t page_start = {page * FREE_BLOB_MANAGER_PAGE_SIZE};
+    offset_t page_end = {page_start.data + FREE_BLOB_MANAGER_PAGE_SIZE};
     offset_t section_end = {std::min(total_offset.data + total_size.data, page_end.data)};
     offset_t offset_for_page = {std::max(total_offset.data, page_start.data)};
     blob_size_t size_for_page = {uint32_t(section_end.data - std::max(page_start.data, total_offset.data))};
@@ -192,7 +192,7 @@ size_t free_blob_manager_t::get_free_sections_count() const
   for (auto& [page_number, sections] : _free_sections_by_page)
   {
     if (last_page_ended_with_free_section
-      && sections.size() && sections.front().offset.data == page_number * PAGE_SIZE)
+      && sections.size() && sections.front().offset.data == page_number * FREE_BLOB_MANAGER_PAGE_SIZE)
     {
       count += sections.size() - 1;
     }
@@ -200,7 +200,7 @@ size_t free_blob_manager_t::get_free_sections_count() const
     {
       count += sections.size();
     }
-    last_page_ended_with_free_section = sections.size() && sections.back().offset.data + sections.back().size.data == (page_number + 1) * PAGE_SIZE;
+    last_page_ended_with_free_section = sections.size() && sections.back().offset.data + sections.back().size.data == (page_number + 1) * FREE_BLOB_MANAGER_PAGE_SIZE;
   }
   return count;
 }

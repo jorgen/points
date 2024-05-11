@@ -19,8 +19,6 @@
 
 #include <cassert>
 #include <cstdlib>
-#include <new>
-#include <type_traits>
 #include <cassert>
 #include <cstddef>
 #include <memory>
@@ -35,8 +33,8 @@ public:
   using iterator = T*;
   using const_iterator = const T*;
 
-  template<typename T, typename P>
-  fixed_capacity_vector_t(const T &vec, P processor)
+  template<typename V, typename P>
+  fixed_capacity_vector_t(const V &vec, P processor)
     : fixed_capacity_vector_t(std::size(vec))
   {
     for (size_t i = 0; i < _capacity; i++)

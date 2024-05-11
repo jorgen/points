@@ -82,7 +82,7 @@ std::pair<int, int> find_missing_lod(tree_registry_t &tree_cache, cache_file_han
     assert(node_data.data.size() <= 1);
     if (node_data.data.size() == 1)
     {
-      assert(node_data.data.back().offset.data == (~uint64_t(0)));
+      assert(node_data.data.back().offset.data == (~uint32_t(0)));
       to_lod.data.emplace_back(node_data.data.back());
       to_lod.data_skips.emplace_back(1);
       to_lod.skips.emplace_back(1);
@@ -664,7 +664,6 @@ static void quantize_attributres(cache_file_handler_t &cache, const child_storag
     auto mapping = lod_attrib_mapping.get_source_mapping(storage_info.attributes_id);
     for (int destination_buffer_index = 1; destination_buffer_index < int(buffers.buffers.size()); destination_buffer_index++)
     {
-      auto target_buffer = buffers.buffers[destination_buffer_index];
       auto attr_mapping = mapping.source_attributes[destination_buffer_index];
       read_attribute_t source_attrib_data(cache, storage_info.locations[attr_mapping.source_index]);
       copy_attribute_for_input(*inputs_it, indecies, attr_mapping.source_format, source_attrib_data.data, lod_attrib_mapping.destination[destination_buffer_index], buffers.buffers[destination_buffer_index]);

@@ -98,8 +98,6 @@ private:
 
   attributes_configs_t _attributes_configs;
 
-  uint32_t _input_sources_inserted_into_tree;
-
   int64_t _read_sort_budget;
   int64_t _read_sort_active_approximate_size;
 

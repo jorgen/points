@@ -148,7 +148,7 @@ attribute_index_map_t::attribute_index_map_t(const attributes_configs_t &attribu
 
 int attribute_index_map_t::get_index(attributes_id_t id, int attribute_name_index)
 {
-  assert(attribute_name_index < m_attribute_names.size());
+  assert(attribute_name_index < int(m_attribute_names.size()));
   auto it = m_map.find(id);
   if (it == m_map.end())
   {

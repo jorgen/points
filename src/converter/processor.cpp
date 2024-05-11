@@ -50,7 +50,6 @@ processor_t::processor_t(converter_t &converter)
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
   , _point_reader(_converter.tree_state, _input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _attributes_configs(_converter.tree_state)
-  , _input_sources_inserted_into_tree(0)
   , _read_sort_budget(uint64_t(1) << 20)
   , _read_sort_active_approximate_size(0)
 {
