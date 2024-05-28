@@ -17,25 +17,25 @@
 ************************************************************************/
 #pragma once
 
-#include <uv.h>
-#include <vector>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
-#include <mutex>
+#include <uv.h>
+#include <vector>
 
 #include <points/converter/converter.h>
 
+#include "attributes_configs.hpp"
+#include "cache_file_handler.hpp"
 #include "conversion_types.hpp"
 #include "event_pipe.hpp"
+#include "input_data_source_registry.hpp"
+#include "morton.hpp"
 #include "pre_init_file_retriever.hpp"
 #include "reader.hpp"
-#include "cache_file_handler.hpp"
 #include "threaded_event_loop.hpp"
-#include "morton.hpp"
 #include "tree_handler.hpp"
-#include "attributes_configs.hpp"
-#include "input_data_source_registry.hpp"
 
 #include <memory>
 
@@ -63,7 +63,10 @@ public:
   void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
   void about_to_block() override;
 
-  cache_file_handler_t &cache_file() { return _cache_file_handler; }
+  cache_file_handler_t &cache_file()
+  {
+    return _cache_file_handler;
+  }
   const attributes_t &get_attributes(attributes_id_t id);
 
 private:
@@ -85,6 +88,7 @@ private:
   event_pipe_t<std::pair<points_t, error_t>> _sorted_points;
   event_pipe_t<file_error_t> _point_reader_file_errors;
   event_pipe_t<input_data_id_t> _point_reader_done_with_file;
+  event_pipe_t<void> _lod_generation_done;
 
   event_pipe_t<error_t> _cache_file_error;
   event_pipe_t<input_data_id_t> _tree_done_with_input;
@@ -101,7 +105,6 @@ private:
 
   void handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files);
 
-
   void handle_pre_init_info_for_files(pre_init_info_file_result_t &&pre_init_info_for_files);
   void handle_file_errors_headers(file_error_t &&error);
 
@@ -110,11 +113,11 @@ private:
   void handle_sorted_points(std::pair<points_t, error_t> &&event);
   void handle_file_errors(file_error_t &&error);
   void handle_file_reading_done(input_data_id_t &&file);
+  void handle_tree_lod_done();
 
   void handle_cache_file_error(error_t &&errors);
   void handle_points_written(const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations);
   void handle_tree_done_with_input(input_data_id_t &&events);
-
 };
-}
+} // namespace converter
 } // namespace points

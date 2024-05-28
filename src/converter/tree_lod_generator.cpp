@@ -45,16 +45,16 @@ struct children_subset_t
   std::vector<tree_id_t> tree_id;
 };
 
-static input_data_id_t get_next_input_id(tree_cache_t &tree_cache)
+static input_data_id_t get_next_input_id(tree_registry_t &tree_cache)
 {
   input_data_id_t ret; // NOLINT(*-pro-type-member-init)
-  static_assert(sizeof(ret) == sizeof(tree_cache.current_lod_node_id), "input_data_id_t is incompatible with tree_cache_t::current_lod_node_id");
+  static_assert(sizeof(ret) == sizeof(tree_cache.current_lod_node_id), "input_data_id_t is incompatible with tree_registry_t::current_lod_node_id");
   memcpy(&ret, &tree_cache.current_lod_node_id, sizeof(ret));
   tree_cache.current_lod_node_id++;
   return ret;
 }
 
-std::pair<int, int> find_missing_lod(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, const morton::morton192_t &max, const morton::morton192_t &parent_min,
+std::pair<int, int> find_missing_lod(tree_registry_t &tree_cache, cache_file_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, const morton::morton192_t &max, const morton::morton192_t &parent_min,
                                      const morton::morton192_t &parent_max, int current_level, int skip, children_subset_t &to_lod) // NOLINT(*-no-recursion)
 {
   auto tree = tree_cache.get(tree_id);
@@ -174,7 +174,7 @@ struct tree_iterator_t
   std::vector<lod_node_worker_data_t> parents;
 };
 
-static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, lod_node_worker_data_t &parent_node, std::vector<lod_tree_worker_data_t> &to_lod)
+static void tree_get_work_items(tree_registry_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, lod_node_worker_data_t &parent_node, std::vector<lod_tree_worker_data_t> &to_lod)
 {
   auto tree = tree_cache.get(tree_id);
   assert(!(tree->morton_min < parent_node.node_min));
@@ -271,7 +271,8 @@ static void tree_get_work_items(tree_cache_t &tree_cache, cache_file_handler_t &
     to_lod.push_back(std::move(lod_tree_worker_data));
 }
 
-lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets)
+lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data,
+                           const std::vector<float> &random_offsets)
   : lod_generator(lod_generator)
   , batch(batch)
   , cache(cache)
@@ -824,8 +825,8 @@ void lod_worker_t::work()
   destination_header.point_count = uint32_t(indecies.size());
   destination_header.point_format = {lod_format, components_1};
   destination_header.lod_span = data.lod;
-  cache.write(destination_header, lod_attrib_mapping.destination_id, std::move(buffers), [this](const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)
-              {
+  cache.write(destination_header, lod_attrib_mapping.destination_id, std::move(buffers),
+              [this](const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error) {
                 (void)storageheader;
                 (void)error;
                 this->data.generated_attributes_id = attrib_id;
@@ -837,10 +838,10 @@ void lod_worker_t::work()
 
 void lod_worker_t::after_work(completion_t completion)
 {
-    (void)completion;
+  (void)completion;
 }
 
-static void get_storage_info(tree_cache_t &tree_cache, lod_node_worker_data_t &node)
+static void get_storage_info(tree_registry_t &tree_cache, lod_node_worker_data_t &node)
 {
   for (int i = 0; i < int(node.child_data.size()); i++)
   {
@@ -861,7 +862,7 @@ static void get_storage_info(tree_cache_t &tree_cache, lod_node_worker_data_t &n
   }
 }
 
-static void adjust_tree_after_lod(tree_cache_t &tree_cache, std::vector<lod_tree_worker_data_t> &to_adjust, int level)
+static void adjust_tree_after_lod(tree_registry_t &tree_cache, std::vector<lod_tree_worker_data_t> &to_adjust, int level)
 {
   for (auto &adjust_data : to_adjust)
   {
@@ -884,7 +885,7 @@ static void adjust_tree_after_lod(tree_cache_t &tree_cache, std::vector<lod_tree
   }
 }
 
-static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_cache_t &tree_cache, cache_file_handler_t &cache_file,
+static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_registry_t &tree_cache, cache_file_handler_t &cache_file,
                           attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
 {
   if (!batch.new_batch)
@@ -919,12 +920,14 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
   }
 }
 
-tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tree_global_state_t &tree_global_state, tree_cache_t &tree_cache, cache_file_handler_t &file_cache, attributes_configs_t &attributes_configs)
+tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tree_global_state_t &tree_global_state, tree_registry_t &tree_cache, cache_file_handler_t &file_cache,
+                                           attributes_configs_t &attributes_configs, event_pipe_t<void> &lod_done)
   : _loop(loop)
   , _tree_global_state(tree_global_state)
   , _tree_cache(tree_cache)
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
+  , _lod_done(lod_done)
   , _iterate_workers(_loop, event_bind_t::bind(*this, &tree_lod_generator_t::iterate_workers))
 {
   _random_offsets.resize(256);
@@ -971,7 +974,6 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
   iterate_workers();
 }
 
-
 void tree_lod_generator_t::iterate_workers()
 {
   if (!_lod_batches.empty() && _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size()) && _lod_batches.front()->level == 0)
@@ -983,9 +985,8 @@ void tree_lod_generator_t::iterate_workers()
     iterate_batch(_random_offsets, *this, *_lod_batches.front(), _tree_cache, _file_cache, _attributes_configs, _loop);
   if (_lod_batches.empty())
   {
-    fmt::print(stderr, "Done\n");
+    _lod_done.post_event();
   }
 }
-
 
 } // namespace points::converter

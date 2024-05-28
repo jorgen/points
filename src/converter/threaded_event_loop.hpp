@@ -95,15 +95,15 @@ public:
     _thread->join();
   }
 
-  template <typename T>
-  void add_event_pipe(event_pipe_multi_t<T> &event_pipe)
+  template <typename... ARGS>
+  void add_event_pipe(event_pipe_multi_t<ARGS...> &event_pipe)
   {
     std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
     _add_pipe.post_event(func);
   }
 
-  template <typename T>
-  void add_event_pipe(event_pipe_t<T> &event_pipe)
+  template <typename... ARGS>
+  void add_event_pipe(event_pipe_t<ARGS...> &event_pipe)
   {
     std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
     _add_pipe.post_event(func);

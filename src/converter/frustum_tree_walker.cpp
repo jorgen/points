@@ -116,7 +116,7 @@ static void walk_tree_l(const tree_global_state_t &global_state, const tree_t &t
   }
 }
 
-void frustum_tree_walker_t::walk_tree(const tree_global_state_t &global_state, tree_cache_t tree_cache, tree_id_t tree_root)
+void frustum_tree_walker_t::walk_tree(const tree_global_state_t &global_state, tree_registry_t tree_cache, tree_id_t tree_root)
 {
   (void)tree_root;
   auto root_tree = tree_cache.get(tree_root);

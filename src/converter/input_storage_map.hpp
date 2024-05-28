@@ -34,6 +34,9 @@ public:
   [[nodiscard]] storage_location_t location(input_data_id_t id, int attribute_index) const;
   void add_ref(input_data_id_t id);
 
+  int serialized_size() const;
+  bool serialize(uint8_t *buffer, int buffer_size) const;
+
 private:
   struct hash
   {

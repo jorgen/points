@@ -31,6 +31,12 @@ namespace converter
 
 class cache_file_handler_t;
 
+struct serialized_tree_t
+{
+  std::shared_ptr<uint8_t[]> data;
+  int size;
+};
+
 struct points_collection_t
 {
   uint64_t point_count = 0;
@@ -102,12 +108,14 @@ struct tree_t
 #endif
   tree_id_t id;
   uint8_t magnitude;
+  bool is_dirty;
   input_storage_map_t storage_map;
 };
 
-struct tree_cache_t
+struct tree_registry_t
 {
   std::vector<tree_t> data;
+  std::vector<storage_location_t> locations;
   uint32_t current_id = 0;
   uint64_t current_lod_node_id = uint64_t(1) << 63;
   tree_t *get(tree_id_t id)
@@ -116,9 +124,12 @@ struct tree_cache_t
   }
 };
 
-tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id,
+tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_registry_t &tree_cache, cache_file_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id,
                           std::vector<storage_location_t> &&locations);
-tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_cache_t &tree_cache, cache_file_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
+tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_registry_t &tree_cache, cache_file_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
                           std::vector<storage_location_t> &&locations);
+
+serialized_tree_t tree_serialize(const tree_t &tree);
+
 } // namespace converter
 } // namespace points

@@ -54,9 +54,9 @@ struct tree_test_infrastructure : points::converter::about_to_block_t
     std::unique_lock<std::mutex> lock(wait_for_write_done_mutex);
     write_done_state = false;
 
-    cache_file_handler.write(header, attribute_id, std::move(buffers), [this](const points::converter::storage_header_t &header, points::converter::attributes_id_t attributes_id, std::vector<points::converter::storage_location_t> &&location, const points::error_t &error) {
-      handle_write_done(header, attributes_id, std::move(location));
-    });
+    cache_file_handler.write(header, attribute_id, std::move(buffers),
+                             [this](const points::converter::storage_header_t &header, points::converter::attributes_id_t attributes_id, std::vector<points::converter::storage_location_t> &&location,
+                                    const points::error_t &error) { handle_write_done(header, attributes_id, std::move(location)); });
   }
 
   void handle_file_error(const points::error_t &&error)
@@ -144,7 +144,7 @@ TEST_CASE("initialize empty tree", "[converter, tree_t]")
   auto write_done_event = create_points(test_util, 0, morton_max, 256);
   auto &[header, attribute_id, locations] = write_done_event;
 
-  points::converter::tree_cache_t tree_cache;
+  points::converter::tree_registry_t tree_cache;
   auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, header, attribute_id, std::move(locations));
   auto tree = *tree_cache.get(root_id);
   REQUIRE(tree.morton_max.data[0] == morton_max);
@@ -160,7 +160,7 @@ TEST_CASE("add inclusion", "[converter, tree_t]")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   tree_test_infrastructure test_util;
-  points::converter::tree_cache_t tree_cache;
+  points::converter::tree_registry_t tree_cache;
   auto write_done_event = create_points(test_util, 0, morton_max, 256);
   auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, write_done_event.header, write_done_event.attribute_id, std::move(write_done_event.locations));
 
@@ -186,7 +186,7 @@ TEST_CASE("add_new_node", "[converter, tree_t]")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   tree_test_infrastructure test_util(256);
-  points::converter::tree_cache_t tree_cache;
+  points::converter::tree_registry_t tree_cache;
   auto points = create_points(test_util, 0, morton_max, 256);
 
   auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
@@ -204,7 +204,7 @@ TEST_CASE("add_new_subtree", "[converter, tree_t]")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
   tree_test_infrastructure test_util(256);
-  points::converter::tree_cache_t tree_cache;
+  points::converter::tree_registry_t tree_cache;
   auto points = create_points(test_util, 0, morton_max, 256);
   auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
   auto &tree = *tree_cache.get(root_id);
@@ -233,7 +233,7 @@ TEST_CASE("add_new_subtree_offsets", "[converter, tree_t]")
     tree_test_infrastructure test_util(256);
     uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2 + i)) - 1);
     auto points = create_points(test_util, 0, morton_max, 256);
-    points::converter::tree_cache_t tree_cache;
+    points::converter::tree_registry_t tree_cache;
     auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
     auto &tree = *tree_cache.get(root_id);
 
@@ -261,7 +261,7 @@ TEST_CASE("reparent", "[converter, tree_t]")
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
 
   auto first_points = create_points(test_util, 0, morton_max);
-  points::converter::tree_cache_t tree_cache;
+  points::converter::tree_registry_t tree_cache;
   auto root_id = points::converter::tree_initialize(test_util.global_state, tree_cache, test_util.cache_file_handler, first_points.header, first_points.attribute_id, std::move(first_points.locations));
 
   morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);

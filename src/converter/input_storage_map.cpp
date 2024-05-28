@@ -72,6 +72,52 @@ attributes_id_t input_storage_map_t::attribute_id(input_data_id_t id)
   auto &value = _map[id];
   return value.attributes_id;
 }
+int input_storage_map_t::serialized_size() const
+{
+  int size = 0;
+  for (auto &[id, value] : _map)
+  {
+    size += sizeof(id) + sizeof(value.attributes_id) + sizeof(value.ref_count) + sizeof(uint32_t);
+    for (auto &loc : value.storage)
+    {
+      size += sizeof(loc);
+    }
+  }
+  return size;
+}
+bool input_storage_map_t::serialize(uint8_t *buffer, int buffer_size) const
+{
+  uint8_t *ptr = buffer;
+  uint8_t *end = buffer + buffer_size;
+  for (auto &[id, value] : _map)
+  {
+    memcpy(ptr, &id, sizeof(id));
+    ptr += sizeof(id);
+    if (ptr >= end)
+      return false;
+    memcpy(ptr, &value.attributes_id, sizeof(value.attributes_id));
+    ptr += sizeof(value.attributes_id);
+    if (ptr >= end)
+      return false;
+    memcpy(ptr, &value.ref_count, sizeof(value.ref_count));
+    ptr += sizeof(value.ref_count);
+    if (ptr >= end)
+      return false;
+    uint32_t storage_size = uint32_t(value.storage.size());
+    memcpy(ptr, &storage_size, sizeof(storage_size));
+    ptr += sizeof(storage_size);
+    if (ptr >= end)
+      return false;
+    for (auto &loc : value.storage)
+    {
+      memcpy(ptr, &loc, sizeof(loc));
+      ptr += sizeof(loc);
+      if (ptr >= end)
+        return false;
+    }
+  }
+  return true;
+}
 
 } // namespace converter
 } // namespace points

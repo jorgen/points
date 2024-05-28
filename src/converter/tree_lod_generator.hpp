@@ -17,12 +17,12 @@
 ************************************************************************/
 #pragma once
 
+#include "threaded_event_loop.hpp"
 #include "tree.hpp"
 #include "worker.hpp"
-#include "threaded_event_loop.hpp"
 
-#include <deque>
 #include <ankerl/unordered_dense.h>
+#include <deque>
 
 namespace points
 {
@@ -35,9 +35,11 @@ struct lod_child_storage_info_t
   std::vector<storage_location_t> locations;
 };
 
-struct input_data_id_hash_t {
+struct input_data_id_hash_t
+{
   using is_avalanching = void;
-  auto operator()(input_data_id_t id) const noexcept -> uint64_t {
+  auto operator()(input_data_id_t id) const noexcept -> uint64_t
+  {
     uint64_t data;
     static_assert(sizeof(data) == sizeof(id), "size mismatch");
     memcpy(&data, &id, sizeof(data));
@@ -73,9 +75,11 @@ struct lod_worker_batch_t;
 class lod_worker_t : public worker_t
 {
 public:
-  lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets);
+  lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data,
+               const std::vector<float> &random_offsets);
   void work() override;
   void after_work(completion_t completion) override;
+
 private:
   tree_lod_generator_t &lod_generator;
   lod_worker_batch_t &batch;
@@ -98,12 +102,16 @@ struct lod_worker_batch_t
 class tree_lod_generator_t
 {
 public:
-  tree_lod_generator_t(threaded_event_loop_t &loop, const tree_global_state_t &tree_global_state, tree_cache_t &tree_cache, cache_file_handler_t &file_cache, attributes_configs_t &attributes_configs);
+  tree_lod_generator_t(threaded_event_loop_t &loop, const tree_global_state_t &tree_global_state, tree_registry_t &tree_cache, cache_file_handler_t &file_cache, attributes_configs_t &attributes_configs,
+                       event_pipe_t<void> &lod_done);
   void generate_lods(tree_id_t &tree_id, const morton::morton192_t &max);
 
   void iterate_workers();
 
-  const tree_global_state_t &global_state() const { return _tree_global_state; }
+  const tree_global_state_t &global_state() const
+  {
+    return _tree_global_state;
+  }
 
   void add_worker_done(lod_worker_batch_t &batch)
   {
@@ -111,14 +119,15 @@ public:
     {
       _iterate_workers.post_event();
     }
-
   }
+
 private:
   threaded_event_loop_t &_loop;
   const tree_global_state_t &_tree_global_state;
-  tree_cache_t &_tree_cache;
+  tree_registry_t &_tree_cache;
   cache_file_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;
+  event_pipe_t<void> &_lod_done;
   event_pipe_t<void> _iterate_workers;
 
   std::vector<float> _random_offsets;
@@ -126,5 +135,5 @@ private:
   std::deque<std::unique_ptr<lod_worker_batch_t>> _lod_batches;
 };
 
-}
-}
+} // namespace converter
+} // namespace points

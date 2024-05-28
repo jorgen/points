@@ -36,9 +36,14 @@ public:
   void add_points(storage_header_t &&header, attributes_id_t &&attributes_id, std::vector<storage_location_t> &&storage);
   void walk_tree(std::shared_ptr<frustum_tree_walker_t> event);
   void generate_lod(const morton::morton192_t &max);
+
+  void serialize_trees();
+
 private:
   void handle_add_points(std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>> &&event);
   void handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&events);
+  void handle_serialize_trees();
+  void handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, std::vector<storage_location_t> &&storage, error_t &&error);
   threaded_event_loop_t _event_loop;
   bool _initialized;
 
@@ -46,15 +51,17 @@ private:
   cache_file_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;
 
-  tree_cache_t _tree_cache;
+  tree_registry_t _tree_registry;
   tree_id_t _tree_root;
 
   tree_lod_generator_t _tree_lod_generator;
 
   event_pipe_t<std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>>> _add_points;
   event_pipe_t<std::shared_ptr<frustum_tree_walker_t>> _walk_tree;
+  event_pipe_t<void> _serialize_trees;
+  event_pipe_t<std::vector<tree_id_t>, std::vector<storage_location_t>, error_t> _serialize_trees_done;
   event_pipe_t<input_data_id_t> &_done_with_input;
 };
 
-}
-}
+} // namespace converter
+} // namespace points

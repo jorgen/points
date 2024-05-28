@@ -45,6 +45,7 @@ processor_t::processor_t(converter_t &converter)
   , _sorted_points(_event_loop, bind(&processor_t::handle_sorted_points))
   , _point_reader_file_errors(_event_loop, bind(&processor_t::handle_file_errors))
   , _point_reader_done_with_file(_event_loop, bind(&processor_t::handle_file_reading_done))
+  , _lod_generation_done(_event_loop, bind(&processor_t::handle_tree_lod_done))
   , _cache_file_error(_event_loop, bind(&processor_t::handle_cache_file_error))
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
   , _point_reader(_converter.tree_state, _input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
@@ -124,12 +125,9 @@ void processor_t::handle_sub_added(input_data_id_t &&event)
 void processor_t::handle_sorted_points(std::pair<points_t, error_t> &&event)
 {
   _input_data_source_registry.handle_sorted_points(event.first.header.input_id, event.first.header.morton_min, event.first.header.morton_max);
-  _cache_file_handler.write(event.first.header, event.first.attributes_id, std::move(event.first.buffers),
-                            [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations, const error_t &)
-                            {
-                              this->handle_points_written(header,attributes, std::move(locations));
-                            }
-  );
+  _cache_file_handler.write(
+    event.first.header, event.first.attributes_id, std::move(event.first.buffers),
+    [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations, const error_t &) { this->handle_points_written(header, attributes, std::move(locations)); });
 }
 
 void processor_t::handle_file_errors(file_error_t &&errors)
@@ -140,6 +138,11 @@ void processor_t::handle_file_errors(file_error_t &&errors)
 void processor_t::handle_file_reading_done(input_data_id_t &&file)
 {
   _input_data_source_registry.handle_reading_done(file);
+}
+
+void processor_t::handle_tree_lod_done()
+{
+  fwrite(fmt::format("LOD done\n").c_str(), 1, 9, stderr);
 }
 
 void processor_t::handle_cache_file_error(error_t &&error)

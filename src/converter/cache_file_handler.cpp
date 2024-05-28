@@ -26,8 +26,8 @@
 #include <assert.h>
 #include <fcntl.h>
 
-#include <utility>
 #include <algorithm>
+#include <utility>
 
 namespace points
 {
@@ -64,7 +64,7 @@ void cache_file_request_t::do_read(const std::weak_ptr<cache_file_request_t> &se
   uv_fs_read(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, offset, request_done_callback);
 }
 
-void cache_file_request_t::do_write(const std::weak_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size)
+void cache_file_request_t::do_write(const std::shared_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size)
 {
   auto self_ptr = new std::shared_ptr<cache_file_request_t>(self);
   uv_request.data = self_ptr;
@@ -82,6 +82,7 @@ cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, std
   , _file_opened(false)
   , _cache_file_error(cache_file_error)
   , _write_event_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_events))
+  , _write_trees_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_trees))
 {
   (void)_state;
   _open_request.data = this;
@@ -110,9 +111,16 @@ void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
   }
 }
 
-void cache_file_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers, std::function<void(const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)> done)
+void cache_file_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
+                                 std::function<void(const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)> done)
 {
   _write_event_pipe.post_event(std::make_tuple(header, attributes_id, std::move(buffers), done));
+}
+
+void cache_file_handler_t::write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees,
+                                       std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)> done)
+{
+  _write_trees_pipe.post_event(std::make_tuple(std::move(tree_ids), std::move(serialized_trees), done));
 }
 
 void cache_file_handler_t::read(input_data_id_t id, int attribute_index)
@@ -134,7 +142,8 @@ static bool serialize_points(const storage_header_t &header, const buffer_t &poi
   return true;
 }
 
-void cache_file_handler_t::handle_write_events(std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event)
+void cache_file_handler_t::handle_write_events(
+  std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event)
 {
   auto &&[storage_header, attributes_id, attribute_buffers, done] = std::move(event);
   std::unique_lock<std::mutex> lock(_mutex);
@@ -188,6 +197,44 @@ void cache_file_handler_t::handle_write_events(std::tuple<storage_header_t, attr
   }
 }
 
+void cache_file_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)>> &&event)
+{
+  auto &&[tree_ids, serialized_trees, done] = std::move(event);
+  std::unique_lock<std::mutex> lock(_mutex);
+  auto &write_requests = this->_write_trees_requests.emplace_back(new write_trees_request_t());
+  write_requests->target_count = int(tree_ids.size());
+  auto &locations = write_requests->locations;
+  locations.resize(tree_ids.size());
+  write_requests->done_callback = std::move(done);
+  write_requests->serialized_trees = std::move(serialized_trees);
+  write_requests->tree_ids = std::move(tree_ids);
+  for (int i = 0; i < write_requests->target_count; i++)
+  {
+    auto &location = locations[i];
+    location.file_id = 0;
+    location.size = write_requests->serialized_trees[i].size;
+    free_blob_manager_t::blob_size_t size = {location.size};
+    location.offset = this->_blob_manager.register_blob(size).data;
+    auto write_requests_prt = write_requests.get();
+    auto request = std::make_shared<cache_file_request_t>(*this, [this, write_requests_prt](const cache_file_request_t &request) {
+      if (request.error.code != 0 && write_requests_prt->error.code == 0)
+      {
+        write_requests_prt->error = request.error;
+      }
+      write_requests_prt->done++;
+      if (write_requests_prt->done == write_requests_prt->target_count)
+      {
+        if (write_requests_prt->done_callback)
+        {
+          write_requests_prt->done_callback(std::move(write_requests_prt->tree_ids), std::move(write_requests_prt->locations), std::move(write_requests_prt->error));
+        }
+        remove_write_tree_requests(write_requests_prt);
+      }
+    });
+    request->do_write(request, write_requests_prt->serialized_trees[i].data, location.offset, location.size);
+  }
+}
+
 points_cache_item_t cache_file_handler_t::ref_points(const storage_location_t &location)
 {
   std::unique_lock<std::mutex> lock(_mutex);
@@ -221,11 +268,17 @@ int cache_file_handler_t::item_count()
 
 void cache_file_handler_t::remove_write_requests(write_requests_t *write_requests)
 {
-    std::unique_lock<std::mutex> lock(_mutex);
-    auto it = std::find_if(_write_requests.begin(), _write_requests.end(), [&](const std::unique_ptr<write_requests_t> &a) { return a.get() == write_requests; });
-    assert(it != _write_requests.end());
-    _write_requests.erase(it);
+  std::unique_lock<std::mutex> lock(_mutex);
+  auto it = std::find_if(_write_requests.begin(), _write_requests.end(), [&](const std::unique_ptr<write_requests_t> &a) { return a.get() == write_requests; });
+  assert(it != _write_requests.end());
+  _write_requests.erase(it);
 }
-
+void cache_file_handler_t::remove_write_tree_requests(write_trees_request_t *write_requests)
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  auto it = std::find_if(_write_trees_requests.begin(), _write_trees_requests.end(), [&](const std::unique_ptr<write_trees_request_t> &a) { return a.get() == write_requests; });
+  assert(it != _write_trees_requests.end());
+  _write_trees_requests.erase(it);
+}
 } // namespace converter
 } // namespace points

@@ -17,24 +17,36 @@
 ************************************************************************/
 #pragma once
 
+#include "attributes_configs.hpp"
+#include "blob_manager.hpp"
 #include "conversion_types.hpp"
+#include "deque_map.hpp"
 #include "error.hpp"
 #include "event_pipe.hpp"
 #include "threaded_event_loop.hpp"
+#include "tree.hpp"
 #include "worker.hpp"
-#include "attributes_configs.hpp"
-#include "deque_map.hpp"
-#include "blob_manager.hpp"
 #include <ankerl/unordered_dense.h>
 
-#include <memory>
 #include <deque>
+#include <memory>
 
 #include <stdint.h>
 namespace points
 {
 namespace converter
 {
+
+struct write_trees_request_t
+{
+  int target_count = 0;
+  int done = 0;
+  std::vector<serialized_tree_t> serialized_trees;
+  std::vector<tree_id_t> tree_ids;
+  std::vector<storage_location_t> locations;
+  error_t error;
+  std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)> done_callback;
+};
 
 struct write_requests_t
 {
@@ -52,13 +64,13 @@ class cache_file_handler_t;
 struct cache_file_request_t
 {
   cache_file_request_t(cache_file_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback);
-    
+
   void do_read(const std::weak_ptr<cache_file_request_t> &self, int64_t offset, int32_t size);
-  void do_write(const std::weak_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size);
-  
+  void do_write(const std::shared_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size);
+
   cache_file_handler_t &cache_file_handler;
   std::function<void(const cache_file_request_t &)> done_callback;
- 
+
   std::shared_ptr<uint8_t[]> buffer;
   error_t error;
 
@@ -71,6 +83,10 @@ struct points_cache_item_t
   buffer_t data;
 };
 
+struct write_tree_jobs_t
+{
+};
+
 class cache_file_handler_t
 {
 public:
@@ -78,7 +94,9 @@ public:
 
   void handle_open_cache_file(uv_fs_t *request);
 
-  void write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)> done);
+  void write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
+             std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)> done);
+  void write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)> done);
   void read(input_data_id_t id, int attribute_index);
 
   points_cache_item_t ref_points(const storage_location_t &location);
@@ -89,8 +107,12 @@ public:
   bool is_available(input_data_id_t id, int attribute_index);
 
   void remove_write_requests(write_requests_t *write_requests);
+  void remove_write_tree_requests(write_trees_request_t *write_requests);
+
 private:
-  void handle_write_events(std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event);
+  void handle_write_events(
+    std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event);
+  void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>> &&event);
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
 
@@ -101,7 +123,7 @@ private:
   {
     int data;
   };
-  
+
   [[nodiscard]] inline auto hash(std::pair<input_data_id_t, attribute_index_t> x) -> uint64_t
   {
     using namespace ankerl::unordered_dense::detail;
@@ -120,14 +142,13 @@ private:
     }
   };
 
-
   uv_file _file_handle;
   bool _file_opened;
 
   uv_fs_t _open_request{};
   event_pipe_t<error_t> &_cache_file_error;
   event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>>> _write_event_pipe;
-
+  event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>>> _write_trees_pipe;
 
   struct hash_storage_location_t
   {
@@ -152,13 +173,14 @@ private:
   ankerl::unordered_dense::map<storage_location_t, cache_item_impl_t, hash_storage_location_t> _cache_map;
 
   std::vector<std::unique_ptr<write_requests_t>> _write_requests;
+  std::vector<std::unique_ptr<write_trees_request_t>> _write_trees_requests;
 
   friend struct cache_file_request_t;
 };
 
 static bool deserialize_points(const buffer_t &data, storage_header_t &header, buffer_t &point_data, error_t &error)
 {
-  uint8_t magic[] = { 'J', 'L', 'P', 0};
+  uint8_t magic[] = {'J', 'L', 'P', 0};
   if (data.size < sizeof(magic) + sizeof(header))
   {
     error.code = 2;
@@ -172,7 +194,7 @@ static bool deserialize_points(const buffer_t &data, storage_header_t &header, b
     error.msg = "Invalid magic";
     return false;
   }
-  auto input_bytes = static_cast<uint8_t*>(data.data);
+  auto input_bytes = static_cast<uint8_t *>(data.data);
   memcpy(&header, input_bytes + sizeof(magic), sizeof(header));
   point_data.size = data.size - sizeof(magic) - sizeof(header);
   point_data.data = input_bytes + sizeof(magic) + sizeof(header);
@@ -204,10 +226,10 @@ struct read_only_points_t
 struct read_attribute_t
 {
   read_attribute_t(cache_file_handler_t &cache_file_handler, storage_location_t location)
-  : cache_file_handler(cache_file_handler)
-  , location(location)
-  , cache_item(cache_file_handler.ref_points(location))
-  , data(cache_item.data)
+    : cache_file_handler(cache_file_handler)
+    , location(location)
+    , cache_item(cache_file_handler.ref_points(location))
+    , data(cache_item.data)
   {
   }
   ~read_attribute_t()
@@ -251,5 +273,5 @@ struct read_points_with_data_t
   error_t error;
 };
 
-}
+} // namespace converter
 } // namespace points
