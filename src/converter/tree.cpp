@@ -552,5 +552,30 @@ serialized_tree_t tree_serialize(const tree_t &tree)
   }
   return {std::move(data), int(tree_size)};
 }
+serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry)
+{
+  uint32_t tree_registry_size = 0;
+  tree_registry_size += sizeof(tree_registry.current_id);
+  uint32_t tree_registry_count = tree_registry.locations.size();
+  tree_registry_size += sizeof(tree_registry_count);
+  tree_registry_size += sizeof(storage_location_t) * tree_registry_count;
+
+  auto data = std::make_shared<uint8_t[]>(tree_registry_size);
+  uint8_t *ptr = data.get();
+  uint8_t *end_ptr = ptr + tree_registry_size;
+  if (ptr + sizeof(tree_registry.current_id) > end_ptr)
+    return {nullptr, 0};
+  memcpy(ptr, &tree_registry.current_id, sizeof(tree_registry.current_id));
+  ptr += sizeof(tree_registry.current_id);
+  if (ptr + sizeof(tree_registry_count) > end_ptr)
+    return {nullptr, 0};
+  memcpy(ptr, &tree_registry_count, sizeof(tree_registry_count));
+  ptr += sizeof(tree_registry_count);
+  if (ptr + sizeof(storage_location_t) * tree_registry_count > end_ptr)
+    return {nullptr, 0};
+  memcpy(ptr, tree_registry.locations.data(), sizeof(storage_location_t) * tree_registry_count);
+  ptr += sizeof(storage_location_t) * tree_registry_count;
+  return {std::move(data), int(tree_registry_size)};
+}
 
 } // namespace points::converter

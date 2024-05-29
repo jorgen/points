@@ -37,6 +37,11 @@ struct serialized_tree_t
   int size;
 };
 
+struct serialized_tree_registry_t
+{
+  std::shared_ptr<uint8_t[]> data;
+  int size;
+};
 struct points_collection_t
 {
   uint64_t point_count = 0;
@@ -130,6 +135,8 @@ tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_registry
                           std::vector<storage_location_t> &&locations);
 
 serialized_tree_t tree_serialize(const tree_t &tree);
+
+serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry);
 
 } // namespace converter
 } // namespace points
