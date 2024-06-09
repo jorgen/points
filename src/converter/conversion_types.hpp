@@ -93,9 +93,9 @@ struct attribute_buffers_t
 
 struct storage_location_t
 {
-  uint32_t file_id;
-  uint32_t size;
-  uint64_t offset;
+  uint32_t file_id = 0;
+  uint32_t size = 0;
+  uint64_t offset = 0;
 };
 
 inline bool operator==(const storage_location_t a, const storage_location_t b)

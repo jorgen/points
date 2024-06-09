@@ -22,8 +22,9 @@
 struct serialized_free_blob_manager_t
 {
   std::shared_ptr<uint8_t[]> data;
-  uint32_t size;
-  uint64_t offset;
+  uint32_t file_id = 0;
+  uint32_t size = 0;
+  uint64_t offset = 0;
 };
 
 class free_blob_manager_t

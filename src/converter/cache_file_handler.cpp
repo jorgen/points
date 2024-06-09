@@ -291,21 +291,21 @@ void cache_file_handler_t::handle_write_blob_locations_and_update_header(storage
   }
 
   auto serialized_blob = new_blob_manager.serialize();
-  auto request =
-    std::make_shared<cache_file_request_t>(*this, [this, serialized_blob = std::move(serialized_blob), new_blob_manager = std::move(new_blob_manager), done = std::move(done)](const cache_file_request_t &request) {
+  auto request = std::make_shared<cache_file_request_t>(
+    *this, [this, new_tree_registry_location, serialized_blob = std::move(serialized_blob), new_blob_manager = std::move(new_blob_manager), done = std::move(done)](const cache_file_request_t &request) mutable {
       error_t error;
       if (request.error.code != 0)
       {
         error = request.error;
         done(std::move(error));
       }
-      this->_blob_manager = std::move(new_blob_manager);
-      done(std::move(error));
+      storage_location_t blob_manager_location = {serialized_blob.file_id, serialized_blob.size, serialized_blob.offset};
+      handle_write_index(std::move(new_blob_manager), blob_manager_location, new_tree_registry_location, std::move(done));
     });
   request->do_write(request, serialized_blob.data, serialized_blob.offset, serialized_blob.size);
 }
 
-void cache_file_handler_t::handle_write_index(const storage_location_t &free_blobs, const storage_location_t &tree_registry, std::function<void(error_t &&error)> &&done)
+void cache_file_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &tree_registry, std::function<void(error_t &&error)> &&done)
 {
   auto serialized_index = std::shared_ptr<uint8_t[]>(new uint8_t[_serialized_index_size]);
   auto *data = serialized_index.get();
@@ -321,15 +321,18 @@ void cache_file_handler_t::handle_write_index(const storage_location_t &free_blo
   memcpy(data, &tree_registry, sizeof(tree_registry));
   data += sizeof(tree_registry);
 
-  auto request = std::make_shared<cache_file_request_t>(*this, [done = std::move(done)](const cache_file_request_t &request) {
+  auto request = std::make_shared<cache_file_request_t>(*this, [this, new_blob_manager = std::move(new_blob_manager), done = std::move(done)](const cache_file_request_t &request) mutable {
     error_t error;
+    fmt::print(stderr, "Write index done {}\n", request.error.code);
     if (request.error.code != 0)
     {
       error = request.error;
       done(std::move(error));
     }
+    this->_blob_manager = std::move(new_blob_manager);
     done(std::move(error));
   });
+  fprintf(stderr, "Writing index\n");
   request->do_write(request, serialized_index, 0, _serialized_index_size);
 }
 

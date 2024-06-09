@@ -111,7 +111,10 @@ void tree_handler_t::handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, 
   {
     auto &tree_id = tree_ids[i];
     auto &location = _tree_registry.locations[tree_id.data];
-    old_locations.emplace_back(location);
+    if (location.offset > 0)
+    {
+      old_locations.emplace_back(location);
+    }
     location = storage[i];
   }
   auto serialized_registry = tree_registry_serialize(_tree_registry);
