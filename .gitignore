@@ -1,4 +1,5 @@
 3rdparty
 out
+out/**
 .vs
 CMakeSettings.json

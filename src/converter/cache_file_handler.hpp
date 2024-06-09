@@ -37,6 +37,14 @@ namespace points
 namespace converter
 {
 
+struct write_tree_registry_request_t
+{
+  serialized_tree_registry_t serialized_tree_registry;
+  std::function<void(storage_location_t, error_t &&error)> done_callback;
+  storage_location_t location;
+  error_t error;
+};
+
 struct write_trees_request_t
 {
   int target_count = 0;
@@ -97,6 +105,8 @@ public:
   void write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
              std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)> done);
   void write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)> done);
+  void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done);
+  void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> done);
   void read(input_data_id_t id, int attribute_index);
 
   points_cache_item_t ref_points(const storage_location_t &location);
@@ -108,16 +118,22 @@ public:
 
   void remove_write_requests(write_requests_t *write_requests);
   void remove_write_tree_requests(write_trees_request_t *write_requests);
+  void remove_write_tree_registry_requests(write_tree_registry_request_t *write_requests);
 
 private:
   void handle_write_events(
     std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event);
   void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>> &&event);
+  void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, error_t &&error)> &&done);
+  void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done);
+  void handle_write_index(const storage_location_t &free_blobs, const storage_location_t &tree_registry, std::function<void(error_t &&error)> &&done);
+
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
 
   const tree_global_state_t &_state;
   attributes_configs_t &_attributes_configs;
+  uint32_t _serialized_index_size;
   free_blob_manager_t _blob_manager;
   struct attribute_index_t
   {
@@ -149,6 +165,8 @@ private:
   event_pipe_t<error_t> &_cache_file_error;
   event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>>> _write_event_pipe;
   event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>>> _write_trees_pipe;
+  event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, error_t &&error)>> _write_tree_registry_pipe;
+  event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(error_t &&error)>> _write_blob_locations_and_update_header_pipe;
 
   struct hash_storage_location_t
   {
@@ -174,30 +192,23 @@ private:
 
   std::vector<std::unique_ptr<write_requests_t>> _write_requests;
   std::vector<std::unique_ptr<write_trees_request_t>> _write_trees_requests;
+  std::vector<std::unique_ptr<write_tree_registry_request_t>> _write_tree_registry_requests;
 
   friend struct cache_file_request_t;
 };
 
 static bool deserialize_points(const buffer_t &data, storage_header_t &header, buffer_t &point_data, error_t &error)
 {
-  uint8_t magic[] = {'J', 'L', 'P', 0};
-  if (data.size < sizeof(magic) + sizeof(header))
+  if (data.size < sizeof(header))
   {
     error.code = 2;
     error.msg = "Invalid input size";
     return false;
   }
-  auto cmp_result = memcmp(magic, data.data, sizeof(magic));
-  if (cmp_result != 0)
-  {
-    error.code = 1;
-    error.msg = "Invalid magic";
-    return false;
-  }
   auto input_bytes = static_cast<uint8_t *>(data.data);
-  memcpy(&header, input_bytes + sizeof(magic), sizeof(header));
-  point_data.size = data.size - sizeof(magic) - sizeof(header);
-  point_data.data = input_bytes + sizeof(magic) + sizeof(header);
+  memcpy(&header, input_bytes, sizeof(header));
+  point_data.size = data.size - sizeof(header);
+  point_data.data = input_bytes + sizeof(header);
   return true;
 }
 

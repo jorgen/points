@@ -17,8 +17,10 @@
 ************************************************************************/
 #include "blob_manager.hpp"
 
+#include <assert.h>
+
 free_blob_manager_t::free_blob_manager_t()
-: _next_offset{0}
+  : _next_offset{0}
 {
 }
 
@@ -30,8 +32,7 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
   {
     auto &[page_number, sections] = *page_it;
     auto page_offset = page_number * FREE_BLOB_MANAGER_PAGE_SIZE;
-    if (spillover_page + 1 != page_number
-      || (sections.size() && sections.front().offset.data != page_offset))
+    if (spillover_page + 1 != page_number || (sections.size() && sections.front().offset.data != page_offset))
     {
       spillover_from_last_page = {0};
     }
@@ -97,7 +98,6 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
   _next_offset.data += size.data;
   return new_offset;
 }
-
 
 [[nodiscard]] bool free_blob_manager_t::unregister_blob(offset_t total_offset, blob_size_t total_size)
 {
@@ -184,15 +184,13 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
   return true;
 }
 
-  
 size_t free_blob_manager_t::get_free_sections_count() const
 {
   size_t count = 0;
   bool last_page_ended_with_free_section = false;
-  for (auto& [page_number, sections] : _free_sections_by_page)
+  for (auto &[page_number, sections] : _free_sections_by_page)
   {
-    if (last_page_ended_with_free_section
-      && sections.size() && sections.front().offset.data == page_number * FREE_BLOB_MANAGER_PAGE_SIZE)
+    if (last_page_ended_with_free_section && sections.size() && sections.front().offset.data == page_number * FREE_BLOB_MANAGER_PAGE_SIZE)
     {
       count += sections.size() - 1;
     }
@@ -218,4 +216,60 @@ free_blob_manager_t::section_t free_blob_manager_t::get_free_section(page_t page
 free_blob_manager_t::offset_t free_blob_manager_t::get_file_size() const
 {
   return {_next_offset.data};
+}
+
+uint32_t free_blob_manager_t::calculate_serialized_size() const
+{
+  uint32_t size = 0;
+
+  auto page_count = uint32_t(_free_sections_by_page.size());
+  size = sizeof(_next_offset) + sizeof(page_count);
+  for (auto &[page_number, sections] : _free_sections_by_page)
+  {
+    auto free_sections_in_page_count = uint32_t(sections.size());
+    size += sizeof(page_number) + sizeof(free_sections_in_page_count);
+    size += sections.size() * sizeof(sections.front());
+  }
+  return size;
+}
+
+serialized_free_blob_manager_t free_blob_manager_t::serialize()
+{
+  serialized_free_blob_manager_t serialized = {};
+
+  for (int i = 0; i < 5; i++)
+  {
+    auto calculted_size = calculate_serialized_size() + 32 * i;
+    auto with_blob_offset = register_blob({calculted_size});
+    auto calculated_size_with_blob_manager = calculate_serialized_size();
+    if (calculated_size_with_blob_manager <= calculted_size)
+    {
+      serialized.size = calculted_size;
+      serialized.offset = with_blob_offset.data;
+      break;
+    }
+  }
+  assert(serialized.size > 0);
+  assert(serialized.offset > 0);
+
+  serialized.data = std::make_shared<uint8_t[]>(serialized.size);
+
+  auto page_count = uint32_t(_free_sections_by_page.size());
+
+  uint8_t *data = serialized.data.get();
+  memcpy(data, &_next_offset, sizeof(_next_offset));
+  data += sizeof(_next_offset);
+  memcpy(data, &page_count, sizeof(page_count));
+  data += sizeof(page_count);
+  for (auto &[page_number, sections] : _free_sections_by_page)
+  {
+    memcpy(data, &page_number, sizeof(page_number));
+    data += sizeof(page_number);
+    auto free_sections_in_page_count = uint32_t(sections.size());
+    memcpy(data, &free_sections_in_page_count, sizeof(free_sections_in_page_count));
+    data += sizeof(free_sections_in_page_count);
+    memcpy(data, sections.data(), sections.size() * sizeof(sections.front()));
+    data += sections.size() * sizeof(sections.front());
+  }
+  return serialized;
 }

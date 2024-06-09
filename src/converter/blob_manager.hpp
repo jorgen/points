@@ -15,11 +15,16 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <vector>
-#include <algorithm>
-#include <numeric>
-#include <fmt/core.h>  // Include the fmt library header
 #include <ankerl/unordered_dense.h>
+#include <fmt/core.h>
+#include <vector>
+
+struct serialized_free_blob_manager_t
+{
+  std::shared_ptr<uint8_t[]> data;
+  uint32_t size;
+  uint64_t offset;
+};
 
 class free_blob_manager_t
 {
@@ -76,4 +81,6 @@ public:
   size_t get_pages_count() const;
   section_t get_free_section(page_t page, size_t n) const;
   offset_t get_file_size() const;
+  uint32_t calculate_serialized_size() const;
+  serialized_free_blob_manager_t serialize();
 };

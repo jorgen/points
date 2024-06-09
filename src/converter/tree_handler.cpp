@@ -115,7 +115,13 @@ void tree_handler_t::handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, 
     location = storage[i];
   }
   auto serialized_registry = tree_registry_serialize(_tree_registry);
-:
+  _file_cache.write_tree_registry(std::move(serialized_registry), [this, old_locations = std::move(old_locations)](storage_location_t tree_registry_location, error_t &&error) mutable {
+    (void)error;
+    this->_file_cache.write_blob_locations_and_update_header(tree_registry_location, std::move(old_locations), [](error_t &&error) {
+      (void)error;
+      fmt::print("Trees serialized\n");
+    });
+  });
 }
 
 } // namespace converter
