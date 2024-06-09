@@ -248,6 +248,9 @@ serialized_free_blob_manager_t free_blob_manager_t::serialize()
       serialized.offset = with_blob_offset.data;
       break;
     }
+    auto did_unregister = unregister_blob(with_blob_offset, {calculted_size});
+    (void)did_unregister;
+    assert(did_unregister);
   }
   assert(serialized.size > 0);
   assert(serialized.offset > 0);

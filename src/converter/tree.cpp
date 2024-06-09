@@ -25,7 +25,7 @@ namespace points::converter
 tree_t &tree_cache_create_root_tree(tree_registry_t &tree_cache)
 {
   tree_cache.data.emplace_back();
-  tree_cache.locations.emplace_back(~uint32_t(0), ~uint32_t(0), ~uint64_t(0));
+  tree_cache.locations.emplace_back(0, 0, 0);
   tree_cache.data.back().id.data = tree_cache.current_id++;
   return tree_cache.data.back();
 }
@@ -34,7 +34,7 @@ tree_t &tree_cache_add_tree(tree_registry_t &tree_cache, tree_t *(&parent))
 {
   auto id = parent->id;
   tree_cache.data.emplace_back();
-  tree_cache.locations.emplace_back(~uint32_t(0), ~uint32_t(0), ~uint64_t(0));
+  tree_cache.locations.emplace_back(0, 0, 0);
   tree_cache.data.back().id.data = tree_cache.current_id++;
   parent = &tree_cache.data[id.data];
   return tree_cache.data.back();
