@@ -228,7 +228,7 @@ uint32_t free_blob_manager_t::calculate_serialized_size() const
   {
     auto free_sections_in_page_count = uint32_t(sections.size());
     size += sizeof(page_number) + sizeof(free_sections_in_page_count);
-    size += sections.size() * sizeof(sections.front());
+    size += uint32_t(sections.size() * sizeof(sections.front()));
   }
   return size;
 }

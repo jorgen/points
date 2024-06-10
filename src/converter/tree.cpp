@@ -556,7 +556,7 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
 {
   uint32_t tree_registry_size = 0;
   tree_registry_size += sizeof(tree_registry.current_id);
-  uint32_t tree_registry_count = tree_registry.locations.size();
+  auto tree_registry_count = uint32_t(tree_registry.locations.size());
   tree_registry_size += sizeof(tree_registry_count);
   tree_registry_size += sizeof(storage_location_t) * tree_registry_count;
 

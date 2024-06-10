@@ -76,11 +76,11 @@ void cache_file_request_t::do_write(const std::shared_ptr<cache_file_request_t> 
 
 cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error)
   : _cache_file_name(std::move(cache_file))
+  , _file_handle(0)
+  , _file_opened(false)
   , _state(state)
   , _attributes_configs(attributes_configs)
   , _serialized_index_size(128)
-  , _file_handle(0)
-  , _file_opened(false)
   , _cache_file_error(cache_file_error)
   , _write_event_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_events))
   , _write_trees_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_trees))
@@ -106,7 +106,6 @@ cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, std
 void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
 {
   _file_handle = uv_file(request->result);
-  _file_opened = _file_handle > 0;
   if (_file_handle < 0)
   {
     error_t error;
@@ -114,6 +113,14 @@ void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
     error.msg = uv_strerror(_file_handle);
     _cache_file_error.post_event(std::move(error));
   }
+  _file_opened = true;
+  _block_for_open.notify_all();
+}
+error_t cache_file_handler_t::wait_for_open()
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  _block_for_open.wait(lock, [this] { return this->_file_opened.load(); });
+  return _open_error;
 }
 
 void cache_file_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,

@@ -99,6 +99,7 @@ public:
   cache_file_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error);
 
   void handle_open_cache_file(uv_fs_t *request);
+  error_t wait_for_open();
 
   void write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
              std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)> done);
@@ -128,6 +129,10 @@ private:
 
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
+  uv_file _file_handle;
+  std::atomic_bool _file_opened;
+  std::condition_variable _block_for_open;
+  error_t _open_error;
 
   const tree_global_state_t &_state;
   attributes_configs_t &_attributes_configs;
@@ -155,9 +160,6 @@ private:
       return wyhash::hash(wyhash::mix(input, uint64_t(x.second.data)));
     }
   };
-
-  uv_file _file_handle;
-  bool _file_opened;
 
   uv_fs_t _open_request{};
   event_pipe_t<error_t> &_cache_file_error;

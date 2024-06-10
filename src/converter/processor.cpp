@@ -72,6 +72,12 @@ processor_t::processor_t(converter_t &converter)
 {
   (void)_converter;
   _event_loop.add_about_to_block_listener(this);
+  auto open_error = _cache_file_handler.wait_for_open();
+  if (open_error.code != 0)
+  {
+    fmt::print(stderr, "Failed to open cache file: {}\n", open_error.msg);
+    exit(1);
+  }
 }
 
 void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files)
