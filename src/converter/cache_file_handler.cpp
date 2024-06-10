@@ -49,6 +49,7 @@ static void request_done_callback(uv_fs_t *req)
   {
     self->error.code = int(req->result);
     self->error.msg = uv_strerror(int(req->result));
+    fprintf(stderr, "Write error %d - %s\n", self->error.code, self->error.msg.c_str());
   }
   uv_fs_req_cleanup(req);
   self->done_callback(*self);
@@ -71,6 +72,8 @@ void cache_file_request_t::do_write(const std::shared_ptr<cache_file_request_t> 
   buffer = data;
   uv_buffer.base = (char *)buffer.get();
   uv_buffer.len = size;
+  assert(size > 0);
+  assert(data != nullptr);
   uv_fs_write(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, int64_t(offset), request_done_callback);
 }
 
@@ -298,23 +301,23 @@ void cache_file_handler_t::handle_write_blob_locations_and_update_header(storage
   }
 
   auto serialized_blob = new_blob_manager.serialize();
+  auto serialized_blob_location = storage_location_t{serialized_blob.file_id, serialized_blob.size, serialized_blob.offset};
   auto request = std::make_shared<cache_file_request_t>(
-    *this, [this, new_tree_registry_location, serialized_blob = std::move(serialized_blob), new_blob_manager = std::move(new_blob_manager), done = std::move(done)](const cache_file_request_t &request) mutable {
+    *this, [this, new_tree_registry_location, serialized_blob_location, new_blob_manager = std::move(new_blob_manager), done = std::move(done)](const cache_file_request_t &request) mutable {
       error_t error;
       if (request.error.code != 0)
       {
         error = request.error;
         done(std::move(error));
       }
-      storage_location_t blob_manager_location = {serialized_blob.file_id, serialized_blob.size, serialized_blob.offset};
-      handle_write_index(std::move(new_blob_manager), blob_manager_location, new_tree_registry_location, std::move(done));
+      handle_write_index(std::move(new_blob_manager), serialized_blob_location, new_tree_registry_location, std::move(done));
     });
   request->do_write(request, serialized_blob.data, serialized_blob.offset, serialized_blob.size);
 }
 
 void cache_file_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &tree_registry, std::function<void(error_t &&error)> &&done)
 {
-  auto serialized_index = std::shared_ptr<uint8_t[]>(new uint8_t[_serialized_index_size]);
+  auto serialized_index = std::make_shared<uint8_t[]>(_serialized_index_size);
   auto *data = serialized_index.get();
   memset(data, 0, _serialized_index_size);
 
