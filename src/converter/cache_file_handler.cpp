@@ -284,6 +284,16 @@ void cache_file_handler_t::handle_write_tree_registry(serialized_tree_registry_t
   request->do_write(request, write_requests_prt->serialized_tree_registry.data, location.offset, location.size);
 }
 
+struct serialize_meta_t
+{
+  free_blob_manager_t new_blob_manager;
+  serialized_free_blob_manager_t serialized_blob;
+  serialized_attributes_t serialized_attributes_configs;
+  storage_location_t serialized_attributes_configs_location;
+  int serialized_count = 0;
+  std::function<void(error_t &&error)> done;
+};
+
 void cache_file_handler_t::handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done)
 {
   auto new_blob_manager = _blob_manager;
@@ -299,23 +309,68 @@ void cache_file_handler_t::handle_write_blob_locations_and_update_header(storage
       return;
     }
   }
-
-  auto serialized_blob = new_blob_manager.serialize();
-  auto serialized_blob_location = storage_location_t{serialized_blob.file_id, serialized_blob.size, serialized_blob.offset};
-  auto request = std::make_shared<cache_file_request_t>(
-    *this, [this, new_tree_registry_location, serialized_blob_location, new_blob_manager = std::move(new_blob_manager), done = std::move(done)](const cache_file_request_t &request) mutable {
+  if (attributes_location.offset > 0)
+  {
+    auto removed = new_blob_manager.unregister_blob({attributes_location.offset}, {attributes_location.size});
+    if (!removed)
+    {
       error_t error;
-      if (request.error.code != 0)
-      {
-        error = request.error;
-        done(std::move(error));
-      }
-      handle_write_index(std::move(new_blob_manager), serialized_blob_location, new_tree_registry_location, std::move(done));
-    });
-  request->do_write(request, serialized_blob.data, serialized_blob.offset, serialized_blob.size);
+      error.code = -1;
+      error.msg = "Failed to remove attributes config location";
+      done(std::move(error));
+      return;
+    }
+  }
+
+  if (blobs_location.offset > 0)
+  {
+    auto removed = new_blob_manager.unregister_blob({blobs_location.offset}, {blobs_location.size});
+    if (!removed)
+    {
+      error_t error;
+      error.code = -1;
+      error.msg = "Failed to remove blobs location";
+      done(std::move(error));
+      return;
+    }
+  }
+
+  auto serialized_meta = std::make_shared<serialize_meta_t>();
+  serialized_meta->serialized_attributes_configs = _attributes_configs.serialize();
+  serialized_meta->serialized_attributes_configs_location.offset = new_blob_manager.register_blob({serialized_meta->serialized_attributes_configs.size}).data;
+  serialized_meta->serialized_attributes_configs_location.size = serialized_meta->serialized_attributes_configs.size;
+  serialized_meta->serialized_blob = new_blob_manager.serialize();
+
+  serialized_meta->new_blob_manager = std::move(new_blob_manager);
+  serialized_meta->done = std::move(done);
+
+  auto request_handler = [this, new_tree_registry_location, serialized_meta](const cache_file_request_t &request) mutable {
+    error_t error;
+    serialized_meta->serialized_count++;
+    if (request.error.code != 0)
+    {
+      error = request.error;
+      serialized_meta->done(std::move(error));
+      return;
+    }
+
+    if (serialized_meta->serialized_count == 2)
+    {
+      storage_location_t serialized_blob_location = {0, serialized_meta->serialized_blob.size, serialized_meta->serialized_blob.offset};
+      handle_write_index(std::move(serialized_meta->new_blob_manager), serialized_blob_location, serialized_meta->serialized_attributes_configs_location, new_tree_registry_location, std::move(serialized_meta->done));
+    }
+  };
+
+  auto request_blob = std::make_shared<cache_file_request_t>(*this, request_handler);
+  request_blob->do_write(request_blob, serialized_meta->serialized_blob.data, serialized_meta->serialized_blob.offset, serialized_meta->serialized_blob.size);
+
+  auto request_attrib_configs = std::make_shared<cache_file_request_t>(*this, request_handler);
+  request_attrib_configs->do_write(request_attrib_configs, serialized_meta->serialized_attributes_configs.data, serialized_meta->serialized_attributes_configs_location.offset,
+                                   serialized_meta->serialized_attributes_configs_location.size);
 }
 
-void cache_file_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &tree_registry, std::function<void(error_t &&error)> &&done)
+void cache_file_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
+                                              std::function<void(error_t &&error)> &&done)
 {
   auto serialized_index = std::make_shared<uint8_t[]>(_serialized_index_size);
   auto *data = serialized_index.get();
@@ -331,7 +386,10 @@ void cache_file_handler_t::handle_write_index(free_blob_manager_t &&new_blob_man
   memcpy(data, &tree_registry, sizeof(tree_registry));
   data += sizeof(tree_registry);
 
-  auto request = std::make_shared<cache_file_request_t>(*this, [this, new_blob_manager = std::move(new_blob_manager), done = std::move(done)](const cache_file_request_t &request) mutable {
+  memcpy(data, &attribute_configs, sizeof(attribute_configs));
+  data += sizeof(attribute_configs);
+
+  auto request = std::make_shared<cache_file_request_t>(*this, [this, new_blob_manager = std::move(new_blob_manager), free_blobs, attribute_configs, done = std::move(done)](const cache_file_request_t &request) mutable {
     error_t error;
     fmt::print(stderr, "Write index done {}\n", request.error.code);
     if (request.error.code != 0)
@@ -340,6 +398,8 @@ void cache_file_handler_t::handle_write_index(free_blob_manager_t &&new_blob_man
       done(std::move(error));
     }
     this->_blob_manager = std::move(new_blob_manager);
+    this->blobs_location = free_blobs;
+    this->attributes_location = attribute_configs;
     done(std::move(error));
   });
   fprintf(stderr, "Writing index\n");

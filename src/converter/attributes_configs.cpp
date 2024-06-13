@@ -252,5 +252,47 @@ int attributes_configs_t::get_attribute_index(attributes_id_t id, const std::str
   }
   return -1;
 }
+
+serialized_attributes_t attributes_configs_t::serialize() const
+{
+  auto count = uint32_t(_attributes_configs.size());
+
+  auto size = uint32_t(0);
+  size += sizeof(count);
+
+  for (auto &attrib : _attributes_configs)
+  {
+    size += uint32_t(attrib.attributes.attributes.size());
+    for (auto &attr : attrib.attributes.attributes)
+    {
+      size += sizeof(attr.format) + sizeof(attr.components) + sizeof(attr.name_size) + attr.name_size;
+    }
+  }
+  auto ret = serialized_attributes_t();
+  ret.size = size;
+  ret.data = std::make_shared<uint8_t[]>(size);
+  auto data = ret.data.get();
+
+  memcpy(data, &count, sizeof(count));
+  data += sizeof(count);
+  for (auto &attrib : _attributes_configs)
+  {
+    auto attrib_count = uint32_t(attrib.attributes.attributes.size());
+    memcpy(data, &attrib_count, sizeof(attrib_count));
+    data += sizeof(attrib_count);
+    for (auto &attr : attrib.attributes.attributes)
+    {
+      memcpy(data, &attr.format, sizeof(attr.format));
+      data += sizeof(attr.format);
+      memcpy(data, &attr.components, sizeof(attr.components));
+      data += sizeof(attr.components);
+      memcpy(data, &attr.name_size, sizeof(attr.name_size));
+      data += sizeof(attr.name_size);
+      memcpy(data, attr.name, attr.name_size);
+      data += attr.name_size;
+    }
+  }
+  return ret;
+}
 } // namespace converter
 } // namespace points

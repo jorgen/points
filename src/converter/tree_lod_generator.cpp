@@ -895,6 +895,10 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
   batch.level--;
   batch.completed = 0;
 
+  auto current_global_level = uint32_t(batch.worker_data.front().magnitude * 5 + batch.level);
+  auto end_global_level = uint32_t(batch.worker_data.back().magnitude * 5 + batch.level);
+  fprintf(stderr, "Iterating batch on level %d of %d\n", current_global_level, end_global_level);
+
   size_t batch_size = 0;
   while (batch_size == 0 && batch.level >= 0)
   {

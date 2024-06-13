@@ -125,7 +125,8 @@ private:
   void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>> &&event);
   void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, error_t &&error)> &&done);
   void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done);
-  void handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &tree_registry, std::function<void(error_t &&error)> &&done);
+  void handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
+                          std::function<void(error_t &&error)> &&done);
 
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
@@ -138,6 +139,10 @@ private:
   attributes_configs_t &_attributes_configs;
   uint32_t _serialized_index_size;
   free_blob_manager_t _blob_manager;
+
+  storage_location_t attributes_location;
+  storage_location_t blobs_location;
+
   struct attribute_index_t
   {
     int data;

@@ -19,8 +19,8 @@
 #define ATTRIBUTES_CONFIGS_HPP
 
 #include <memory>
-#include <vector>
 #include <mutex>
+#include <vector>
 
 #include <conversion_types.hpp>
 
@@ -48,10 +48,7 @@ struct attribute_lod_mapping_t
   std::vector<attribute_lod_info_t> source;
   const attribute_lod_info_t &get_source_mapping(attributes_id_t id) const
   {
-    auto it = std::find_if(source.begin(), source.end(), [id](const attribute_lod_info_t &info)
-    {
-      return info.source_id.data == id.data;
-    });
+    auto it = std::find_if(source.begin(), source.end(), [id](const attribute_lod_info_t &info) { return info.source_id.data == id.data; });
     assert(it != source.end());
     return *it;
   }
@@ -60,6 +57,12 @@ struct attribute_lod_mapping_t
 struct attribute_config_t
 {
   attributes_t attributes;
+};
+
+struct serialized_attributes_t
+{
+  std::shared_ptr<uint8_t[]> data;
+  uint32_t size = 0;
 };
 
 class attributes_configs_t
@@ -77,11 +80,15 @@ public:
   point_format_t get_point_format(attributes_id_t id);
 
   int get_attribute_index(attributes_id_t id, const std::string &name) const;
+
+  serialized_attributes_t serialize() const;
+
 private:
   const tree_global_state_t &_global_state;
-  mutable  std::mutex _mutex;
+  mutable std::mutex _mutex;
   std::vector<attribute_config_t> _attributes_configs;
 };
 
-}}
+} // namespace converter
+} // namespace points
 #endif // ATTRIBUTES_CONFIGS_HPP
