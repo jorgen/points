@@ -29,7 +29,7 @@ class frustum_tree_walker_t;
 class tree_handler_t : public about_to_block_t
 {
 public:
-  tree_handler_t(const tree_global_state_t &global_state, cache_file_handler_t &file_cache, attributes_configs_t &attributrs_configs, event_pipe_t<input_data_id_t> &done_input);
+  tree_handler_t(const tree_global_state_t &global_state, storage_handler_t &file_cache, attributes_configs_t &attributrs_configs, event_pipe_t<input_data_id_t> &done_input);
 
   void about_to_block() override;
 
@@ -48,7 +48,7 @@ private:
   bool _initialized;
 
   const tree_global_state_t &_global_state;
-  cache_file_handler_t &_file_cache;
+  storage_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;
 
   tree_registry_t _tree_registry;

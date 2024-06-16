@@ -26,7 +26,7 @@ set(private_headers
         tree.hpp
         point_buffer_splitter.hpp
         pre_init_file_retriever.hpp
-        cache_file_handler.hpp
+        storage_handler.hpp
         tree_handler.hpp
         tree_lod_generator.hpp
         attributes_configs.hpp
@@ -46,7 +46,7 @@ set(sources
         sorter.cpp
         tree.cpp
         pre_init_file_retriever.cpp
-        cache_file_handler.cpp
+        storage_handler.cpp
         tree_handler.cpp
         tree_lod_generator.cpp
         attributes_configs.cpp

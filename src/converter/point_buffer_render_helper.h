@@ -19,8 +19,8 @@
 #define POINT_BUFFER_RENDER_HELPER_H
 
 #include "buffer.hpp"
-#include "cache_file_handler.hpp"
 #include "conversion_types.hpp"
+#include "storage_handler.hpp"
 #include <glm_include.hpp>
 #include <points/common/format.h>
 #include <points/converter/converter_data_source.h>
@@ -45,7 +45,8 @@ struct dyn_points_draw_buffer_t
 };
 
 template <typename MORTON_TYPE, typename DECODED_T>
-void convert_points_to_vertex_data_morton(const tree_global_state_t &state, const read_only_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset, std::unique_ptr<uint8_t[]> &vertex_data)
+void convert_points_to_vertex_data_morton(const tree_global_state_t &state, const read_only_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
+                                          std::unique_ptr<uint8_t[]> &vertex_data)
 {
   assert(read_points.data.size % sizeof(MORTON_TYPE) == 0);
   assert(read_points.header.point_count == read_points.data.size / sizeof(MORTON_TYPE));

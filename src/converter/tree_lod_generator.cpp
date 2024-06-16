@@ -18,10 +18,10 @@
 #include "tree_lod_generator.hpp"
 
 #include "attributes_configs.hpp"
-#include "cache_file_handler.hpp"
 #include "input_header.hpp"
 #include "morton.hpp"
 #include "morton_tree_coordinate_transform.hpp"
+#include "storage_handler.hpp"
 #include "worker.hpp"
 
 #include <fixed_size_vector.hpp>
@@ -54,7 +54,7 @@ static input_data_id_t get_next_input_id(tree_registry_t &tree_cache)
   return ret;
 }
 
-std::pair<int, int> find_missing_lod(tree_registry_t &tree_cache, cache_file_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, const morton::morton192_t &max, const morton::morton192_t &parent_min,
+std::pair<int, int> find_missing_lod(tree_registry_t &tree_cache, storage_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, const morton::morton192_t &max, const morton::morton192_t &parent_min,
                                      const morton::morton192_t &parent_max, int current_level, int skip, children_subset_t &to_lod) // NOLINT(*-no-recursion)
 {
   auto tree = tree_cache.get(tree_id);
@@ -174,7 +174,7 @@ struct tree_iterator_t
   std::vector<lod_node_worker_data_t> parents;
 };
 
-static void tree_get_work_items(tree_registry_t &tree_cache, cache_file_handler_t &cache, tree_id_t &tree_id, lod_node_worker_data_t &parent_node, std::vector<lod_tree_worker_data_t> &to_lod)
+static void tree_get_work_items(tree_registry_t &tree_cache, storage_handler_t &cache, tree_id_t &tree_id, lod_node_worker_data_t &parent_node, std::vector<lod_tree_worker_data_t> &to_lod)
 {
   auto tree = tree_cache.get(tree_id);
   assert(!(tree->morton_min < parent_node.node_min));
@@ -271,7 +271,7 @@ static void tree_get_work_items(tree_registry_t &tree_cache, cache_file_handler_
     to_lod.push_back(std::move(lod_tree_worker_data));
 }
 
-lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, cache_file_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data,
+lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, storage_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data,
                            const std::vector<float> &random_offsets)
   : lod_generator(lod_generator)
   , batch(batch)
@@ -652,7 +652,7 @@ static void copy_attribute_for_input(input_data_id_t input_id, const std::vector
   }
 }
 
-static void quantize_attributres(cache_file_handler_t &cache, const child_storage_map_t &child_storage_map, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies,
+static void quantize_attributres(storage_handler_t &cache, const child_storage_map_t &child_storage_map, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies,
                                  const attribute_lod_mapping_t &lod_attrib_mapping, attribute_buffers_t &buffers)
 {
   fixed_capacity_vector_t<input_data_id_t> inputs(indecies, [](const std::pair<input_data_id_t, uint32_t> &a) { return a.first; });
@@ -672,7 +672,7 @@ static void quantize_attributres(cache_file_handler_t &cache, const child_storag
 }
 
 template <typename T, size_t N>
-static void quantize_subset(cache_file_handler_t &cache, const points_subset_t &subset, const lod_child_storage_info_t &storage_info, int lod, const std::vector<float> &random_offsets,
+static void quantize_subset(storage_handler_t &cache, const points_subset_t &subset, const lod_child_storage_info_t &storage_info, int lod, const std::vector<float> &random_offsets,
                             std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   read_only_points_t subset_data(cache, storage_info.locations[0]);
@@ -695,7 +695,7 @@ static void quantize_subset(cache_file_handler_t &cache, const points_subset_t &
 }
 
 template <typename T, size_t N>
-static void quantize_points_collection(cache_file_handler_t &cache, const points_collection_t &point_collection, const child_storage_map_t &child_storage_map, int lod, const std::vector<float> &random_offsets,
+static void quantize_points_collection(storage_handler_t &cache, const points_collection_t &point_collection, const child_storage_map_t &child_storage_map, int lod, const std::vector<float> &random_offsets,
                                        std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   for (int i = 0; i < int(point_collection.data.size()); i++)
@@ -725,7 +725,7 @@ struct calculate_child_buffer_size_t
 };
 
 template <typename T, size_t N>
-static void quantize_morton_remember_indecies_t(cache_file_handler_t &cache, const std::vector<points_collection_t> &child_data, const child_storage_map_t &child_storage_map, int lod,
+static void quantize_morton_remember_indecies_t(storage_handler_t &cache, const std::vector<points_collection_t> &child_data, const child_storage_map_t &child_storage_map, int lod,
                                                 const std::vector<float> &random_offsets, std::unique_ptr<uint8_t[]> &morton_data, std::vector<std::pair<input_data_id_t, uint32_t>> &indecies)
 {
   std::vector<morton_to_lod_t<T, N>> morton_to_lod;
@@ -765,8 +765,8 @@ static void quantize_morton_remember_indecies_t(cache_file_handler_t &cache, con
   indecies.emplace_back(morton_to_lod[index].id, uint32_t(morton_to_lod[index].index.data));
 }
 
-static void quantize_morton_remember_indecies(cache_file_handler_t &cache, const std::vector<points_collection_t> &child_data, const child_storage_map_t &child_storage_map, int lod,
-                                              const std::vector<float> &random_offsets, std::unique_ptr<uint8_t[]> &morton_data, std::vector<std::pair<input_data_id_t, uint32_t>> &indecies)
+static void quantize_morton_remember_indecies(storage_handler_t &cache, const std::vector<points_collection_t> &child_data, const child_storage_map_t &child_storage_map, int lod, const std::vector<float> &random_offsets,
+                                              std::unique_ptr<uint8_t[]> &morton_data, std::vector<std::pair<input_data_id_t, uint32_t>> &indecies)
 {
   auto lod_format = morton_format_from_lod(lod);
   switch (lod_format)
@@ -884,7 +884,7 @@ static void adjust_tree_after_lod(tree_registry_t &tree_cache, std::vector<lod_t
   }
 }
 
-static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_registry_t &tree_cache, cache_file_handler_t &cache_file,
+static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_registry_t &tree_cache, storage_handler_t &cache_file,
                           attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
 {
   if (!batch.new_batch)
@@ -923,8 +923,8 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
   }
 }
 
-tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tree_global_state_t &tree_global_state, tree_registry_t &tree_cache, cache_file_handler_t &file_cache,
-                                           attributes_configs_t &attributes_configs, event_pipe_t<void> &lod_done)
+tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tree_global_state_t &tree_global_state, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs,
+                                           event_pipe_t<void> &lod_done)
   : _loop(loop)
   , _tree_global_state(tree_global_state)
   , _tree_cache(tree_cache)

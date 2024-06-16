@@ -15,7 +15,7 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "cache_file_handler.hpp"
+#include "storage_handler.hpp"
 
 #include "event_pipe.hpp"
 
@@ -34,7 +34,7 @@ namespace points
 namespace converter
 {
 
-cache_file_request_t::cache_file_request_t(cache_file_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback)
+cache_file_request_t::cache_file_request_t(storage_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback)
   : cache_file_handler(cache_file_handler)
   , done_callback(std::move(done_callback))
 {
@@ -77,7 +77,7 @@ void cache_file_request_t::do_write(const std::shared_ptr<cache_file_request_t> 
   uv_fs_write(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, int64_t(offset), request_done_callback);
 }
 
-cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error)
+storage_handler_t::storage_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error)
   : _cache_file_name(std::move(cache_file))
   , _file_handle(0)
   , _file_opened(false)
@@ -85,10 +85,10 @@ cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, std
   , _attributes_configs(attributes_configs)
   , _serialized_index_size(128)
   , _cache_file_error(cache_file_error)
-  , _write_event_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_events))
-  , _write_trees_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_trees))
-  , _write_tree_registry_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_tree_registry))
-  , _write_blob_locations_and_update_header_pipe(_event_loop, event_bind_t::bind(*this, &cache_file_handler_t::handle_write_blob_locations_and_update_header))
+  , _write_event_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_events))
+  , _write_trees_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_trees))
+  , _write_tree_registry_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_tree_registry))
+  , _write_blob_locations_and_update_header_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
 {
   (void)_state;
   auto index = _blob_manager.register_blob({_serialized_index_size});
@@ -100,13 +100,13 @@ cache_file_handler_t::cache_file_handler_t(const tree_global_state_t &state, std
   int open_mode = 0666;
 #endif
   uv_fs_open(_event_loop.loop(), &_open_request, _cache_file_name.c_str(), UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC, open_mode, [](uv_fs_t *request) {
-    cache_file_handler_t &self = *static_cast<cache_file_handler_t *>(request->data);
+    storage_handler_t &self = *static_cast<storage_handler_t *>(request->data);
     self.handle_open_cache_file(request);
   });
   (void)_attributes_configs;
 }
 
-void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
+void storage_handler_t::handle_open_cache_file(uv_fs_t *request)
 {
   _file_handle = uv_file(request->result);
   if (_file_handle < 0)
@@ -119,36 +119,36 @@ void cache_file_handler_t::handle_open_cache_file(uv_fs_t *request)
   _file_opened = true;
   _block_for_open.notify_all();
 }
-error_t cache_file_handler_t::wait_for_open()
+error_t storage_handler_t::wait_for_open()
 {
   std::unique_lock<std::mutex> lock(_mutex);
   _block_for_open.wait(lock, [this] { return this->_file_opened.load(); });
   return _open_error;
 }
 
-void cache_file_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
-                                 std::function<void(const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)> done)
+void storage_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
+                              std::function<void(const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)> done)
 {
   _write_event_pipe.post_event(std::make_tuple(header, attributes_id, std::move(buffers), done));
 }
 
-void cache_file_handler_t::write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees,
-                                       std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)> done)
+void storage_handler_t::write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees,
+                                    std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)> done)
 {
   _write_trees_pipe.post_event(std::make_tuple(std::move(tree_ids), std::move(serialized_trees), done));
 }
 
-void cache_file_handler_t::write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done)
+void storage_handler_t::write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done)
 {
   _write_tree_registry_pipe.post_event(std::move(serialized_tree_registry), std::move(done));
 }
 
-void cache_file_handler_t::write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> done)
+void storage_handler_t::write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> done)
 {
   _write_blob_locations_and_update_header_pipe.post_event(std::move(location), std::move(old_locations), std::move(done));
 }
 
-void cache_file_handler_t::read(input_data_id_t id, int attribute_index)
+void storage_handler_t::read(input_data_id_t id, int attribute_index)
 {
   (void)id;
   (void)attribute_index;
@@ -165,7 +165,7 @@ static bool serialize_points(const storage_header_t &header, const buffer_t &poi
   return true;
 }
 
-void cache_file_handler_t::handle_write_events(
+void storage_handler_t::handle_write_events(
   std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event)
 {
   auto &&[storage_header, attributes_id, attribute_buffers, done] = std::move(event);
@@ -220,7 +220,7 @@ void cache_file_handler_t::handle_write_events(
   }
 }
 
-void cache_file_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)>> &&event)
+void storage_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)>> &&event)
 {
   auto &&[tree_ids, serialized_trees, done] = std::move(event);
   std::unique_lock<std::mutex> lock(_mutex);
@@ -258,7 +258,7 @@ void cache_file_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>,
   }
 }
 
-void cache_file_handler_t::handle_write_tree_registry(serialized_tree_registry_t &&serialized_tree, std::function<void(storage_location_t, error_t &&error)> &&done)
+void storage_handler_t::handle_write_tree_registry(serialized_tree_registry_t &&serialized_tree, std::function<void(storage_location_t, error_t &&error)> &&done)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto &write_requests = this->_write_tree_registry_requests.emplace_back(new write_tree_registry_request_t());
@@ -294,7 +294,7 @@ struct serialize_meta_t
   std::function<void(error_t &&error)> done;
 };
 
-void cache_file_handler_t::handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done)
+void storage_handler_t::handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done)
 {
   auto new_blob_manager = _blob_manager;
   for (auto &location : old_locations)
@@ -369,8 +369,8 @@ void cache_file_handler_t::handle_write_blob_locations_and_update_header(storage
                                    serialized_meta->serialized_attributes_configs_location.size);
 }
 
-void cache_file_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                                              std::function<void(error_t &&error)> &&done)
+void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
+                                           std::function<void(error_t &&error)> &&done)
 {
   auto serialized_index = std::make_shared<uint8_t[]>(_serialized_index_size);
   auto *data = serialized_index.get();
@@ -406,7 +406,7 @@ void cache_file_handler_t::handle_write_index(free_blob_manager_t &&new_blob_man
   request->do_write(request, serialized_index, 0, _serialized_index_size);
 }
 
-points_cache_item_t cache_file_handler_t::ref_points(const storage_location_t &location)
+points_cache_item_t storage_handler_t::ref_points(const storage_location_t &location)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto it = _cache_map.find(location);
@@ -416,7 +416,7 @@ points_cache_item_t cache_file_handler_t::ref_points(const storage_location_t &l
   ret.data = it->second.buffer;
   return ret;
 }
-void cache_file_handler_t::deref_points(const storage_location_t &location)
+void storage_handler_t::deref_points(const storage_location_t &location)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto it = _cache_map.find(location);
@@ -424,7 +424,7 @@ void cache_file_handler_t::deref_points(const storage_location_t &location)
   it->second.ref--;
 }
 
-bool cache_file_handler_t::is_available(input_data_id_t id, int attribute_index)
+bool storage_handler_t::is_available(input_data_id_t id, int attribute_index)
 {
   (void)id;
   (void)attribute_index;
@@ -432,12 +432,12 @@ bool cache_file_handler_t::is_available(input_data_id_t id, int attribute_index)
   return false;
 }
 
-int cache_file_handler_t::item_count()
+int storage_handler_t::item_count()
 {
   return int(_cache_map.size());
 }
 
-void cache_file_handler_t::remove_write_requests(write_requests_t *write_requests)
+void storage_handler_t::remove_write_requests(write_requests_t *write_requests)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto it = std::find_if(_write_requests.begin(), _write_requests.end(), [&](const std::unique_ptr<write_requests_t> &a) { return a.get() == write_requests; });
@@ -445,7 +445,7 @@ void cache_file_handler_t::remove_write_requests(write_requests_t *write_request
   _write_requests.erase(it);
 }
 
-void cache_file_handler_t::remove_write_tree_requests(write_trees_request_t *write_requests)
+void storage_handler_t::remove_write_tree_requests(write_trees_request_t *write_requests)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto it = std::find_if(_write_trees_requests.begin(), _write_trees_requests.end(), [&](const std::unique_ptr<write_trees_request_t> &a) { return a.get() == write_requests; });
@@ -453,7 +453,7 @@ void cache_file_handler_t::remove_write_tree_requests(write_trees_request_t *wri
   _write_trees_requests.erase(it);
 }
 
-void cache_file_handler_t::remove_write_tree_registry_requests(write_tree_registry_request_t *write_requests)
+void storage_handler_t::remove_write_tree_registry_requests(write_tree_registry_request_t *write_requests)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto it = std::find_if(_write_tree_registry_requests.begin(), _write_tree_registry_requests.end(), [&](const std::unique_ptr<write_tree_registry_request_t> &a) { return a.get() == write_requests; });

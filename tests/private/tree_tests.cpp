@@ -2,8 +2,8 @@
 #include <fmt/printf.h>
 #include <utility>
 
-#include "cache_file_handler.hpp"
 #include "conversion_types.hpp"
+#include "storage_handler.hpp"
 #include <attributes_configs.hpp>
 #include <event_pipe.hpp>
 #include <input_header.hpp>
@@ -87,7 +87,7 @@ struct tree_test_infrastructure : points::converter::about_to_block_t
   points::converter::tree_global_state_t global_state;
   points::converter::attributes_configs_t attributes_config;
   points::converter::event_pipe_t<points::error_t> cache_file_error;
-  points::converter::cache_file_handler_t cache_file_handler;
+  points::converter::storage_handler_t cache_file_handler;
 
   bool write_done_state = false;
   std::mutex wait_for_write_done_mutex;

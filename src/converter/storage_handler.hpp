@@ -65,16 +65,16 @@ struct write_requests_t
   std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)> done_callback;
 };
 
-class cache_file_handler_t;
+class storage_handler_t;
 
 struct cache_file_request_t
 {
-  cache_file_request_t(cache_file_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback);
+  cache_file_request_t(storage_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback);
 
   void do_read(const std::weak_ptr<cache_file_request_t> &self, int64_t offset, int32_t size);
   void do_write(const std::shared_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size);
 
-  cache_file_handler_t &cache_file_handler;
+  storage_handler_t &cache_file_handler;
   std::function<void(const cache_file_request_t &)> done_callback;
 
   std::shared_ptr<uint8_t[]> buffer;
@@ -89,14 +89,10 @@ struct points_cache_item_t
   buffer_t data;
 };
 
-struct write_tree_jobs_t
-{
-};
-
-class cache_file_handler_t
+class storage_handler_t
 {
 public:
-  cache_file_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error);
+  storage_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error);
 
   void handle_open_cache_file(uv_fs_t *request);
   error_t wait_for_open();
@@ -219,7 +215,7 @@ static bool deserialize_points(const buffer_t &data, storage_header_t &header, b
 
 struct read_only_points_t
 {
-  read_only_points_t(cache_file_handler_t &cache_file_handler, storage_location_t location)
+  read_only_points_t(storage_handler_t &cache_file_handler, storage_location_t location)
     : cache_file_handler(cache_file_handler)
     , location(location)
     , cache_item(cache_file_handler.ref_points(location))
@@ -231,7 +227,7 @@ struct read_only_points_t
     cache_file_handler.deref_points(location);
   }
 
-  cache_file_handler_t &cache_file_handler;
+  storage_handler_t &cache_file_handler;
   storage_location_t location;
   points_cache_item_t cache_item;
   storage_header_t header;
@@ -241,7 +237,7 @@ struct read_only_points_t
 
 struct read_attribute_t
 {
-  read_attribute_t(cache_file_handler_t &cache_file_handler, storage_location_t location)
+  read_attribute_t(storage_handler_t &cache_file_handler, storage_location_t location)
     : cache_file_handler(cache_file_handler)
     , location(location)
     , cache_item(cache_file_handler.ref_points(location))
@@ -253,7 +249,7 @@ struct read_attribute_t
     cache_file_handler.deref_points(location);
   }
 
-  cache_file_handler_t &cache_file_handler;
+  storage_handler_t &cache_file_handler;
   storage_location_t location;
   points_cache_item_t cache_item;
   buffer_t data;
@@ -262,7 +258,7 @@ struct read_attribute_t
 
 struct read_points_with_data_t
 {
-  read_points_with_data_t(cache_file_handler_t &cache_file_handler, std::vector<storage_location_t> locations)
+  read_points_with_data_t(storage_handler_t &cache_file_handler, std::vector<storage_location_t> locations)
     : cache_file_handler(cache_file_handler)
     , locations(std::move(locations))
     , cache_items(this->locations.size())
@@ -281,7 +277,7 @@ struct read_points_with_data_t
       cache_file_handler.deref_points(location);
     }
   }
-  cache_file_handler_t &cache_file_handler;
+  storage_handler_t &cache_file_handler;
   std::vector<storage_location_t> locations;
   std::vector<points_cache_item_t> cache_items;
   storage_header_t header;

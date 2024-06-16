@@ -27,13 +27,13 @@
 #include <points/converter/converter.h>
 
 #include "attributes_configs.hpp"
-#include "cache_file_handler.hpp"
 #include "conversion_types.hpp"
 #include "event_pipe.hpp"
 #include "input_data_source_registry.hpp"
 #include "morton.hpp"
 #include "pre_init_file_retriever.hpp"
 #include "reader.hpp"
+#include "storage_handler.hpp"
 #include "threaded_event_loop.hpp"
 #include "tree_handler.hpp"
 
@@ -63,7 +63,7 @@ public:
   void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
   void about_to_block() override;
 
-  cache_file_handler_t &cache_file()
+  storage_handler_t &cache_file()
   {
     return _cache_file_handler;
   }
@@ -74,7 +74,7 @@ private:
   threaded_event_loop_t _event_loop;
 
   input_data_source_registry_t _input_data_source_registry;
-  cache_file_handler_t _cache_file_handler;
+  storage_handler_t _cache_file_handler;
   tree_handler_t _tree_handler;
 
   event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
