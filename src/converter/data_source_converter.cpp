@@ -36,8 +36,8 @@ inline void initialize_buffer(render::callback_manager_t &callbacks, std::vector
   assert(data_vector.size());
 }
 
-converter_data_source_t::converter_data_source_t(converter_t *converter, render::callback_manager_t &callbacks)
-  : converter(converter)
+converter_data_source_t::converter_data_source_t(const std::string &url, render::callback_manager_t &callbacks)
+  : url(url)
   , callbacks(callbacks)
 {
   memset(aabb.min, 0, sizeof(aabb.min));
@@ -64,7 +64,7 @@ static void combine_buffers(std::vector<tree_walker_nodes_t> &new_nodes, render:
 void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, render::to_render_t *to_render)
 {
   (void)to_render;
-  //const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
+  // const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
   (void)c_camera;
 
   if (back_buffer && back_buffer->done() && !has_rendered)
@@ -151,9 +151,9 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   // }
 }
 
-struct converter_data_source_t *converter_data_source_create(struct converter::converter_t *converter, struct render::renderer_t *renderer)
+struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, struct render::renderer_t *renderer)
 {
-  return new converter_data_source_t(converter, renderer->callbacks);
+  return new converter_data_source_t(std::string(url, url_len), renderer->callbacks);
 }
 
 void converter_data_source_destroy(struct converter_data_source_t *converter_data_source)

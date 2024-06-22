@@ -71,8 +71,8 @@ struct cache_file_request_t
 {
   cache_file_request_t(storage_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback);
 
-  void do_read(const std::weak_ptr<cache_file_request_t> &self, int64_t offset, int32_t size);
-  void do_write(const std::shared_ptr<cache_file_request_t> &self, const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size);
+  void do_read(int64_t offset, int32_t size);
+  void do_write(uint64_t offset, uint32_t size);
 
   storage_handler_t &cache_file_handler;
   std::function<void(const cache_file_request_t &)> done_callback;
@@ -84,15 +84,22 @@ struct cache_file_request_t
   uv_fs_t uv_request;
 };
 
-struct points_cache_item_t
+struct read_request_t
 {
-  buffer_t data;
+  read_request_t(storage_handler_t &cache_file_handler, storage_location_t location, std::function<void(const cache_file_request_t &)> done_callback);
+
+  void wait_for_read();
+
+  cache_file_request_t _request;
+  bool _done;
+  std::mutex _mutex;
+  std::condition_variable _block_for_read;
 };
 
 class storage_handler_t
 {
 public:
-  storage_handler_t(const tree_global_state_t &state, std::string cache_file, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &cache_file_error);
+  storage_handler_t(const tree_global_state_t &state, const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe);
 
   void handle_open_cache_file(uv_fs_t *request);
   error_t wait_for_open();
@@ -102,27 +109,23 @@ public:
   void write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)> done);
   void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done);
   void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> done);
-  void read(input_data_id_t id, int attribute_index);
 
-  points_cache_item_t ref_points(const storage_location_t &location);
-  void deref_points(const storage_location_t &location);
+  std::shared_ptr<read_request_t> read(storage_location_t location, std::function<void(const cache_file_request_t &)> done_callback);
 
-  int item_count();
-
-  bool is_available(input_data_id_t id, int attribute_index);
-
-  void remove_write_requests(write_requests_t *write_requests);
-  void remove_write_tree_requests(write_trees_request_t *write_requests);
-  void remove_write_tree_registry_requests(write_tree_registry_request_t *write_requests);
+  void remove_request(cache_file_request_t *request);
 
 private:
   void handle_write_events(
     std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event);
-  void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>> &&event);
+  void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)>> &&event);
   void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, error_t &&error)> &&done);
   void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done);
   void handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
                           std::function<void(error_t &&error)> &&done);
+
+  void remove_write_requests(write_requests_t *write_requests);
+  void remove_write_tree_requests(write_trees_request_t *write_requests);
+  void remove_write_tree_registry_requests(write_tree_registry_request_t *write_requests);
 
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
@@ -139,61 +142,20 @@ private:
   storage_location_t attributes_location;
   storage_location_t blobs_location;
 
-  struct attribute_index_t
-  {
-    int data;
-  };
-
-  [[nodiscard]] inline auto hash(std::pair<input_data_id_t, attribute_index_t> x) -> uint64_t
-  {
-    using namespace ankerl::unordered_dense::detail;
-    uint64_t input;
-    memcpy(&input, &x.first, sizeof(input));
-    return wyhash::hash(wyhash::mix(input, uint64_t(x.second.data)));
-  }
-  struct hash_input_id_attribute_index_t
-  {
-    inline uint64_t operator()(const std::pair<input_data_id_t, attribute_index_t> &x) const
-    {
-      using namespace ankerl::unordered_dense::detail;
-      uint64_t input;
-      memcpy(&input, &x.first, sizeof(input));
-      return wyhash::hash(wyhash::mix(input, uint64_t(x.second.data)));
-    }
-  };
-
   uv_fs_t _open_request{};
-  event_pipe_t<error_t> &_cache_file_error;
+  event_pipe_t<error_t> &_storage_error;
   event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>>> _write_event_pipe;
   event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>>> _write_trees_pipe;
   event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, error_t &&error)>> _write_tree_registry_pipe;
   event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(error_t &&error)>> _write_blob_locations_and_update_header_pipe;
 
-  struct hash_storage_location_t
-  {
-    uint64_t operator()(const storage_location_t &a) const
-    {
-      std::pair<uint64_t, uint64_t> b;
-      static_assert(sizeof(a) == sizeof(b), "hash function is invalid");
-      memcpy(&b, &a, sizeof(b));
-      b.first ^= b.second + 0x517cc1b727220a95 + (b.first << 6) + (b.first >> 2);
-      return b.first;
-    }
-  };
-  struct cache_item_impl_t
-  {
-    int ref;
-    buffer_t buffer;
-    std::shared_ptr<uint8_t[]> data;
-  };
-
   std::mutex _mutex;
-
-  ankerl::unordered_dense::map<storage_location_t, cache_item_impl_t, hash_storage_location_t> _cache_map;
 
   std::vector<std::unique_ptr<write_requests_t>> _write_requests;
   std::vector<std::unique_ptr<write_trees_request_t>> _write_trees_requests;
   std::vector<std::unique_ptr<write_tree_registry_request_t>> _write_tree_registry_requests;
+
+  std::vector<std::shared_ptr<cache_file_request_t>> _requests;
 
   friend struct cache_file_request_t;
 };

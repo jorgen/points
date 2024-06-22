@@ -56,11 +56,12 @@ struct tree_walker_with_buffer_t
 
 struct converter_data_source_t
 {
-  converter_data_source_t(converter_t *converter, render::callback_manager_t &callback_manager);
+  converter_data_source_t(const std::string &url, render::callback_manager_t &callback_manager);
 
   void add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render);
 
-  converter_t *converter;
+  const std::string url;
+  // storage_handler_t cache_file_handler;
   render::callback_manager_t &callbacks;
   render::data_source_t data_source;
 
