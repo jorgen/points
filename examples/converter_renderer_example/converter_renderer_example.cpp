@@ -138,14 +138,14 @@ int main(int, char **)
   std::vector<points::converter::str_buffer> input_files;
   // input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
   // input_files.push_back(make_str_buffer("D:/LazData/Kosciol_Libusza/K_Libusza_ext_18.laz"));
-  // input_files.push_back(make_str_buffer("D:/LazData/Palac_Moszna/Palac_Moszna.laz"));
+  input_files.push_back(make_str_buffer("D:/LazData/Palac_Moszna/Palac_Moszna.laz"));
   // input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
   // input_files.push_back(make_str_buffer("D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-63.laz"));
-  input_files.push_back(make_str_buffer("/Users/jlind/Downloads/Palac_Moszna.laz"));
+  // input_files.push_back(make_str_buffer("/Users/jlind/Downloads/Palac_Moszna.laz"));
 
   const char cache_file[] = "tmp_file.tmp";
-  // auto converter = create_unique_ptr(points::converter::converter_create(cache_file, sizeof(cache_file)), &points::converter::converter_destroy);
-  // points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
+  auto converter = create_unique_ptr(points::converter::converter_create(cache_file, sizeof(cache_file)), &points::converter::converter_destroy);
+  points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
 
   bool render_flat_points = true;
   auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size), &points::render::flat_points_data_source_destroy);

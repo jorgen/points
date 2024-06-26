@@ -29,9 +29,9 @@
 #include <algorithm>
 #include <utility>
 
-namespace points
-{
-namespace converter
+#include <fmt/format.h>
+
+namespace points::converter
 {
 
 cache_file_request_t::cache_file_request_t(storage_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback)
@@ -50,13 +50,19 @@ static void request_done_callback(uv_fs_t *req)
     self->error.msg = uv_strerror(int(req->result));
     fprintf(stderr, "Write error %d - %s\n", self->error.code, self->error.msg.c_str());
   }
+  else
+  {
+    self->buffer_info.size = uint32_t(req->result);
+    self->buffer_info.data = self->buffer.get();
+  }
   uv_fs_req_cleanup(req);
   self->done_callback(*self);
   self->cache_file_handler.remove_request(self);
 }
 
-void cache_file_request_t::do_read(int64_t offset, int32_t size)
+void cache_file_request_t::do_read(uint64_t offset, uint32_t size)
 {
+  assert(std::this_thread::get_id() == cache_file_handler._event_loop.thread_id());
   uv_request.data = this;
   buffer = std::make_shared<uint8_t[]>(size);
   uv_buffer.base = (char *)buffer.get();
@@ -66,6 +72,7 @@ void cache_file_request_t::do_read(int64_t offset, int32_t size)
 
 void cache_file_request_t::do_write(const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size)
 {
+  assert(std::this_thread::get_id() == cache_file_handler._event_loop.thread_id());
   uv_request.data = this;
   buffer = data;
   uv_buffer.base = (char *)buffer.get();
@@ -75,14 +82,14 @@ void cache_file_request_t::do_write(const std::shared_ptr<uint8_t[]> &data, uint
   uv_fs_write(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, int64_t(offset), request_done_callback);
 }
 
-read_request_t::read_request_t(storage_handler_t &cache_file_handler, storage_location_t location, std::function<void(const cache_file_request_t &)> done_callback)
-  : _request(cache_file_handler,
-             [this, done_callback](const cache_file_request_t &request) {
-               std::unique_lock<std::mutex> lock(this->_mutex);
-               this->_done = true;
-               this->_block_for_read.notify_all();
-               done_callback(request);
-             })
+read_request_t::read_request_t(storage_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback)
+  : cache_file_request_t(cache_file_handler,
+                         [this, done_callback = std::move(done_callback)](const cache_file_request_t &request) {
+                           std::unique_lock<std::mutex> lock(this->_mutex);
+                           this->_done = true;
+                           this->_block_for_read.notify_all();
+                           done_callback(request);
+                         })
   , _done(false)
 {
 }
@@ -105,6 +112,7 @@ storage_handler_t::storage_handler_t(const tree_global_state_t &state, const std
   , _write_trees_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_trees))
   , _write_tree_registry_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_tree_registry))
   , _write_blob_locations_and_update_header_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
+  , _read_request_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
 {
   (void)_state;
   auto index = _blob_manager.register_blob({_serialized_index_size});
@@ -161,12 +169,6 @@ void storage_handler_t::write_tree_registry(serialized_tree_registry_t &&seriali
 void storage_handler_t::write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> done)
 {
   _write_blob_locations_and_update_header_pipe.post_event(std::move(location), std::move(old_locations), std::move(done));
-}
-
-void storage_handler_t::read(input_data_id_t id, int attribute_index)
-{
-  (void)id;
-  (void)attribute_index;
 }
 
 static bool serialize_points(const storage_header_t &header, const buffer_t &points, buffer_t &serialize_data, std::shared_ptr<uint8_t[]> &data_owner)
@@ -227,7 +229,8 @@ void storage_handler_t::handle_write_events(
         remove_write_requests(write_requests_prt);
       }
     });
-    request->do_write(request, data_owner, location.offset, location.size);
+    add_request(request);
+    request->do_write(data_owner, location.offset, location.size);
   }
 }
 
@@ -265,7 +268,8 @@ void storage_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>, st
         remove_write_tree_requests(write_requests_prt);
       }
     });
-    request->do_write(request, write_requests_prt->serialized_trees[i].data, location.offset, location.size);
+    add_request(request);
+    request->do_write(write_requests_prt->serialized_trees[i].data, location.offset, location.size);
   }
 }
 
@@ -292,7 +296,8 @@ void storage_handler_t::handle_write_tree_registry(serialized_tree_registry_t &&
     }
     remove_write_tree_registry_requests(write_requests_prt);
   });
-  request->do_write(request, write_requests_prt->serialized_tree_registry.data, location.offset, location.size);
+  add_request(request);
+  request->do_write(write_requests_prt->serialized_tree_registry.data, location.offset, location.size);
 }
 
 struct serialize_meta_t
@@ -373,11 +378,12 @@ void storage_handler_t::handle_write_blob_locations_and_update_header(storage_lo
   };
 
   auto request_blob = std::make_shared<cache_file_request_t>(*this, request_handler);
-  request_blob->do_write(request_blob, serialized_meta->serialized_blob.data, serialized_meta->serialized_blob.offset, serialized_meta->serialized_blob.size);
+  add_request(request_blob);
+  request_blob->do_write(serialized_meta->serialized_blob.data, serialized_meta->serialized_blob.offset, serialized_meta->serialized_blob.size);
 
   auto request_attrib_configs = std::make_shared<cache_file_request_t>(*this, request_handler);
-  request_attrib_configs->do_write(request_attrib_configs, serialized_meta->serialized_attributes_configs.data, serialized_meta->serialized_attributes_configs_location.offset,
-                                   serialized_meta->serialized_attributes_configs_location.size);
+  add_request(request_attrib_configs);
+  request_attrib_configs->do_write(serialized_meta->serialized_attributes_configs.data, serialized_meta->serialized_attributes_configs_location.offset, serialized_meta->serialized_attributes_configs_location.size);
 }
 
 void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
@@ -414,7 +420,8 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
     done(std::move(error));
   });
   fprintf(stderr, "Writing index\n");
-  request->do_write(request, serialized_index, 0, _serialized_index_size);
+  add_request(request);
+  request->do_write(serialized_index, 0, _serialized_index_size);
 }
 
 void storage_handler_t::remove_write_requests(write_requests_t *write_requests)
@@ -442,9 +449,29 @@ void storage_handler_t::remove_write_tree_registry_requests(write_tree_registry_
 }
 std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t location, std::function<void(const cache_file_request_t &)> done_callback)
 {
-  auto ret = std::make_shared<read_request_t>(*this, location, std::move(done_callback));
-  auto ret->_request.do_read(_request, location.offset, location.size);
+  auto ret = std::make_shared<read_request_t>(*this, std::move(done_callback));
+  auto copy = ret;
+  _read_request_pipe.post_event(std::move(copy), std::move(location));
+  return ret;
 }
 
-} // namespace converter
-} // namespace points
+void storage_handler_t::add_request(std::shared_ptr<cache_file_request_t> request)
+{
+  std::unique_lock<std::mutex> lock(_requests_mutex);
+  _requests.emplace_back(std::move(request));
+}
+
+void storage_handler_t::remove_request(cache_file_request_t *request)
+{
+  std::unique_lock<std::mutex> lock(_requests_mutex);
+  auto it = std::find_if(_requests.begin(), _requests.end(), [&](const std::shared_ptr<cache_file_request_t> &a) { return a.get() == request; });
+  assert(it != _requests.end());
+  _requests.erase(it);
+}
+void storage_handler_t::handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location)
+{
+  add_request(read_request);
+  read_request->do_read(location.offset, location.size);
+}
+
+} // namespace points::converter

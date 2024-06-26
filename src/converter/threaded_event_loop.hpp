@@ -123,6 +123,11 @@ public:
     return _loop;
   }
 
+  std::thread::id thread_id() const
+  {
+    return _thread->get_id();
+  }
+
 private:
   void add_event_pipe_cb(std::vector<std::function<uv_handle_t *(uv_loop_t *)>> &&events)
   {
