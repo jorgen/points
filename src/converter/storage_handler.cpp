@@ -34,15 +34,15 @@
 namespace points::converter
 {
 
-cache_file_request_t::cache_file_request_t(storage_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback)
-  : cache_file_handler(cache_file_handler)
+storage_handler_request_t::storage_handler_request_t(storage_handler_t &storage_handler, std::function<void(const storage_handler_request_t &)> done_callback)
+  : storage_handler(storage_handler)
   , done_callback(std::move(done_callback))
 {
 }
 
 static void request_done_callback(uv_fs_t *req)
 {
-  auto self = static_cast<cache_file_request_t *>(req->data);
+  auto self = static_cast<storage_handler_request_t *>(req->data);
   error_t error;
   if (req->result < 0)
   {
@@ -57,39 +57,39 @@ static void request_done_callback(uv_fs_t *req)
   }
   uv_fs_req_cleanup(req);
   self->done_callback(*self);
-  self->cache_file_handler.remove_request(self);
+  self->storage_handler.remove_request(self);
 }
 
-void cache_file_request_t::do_read(uint64_t offset, uint32_t size)
+void storage_handler_request_t::do_read(uint64_t offset, uint32_t size)
 {
-  assert(std::this_thread::get_id() == cache_file_handler._event_loop.thread_id());
+  assert(std::this_thread::get_id() == storage_handler._event_loop.thread_id());
   uv_request.data = this;
   buffer = std::make_shared<uint8_t[]>(size);
   uv_buffer.base = (char *)buffer.get();
   uv_buffer.len = size;
-  uv_fs_read(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, offset, request_done_callback);
+  uv_fs_read(storage_handler._event_loop.loop(), &uv_request, storage_handler._file_handle, &uv_buffer, 1, int64_t(offset), request_done_callback);
 }
 
-void cache_file_request_t::do_write(const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size)
+void storage_handler_request_t::do_write(const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size)
 {
-  assert(std::this_thread::get_id() == cache_file_handler._event_loop.thread_id());
+  assert(std::this_thread::get_id() == storage_handler._event_loop.thread_id());
   uv_request.data = this;
   buffer = data;
   uv_buffer.base = (char *)buffer.get();
   uv_buffer.len = size;
   assert(size > 0);
   assert(data != nullptr);
-  uv_fs_write(cache_file_handler._event_loop.loop(), &uv_request, cache_file_handler._file_handle, &uv_buffer, 1, int64_t(offset), request_done_callback);
+  uv_fs_write(storage_handler._event_loop.loop(), &uv_request, storage_handler._file_handle, &uv_buffer, 1, int64_t(offset), request_done_callback);
 }
 
-read_request_t::read_request_t(storage_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback)
-  : cache_file_request_t(cache_file_handler,
-                         [this, done_callback = std::move(done_callback)](const cache_file_request_t &request) {
-                           std::unique_lock<std::mutex> lock(this->_mutex);
-                           this->_done = true;
-                           this->_block_for_read.notify_all();
-                           done_callback(request);
-                         })
+read_request_t::read_request_t(storage_handler_t &storage_handler, std::function<void(const storage_handler_request_t &)> done_callback)
+  : storage_handler_request_t(storage_handler,
+                              [this, done_callback = std::move(done_callback)](const storage_handler_request_t &request) {
+                                std::unique_lock<std::mutex> lock(this->_mutex);
+                                this->_done = true;
+                                this->_block_for_read.notify_all();
+                                done_callback(request);
+                              })
   , _done(false)
 {
 }
@@ -214,7 +214,7 @@ void storage_handler_t::handle_write_events(
     location.offset = this->_blob_manager.register_blob(size).data;
 
     auto write_requests_prt = write_requests.get();
-    auto request = std::make_shared<cache_file_request_t>(*this, [this, write_requests_prt](const cache_file_request_t &request) {
+    auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request) {
       if (request.error.code != 0 && write_requests_prt->error.code == 0)
       {
         write_requests_prt->error = request.error;
@@ -228,9 +228,8 @@ void storage_handler_t::handle_write_events(
         }
         remove_write_requests(write_requests_prt);
       }
-    });
-    add_request(request);
-    request->do_write(data_owner, location.offset, location.size);
+    };
+    handle_write(data_owner, location, std::move(done_callback));
   }
 }
 
@@ -253,7 +252,7 @@ void storage_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>, st
     free_blob_manager_t::blob_size_t size = {location.size};
     location.offset = this->_blob_manager.register_blob(size).data;
     auto write_requests_prt = write_requests.get();
-    auto request = std::make_shared<cache_file_request_t>(*this, [this, write_requests_prt](const cache_file_request_t &request) {
+    auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request) {
       if (request.error.code != 0 && write_requests_prt->error.code == 0)
       {
         write_requests_prt->error = request.error;
@@ -267,9 +266,8 @@ void storage_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>, st
         }
         remove_write_tree_requests(write_requests_prt);
       }
-    });
-    add_request(request);
-    request->do_write(write_requests_prt->serialized_trees[i].data, location.offset, location.size);
+    };
+    handle_write(write_requests->serialized_trees[i].data, location, std::move(done_callback));
   }
 }
 
@@ -285,7 +283,7 @@ void storage_handler_t::handle_write_tree_registry(serialized_tree_registry_t &&
   free_blob_manager_t::blob_size_t size = {location.size};
   location.offset = this->_blob_manager.register_blob(size).data;
   auto write_requests_prt = write_requests.get();
-  auto request = std::make_shared<cache_file_request_t>(*this, [this, write_requests_prt](const cache_file_request_t &request) {
+  auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request) {
     if (request.error.code != 0 && write_requests_prt->error.code == 0)
     {
       write_requests_prt->error = request.error;
@@ -295,9 +293,8 @@ void storage_handler_t::handle_write_tree_registry(serialized_tree_registry_t &&
       write_requests_prt->done_callback(write_requests_prt->location, std::move(write_requests_prt->error));
     }
     remove_write_tree_registry_requests(write_requests_prt);
-  });
-  add_request(request);
-  request->do_write(write_requests_prt->serialized_tree_registry.data, location.offset, location.size);
+  };
+  handle_write(write_requests->serialized_tree_registry.data, location, std::move(done_callback));
 }
 
 struct serialize_meta_t
@@ -360,7 +357,7 @@ void storage_handler_t::handle_write_blob_locations_and_update_header(storage_lo
   serialized_meta->new_blob_manager = std::move(new_blob_manager);
   serialized_meta->done = std::move(done);
 
-  auto request_handler = [this, new_tree_registry_location, serialized_meta](const cache_file_request_t &request) mutable {
+  auto request_handler = [this, new_tree_registry_location, serialized_meta](const storage_handler_request_t &request) mutable {
     error_t error;
     serialized_meta->serialized_count++;
     if (request.error.code != 0)
@@ -377,13 +374,9 @@ void storage_handler_t::handle_write_blob_locations_and_update_header(storage_lo
     }
   };
 
-  auto request_blob = std::make_shared<cache_file_request_t>(*this, request_handler);
-  add_request(request_blob);
-  request_blob->do_write(serialized_meta->serialized_blob.data, serialized_meta->serialized_blob.offset, serialized_meta->serialized_blob.size);
+  handle_write(serialized_meta->serialized_blob.data, {0, serialized_meta->serialized_blob.size, serialized_meta->serialized_blob.offset}, request_handler);
 
-  auto request_attrib_configs = std::make_shared<cache_file_request_t>(*this, request_handler);
-  add_request(request_attrib_configs);
-  request_attrib_configs->do_write(serialized_meta->serialized_attributes_configs.data, serialized_meta->serialized_attributes_configs_location.offset, serialized_meta->serialized_attributes_configs_location.size);
+  handle_write(serialized_meta->serialized_attributes_configs.data, {0, serialized_meta->serialized_attributes_configs_location.size, serialized_meta->serialized_attributes_configs_location.offset}, request_handler);
 }
 
 void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
@@ -406,7 +399,7 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
   memcpy(data, &attribute_configs, sizeof(attribute_configs));
   data += sizeof(attribute_configs);
 
-  auto request = std::make_shared<cache_file_request_t>(*this, [this, new_blob_manager = std::move(new_blob_manager), free_blobs, attribute_configs, done = std::move(done)](const cache_file_request_t &request) mutable {
+  auto done_callback = [this, new_blob_manager = std::move(new_blob_manager), free_blobs, attribute_configs, done = std::move(done)](const storage_handler_request_t &request) mutable {
     error_t error;
     fmt::print(stderr, "Write index done {}\n", request.error.code);
     if (request.error.code != 0)
@@ -418,10 +411,10 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
     this->blobs_location = free_blobs;
     this->attributes_location = attribute_configs;
     done(std::move(error));
-  });
+  };
+
   fprintf(stderr, "Writing index\n");
-  add_request(request);
-  request->do_write(serialized_index, 0, _serialized_index_size);
+  handle_write(serialized_index, {0, _serialized_index_size, 0}, std::move(done_callback));
 }
 
 void storage_handler_t::remove_write_requests(write_requests_t *write_requests)
@@ -447,7 +440,7 @@ void storage_handler_t::remove_write_tree_registry_requests(write_tree_registry_
   assert(it != _write_tree_registry_requests.end());
   _write_tree_registry_requests.erase(it);
 }
-std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t location, std::function<void(const cache_file_request_t &)> done_callback)
+std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t location, std::function<void(const storage_handler_request_t &)> done_callback)
 {
   auto ret = std::make_shared<read_request_t>(*this, std::move(done_callback));
   auto copy = ret;
@@ -455,16 +448,16 @@ std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t locat
   return ret;
 }
 
-void storage_handler_t::add_request(std::shared_ptr<cache_file_request_t> request)
+void storage_handler_t::add_request(std::shared_ptr<storage_handler_request_t> request)
 {
   std::unique_lock<std::mutex> lock(_requests_mutex);
   _requests.emplace_back(std::move(request));
 }
 
-void storage_handler_t::remove_request(cache_file_request_t *request)
+void storage_handler_t::remove_request(storage_handler_request_t *request)
 {
   std::unique_lock<std::mutex> lock(_requests_mutex);
-  auto it = std::find_if(_requests.begin(), _requests.end(), [&](const std::shared_ptr<cache_file_request_t> &a) { return a.get() == request; });
+  auto it = std::find_if(_requests.begin(), _requests.end(), [&](const std::shared_ptr<storage_handler_request_t> &a) { return a.get() == request; });
   assert(it != _requests.end());
   _requests.erase(it);
 }
@@ -472,6 +465,13 @@ void storage_handler_t::handle_read_request(std::shared_ptr<read_request_t> &&re
 {
   add_request(read_request);
   read_request->do_read(location.offset, location.size);
+}
+std::shared_ptr<storage_handler_request_t> storage_handler_t::handle_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location, std::function<void(const storage_handler_request_t &)> done_callback)
+{
+  auto ret = std::make_shared<storage_handler_request_t>(*this, std::move(done_callback));
+  add_request(ret);
+  ret->do_write(data, location.offset, location.size);
+  return ret;
 }
 
 } // namespace points::converter

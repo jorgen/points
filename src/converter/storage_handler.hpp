@@ -31,9 +31,8 @@
 
 #include <cstdint>
 #include <deque>
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 
 struct write_tree_registry_request_t
@@ -68,27 +67,27 @@ struct write_requests_t
 
 class storage_handler_t;
 
-struct cache_file_request_t
+struct storage_handler_request_t
 {
-  cache_file_request_t(storage_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback);
+  storage_handler_request_t(storage_handler_t &storage_handler, std::function<void(const storage_handler_request_t &)> done_callback);
 
   void do_read(uint64_t offset, uint32_t size);
   void do_write(const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size);
 
-  storage_handler_t &cache_file_handler;
-  std::function<void(const cache_file_request_t &)> done_callback;
+  storage_handler_t &storage_handler;
+  std::function<void(const storage_handler_request_t &)> done_callback;
 
   std::shared_ptr<uint8_t[]> buffer;
   buffer_t buffer_info;
   error_t error;
 
-  uv_buf_t uv_buffer;
-  uv_fs_t uv_request;
+  uv_buf_t uv_buffer{};
+  uv_fs_t uv_request{};
 };
 
-struct read_request_t : cache_file_request_t
+struct read_request_t : storage_handler_request_t
 {
-  read_request_t(storage_handler_t &cache_file_handler, std::function<void(const cache_file_request_t &)> done_callback);
+  read_request_t(storage_handler_t &storage_handler, std::function<void(const storage_handler_request_t &)> done_callback);
 
   void wait_for_read();
 
@@ -111,10 +110,10 @@ public:
   void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done);
   void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> done);
 
-  std::shared_ptr<read_request_t> read(storage_location_t location, std::function<void(const cache_file_request_t &)> done_callback);
+  std::shared_ptr<read_request_t> read(storage_location_t location, std::function<void(const storage_handler_request_t &)> done_callback);
 
-  void add_request(std::shared_ptr<cache_file_request_t> request);
-  void remove_request(cache_file_request_t *request);
+  void add_request(std::shared_ptr<storage_handler_request_t> request);
+  void remove_request(storage_handler_request_t *request);
 
 private:
   void handle_write_events(
@@ -128,6 +127,7 @@ private:
   void remove_write_requests(write_requests_t *write_requests);
   void remove_write_tree_requests(write_trees_request_t *write_requests);
   void remove_write_tree_registry_requests(write_tree_registry_request_t *write_requests);
+  std::shared_ptr<storage_handler_request_t> handle_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location, std::function<void(const storage_handler_request_t &)> done_callback);
 
   std::string _cache_file_name;
   threaded_event_loop_t _event_loop;
@@ -159,9 +159,9 @@ private:
   std::vector<std::unique_ptr<write_tree_registry_request_t>> _write_tree_registry_requests;
 
   std::mutex _requests_mutex;
-  std::deque<std::shared_ptr<cache_file_request_t>> _requests;
+  std::deque<std::shared_ptr<storage_handler_request_t>> _requests;
 
-  friend struct cache_file_request_t;
+  friend struct storage_handler_request_t;
 };
 
 static bool deserialize_points(const buffer_t &data, storage_header_t &header, buffer_t &point_data, error_t &error)
@@ -181,10 +181,9 @@ static bool deserialize_points(const buffer_t &data, storage_header_t &header, b
 
 struct read_only_points_t
 {
-  read_only_points_t(storage_handler_t &cache_file_handler, storage_location_t location)
-    : cache_file_handler(cache_file_handler)
-    , location(location)
-    , read_request(cache_file_handler.read(location, [this](const cache_file_request_t &) {}))
+  read_only_points_t(storage_handler_t &storage_handler, storage_location_t location)
+    : location(location)
+    , read_request(storage_handler.read(location, [this](const storage_handler_request_t &) {}))
   {
     read_request->wait_for_read();
     deserialize_points(read_request->buffer_info, header, data, error);
@@ -193,7 +192,6 @@ struct read_only_points_t
   {
   }
 
-  storage_handler_t &cache_file_handler;
   storage_location_t location;
   std::shared_ptr<read_request_t> read_request;
   storage_header_t header;
@@ -203,21 +201,20 @@ struct read_only_points_t
 
 struct read_attribute_t
 {
-  read_attribute_t(storage_handler_t &cache_file_handler, storage_location_t location)
-    : cache_file_handler(cache_file_handler)
+  read_attribute_t(storage_handler_t &storage_handler, storage_location_t location)
+    : storage_handler(storage_handler)
     , location(location)
-    , read_request(cache_file_handler.read(location, [this](const cache_file_request_t &) {}))
+    , read_request(storage_handler.read(location, [this](const storage_handler_request_t &) {}))
   {
     read_request->wait_for_read();
     data = read_request->buffer_info;
   }
 
-  storage_handler_t &cache_file_handler;
+  storage_handler_t &storage_handler;
   storage_location_t location;
   std::shared_ptr<read_request_t> read_request;
   buffer_t data;
   error_t error;
 };
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
