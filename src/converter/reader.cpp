@@ -131,7 +131,7 @@ void get_data_worker_t::after_work(completion_t completion)
   point_reader_file.input_split = split;
 }
 
-sort_worker_t::sort_worker_t(const tree_global_state_t &tree_state, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, header_t public_header, points_t &&points)
+sort_worker_t::sort_worker_t(const tree_config_t &tree_state, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, header_t public_header, points_t &&points)
   : tree_state(tree_state)
   , reader_file(reader_file)
   , attributes_configs(attributes_configs)
@@ -152,7 +152,7 @@ void sort_worker_t::after_work(completion_t completion)
   reader_file.sorted_points_pipe.post_event(std::make_pair(std::move(points), std::move(error)));
 }
 
-point_reader_t::point_reader_t(const tree_global_state_t &tree_state, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs,
+point_reader_t::point_reader_t(const tree_config_t &tree_state, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs,
                                event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_t<input_data_id_t> &sub_added,
                                event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors)
   : _tree_state(tree_state)

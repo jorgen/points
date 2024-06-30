@@ -209,7 +209,7 @@ static void reorder_buffer(uint32_t count, const INDEX_T *indecies_begin, std::p
 }
 
 template <typename T, typename INDEX_T, typename MT, size_t C>
-void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_configs_t &attributes_config, const header_t &public_header, points_t &points, double smallest_scale, type_t format, error_t &error)
+void convert_and_sort_morton(const tree_config_t &tree_state, attributes_configs_t &attributes_config, const header_t &public_header, points_t &points, double smallest_scale, type_t format, error_t &error)
 {
   (void)error;
   auto &header = points.header;
@@ -325,7 +325,7 @@ void convert_and_sort_morton(const tree_global_state_t &tree_state, attributes_c
 }
 
 template <typename T, typename INDEX_T>
-void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
+void convert_and_sort(const tree_config_t &tree_state, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
 {
   auto &header = points.header;
 
@@ -384,7 +384,7 @@ void convert_and_sort(const tree_global_state_t &tree_state, attributes_configs_
 }
 
 template <typename T>
-void convert_and_sort_resolve_index_t(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
+void convert_and_sort_resolve_index_t(const tree_config_t &tree_state, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
 {
   if (points.header.point_count < std::numeric_limits<uint16_t>::max())
   {
@@ -400,7 +400,7 @@ void convert_and_sort_resolve_index_t(const tree_global_state_t &tree_state, att
   }
 }
 
-void sort_points(const tree_global_state_t &tree_state, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
+void sort_points(const tree_config_t &tree_state, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
 {
   auto point_format = attributes_configs.get_point_format(points.attributes_id);
   switch (point_format.type)

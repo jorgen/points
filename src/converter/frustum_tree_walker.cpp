@@ -84,7 +84,7 @@ frustum_tree_walker_t::frustum_tree_walker_t(const glm::dmat4 view_perspective, 
 {
 }
 
-static void walk_tree_l(const tree_global_state_t &global_state, const tree_t &tree, const glm::dmat4 &view_perspective, attribute_index_map_t &attribute_index_map, int level, int index, const render::aabb_t &aabb,
+static void walk_tree_l(const tree_config_t &global_state, const tree_t &tree, const glm::dmat4 &view_perspective, attribute_index_map_t &attribute_index_map, int level, int index, const render::aabb_t &aabb,
                         tree_walker_nodes_t &nodes)
 {
   auto node = tree.nodes[level][index];
@@ -116,7 +116,7 @@ static void walk_tree_l(const tree_global_state_t &global_state, const tree_t &t
   }
 }
 
-void frustum_tree_walker_t::walk_tree(const tree_global_state_t &global_state, tree_registry_t tree_cache, tree_id_t tree_root)
+void frustum_tree_walker_t::walk_tree(const tree_config_t &global_state, tree_registry_t tree_cache, tree_id_t tree_root)
 {
   (void)tree_root;
   auto root_tree = tree_cache.get(tree_root);

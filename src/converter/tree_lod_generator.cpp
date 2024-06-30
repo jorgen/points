@@ -923,7 +923,7 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
   }
 }
 
-tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tree_global_state_t &tree_global_state, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs,
+tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, const tree_config_t &tree_global_state, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs,
                                            event_pipe_t<void> &lod_done)
   : _loop(loop)
   , _tree_global_state(tree_global_state)

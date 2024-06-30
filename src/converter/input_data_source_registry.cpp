@@ -59,8 +59,8 @@ input_data_reference_t input_data_source_registry_t::register_file(std::unique_p
   item.public_header = {};
   return {input_id, {item.name.get(), item.name_length}};
 }
-  
-void input_data_source_registry_t::register_pre_init_result(const tree_global_state_t &global_state, input_data_id_t id, bool found_min, double(&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes)
+
+void input_data_source_registry_t::register_pre_init_result(const tree_config_t &global_state, input_data_id_t id, bool found_min, double (&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = get_item(id, _registry);
@@ -71,7 +71,6 @@ void input_data_source_registry_t::register_pre_init_result(const tree_global_st
   else
     memset(&item.input_order, 0, sizeof(item.input_order));
   _unsorted_input_sources_dirty = true;
-
 }
 
 void input_data_source_registry_t::handle_input_init(input_data_id_t id, attributes_id_t attributes_id, header_t public_header)
@@ -87,10 +86,10 @@ void input_data_source_registry_t::handle_sub_added(input_data_id_t id)
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = get_item(id, _registry);
   item.sub_count++;
-  _input_data_with_sub_parts++; 
+  _input_data_with_sub_parts++;
 }
 
-void input_data_source_registry_t::handle_sorted_points(input_data_id_t id, const morton::morton192_t& min, const morton::morton192_t& max)
+void input_data_source_registry_t::handle_sorted_points(input_data_id_t id, const morton::morton192_t &min, const morton::morton192_t &max)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = get_item(id, _registry);
@@ -101,7 +100,7 @@ void input_data_source_registry_t::handle_sorted_points(input_data_id_t id, cons
     item.morton_max = max;
 }
 
-void input_data_source_registry_t::handle_points_written(input_data_id_t id, std::vector<storage_location_t> && location)
+void input_data_source_registry_t::handle_points_written(input_data_id_t id, std::vector<storage_location_t> &&location)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = get_item(id, _registry);
@@ -118,7 +117,7 @@ void input_data_source_registry_t::handle_reading_done(input_data_id_t id)
   auto &item = get_item(id, _registry);
   item.read_finished = true;
 }
-  
+
 void input_data_source_registry_t::handle_tree_done_with_input(input_data_id_t id)
 {
   std::unique_lock<std::mutex> lock(_mutex);
@@ -126,7 +125,7 @@ void input_data_source_registry_t::handle_tree_done_with_input(input_data_id_t i
   item.inserted_into_tree++;
   _input_data_inserted_to_tree++;
 }
-  
+
 bool input_data_source_registry_t::all_inserted_into_tree() const
 {
   std::unique_lock<std::mutex> lock(_mutex);

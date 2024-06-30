@@ -15,24 +15,24 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <points/converter/converter.h>
 #include "converter.hpp"
 #include "conversion_types.hpp"
+#include <points/converter/converter.h>
 
 #include "error.hpp"
 #include "processor.hpp"
 
-#include <vector>
-#include <string>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace points
 {
 namespace converter
 {
-struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size)
+struct converter_t *converter_create(const char *url, uint64_t url_size)
 {
-  return new converter_t(cache_filename, cache_filename_size);
+  return new converter_t(url, url_size);
 }
 
 void converter_destroy(converter_t *destroy)
@@ -75,7 +75,6 @@ converter_conversion_status_t converter_status(converter_t *converter)
 {
   return converter->status;
 }
-
 
 } // namespace converter
 } // namespace points

@@ -20,10 +20,10 @@
 #include "conversion_types.hpp"
 #include "error.hpp"
 #include "event_pipe.hpp"
+#include "input_data_source_registry.hpp"
+#include "input_header.hpp"
 #include "threaded_event_loop.hpp"
 #include "worker.hpp"
-#include "input_header.hpp"
-#include "input_data_source_registry.hpp"
 
 namespace points
 {
@@ -46,16 +46,12 @@ struct pre_init_info_file_result_t
 
 struct get_pre_init_info_worker_t : worker_t
 {
-  get_pre_init_info_worker_t(const tree_global_state_t &tree_state
-                            , input_data_id_t input_id
-                            , const input_name_ref_t &file_name
-                            , converter_file_convert_callbacks_t &convert_callbacks
-                            , event_pipe_t<pre_init_info_file_result_t> &pre_init_for_file
-                            , event_pipe_t<file_error_t> &file_errors);
+  get_pre_init_info_worker_t(const tree_config_t &tree_state, input_data_id_t input_id, const input_name_ref_t &file_name, converter_file_convert_callbacks_t &convert_callbacks,
+                             event_pipe_t<pre_init_info_file_result_t> &pre_init_for_file, event_pipe_t<file_error_t> &file_errors);
   void work() override;
   void after_work(completion_t completion) override;
 
-  const tree_global_state_t &tree_state;
+  const tree_config_t &tree_state;
   input_data_id_t input_id;
   input_name_ref_t file_name;
   converter_file_convert_callbacks_t &converter_callbacks;
@@ -68,5 +64,4 @@ struct get_pre_init_info_worker_t : worker_t
 };
 
 } // namespace converter
-}
-
+} // namespace points

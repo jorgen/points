@@ -50,10 +50,12 @@ struct thread_count_env_setter_t
 };
 static thread_count_env_setter_t thread_pool_size_setter;
 
-processor_t::processor_t(converter_t &converter)
-  : _converter(converter)
-  , _cache_file_handler(_converter.tree_state, converter.cache_filename, _attributes_configs, _cache_file_error)
-  , _tree_handler(_converter.tree_state, _cache_file_handler, _attributes_configs, _tree_done_with_input)
+processor_t::processor_t(std::string url, tree_config_t &global_state, converter_file_convert_callbacks_t &convert_callbacks)
+  : _url(std::move(url))
+  , _global_state(global_state)
+  , _convert_callbacks(convert_callbacks)
+  , _cache_file_handler(_global_state, _url, _attributes_configs, _cache_file_error)
+  , _tree_handler(_global_state, _cache_file_handler, _attributes_configs, _tree_done_with_input)
   , _files_added(_event_loop, bind(&processor_t::handle_new_files))
   , _pre_init_info_file_result(_event_loop, bind(&processor_t::handle_pre_init_info_for_files))
   , _pre_init_file_errors(_event_loop, bind(&processor_t::handle_file_errors_headers))
@@ -65,12 +67,11 @@ processor_t::processor_t(converter_t &converter)
   , _lod_generation_done(_event_loop, bind(&processor_t::handle_tree_lod_done))
   , _cache_file_error(_event_loop, bind(&processor_t::handle_cache_file_error))
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
-  , _point_reader(_converter.tree_state, _input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
-  , _attributes_configs(_converter.tree_state)
+  , _point_reader(_global_state, _input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
+  , _attributes_configs(_global_state)
   , _read_sort_budget(uint64_t(1) << 20)
   , _read_sort_active_approximate_size(0)
 {
-  (void)_converter;
   _event_loop.add_about_to_block_listener(this);
   auto open_error = _cache_file_handler.wait_for_open();
   if (open_error.code != 0)
@@ -99,7 +100,7 @@ void processor_t::about_to_block()
       break;
     _read_sort_active_approximate_size += next_input->approximate_point_count * next_input->approximate_point_size_bytes;
     get_points_file_t file;
-    file.callbacks = _converter.convert_callbacks;
+    file.callbacks = _convert_callbacks;
     file.id = next_input->id;
     file.filename = next_input->name;
     _point_reader.add_file(std::move(file));
@@ -116,7 +117,7 @@ void processor_t::handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>
   for (auto &new_file : new_files)
   {
     auto input_ref = _input_data_source_registry.register_file(std::move(new_file.first), new_file.second);
-    _pre_init_info_workers.emplace_back(new get_pre_init_info_worker_t(_converter.tree_state, input_ref.input_id, input_ref.name, _converter.convert_callbacks, _pre_init_info_file_result, _pre_init_file_errors));
+    _pre_init_info_workers.emplace_back(new get_pre_init_info_worker_t(_global_state, input_ref.input_id, input_ref.name, _convert_callbacks, _pre_init_info_file_result, _pre_init_file_errors));
     _pre_init_info_workers.back()->enqueue(_event_loop);
   }
 }
@@ -125,7 +126,7 @@ void processor_t::handle_pre_init_info_for_files(pre_init_info_file_result_t &&p
 {
   assert(std::count_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == pre_init_for_file.id; }) == 1);
   _pre_init_info_workers.erase(std::find_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == pre_init_for_file.id; }));
-  _input_data_source_registry.register_pre_init_result(_converter.tree_state, pre_init_for_file.id, pre_init_for_file.found_min, pre_init_for_file.min, pre_init_for_file.approximate_point_count,
+  _input_data_source_registry.register_pre_init_result(_global_state, pre_init_for_file.id, pre_init_for_file.found_min, pre_init_for_file.min, pre_init_for_file.approximate_point_count,
                                                        pre_init_for_file.approximate_point_size_bytes);
 }
 

@@ -100,7 +100,7 @@ void read_request_t::wait_for_read()
   _block_for_read.wait(lock, [this] { return this->_done; });
 }
 
-storage_handler_t::storage_handler_t(const tree_global_state_t &state, const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe)
+storage_handler_t::storage_handler_t(const tree_config_t &state, const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe)
   : _cache_file_name(url)
   , _file_handle(0)
   , _file_opened(false)

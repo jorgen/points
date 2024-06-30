@@ -40,8 +40,7 @@ tree_t &tree_cache_add_tree(tree_registry_t &tree_cache, tree_t *(&parent))
   return tree_cache.data.back();
 }
 
-tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes,
-                          std::vector<storage_location_t> &&locations)
+tree_id_t tree_initialize(const tree_config_t &global_state, tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations)
 {
   tree_t &tree = tree_cache_create_root_tree(tree_cache);
   morton::morton192_t mask = morton::morton_xor(header.morton_min, header.morton_max);
@@ -150,7 +149,7 @@ static void sub_tree_increase_skips(tree_t &tree, int level, int skip)
   }
 }
 
-static void sub_tree_split_points_to_children(const tree_global_state_t &state, storage_handler_t &cache, input_storage_map_t &storage_map, points_collection_t &&points, int lod, const morton::morton192_t &node_min,
+static void sub_tree_split_points_to_children(const tree_config_t &state, storage_handler_t &cache, input_storage_map_t &storage_map, points_collection_t &&points, int lod, const morton::morton192_t &node_min,
                                               points_collection_t (&children)[8])
 {
   deref_on_destruct_t to_deref(storage_map);
@@ -174,8 +173,8 @@ static void move_storage_locations_to_subtree(const points_collection_t &collect
   }
 }
 
-static void sub_tree_insert_points(const tree_global_state_t &state, tree_registry_t &tree_cache, storage_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, int current_level, int skip,
-                                   uint16_t current_name, points_collection_t &&points) // NOLINT(*-no-recursion)
+static void sub_tree_insert_points(const tree_config_t &state, tree_registry_t &tree_cache, storage_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, int current_level, int skip, uint16_t current_name,
+                                   points_collection_t &&points) // NOLINT(*-no-recursion)
 {
   auto *tree = tree_cache.get(tree_id);
   tree->is_dirty = true;
@@ -394,7 +393,7 @@ static tree_id_t reparent_tree(tree_registry_t &tree_cache, tree_id_t tree_id, c
   return new_parent.id;
 }
 
-tree_id_t tree_add_points(const tree_global_state_t &state, tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
+tree_id_t tree_add_points(const tree_config_t &state, tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
                           std::vector<storage_location_t> &&locations)
 {
   tree_id_t ret = tree_id;

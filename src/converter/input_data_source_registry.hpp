@@ -31,7 +31,7 @@ struct input_data_source_t
   input_name_ref_t name;
   header_t public_header;
 };
-  
+
 struct input_data_source_impl_t
 {
   input_data_id_t input_id;
@@ -74,7 +74,7 @@ public:
   ~input_data_source_registry_t();
 
   input_data_reference_t register_file(std::unique_ptr<char[]> &&name, uint32_t name_length);
-  void register_pre_init_result(const tree_global_state_t &global_state, input_data_id_t id, bool found_min, double (&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes);
+  void register_pre_init_result(const tree_config_t &global_state, input_data_id_t id, bool found_min, double (&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes);
   void handle_input_init(input_data_id_t id, attributes_id_t attributes_id, header_t public_header);
   void handle_sub_added(input_data_id_t id);
   void handle_sorted_points(input_data_id_t id, const morton::morton192_t &min, const morton::morton192_t &max);

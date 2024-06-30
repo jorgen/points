@@ -45,8 +45,7 @@ struct dyn_points_draw_buffer_t
 };
 
 template <typename MORTON_TYPE, typename DECODED_T>
-void convert_points_to_vertex_data_morton(const tree_global_state_t &state, const read_only_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
-                                          std::unique_ptr<uint8_t[]> &vertex_data)
+void convert_points_to_vertex_data_morton(const tree_config_t &state, const read_only_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset, std::unique_ptr<uint8_t[]> &vertex_data)
 {
   assert(read_points.data.size % sizeof(MORTON_TYPE) == 0);
   assert(read_points.header.point_count == read_points.data.size / sizeof(MORTON_TYPE));
@@ -86,7 +85,7 @@ void convert_points_to_vertex_data_morton(const tree_global_state_t &state, cons
   }
 }
 
-inline void convert_points_to_vertex_data(const tree_global_state_t &global_state, const read_only_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer)
+inline void convert_points_to_vertex_data(const tree_config_t &global_state, const read_only_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer)
 {
   auto pformat = read_points.header.point_format;
   switch (pformat.type)

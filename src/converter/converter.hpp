@@ -18,8 +18,8 @@
 #pragma once
 
 #include <points/converter/converter.h>
-#include <points/error.h>
 #include <points/converter/laszip_file_convert_callbacks.h>
+#include <points/error.h>
 
 #include <string>
 
@@ -32,11 +32,11 @@ namespace converter
 
 struct converter_t
 {
-  converter_t(const char *cache_filename, uint64_t cache_filename_size)
-    : cache_filename(cache_filename, cache_filename_size)
-    , processor(*this)
+  converter_t(const char *url, uint64_t url_size)
+    : cache_filename(url, url_size)
     , convert_callbacks(laszip_callbacks())
     , runtime_callbacks{}
+    , processor(cache_filename, tree_state, convert_callbacks)
   {
     tree_state.scale = 0.00025;
     tree_state.offset[0] = 0;
@@ -44,11 +44,11 @@ struct converter_t
     tree_state.offset[2] = 0;
   }
   std::string cache_filename;
-  tree_global_state_t tree_state;
-  processor_t processor;
+  tree_config_t tree_state;
   converter_file_convert_callbacks_t convert_callbacks;
   converter_runtime_callbacks_t runtime_callbacks;
   converter_conversion_status_t status;
+  processor_t processor;
 };
 
 } // namespace converter

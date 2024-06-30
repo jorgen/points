@@ -28,7 +28,7 @@ namespace points
 {
 namespace converter
 {
-tree_handler_t::tree_handler_t(const tree_global_state_t &global_state, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
+tree_handler_t::tree_handler_t(const tree_config_t &global_state, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
   : _initialized(false)
   , _global_state(global_state)
   , _file_cache(file_cache)

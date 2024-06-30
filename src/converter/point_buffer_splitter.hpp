@@ -32,7 +32,7 @@ namespace points
 namespace converter
 {
 template <typename T, size_t C>
-void verify_points_range(const tree_global_state_t &state, const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &min, const morton::morton192_t &max)
+void verify_points_range(const tree_config_t &state, const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &min, const morton::morton192_t &max)
 {
   (void)state;
   morton::morton_t<T, C> morton_current;
@@ -63,7 +63,7 @@ void verify_points_range(const tree_global_state_t &state, const read_only_point
 }
 
 template <typename T, size_t C>
-void verify_points_less_than(const tree_global_state_t &state, const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &max)
+void verify_points_less_than(const tree_config_t &state, const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &max)
 {
   morton::morton_t<T, C> local_max;
   convert_world_morton_to_local(max, local_max);
@@ -110,7 +110,7 @@ static void add_subset_to_child(input_data_id_t input_id, offset_in_subset_t off
 }
 
 template <typename T, size_t C>
-void point_buffer_subdivide_type(const tree_global_state_t &state, const read_only_points_t &points, input_storage_map_t &storage_map, const points_subset_t &subset, int lod, const morton::morton192_t &node_min,
+void point_buffer_subdivide_type(const tree_config_t &state, const read_only_points_t &points, input_storage_map_t &storage_map, const points_subset_t &subset, int lod, const morton::morton192_t &node_min,
                                  points_collection_t (&children)[8])
 {
   assert(points.data.size / sizeof(morton::morton_t<T, C>) == points.header.point_count);
@@ -182,7 +182,7 @@ void point_buffer_subdivide_type(const tree_global_state_t &state, const read_on
   }
 }
 
-inline void point_buffer_subdivide(const tree_global_state_t &state, const read_only_points_t &points, input_storage_map_t &storage_map, const points_subset_t &subset, int lod, const morton::morton192_t &node_min,
+inline void point_buffer_subdivide(const tree_config_t &state, const read_only_points_t &points, input_storage_map_t &storage_map, const points_subset_t &subset, int lod, const morton::morton192_t &node_min,
                                    points_collection_t (&children)[8])
 {
   switch (points.header.point_format.type)

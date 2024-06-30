@@ -129,9 +129,9 @@ struct tree_registry_t
   }
 };
 
-tree_id_t tree_initialize(const tree_global_state_t &global_state, tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id,
+tree_id_t tree_initialize(const tree_config_t &global_state, tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id,
                           std::vector<storage_location_t> &&locations);
-tree_id_t tree_add_points(const tree_global_state_t &global_state, tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
+tree_id_t tree_add_points(const tree_config_t &global_state, tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
                           std::vector<storage_location_t> &&locations);
 
 serialized_tree_t tree_serialize(const tree_t &tree);

@@ -138,12 +138,11 @@ struct points_t
   attribute_buffers_t buffers;
 };
 
-struct tree_global_state_t
+struct tree_config_t
 {
   uint32_t node_limit = 100000;
-  double scale;
-  double inv_scale;
-  double offset[3];
+  double scale = {};
+  double offset[3] = {};
 };
 
 struct offset_t

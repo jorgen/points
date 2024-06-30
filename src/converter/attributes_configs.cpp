@@ -30,7 +30,7 @@ namespace points
 namespace converter
 {
 
-attributes_configs_t::attributes_configs_t(const tree_global_state_t &global_state)
+attributes_configs_t::attributes_configs_t(const tree_config_t &global_state)
   : _global_state(global_state)
 {
   (void)_global_state;

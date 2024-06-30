@@ -18,9 +18,9 @@
 namespace
 {
 
-points::converter::tree_global_state_t create_tree_global_state(uint32_t node_limit, double scale, double offset = -double(uint64_t(1) << 17))
+points::converter::tree_config_t create_tree_global_state(uint32_t node_limit, double scale, double offset = -double(uint64_t(1) << 17))
 {
-  points::converter::tree_global_state_t globalState;
+  points::converter::tree_config_t globalState;
   globalState.node_limit = node_limit;
   globalState.scale = scale;
 
@@ -84,7 +84,7 @@ struct tree_test_infrastructure : points::converter::about_to_block_t
   }
 
   points::converter::threaded_event_loop_t event_loop;
-  points::converter::tree_global_state_t global_state;
+  points::converter::tree_config_t global_state;
   points::converter::attributes_configs_t attributes_config;
   points::converter::event_pipe_t<points::error_t> cache_file_error;
   points::converter::storage_handler_t cache_file_handler;
