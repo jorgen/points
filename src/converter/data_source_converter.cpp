@@ -96,7 +96,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
       //          lod_buffers.resize(subset.size());
       //          read_points_t read_points(converter->processor.cache_file(), subset[0].location);
       //          assert(read_points.point_data.size);
-      //          convert_points_to_vertex_data(converter->tree_state, read_points, buffer);
+      //          convert_points_to_vertex_data(converter->tree_config, read_points, buffer);
       //          callbacks.do_create_buffer(buffer.render_buffers[0], points::render::buffer_type_vertex);
       //          callbacks.do_initialize_buffer(buffer.render_buffers[0], buffer.format[0].first, buffer.format[0].second, int(buffer.data_info[0].size), buffer.data_info[0].data);
       //

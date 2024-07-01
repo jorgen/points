@@ -100,11 +100,10 @@ void read_request_t::wait_for_read()
   _block_for_read.wait(lock, [this] { return this->_done; });
 }
 
-storage_handler_t::storage_handler_t(const tree_config_t &state, const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe)
+storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe)
   : _cache_file_name(url)
   , _file_handle(0)
   , _file_opened(false)
-  , _state(state)
   , _attributes_configs(attributes_configs)
   , _serialized_index_size(128)
   , _storage_error(storage_error_pipe)
@@ -114,7 +113,6 @@ storage_handler_t::storage_handler_t(const tree_config_t &state, const std::stri
   , _write_blob_locations_and_update_header_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
   , _read_request_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
 {
-  (void)_state;
   auto index = _blob_manager.register_blob({_serialized_index_size});
   assert(index.data == 0);
   _open_request.data = this;

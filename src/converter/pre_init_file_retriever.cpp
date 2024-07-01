@@ -22,9 +22,9 @@ namespace points
 namespace converter
 {
 
-get_pre_init_info_worker_t::get_pre_init_info_worker_t(const tree_config_t &tree_state, input_data_id_t input_id, const input_name_ref_t &file_name, converter_file_convert_callbacks_t &convert_callbacks,
+get_pre_init_info_worker_t::get_pre_init_info_worker_t(const tree_config_t &tree_config, input_data_id_t input_id, const input_name_ref_t &file_name, converter_file_convert_callbacks_t &convert_callbacks,
                                                        event_pipe_t<pre_init_info_file_result_t> &pre_init_info_file_result, event_pipe_t<file_error_t> &file_errors)
-  : tree_state(tree_state)
+  : tree_config(tree_config)
   , input_id(input_id)
   , file_name(file_name)
   , converter_callbacks(convert_callbacks)

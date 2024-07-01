@@ -60,14 +60,14 @@ input_data_reference_t input_data_source_registry_t::register_file(std::unique_p
   return {input_id, {item.name.get(), item.name_length}};
 }
 
-void input_data_source_registry_t::register_pre_init_result(const tree_config_t &global_state, input_data_id_t id, bool found_min, double (&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes)
+void input_data_source_registry_t::register_pre_init_result(const tree_config_t &tree_config, input_data_id_t id, bool found_min, double (&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = get_item(id, _registry);
   item.approximate_point_count = approximate_point_count;
   item.approximate_point_size_bytes = approximate_point_size_bytes;
   if (found_min)
-    convert_pos_to_morton(global_state.scale, global_state.offset, min, item.input_order);
+    convert_pos_to_morton(tree_config.scale, tree_config.offset, min, item.input_order);
   else
     memset(&item.input_order, 0, sizeof(item.input_order));
   _unsorted_input_sources_dirty = true;

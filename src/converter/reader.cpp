@@ -131,8 +131,8 @@ void get_data_worker_t::after_work(completion_t completion)
   point_reader_file.input_split = split;
 }
 
-sort_worker_t::sort_worker_t(const tree_config_t &tree_state, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, header_t public_header, points_t &&points)
-  : tree_state(tree_state)
+sort_worker_t::sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, header_t public_header, points_t &&points)
+  : _tree_config(tree_config)
   , reader_file(reader_file)
   , attributes_configs(attributes_configs)
   , public_header(public_header)
@@ -142,7 +142,7 @@ sort_worker_t::sort_worker_t(const tree_config_t &tree_state, point_reader_file_
 
 void sort_worker_t::work()
 {
-  sort_points(tree_state, attributes_configs, public_header, points, error);
+  sort_points(_tree_config, attributes_configs, public_header, points, error);
 }
 
 void sort_worker_t::after_work(completion_t completion)
@@ -152,10 +152,10 @@ void sort_worker_t::after_work(completion_t completion)
   reader_file.sorted_points_pipe.post_event(std::make_pair(std::move(points), std::move(error)));
 }
 
-point_reader_t::point_reader_t(const tree_config_t &tree_state, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs,
+point_reader_t::point_reader_t(const tree_config_t &tree_config, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs,
                                event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_t<input_data_id_t> &sub_added,
                                event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors)
-  : _tree_state(tree_state)
+  : _tree_config(tree_config)
   , _event_loop(event_loop)
   , _attributes_configs(attributes_configs)
   , _input_init_pipe(input_init_pipe)
@@ -197,14 +197,14 @@ void point_reader_t::about_to_block()
 
 void point_reader_t::handle_new_files(get_points_file_t &&new_file)
 {
-  _point_reader_files.emplace_back(new point_reader_file_t(_tree_state, _event_loop, _attributes_configs, new_file, _input_init_pipe, _sub_added, _unsorted_points, _sorted_points_pipe));
+  _point_reader_files.emplace_back(new point_reader_file_t(_tree_config, _event_loop, _attributes_configs, new_file, _input_init_pipe, _sub_added, _unsorted_points, _sorted_points_pipe));
 }
 
 void point_reader_t::handle_unsorted_points(unsorted_points_event_t &&unsorted_points)
 {
-  auto &tree_state = unsorted_points.reader_file.tree_state;
+  auto &tree_config = unsorted_points.reader_file.tree_config;
   auto &reader_file = unsorted_points.reader_file;
-  unsorted_points.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_state, reader_file, _attributes_configs, unsorted_points.public_header, std::move(unsorted_points.points)));
+  unsorted_points.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_config, reader_file, _attributes_configs, unsorted_points.public_header, std::move(unsorted_points.points)));
   unsorted_points.reader_file.sort_workers.back()->enqueue(unsorted_points.reader_file.event_loop);
 }
 

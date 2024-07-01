@@ -99,7 +99,7 @@ struct read_request_t : storage_handler_request_t
 class storage_handler_t
 {
 public:
-  storage_handler_t(const tree_config_t &state, const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe);
+  storage_handler_t(const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe);
 
   void handle_open_cache_file(uv_fs_t *request);
   error_t wait_for_open();
@@ -136,7 +136,6 @@ private:
   std::condition_variable _block_for_open;
   error_t _open_error;
 
-  const tree_config_t &_state;
   attributes_configs_t &_attributes_configs;
   uint32_t _serialized_index_size;
   free_blob_manager_t _blob_manager;

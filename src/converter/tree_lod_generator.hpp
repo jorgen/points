@@ -101,16 +101,10 @@ struct lod_worker_batch_t
 class tree_lod_generator_t
 {
 public:
-  tree_lod_generator_t(threaded_event_loop_t &loop, const tree_config_t &tree_global_state, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs,
-                       event_pipe_t<void> &lod_done);
+  tree_lod_generator_t(threaded_event_loop_t &loop, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<void> &lod_done);
   void generate_lods(tree_id_t &tree_id, const morton::morton192_t &max);
 
   void iterate_workers();
-
-  const tree_config_t &global_state() const
-  {
-    return _tree_global_state;
-  }
 
   void add_worker_done(lod_worker_batch_t &batch)
   {
@@ -122,7 +116,6 @@ public:
 
 private:
   threaded_event_loop_t &_loop;
-  const tree_config_t &_tree_global_state;
   tree_registry_t &_tree_cache;
   storage_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;

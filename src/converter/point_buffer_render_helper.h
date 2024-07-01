@@ -45,7 +45,8 @@ struct dyn_points_draw_buffer_t
 };
 
 template <typename MORTON_TYPE, typename DECODED_T>
-void convert_points_to_vertex_data_morton(const tree_config_t &state, const read_only_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset, std::unique_ptr<uint8_t[]> &vertex_data)
+void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const read_only_points_t &read_points, buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
+                                          std::unique_ptr<uint8_t[]> &vertex_data)
 {
   assert(read_points.data.size % sizeof(MORTON_TYPE) == 0);
   assert(read_points.header.point_count == read_points.data.size / sizeof(MORTON_TYPE));
@@ -64,9 +65,9 @@ void convert_points_to_vertex_data_morton(const tree_config_t &state, const read
   uint64_t min_int[3];
   morton::decode(morton_min, min_int);
   double min[3];
-  min[0] = min_int[0] * state.scale;
-  min[1] = min_int[1] * state.scale;
-  min[2] = min_int[2] * state.scale;
+  min[0] = min_int[0] * tree_config.scale;
+  min[1] = min_int[1] * tree_config.scale;
+  min[2] = min_int[2] * tree_config.scale;
 
   output_offset[0] = min[0];
   output_offset[1] = min[1];
@@ -80,12 +81,12 @@ void convert_points_to_vertex_data_morton(const tree_config_t &state, const read
     for (int n = 0; n < 3; n++)
     {
       tmp_pos[n] -= min_int[n];
-      decoded_array[i][n] = float(tmp_pos[n] * state.scale);
+      decoded_array[i][n] = float(tmp_pos[n] * tree_config.scale);
     }
   }
 }
 
-inline void convert_points_to_vertex_data(const tree_config_t &global_state, const read_only_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer)
+inline void convert_points_to_vertex_data(const tree_config_t &tree_config, const read_only_points_t &read_points, dyn_points_draw_buffer_t &draw_buffer)
 {
   auto pformat = read_points.header.point_format;
   switch (pformat.type)
@@ -107,19 +108,19 @@ inline void convert_points_to_vertex_data(const tree_config_t &global_state, con
     break;
   }
   case type_m32:
-    convert_points_to_vertex_data_morton<morton::morton32_t, std::array<uint16_t, 3>>(global_state, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    convert_points_to_vertex_data_morton<morton::morton32_t, std::array<uint16_t, 3>>(tree_config, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
     draw_buffer.format[0] = point_format_t(type_r32, components_3);
     break;
   case type_m64:
-    convert_points_to_vertex_data_morton<morton::morton64_t, std::array<uint32_t, 3>>(global_state, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    convert_points_to_vertex_data_morton<morton::morton64_t, std::array<uint32_t, 3>>(tree_config, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
     draw_buffer.format[0] = point_format_t(type_r32, components_3);
     break;
   case type_m128:
-    convert_points_to_vertex_data_morton<morton::morton128_t, std::array<uint64_t, 3>>(global_state, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    convert_points_to_vertex_data_morton<morton::morton128_t, std::array<uint64_t, 3>>(tree_config, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
     draw_buffer.format[0] = point_format_t(type_r32, components_3);
     break;
   case type_m192:
-    convert_points_to_vertex_data_morton<morton::morton192_t, std::array<uint64_t, 3>>(global_state, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    convert_points_to_vertex_data_morton<morton::morton192_t, std::array<uint64_t, 3>>(tree_config, read_points, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
     draw_buffer.format[0] = point_format_t(type_r32, components_3);
     break;
   }

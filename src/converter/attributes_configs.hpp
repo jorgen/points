@@ -68,8 +68,6 @@ struct serialized_attributes_t
 class attributes_configs_t
 {
 public:
-  explicit attributes_configs_t(const tree_config_t &global_state);
-
   attributes_id_t get_attribute_config_index(attributes_t &&attr);
   attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end);
   attribute_lod_mapping_t get_lod_attribute_mapping(const type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end);
@@ -84,7 +82,6 @@ public:
   serialized_attributes_t serialize() const;
 
 private:
-  const tree_config_t &_global_state;
   mutable std::mutex _mutex;
   std::vector<attribute_config_t> _attributes_configs;
 };

@@ -84,7 +84,7 @@ frustum_tree_walker_t::frustum_tree_walker_t(const glm::dmat4 view_perspective, 
 {
 }
 
-static void walk_tree_l(const tree_config_t &global_state, const tree_t &tree, const glm::dmat4 &view_perspective, attribute_index_map_t &attribute_index_map, int level, int index, const render::aabb_t &aabb,
+static void walk_tree_l(const tree_config_t &tree_config, const tree_t &tree, const glm::dmat4 &view_perspective, attribute_index_map_t &attribute_index_map, int level, int index, const render::aabb_t &aabb,
                         tree_walker_nodes_t &nodes)
 {
   auto node = tree.nodes[level][index];
@@ -110,25 +110,25 @@ static void walk_tree_l(const tree_config_t &global_state, const tree_t &tree, c
   {
     if (node & 1 << i)
     {
-      walk_tree_l(global_state, tree, view_perspective, attribute_index_map, level + 1, tree.skips[level][index] + children, aabb, nodes);
+      walk_tree_l(tree_config, tree, view_perspective, attribute_index_map, level + 1, tree.skips[level][index] + children, aabb, nodes);
       children++;
     }
   }
 }
 
-void frustum_tree_walker_t::walk_tree(const tree_config_t &global_state, tree_registry_t tree_cache, tree_id_t tree_root)
+void frustum_tree_walker_t::walk_tree(const tree_config_t &tree_config, tree_registry_t tree_cache, tree_id_t tree_root)
 {
   (void)tree_root;
   auto root_tree = tree_cache.get(tree_root);
-  convert_morton_to_pos(global_state.scale, global_state.offset, root_tree->morton_min, m_tree_aabb.min);
-  convert_morton_to_pos(global_state.scale, global_state.offset, root_tree->morton_max, m_tree_aabb.max);
+  convert_morton_to_pos(tree_config.scale, tree_config.offset, root_tree->morton_min, m_tree_aabb.min);
+  convert_morton_to_pos(tree_config.scale, tree_config.offset, root_tree->morton_max, m_tree_aabb.max);
 
   if (root_tree->nodes[0].size() && frustum_contains_aabb2(m_view_perspective, m_tree_aabb))
   {
     m_new_nodes.id.data = root_tree->id.data;
     m_new_nodes.min_morton = root_tree->morton_min;
     m_new_nodes.level = root_tree->magnitude;
-    walk_tree_l(global_state, *root_tree, m_view_perspective, m_attribute_index_map, 0, 0, m_tree_aabb, m_new_nodes);
+    walk_tree_l(tree_config, *root_tree, m_view_perspective, m_attribute_index_map, 0, 0, m_tree_aabb, m_new_nodes);
   }
 
   std::unique_lock<std::mutex> lock(m_mutex);

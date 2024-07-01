@@ -28,12 +28,12 @@ namespace points
 {
 namespace converter
 {
-tree_handler_t::tree_handler_t(const tree_config_t &global_state, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
+tree_handler_t::tree_handler_t(const tree_config_t &tree_config, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
   : _initialized(false)
-  , _global_state(global_state)
+  , _tree_config(tree_config)
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
-  , _tree_lod_generator(_event_loop, global_state, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
+  , _tree_lod_generator(_event_loop, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
   , _add_points(_event_loop, bind(&tree_handler_t::handle_add_points))
   , _walk_tree(_event_loop, bind(&tree_handler_t::handle_walk_tree))
   , _serialize_trees(_event_loop, bind(&tree_handler_t::handle_serialize_trees))
@@ -63,11 +63,11 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
   if (!_initialized)
   {
     _initialized = true;
-    _tree_root = tree_initialize(_global_state, _tree_registry, _file_cache, header, attributes_id, std::move(storage));
+    _tree_root = tree_initialize(_tree_config, _tree_registry, _file_cache, header, attributes_id, std::move(storage));
   }
   else
   {
-    _tree_root = tree_add_points(_global_state, _tree_registry, _file_cache, _tree_root, header, attributes_id, std::move(storage));
+    _tree_root = tree_add_points(_tree_config, _tree_registry, _file_cache, _tree_root, header, attributes_id, std::move(storage));
   }
   auto to_send = header.input_id;
   _done_with_input.post_event(std::move(to_send));
@@ -75,7 +75,7 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
 
 void tree_handler_t::handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event)
 {
-  event->walk_tree(_global_state, _tree_registry, _tree_root);
+  event->walk_tree(_tree_config, _tree_registry, _tree_root);
 }
 
 void tree_handler_t::generate_lod(const morton::morton192_t &max)

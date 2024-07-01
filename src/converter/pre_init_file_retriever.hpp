@@ -46,12 +46,12 @@ struct pre_init_info_file_result_t
 
 struct get_pre_init_info_worker_t : worker_t
 {
-  get_pre_init_info_worker_t(const tree_config_t &tree_state, input_data_id_t input_id, const input_name_ref_t &file_name, converter_file_convert_callbacks_t &convert_callbacks,
+  get_pre_init_info_worker_t(const tree_config_t &tree_config, input_data_id_t input_id, const input_name_ref_t &file_name, converter_file_convert_callbacks_t &convert_callbacks,
                              event_pipe_t<pre_init_info_file_result_t> &pre_init_for_file, event_pipe_t<file_error_t> &file_errors);
   void work() override;
   void after_work(completion_t completion) override;
 
-  const tree_config_t &tree_state;
+  const tree_config_t &tree_config;
   input_data_id_t input_id;
   input_name_ref_t file_name;
   converter_file_convert_callbacks_t &converter_callbacks;

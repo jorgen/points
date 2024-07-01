@@ -36,15 +36,15 @@ struct converter_t
     : cache_filename(url, url_size)
     , convert_callbacks(laszip_callbacks())
     , runtime_callbacks{}
-    , processor(cache_filename, tree_state, convert_callbacks)
+    , processor(cache_filename, tree_config, convert_callbacks)
   {
-    tree_state.scale = 0.00025;
-    tree_state.offset[0] = 0;
-    tree_state.offset[1] = 0;
-    tree_state.offset[2] = 0;
+    tree_config.scale = 0.00025;
+    tree_config.offset[0] = 0;
+    tree_config.offset[1] = 0;
+    tree_config.offset[2] = 0;
   }
   std::string cache_filename;
-  tree_config_t tree_state;
+  tree_config_t tree_config;
   converter_file_convert_callbacks_t convert_callbacks;
   converter_runtime_callbacks_t runtime_callbacks;
   converter_conversion_status_t status;

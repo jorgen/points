@@ -30,12 +30,6 @@ namespace points
 namespace converter
 {
 
-attributes_configs_t::attributes_configs_t(const tree_config_t &global_state)
-  : _global_state(global_state)
-{
-  (void)_global_state;
-}
-
 static bool compare_attribute(const attribute_t &a, const attribute_t &b)
 {
   if (a.name_size != b.name_size)
