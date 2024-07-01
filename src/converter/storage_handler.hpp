@@ -183,7 +183,7 @@ struct read_only_points_t
 {
   read_only_points_t(storage_handler_t &storage_handler, storage_location_t location)
     : location(location)
-    , read_request(storage_handler.read(location, [this](const storage_handler_request_t &) {}))
+    , read_request(storage_handler.read(location, [](const storage_handler_request_t &) {}))
   {
     read_request->wait_for_read();
     deserialize_points(read_request->buffer_info, header, data, error);
@@ -204,7 +204,7 @@ struct read_attribute_t
   read_attribute_t(storage_handler_t &storage_handler, storage_location_t location)
     : storage_handler(storage_handler)
     , location(location)
-    , read_request(storage_handler.read(location, [this](const storage_handler_request_t &) {}))
+    , read_request(storage_handler.read(location, [](const storage_handler_request_t &) {}))
   {
     read_request->wait_for_read();
     data = read_request->buffer_info;

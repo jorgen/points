@@ -82,9 +82,9 @@ void storage_handler_request_t::do_write(const std::shared_ptr<uint8_t[]> &data,
   uv_fs_write(storage_handler._event_loop.loop(), &uv_request, storage_handler._file_handle, &uv_buffer, 1, int64_t(offset), request_done_callback);
 }
 
-read_request_t::read_request_t(storage_handler_t &storage_handler, std::function<void(const storage_handler_request_t &)> done_callback)
-  : storage_handler_request_t(storage_handler,
-                              [this, done_callback = std::move(done_callback)](const storage_handler_request_t &request) {
+read_request_t::read_request_t(storage_handler_t &storage, std::function<void(const storage_handler_request_t &)> done)
+  : storage_handler_request_t(storage,
+                              [this, done = std::move(done)](const storage_handler_request_t &request) {
                                 std::unique_lock<std::mutex> lock(this->_mutex);
                                 this->_done = true;
                                 this->_block_for_read.notify_all();
