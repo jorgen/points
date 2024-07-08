@@ -79,7 +79,7 @@ class frustum_tree_walker_t
 {
 public:
   frustum_tree_walker_t(glm::dmat4 view_perspective, const attributes_configs_t &attributes_configs, std::vector<std::string> attribute_names);
-  void walk_tree(const tree_config_t &tree_config, tree_registry_t tree_cache, tree_id_t tree_root);
+  void walk_tree(const tree_config_t &config, tree_registry_t tree_cache, tree_id_t tree_root);
 
   bool done();
 

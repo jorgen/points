@@ -50,12 +50,11 @@ struct thread_count_env_setter_t
 };
 static thread_count_env_setter_t thread_pool_size_setter;
 
-processor_t::processor_t(std::string url, tree_config_t &tree_config, converter_file_convert_callbacks_t &convert_callbacks)
+processor_t::processor_t(std::string url, converter_file_convert_callbacks_t &convert_callbacks)
   : _url(std::move(url))
-  , _tree_config(tree_config)
   , _convert_callbacks(convert_callbacks)
   , _cache_file_handler(_url, _attributes_configs, _cache_file_error)
-  , _tree_handler(_tree_config, _cache_file_handler, _attributes_configs, _tree_done_with_input)
+  , _tree_handler(_cache_file_handler, _attributes_configs, _tree_done_with_input)
   , _files_added(_event_loop, bind(&processor_t::handle_new_files))
   , _pre_init_info_file_result(_event_loop, bind(&processor_t::handle_pre_init_info_for_files))
   , _pre_init_file_errors(_event_loop, bind(&processor_t::handle_file_errors_headers))
@@ -67,7 +66,7 @@ processor_t::processor_t(std::string url, tree_config_t &tree_config, converter_
   , _lod_generation_done(_event_loop, bind(&processor_t::handle_tree_lod_done))
   , _cache_file_error(_event_loop, bind(&processor_t::handle_cache_file_error))
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
-  , _point_reader(_tree_config, _input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
+  , _point_reader(_input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _read_sort_budget(uint64_t(1) << 20)
   , _read_sort_active_approximate_size(0)
 {
@@ -102,7 +101,7 @@ void processor_t::about_to_block()
     file.callbacks = _convert_callbacks;
     file.id = next_input->id;
     file.filename = next_input->name;
-    _point_reader.add_file(std::move(file));
+    _point_reader.add_file(_tree_handler.tree_config(), std::move(file));
   }
 }
 
@@ -113,10 +112,11 @@ const attributes_t &processor_t::get_attributes(attributes_id_t id)
 
 void processor_t::handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files)
 {
+  auto tree_config = _tree_handler.tree_config();
   for (auto &new_file : new_files)
   {
     auto input_ref = _input_data_source_registry.register_file(std::move(new_file.first), new_file.second);
-    _pre_init_info_workers.emplace_back(new get_pre_init_info_worker_t(_tree_config, input_ref.input_id, input_ref.name, _convert_callbacks, _pre_init_info_file_result, _pre_init_file_errors));
+    _pre_init_info_workers.emplace_back(new get_pre_init_info_worker_t(tree_config, input_ref.input_id, input_ref.name, _convert_callbacks, _pre_init_info_file_result, _pre_init_file_errors));
     _pre_init_info_workers.back()->enqueue(_event_loop);
   }
 }
@@ -125,7 +125,7 @@ void processor_t::handle_pre_init_info_for_files(pre_init_info_file_result_t &&p
 {
   assert(std::count_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == pre_init_for_file.id; }) == 1);
   _pre_init_info_workers.erase(std::find_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == pre_init_for_file.id; }));
-  _input_data_source_registry.register_pre_init_result(_tree_config, pre_init_for_file.id, pre_init_for_file.found_min, pre_init_for_file.min, pre_init_for_file.approximate_point_count,
+  _input_data_source_registry.register_pre_init_result(_tree_handler.tree_config(), pre_init_for_file.id, pre_init_for_file.found_min, pre_init_for_file.min, pre_init_for_file.approximate_point_count,
                                                        pre_init_for_file.approximate_point_size_bytes);
 }
 
@@ -189,6 +189,14 @@ void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
   auto min = _input_data_source_registry.get_done_morton();
   if (min)
     _tree_handler.generate_lod(*min);
+}
+void processor_t::set_pre_init_tree_config(const tree_config_t &tree_config)
+{
+  _tree_handler.set_tree_initialization_config(tree_config);
+}
+void processor_t::set_pre_init_tree_node_limit(uint32_t node_limit)
+{
+  _tree_handler.set_tree_initialization_node_limit(node_limit);
 }
 
 } // namespace converter

@@ -28,9 +28,13 @@ namespace points
 {
 namespace converter
 {
-tree_handler_t::tree_handler_t(const tree_config_t &tree_config, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
+tree_handler_t::tree_handler_t(storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
   : _initialized(false)
-  , _tree_config(tree_config)
+  , _configuration_initialized(false)
+  , _pre_init_node_limit(1000000)
+  , _node_limit(0)
+  , _pre_init_tree_config({0.001, {100000, 100000, 100000}})
+  , _tree_config({})
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
   , _tree_lod_generator(_event_loop, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
@@ -41,6 +45,18 @@ tree_handler_t::tree_handler_t(const tree_config_t &tree_config, storage_handler
   , _done_with_input(done_with_input)
 {
   _event_loop.add_about_to_block_listener(this);
+}
+void tree_handler_t::set_tree_initialization_config(const tree_config_t &config)
+{
+  std::unique_lock<std::mutex> lock(_configuration_mutex);
+  assert(!_configuration_initialized);
+  _pre_init_tree_config = config;
+}
+void tree_handler_t::set_tree_initialization_node_limit(uint32_t limit)
+{
+  std::unique_lock<std::mutex> lock(_configuration_mutex);
+  assert(!_configuration_initialized);
+  _pre_init_node_limit = limit;
 }
 
 void tree_handler_t::about_to_block()
@@ -63,11 +79,12 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
   if (!_initialized)
   {
     _initialized = true;
-    _tree_root = tree_initialize(_tree_config, _tree_registry, _file_cache, header, attributes_id, std::move(storage));
+    seal_configuration();
+    _tree_root = tree_initialize(_node_limit, _tree_registry, _file_cache, header, attributes_id, std::move(storage));
   }
   else
   {
-    _tree_root = tree_add_points(_tree_config, _tree_registry, _file_cache, _tree_root, header, attributes_id, std::move(storage));
+    _tree_root = tree_add_points(_node_limit, _tree_registry, _file_cache, _tree_root, header, attributes_id, std::move(storage));
   }
   auto to_send = header.input_id;
   _done_with_input.post_event(std::move(to_send));
@@ -85,6 +102,12 @@ void tree_handler_t::generate_lod(const morton::morton192_t &max)
 void tree_handler_t::serialize_trees()
 {
   _serialize_trees.post_event();
+}
+tree_config_t tree_handler_t::tree_config()
+{
+  seal_configuration();
+  std::unique_lock<std::mutex> lock(_configuration_mutex);
+  return _tree_config;
 }
 void tree_handler_t::handle_serialize_trees()
 {

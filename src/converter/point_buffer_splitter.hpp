@@ -32,9 +32,8 @@ namespace points
 namespace converter
 {
 template <typename T, size_t C>
-void verify_points_range(const tree_config_t &tree_config, const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &min, const morton::morton192_t &max)
+void verify_points_range(const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &min, const morton::morton192_t &max)
 {
-  (void)tree_config;
   morton::morton_t<T, C> morton_current;
   morton::morton_t<T, C> morton_previous = {};
   int count_less = 0;
@@ -110,8 +109,7 @@ static void add_subset_to_child(input_data_id_t input_id, offset_in_subset_t off
 }
 
 template <typename T, size_t C>
-void point_buffer_subdivide_type(const tree_config_t &tree_config, const read_only_points_t &points, input_storage_map_t &storage_map, const points_subset_t &subset, int lod, const morton::morton192_t &node_min,
-                                 points_collection_t (&children)[8])
+void point_buffer_subdivide_type(const read_only_points_t &points, input_storage_map_t &storage_map, const points_subset_t &subset, int lod, const morton::morton192_t &node_min, points_collection_t (&children)[8])
 {
   assert(points.data.size / sizeof(morton::morton_t<T, C>) == points.header.point_count);
   const morton::morton_t<T, C> *morton_begin = static_cast<const morton::morton_t<T, C> *>(points.data.data) + subset.offset.data;
@@ -174,7 +172,7 @@ void point_buffer_subdivide_type(const tree_config_t &tree_config, const read_on
       add_subset_to_child(subset.input_id, offset_in_subset_t(uint32_t(new_offset)), point_count_t(uint32_t(new_size)), global_current_start, global_current_end, children[i]);
 
 #ifndef NDEBUG
-      verify_points_range<T, C>(tree_config, points, int(new_offset), int(new_offset + new_size), node_min, node_max);
+      verify_points_range<T, C>(points, int(new_offset), int(new_offset + new_size), node_min, node_max);
 #endif
       morton_current_start = morton_current_end;
     }
@@ -182,22 +180,21 @@ void point_buffer_subdivide_type(const tree_config_t &tree_config, const read_on
   }
 }
 
-inline void point_buffer_subdivide(const tree_config_t &tree_config, const read_only_points_t &points, input_storage_map_t &storage_map, const points_subset_t &subset, int lod, const morton::morton192_t &node_min,
-                                   points_collection_t (&children)[8])
+inline void point_buffer_subdivide(const read_only_points_t &points, input_storage_map_t &storage_map, const points_subset_t &subset, int lod, const morton::morton192_t &node_min, points_collection_t (&children)[8])
 {
   switch (points.header.point_format.type)
   {
   case type_m32:
-    point_buffer_subdivide_type<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(tree_config, points, storage_map, subset, lod, node_min, children);
+    point_buffer_subdivide_type<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
   case type_m64:
-    point_buffer_subdivide_type<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(tree_config, points, storage_map, subset, lod, node_min, children);
+    point_buffer_subdivide_type<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
   case type_m128:
-    point_buffer_subdivide_type<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(tree_config, points, storage_map, subset, lod, node_min, children);
+    point_buffer_subdivide_type<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
   case type_m192:
-    point_buffer_subdivide_type<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(tree_config, points, storage_map, subset, lod, node_min, children);
+    point_buffer_subdivide_type<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
   default:
     assert(false);

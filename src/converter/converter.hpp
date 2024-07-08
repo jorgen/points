@@ -36,12 +36,10 @@ struct converter_t
     : cache_filename(url, url_size)
     , convert_callbacks(laszip_callbacks())
     , runtime_callbacks{}
-    , processor(cache_filename, tree_config, convert_callbacks)
+    , processor(cache_filename, convert_callbacks)
   {
-    tree_config.scale = 0.00025;
-    tree_config.offset[0] = 0;
-    tree_config.offset[1] = 0;
-    tree_config.offset[2] = 0;
+    processor.set_pre_init_tree_node_limit(100000);
+    processor.set_pre_init_tree_config({0.00025, {0, 0, 0}});
   }
   std::string cache_filename;
   tree_config_t tree_config;

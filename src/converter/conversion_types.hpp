@@ -140,7 +140,6 @@ struct points_t
 
 struct tree_config_t
 {
-  uint32_t node_limit = 100000;
   double scale = {};
   double offset[3] = {};
 };

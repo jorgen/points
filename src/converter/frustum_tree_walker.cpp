@@ -84,8 +84,7 @@ frustum_tree_walker_t::frustum_tree_walker_t(const glm::dmat4 view_perspective, 
 {
 }
 
-static void walk_tree_l(const tree_config_t &tree_config, const tree_t &tree, const glm::dmat4 &view_perspective, attribute_index_map_t &attribute_index_map, int level, int index, const render::aabb_t &aabb,
-                        tree_walker_nodes_t &nodes)
+static void walk_tree_l(const tree_t &tree, const glm::dmat4 &view_perspective, attribute_index_map_t &attribute_index_map, int level, int index, const render::aabb_t &aabb, tree_walker_nodes_t &nodes)
 {
   auto node = tree.nodes[level][index];
   nodes.morton_nodes[level].emplace_back(tree.node_ids[level][index]);
@@ -110,7 +109,7 @@ static void walk_tree_l(const tree_config_t &tree_config, const tree_t &tree, co
   {
     if (node & 1 << i)
     {
-      walk_tree_l(tree_config, tree, view_perspective, attribute_index_map, level + 1, tree.skips[level][index] + children, aabb, nodes);
+      walk_tree_l(tree, view_perspective, attribute_index_map, level + 1, tree.skips[level][index] + children, aabb, nodes);
       children++;
     }
   }
@@ -128,7 +127,7 @@ void frustum_tree_walker_t::walk_tree(const tree_config_t &tree_config, tree_reg
     m_new_nodes.id.data = root_tree->id.data;
     m_new_nodes.min_morton = root_tree->morton_min;
     m_new_nodes.level = root_tree->magnitude;
-    walk_tree_l(tree_config, *root_tree, m_view_perspective, m_attribute_index_map, 0, 0, m_tree_aabb, m_new_nodes);
+    walk_tree_l(*root_tree, m_view_perspective, m_attribute_index_map, 0, 0, m_tree_aabb, m_new_nodes);
   }
 
   std::unique_lock<std::mutex> lock(m_mutex);

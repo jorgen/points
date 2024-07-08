@@ -152,11 +152,10 @@ void sort_worker_t::after_work(completion_t completion)
   reader_file.sorted_points_pipe.post_event(std::make_pair(std::move(points), std::move(error)));
 }
 
-point_reader_t::point_reader_t(const tree_config_t &tree_config, threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs,
-                               event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_t<input_data_id_t> &sub_added,
-                               event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file, event_pipe_t<file_error_t> &file_errors)
-  : _tree_config(tree_config)
-  , _event_loop(event_loop)
+point_reader_t::point_reader_t(threaded_event_loop_t &event_loop, attributes_configs_t &attributes_configs, event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,
+                               event_pipe_t<input_data_id_t> &sub_added, event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file,
+                               event_pipe_t<file_error_t> &file_errors)
+  : _event_loop(event_loop)
   , _attributes_configs(attributes_configs)
   , _input_init_pipe(input_init_pipe)
   , _sub_added(sub_added)
@@ -169,9 +168,9 @@ point_reader_t::point_reader_t(const tree_config_t &tree_config, threaded_event_
   event_loop.add_about_to_block_listener(this);
 }
 
-void point_reader_t::add_file(get_points_file_t &&new_file)
+void point_reader_t::add_file(tree_config_t tree_config, get_points_file_t &&new_file)
 {
-  _new_files_pipe.post_event(std::move(new_file));
+  _new_files_pipe.post_event(std::move(tree_config), std::move(new_file));
 }
 
 void point_reader_t::about_to_block()
@@ -195,9 +194,9 @@ void point_reader_t::about_to_block()
   _point_reader_files.erase(finished, _point_reader_files.end());
 }
 
-void point_reader_t::handle_new_files(get_points_file_t &&new_file)
+void point_reader_t::handle_new_files(tree_config_t &&tree_config, get_points_file_t &&new_file)
 {
-  _point_reader_files.emplace_back(new point_reader_file_t(_tree_config, _event_loop, _attributes_configs, new_file, _input_init_pipe, _sub_added, _unsorted_points, _sorted_points_pipe));
+  _point_reader_files.emplace_back(new point_reader_file_t(tree_config, _event_loop, _attributes_configs, new_file, _input_init_pipe, _sub_added, _unsorted_points, _sorted_points_pipe));
 }
 
 void point_reader_t::handle_unsorted_points(unsorted_points_event_t &&unsorted_points)

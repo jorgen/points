@@ -51,7 +51,7 @@ struct get_pre_init_info_worker_t : worker_t
   void work() override;
   void after_work(completion_t completion) override;
 
-  const tree_config_t &tree_config;
+  tree_config_t tree_config;
   input_data_id_t input_id;
   input_name_ref_t file_name;
   converter_file_convert_callbacks_t &converter_callbacks;

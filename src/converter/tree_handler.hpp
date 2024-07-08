@@ -21,15 +21,17 @@
 #include "tree.hpp"
 #include "tree_lod_generator.hpp"
 
-namespace points
+namespace points::converter
 {
-namespace converter
-{
+
 class frustum_tree_walker_t;
 class tree_handler_t : public about_to_block_t
 {
 public:
-  tree_handler_t(const tree_config_t &tree_config, storage_handler_t &file_cache, attributes_configs_t &attributrs_configs, event_pipe_t<input_data_id_t> &done_input);
+  tree_handler_t(storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_input);
+
+  void set_tree_initialization_config(const tree_config_t &config);
+  void set_tree_initialization_node_limit(uint32_t limit);
 
   void about_to_block() override;
 
@@ -39,15 +41,33 @@ public:
 
   void serialize_trees();
 
+  tree_config_t tree_config();
+
 private:
   void handle_add_points(std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>> &&event);
   void handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&events);
   void handle_serialize_trees();
   void handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, std::vector<storage_location_t> &&storage, error_t &&error);
-  threaded_event_loop_t _event_loop;
-  bool _initialized;
 
-  const tree_config_t &_tree_config;
+  void seal_configuration()
+  {
+    std::unique_lock<std::mutex> lock(_configuration_mutex);
+    if (_configuration_initialized)
+      return;
+    _configuration_initialized = true;
+    _node_limit = _pre_init_node_limit;
+    _tree_config = _pre_init_tree_config;
+  }
+
+  threaded_event_loop_t _event_loop;
+  std::mutex _configuration_mutex;
+  bool _initialized;
+  bool _configuration_initialized;
+  uint32_t _pre_init_node_limit;
+  uint32_t _node_limit;
+  tree_config_t _pre_init_tree_config;
+  tree_config_t _tree_config;
+
   storage_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;
 
@@ -63,5 +83,4 @@ private:
   event_pipe_t<input_data_id_t> &_done_with_input;
 };
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
