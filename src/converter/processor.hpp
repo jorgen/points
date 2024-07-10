@@ -56,9 +56,9 @@ public:
   void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
   void about_to_block() override;
 
-  storage_handler_t &cache_file()
+  storage_handler_t &storage_handler()
   {
-    return _cache_file_handler;
+    return _storage_handler;
   }
   const attributes_t &get_attributes(attributes_id_t id);
 
@@ -69,7 +69,7 @@ private:
   threaded_event_loop_t _event_loop;
 
   input_data_source_registry_t _input_data_source_registry;
-  storage_handler_t _cache_file_handler;
+  storage_handler_t _storage_handler;
   tree_handler_t _tree_handler;
 
   event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
@@ -85,7 +85,7 @@ private:
   event_pipe_t<input_data_id_t> _point_reader_done_with_file;
   event_pipe_t<void> _lod_generation_done;
 
-  event_pipe_t<error_t> _cache_file_error;
+  event_pipe_t<error_t> _storage_handler_error;
   event_pipe_t<input_data_id_t> _tree_done_with_input;
 
   threaded_event_loop_t _input_event_loop;
@@ -108,7 +108,7 @@ private:
   void handle_file_reading_done(input_data_id_t &&file);
   void handle_tree_lod_done();
 
-  void handle_cache_file_error(error_t &&errors);
+  void handle_storage_error(error_t &&errors);
   void handle_points_written(const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations);
   void handle_tree_done_with_input(input_data_id_t &&events);
 };

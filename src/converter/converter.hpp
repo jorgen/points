@@ -33,10 +33,9 @@ namespace converter
 struct converter_t
 {
   converter_t(const char *url, uint64_t url_size)
-    : cache_filename(url, url_size)
-    , convert_callbacks(laszip_callbacks())
+    : convert_callbacks(laszip_callbacks())
     , runtime_callbacks{}
-    , processor(cache_filename, convert_callbacks, error)
+    , processor(url, convert_callbacks, error)
   {
     if (error.code != 0)
     {
@@ -52,7 +51,6 @@ struct converter_t
     processor.set_pre_init_tree_node_limit(100000);
     processor.set_pre_init_tree_config({0.00025, {0, 0, 0}});
   }
-  std::string cache_filename;
   error_t error;
   tree_config_t tree_config;
   converter_file_convert_callbacks_t convert_callbacks;

@@ -101,7 +101,7 @@ void read_request_t::wait_for_read()
 }
 
 storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe, error_t &error)
-  : _cache_file_name(url)
+  : _file_name(url)
   , _file_handle(0)
   , _file_opened(false)
   , _file_exists(false)
@@ -116,7 +116,7 @@ storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_
   , _read_request_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
 {
   uv_fs_t request = {};
-  auto result = uv_fs_stat(_event_loop.loop(), &request, _cache_file_name.c_str(), NULL);
+  auto result = uv_fs_stat(_event_loop.loop(), &request, _file_name.c_str(), NULL);
   if (result != 0)
   {
     auto index = _blob_manager.register_blob({_serialized_index_size});
@@ -127,7 +127,7 @@ storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_
     return;
   }
   _file_exists = true;
-  result = uv_fs_open(_event_loop.loop(), &request, _cache_file_name.c_str(), UV_FS_O_RDONLY, 0, NULL);
+  result = uv_fs_open(_event_loop.loop(), &request, _file_name.c_str(), UV_FS_O_RDONLY, 0, NULL);
   _file_handle = uv_file(request.result);
   if (_file_handle < 0)
   {
@@ -164,7 +164,7 @@ error_t storage_handler_t::upgrade_to_write(bool truncate)
   int open_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 #endif
 
-  uv_fs_open(_event_loop.loop(), &request, _cache_file_name.c_str(), UV_FS_O_RDWR | open_flags, open_mode, NULL);
+  uv_fs_open(_event_loop.loop(), &request, _file_name.c_str(), UV_FS_O_RDWR | open_flags, open_mode, NULL);
 
   _file_handle = uv_file(request.result);
   if (_file_handle < 0)
