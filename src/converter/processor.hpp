@@ -44,21 +44,12 @@ namespace points
 namespace converter
 {
 
-struct sorted_input_id_t
-{
-  input_data_id_t id;
-  morton::morton192_t aabb_min;
-  bool operator<(const sorted_input_id_t &other) const
-  {
-    return aabb_min < other.aabb_min;
-  }
-};
-
 class frustum_tree_walker_t;
 class processor_t : public about_to_block_t
 {
 public:
-  processor_t(std::string url, converter_file_convert_callbacks_t &convert_callbacks);
+  processor_t(std::string url, converter_file_convert_callbacks_t &convert_callbacks, error_t &error);
+  error_t upgrade_to_write(bool truncate);
   void set_pre_init_tree_config(const tree_config_t &tree_config);
   void set_pre_init_tree_node_limit(uint32_t node_limit);
   void add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files);

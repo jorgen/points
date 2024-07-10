@@ -84,11 +84,11 @@ void storage_handler_request_t::do_write(const std::shared_ptr<uint8_t[]> &data,
 
 read_request_t::read_request_t(storage_handler_t &storage, std::function<void(const storage_handler_request_t &)> done)
   : storage_handler_request_t(storage,
-                              [this, done = std::move(done)](const storage_handler_request_t &request) {
+                              [this, done_moved = std::move(done)](const storage_handler_request_t &request) {
                                 std::unique_lock<std::mutex> lock(this->_mutex);
                                 this->_done = true;
                                 this->_block_for_read.notify_all();
-                                done_callback(request);
+                                done_moved(request);
                               })
   , _done(false)
 {
@@ -100,10 +100,12 @@ void read_request_t::wait_for_read()
   _block_for_read.wait(lock, [this] { return this->_done; });
 }
 
-storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe)
+storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe, error_t &error)
   : _cache_file_name(url)
   , _file_handle(0)
   , _file_opened(false)
+  , _file_exists(false)
+  , _file_opened_in_write_mode(false)
   , _attributes_configs(attributes_configs)
   , _serialized_index_size(128)
   , _storage_error(storage_error_pipe)
@@ -113,38 +115,69 @@ storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_
   , _write_blob_locations_and_update_header_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
   , _read_request_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
 {
-  auto index = _blob_manager.register_blob({_serialized_index_size});
-  assert(index.data == 0);
-  _open_request.data = this;
-#ifdef WIN32
-  int open_mode = _S_IREAD | _S_IWRITE;
-#else
-  int open_mode = 0666;
-#endif
-  uv_fs_open(_event_loop.loop(), &_open_request, _cache_file_name.c_str(), UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC, open_mode, [](uv_fs_t *request) {
-    storage_handler_t &self = *static_cast<storage_handler_t *>(request->data);
-    self.handle_open_cache_file(request);
-  });
-}
-
-void storage_handler_t::handle_open_cache_file(uv_fs_t *request)
-{
-  _file_handle = uv_file(request->result);
+  uv_fs_t request = {};
+  auto result = uv_fs_stat(_event_loop.loop(), &request, _cache_file_name.c_str(), NULL);
+  if (result != 0)
+  {
+    auto index = _blob_manager.register_blob({_serialized_index_size});
+    assert(index.data == 0);
+    error = {1, "Failed to stat file."};
+    auto error_to_move = error;
+    _storage_error.post_event(std::move(error_to_move));
+    return;
+  }
+  _file_exists = true;
+  result = uv_fs_open(_event_loop.loop(), &request, _cache_file_name.c_str(), UV_FS_O_RDONLY, 0, NULL);
+  _file_handle = uv_file(request.result);
   if (_file_handle < 0)
   {
-    error_t error;
     error.code = (int)_file_handle;
     error.msg = uv_strerror(_file_handle);
     _storage_error.post_event(std::move(error));
   }
   _file_opened = true;
-  _block_for_open.notify_all();
 }
-error_t storage_handler_t::wait_for_open()
+
+error_t storage_handler_t::upgrade_to_write(bool truncate)
 {
-  std::unique_lock<std::mutex> lock(_mutex);
-  _block_for_open.wait(lock, [this] { return this->_file_opened.load(); });
-  return _open_error;
+  int open_flags = 0;
+  if (!_file_exists)
+  {
+    open_flags |= UV_FS_O_CREAT;
+  }
+
+  if (truncate)
+  {
+    open_flags |= UV_FS_O_TRUNC;
+  }
+
+  uv_fs_t request = {};
+  if (_file_handle > 0)
+  {
+    uv_fs_close(_event_loop.loop(), &request, _file_handle, NULL);
+    _file_handle = 0;
+  }
+
+#ifdef WIN32
+  int open_mode = _S_IREAD | _S_IWRITE;
+#else
+  int open_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+#endif
+
+  uv_fs_open(_event_loop.loop(), &request, _cache_file_name.c_str(), UV_FS_O_RDWR | open_flags, open_mode, NULL);
+
+  _file_handle = uv_file(request.result);
+  if (_file_handle < 0)
+  {
+    error_t error;
+    error.code = (int)_file_handle;
+    error.msg = uv_strerror(_file_handle);
+    auto error_copy = error;
+    _storage_error.post_event(std::move(error));
+    return error_copy;
+  }
+
+  return {};
 }
 
 void storage_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
@@ -397,18 +430,18 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
   memcpy(data, &attribute_configs, sizeof(attribute_configs));
   data += sizeof(attribute_configs);
 
-  auto done_callback = [this, new_blob_manager = std::move(new_blob_manager), free_blobs, attribute_configs, done = std::move(done)](const storage_handler_request_t &request) mutable {
+  auto done_callback = [this, new_blob_manager_moved = std::move(new_blob_manager), free_blobs, attribute_configs, done_moved = std::move(done)](const storage_handler_request_t &request) mutable {
     error_t error;
     fmt::print(stderr, "Write index done {}\n", request.error.code);
     if (request.error.code != 0)
     {
       error = request.error;
-      done(std::move(error));
+      done_moved(std::move(error));
     }
-    this->_blob_manager = std::move(new_blob_manager);
+    this->_blob_manager = std::move(new_blob_manager_moved);
     this->blobs_location = free_blobs;
     this->attributes_location = attribute_configs;
-    done(std::move(error));
+    done_moved(std::move(error));
   };
 
   fprintf(stderr, "Writing index\n");

@@ -50,10 +50,10 @@ struct thread_count_env_setter_t
 };
 static thread_count_env_setter_t thread_pool_size_setter;
 
-processor_t::processor_t(std::string url, converter_file_convert_callbacks_t &convert_callbacks)
+processor_t::processor_t(std::string url, converter_file_convert_callbacks_t &convert_callbacks, error_t &error)
   : _url(std::move(url))
   , _convert_callbacks(convert_callbacks)
-  , _cache_file_handler(_url, _attributes_configs, _cache_file_error)
+  , _cache_file_handler(_url, _attributes_configs, _cache_file_error, error)
   , _tree_handler(_cache_file_handler, _attributes_configs, _tree_done_with_input)
   , _files_added(_event_loop, bind(&processor_t::handle_new_files))
   , _pre_init_info_file_result(_event_loop, bind(&processor_t::handle_pre_init_info_for_files))
@@ -71,12 +71,6 @@ processor_t::processor_t(std::string url, converter_file_convert_callbacks_t &co
   , _read_sort_active_approximate_size(0)
 {
   _event_loop.add_about_to_block_listener(this);
-  auto open_error = _cache_file_handler.wait_for_open();
-  if (open_error.code != 0)
-  {
-    fmt::print(stderr, "Failed to open cache file: {}\n", open_error.msg);
-    exit(1);
-  }
 }
 
 void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files)
@@ -190,6 +184,12 @@ void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
   if (min)
     _tree_handler.generate_lod(*min);
 }
+
+error_t processor_t::upgrade_to_write(bool truncate)
+{
+  return _cache_file_handler.upgrade_to_write(truncate);
+}
+
 void processor_t::set_pre_init_tree_config(const tree_config_t &tree_config)
 {
   _tree_handler.set_tree_initialization_config(tree_config);

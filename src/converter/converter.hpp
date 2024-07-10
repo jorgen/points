@@ -36,12 +36,24 @@ struct converter_t
     : cache_filename(url, url_size)
     , convert_callbacks(laszip_callbacks())
     , runtime_callbacks{}
-    , processor(cache_filename, convert_callbacks)
+    , processor(cache_filename, convert_callbacks, error)
   {
+    if (error.code != 0)
+    {
+      fmt::print(stderr, "Failed to open cache file: {}\n", error.msg);
+      exit(1);
+    }
+    error = processor.upgrade_to_write(true);
+    if (error.code != 0)
+    {
+      fmt::print(stderr, "Failed to make file writable: {}\n", error.msg);
+      exit(1);
+    }
     processor.set_pre_init_tree_node_limit(100000);
     processor.set_pre_init_tree_config({0.00025, {0, 0, 0}});
   }
   std::string cache_filename;
+  error_t error;
   tree_config_t tree_config;
   converter_file_convert_callbacks_t convert_callbacks;
   converter_runtime_callbacks_t runtime_callbacks;
