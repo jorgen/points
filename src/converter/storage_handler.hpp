@@ -99,7 +99,7 @@ struct read_request_t : storage_handler_request_t
 class storage_handler_t
 {
 public:
-  storage_handler_t(const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe, error_t &error);
+  storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe, error_t &error);
   error_t upgrade_to_write(bool truncate);
 
   void write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
@@ -204,7 +204,7 @@ struct read_attribute_t
   read_attribute_t(storage_handler_t &storage_handler, storage_location_t location)
     : storage_handler(storage_handler)
     , location(location)
-    , read_request(storage_handler.read(location, [](const storage_handler_request_t &) {}))
+    , read_request(storage_handler.read(location, nullptr))
   {
     read_request->wait_for_read();
     data = read_request->buffer_info;

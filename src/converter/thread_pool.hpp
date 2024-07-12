@@ -24,18 +24,20 @@
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
-namespace points
+namespace points::converter
 {
-namespace converter
-{
+
 class thread_pool_t
 {
 public:
-  thread_pool_t(int thread_count = std::hardware_concurrency())
+  thread_pool_t(int thread_count = std::thread::hardware_concurrency())
+    : stop(false)
   {
-    for (size_t i = 0; i < threads; ++i)
+    workers.reserve(thread_count);
+    for (int i = 0; i < thread_count; ++i)
       workers.emplace_back([this] {
         for (;;)
         {
@@ -63,10 +65,10 @@ public:
       worker.join();
   }
 
-  template<typename T>
-  std::future<typename std::result_of<F()>::type> enqueue(T &&task)
+  template <typename T>
+  std::future<typename std::invoke_result_t<T>> enqueue(T &&task)
   {
-    using return_type = typename std::result_of<F()>::type;
+    using return_type = typename std::invoke_result_t<T>;
 
     auto package = std::make_shared<std::packaged_task<return_type()>>(std::forward<T>(task));
 
@@ -76,7 +78,7 @@ public:
 
       if (stop)
       {
-        abort(); // invalid state. Enqueing after 
+        abort(); // invalid state. Enqueing after
       }
 
       tasks.emplace([package]() { (*package)(); });
@@ -93,4 +95,4 @@ private:
   std::condition_variable condition;
   bool stop;
 };
-} } // namespace points
+} // namespace points::converter

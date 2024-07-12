@@ -19,16 +19,15 @@
 
 #include "threaded_event_loop.hpp"
 
-#include <assert.h>
+#include <cassert>
 
-namespace points
+namespace points::converter
 {
-namespace converter
-{
-  
+
 worker_t::worker_t()
   : _done(false)
 {
+  async.data = this;
 }
 
 worker_t::~worker_t()
@@ -37,23 +36,10 @@ worker_t::~worker_t()
 }
 void worker_t::enqueue(threaded_event_loop_t &loop)
 {
-  //(void)event_loop;
-  _worker_request.data = this;
-  uv_queue_work(
-    loop._loop, &_worker_request,
-    [](uv_work_t *req) { static_cast<worker_t *>(req->data)->work(); },
-    [](uv_work_t *req, int status) {
-      completion_t completion = status == UV_ECANCELED ? cancelled : completed;
-      auto worker = static_cast<worker_t *>(req->data);
-      worker->_done = true;
-      worker->after_work(completion);
-    });
-}
-void worker_t::cancel()
-{
-  uv_cancel((uv_req_t*)&_worker_request);
+  loop.worker_thread_pool().enqueue([this, &loop] {
+    this->work();
+    loop.add_worker_done(this);
+  });
 }
 
-
-}
-} // namespace points
+} // namespace points::converter

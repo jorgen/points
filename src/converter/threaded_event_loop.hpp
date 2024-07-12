@@ -25,6 +25,8 @@
 #include <uv.h>
 
 #include "event_pipe.hpp"
+#include "thread_pool.hpp"
+#include "worker.hpp"
 
 namespace points
 {
@@ -46,8 +48,9 @@ public:
 class threaded_event_loop_t
 {
 public:
-  threaded_event_loop_t()
+  threaded_event_loop_t(thread_pool_t &worker_thread_pool)
     : _loop(nullptr)
+    , _worker_thread_pool(worker_thread_pool)
     , _add_pipe([this](std::vector<std::function<uv_handle_t *(uv_loop_t *)>> &&events) { add_event_pipe_cb(std::move(events)); })
     , _run_in_loop([](std::vector<std::function<void()>> &&events) {
       for (auto &to_run : events)
@@ -118,6 +121,14 @@ public:
     _run_in_loop.post_event([this, listener] { _about_to_block_listeners.erase(std::remove(_about_to_block_listeners.begin(), _about_to_block_listeners.end(), listener), _about_to_block_listeners.end()); });
   }
 
+  void add_worker_done(worker_t *done)
+  {
+    _run_in_loop.post_event([done] {
+      done->mark_done();
+      done->after_work(worker_t::completed);
+    });
+  }
+
   uv_loop_t *loop() const
   {
     return _loop;
@@ -126,6 +137,11 @@ public:
   std::thread::id thread_id() const
   {
     return _thread->get_id();
+  }
+
+  thread_pool_t &worker_thread_pool()
+  {
+    return _worker_thread_pool;
   }
 
 private:
@@ -168,6 +184,7 @@ private:
   std::mutex _mutex;
   std::vector<uv_handle_t *> _to_close_handles;
   std::vector<uv_work_t *> _to_cancel_work_handles;
+  thread_pool_t &_worker_thread_pool;
   event_pipe_multi_t<std::function<uv_handle_t *(uv_loop_t *)>> _add_pipe;
   event_pipe_multi_t<std::function<void()>> _run_in_loop;
 

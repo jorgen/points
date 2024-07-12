@@ -23,7 +23,8 @@
 
 #include <fmt/printf.h>
 
-#include <assert.h>
+#include <cassert>
+#include <cstring>
 #include <fcntl.h>
 
 #include <algorithm>
@@ -33,6 +34,47 @@
 
 namespace points::converter
 {
+
+static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry)
+{
+  auto serialized_index = std::make_shared<uint8_t[]>(index_size);
+  auto *data = serialized_index.get();
+  memset(data, 0, index_size);
+
+  uint8_t magic[] = {'J', 'L', 'P', 0};
+  memcpy(data, magic, sizeof(magic));
+  data += sizeof(magic);
+
+  memcpy(data, &free_blobs, sizeof(free_blobs));
+  data += sizeof(free_blobs);
+
+  memcpy(data, &tree_registry, sizeof(tree_registry));
+  data += sizeof(tree_registry);
+
+  memcpy(data, &attribute_configs, sizeof(attribute_configs));
+  data += sizeof(attribute_configs);
+  return serialized_index;
+}
+[[nodiscard]] static error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry)
+{
+  uint8_t magic[] = {'J', 'L', 'P', 0};
+  if (memcmp(buffer, magic, sizeof(magic)) != 0)
+  {
+    error_t ret;
+    ret.code = 1;
+    ret.msg = "Wrong magic.";
+    return ret;
+  }
+  auto ptr = buffer + 4;
+  memcpy(&free_blobs, ptr, sizeof(free_blobs));
+  ptr += sizeof(free_blobs);
+
+  memcpy(&attribute_configs, ptr, sizeof(attribute_configs));
+  ptr += sizeof(attribute_configs);
+
+  memcpy(&tree_registry, ptr, sizeof(tree_registry));
+  return {};
+}
 
 storage_handler_request_t::storage_handler_request_t(storage_handler_t &storage_handler, std::function<void(const storage_handler_request_t &)> done_callback)
   : storage_handler(storage_handler)
@@ -88,7 +130,8 @@ read_request_t::read_request_t(storage_handler_t &storage, std::function<void(co
                                 std::unique_lock<std::mutex> lock(this->_mutex);
                                 this->_done = true;
                                 this->_block_for_read.notify_all();
-                                done_moved(request);
+                                if (done_moved)
+                                  done_moved(*this);
                               })
   , _done(false)
 {
@@ -100,8 +143,31 @@ void read_request_t::wait_for_read()
   _block_for_read.wait(lock, [this] { return this->_done; });
 }
 
-storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe, error_t &error)
+struct close_file_on_error_t
+{
+  close_file_on_error_t(uv_file &file_handle, uv_loop_t *loop, error_t &error)
+    : file_handle(file_handle)
+    , loop(loop)
+    , error(error)
+  {
+  }
+  ~close_file_on_error_t()
+  {
+    if (error.code != 0)
+    {
+      uv_fs_t req = {};
+      uv_fs_close(loop, &req, file_handle, NULL);
+      file_handle = 0;
+    }
+  }
+
+  uv_file &file_handle;
+  uv_loop_t *loop;
+  error_t &error;
+};
+storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe, error_t &error)
   : _file_name(url)
+  , _event_loop(thread_pool)
   , _file_handle(0)
   , _file_opened(false)
   , _file_exists(false)
@@ -121,9 +187,6 @@ storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_
   {
     auto index = _blob_manager.register_blob({_serialized_index_size});
     assert(index.data == 0);
-    error = {1, "Failed to stat file."};
-    auto error_to_move = error;
-    _storage_error.post_event(std::move(error_to_move));
     return;
   }
   _file_exists = true;
@@ -133,8 +196,34 @@ storage_handler_t::storage_handler_t(const std::string &url, attributes_configs_
   {
     error.code = (int)_file_handle;
     error.msg = uv_strerror(_file_handle);
-    _storage_error.post_event(std::move(error));
+    //_storage_error.post_event(std::move(error));
+    return;
   }
+  close_file_on_error_t closer(_file_handle, _event_loop.loop(), error);
+  auto index_buffer = std::make_unique<uint8_t[]>(_serialized_index_size);
+  uv_buf_t index_uv_buf = {(char *)index_buffer.get(), _serialized_index_size};
+  auto read = uv_fs_read(_event_loop.loop(), &request, _file_handle, &index_uv_buf, 1, 0, NULL);
+  if (read < 0)
+  {
+    error.code = 1;
+    error.msg = uv_strerror(read);
+    return;
+  }
+  if (uint32_t(read) != _serialized_index_size)
+  {
+    error.code = 1;
+    error.msg = "could not read index";
+    return;
+  }
+  storage_location_t free_blobs;
+  storage_location_t attribute_configs;
+  storage_location_t tree_registry;
+  error = deserialize_index(index_buffer.get(), _serialized_index_size, free_blobs, attribute_configs, tree_registry);
+  if (error.code != 0)
+  {
+    return;
+  }
+
   _file_opened = true;
 }
 
@@ -413,23 +502,7 @@ void storage_handler_t::handle_write_blob_locations_and_update_header(storage_lo
 void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
                                            std::function<void(error_t &&error)> &&done)
 {
-  auto serialized_index = std::make_shared<uint8_t[]>(_serialized_index_size);
-  auto *data = serialized_index.get();
-  memset(data, 0, _serialized_index_size);
-
-  uint8_t magic[] = {'J', 'L', 'P', 0};
-  memcpy(data, magic, sizeof(magic));
-  data += sizeof(magic);
-
-  memcpy(data, &free_blobs, sizeof(free_blobs));
-  data += sizeof(free_blobs);
-
-  memcpy(data, &tree_registry, sizeof(tree_registry));
-  data += sizeof(tree_registry);
-
-  memcpy(data, &attribute_configs, sizeof(attribute_configs));
-  data += sizeof(attribute_configs);
-
+  auto serialized_index = serialize_index(_serialized_index_size, free_blobs, attribute_configs, tree_registry);
   auto done_callback = [this, new_blob_manager_moved = std::move(new_blob_manager), free_blobs, attribute_configs, done_moved = std::move(done)](const storage_handler_request_t &request) mutable {
     error_t error;
     fmt::print(stderr, "Write index done {}\n", request.error.code);

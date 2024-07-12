@@ -17,6 +17,7 @@
 ************************************************************************/
 #pragma once
 
+#include "thread_pool.hpp"
 #include <uv.h>
 
 namespace points
@@ -30,7 +31,7 @@ public:
   enum completion_t
   {
     cancelled,
-    completed 
+    completed
   };
   worker_t();
   virtual ~worker_t();
@@ -38,15 +39,18 @@ public:
   virtual void after_work(completion_t completion) = 0;
 
   void enqueue(threaded_event_loop_t &loop);
-  void cancel();
+  void mark_done()
+  {
+    _done = true;
+  }
   bool done() const
   {
     return _done;
   }
 
 private:
-  uv_work_t _worker_request;
   bool _done;
+  uv_async_t async;
 };
-}
+} // namespace converter
 } // namespace points

@@ -33,28 +33,13 @@ namespace points
 namespace converter
 {
 
-struct thread_count_env_setter_t
-{
-  thread_count_env_setter_t()
-  {
-    std::string count = std::to_string(int(std::thread::hardware_concurrency() * 1.5));
-    // uv_os_setenv("UV_THREADPOOL_SIZE", count.c_str());
-#if (WIN32)
-    _putenv(fmt::format("UV_THREADPOOL_SIZE={}", count.c_str()).c_str());
-#else
-    std::string env_name = fmt::format("UV_THREADPOOL_SIZE={}", count.c_str());
-    char *env_name_c = &env_name[0];
-    putenv(env_name_c);
-#endif
-  }
-};
-static thread_count_env_setter_t thread_pool_size_setter;
-
 processor_t::processor_t(std::string url, converter_file_convert_callbacks_t &convert_callbacks, error_t &error)
   : _url(std::move(url))
+  , _thread_pool(int(std::thread::hardware_concurrency()))
   , _convert_callbacks(convert_callbacks)
-  , _storage_handler(_url, _attributes_configs, _storage_handler_error, error)
-  , _tree_handler(_storage_handler, _attributes_configs, _tree_done_with_input)
+  , _event_loop(_thread_pool)
+  , _storage_handler(_url, _thread_pool, _attributes_configs, _storage_handler_error, error)
+  , _tree_handler(_thread_pool, _storage_handler, _attributes_configs, _tree_done_with_input)
   , _files_added(_event_loop, bind(&processor_t::handle_new_files))
   , _pre_init_info_file_result(_event_loop, bind(&processor_t::handle_pre_init_info_for_files))
   , _pre_init_file_errors(_event_loop, bind(&processor_t::handle_file_errors_headers))
@@ -66,6 +51,7 @@ processor_t::processor_t(std::string url, converter_file_convert_callbacks_t &co
   , _lod_generation_done(_event_loop, bind(&processor_t::handle_tree_lod_done))
   , _storage_handler_error(_event_loop, bind(&processor_t::handle_storage_error))
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
+  , _input_event_loop(_thread_pool)
   , _point_reader(_input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _read_sort_budget(uint64_t(1) << 20)
   , _read_sort_active_approximate_size(0)

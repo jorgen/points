@@ -34,6 +34,7 @@
 #include "pre_init_file_retriever.hpp"
 #include "reader.hpp"
 #include "storage_handler.hpp"
+#include "thread_pool.hpp"
 #include "threaded_event_loop.hpp"
 #include "tree_handler.hpp"
 
@@ -64,6 +65,7 @@ public:
 
 private:
   std::string _url;
+  thread_pool_t _thread_pool;
   converter_file_convert_callbacks_t &_convert_callbacks;
 
   threaded_event_loop_t _event_loop;

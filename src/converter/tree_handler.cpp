@@ -28,8 +28,9 @@ namespace points
 {
 namespace converter
 {
-tree_handler_t::tree_handler_t(storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
-  : _initialized(false)
+tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
+  : _event_loop(thread_pool)
+  , _initialized(false)
   , _configuration_initialized(false)
   , _pre_init_node_limit(1000000)
   , _node_limit(0)
