@@ -33,10 +33,10 @@ namespace points
 namespace converter
 {
 
-processor_t::processor_t(std::string url, converter_file_convert_callbacks_t &convert_callbacks, error_t &error)
+processor_t::processor_t(std::string url, error_t &error)
   : _url(std::move(url))
   , _thread_pool(int(std::thread::hardware_concurrency()))
-  , _convert_callbacks(convert_callbacks)
+  , _convert_callbacks({})
   , _event_loop(_thread_pool)
   , _storage_handler(_url, _thread_pool, _attributes_configs, _storage_handler_error, error)
   , _tree_handler(_thread_pool, _storage_handler, _attributes_configs, _tree_done_with_input)
@@ -183,6 +183,10 @@ void processor_t::set_pre_init_tree_config(const tree_config_t &tree_config)
 void processor_t::set_pre_init_tree_node_limit(uint32_t node_limit)
 {
   _tree_handler.set_tree_initialization_node_limit(node_limit);
+}
+void processor_t::set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks)
+{
+  _convert_callbacks = convert_callbacks;
 }
 
 } // namespace converter

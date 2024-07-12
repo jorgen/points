@@ -33,7 +33,7 @@ namespace points
 namespace converter
 {
 struct converter_data_source_t;
-POINTS_CONVERTER_EXPORT struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, struct render::renderer_t *renderer);
+POINTS_CONVERTER_EXPORT struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, error_t *error, struct render::renderer_t *renderer);
 POINTS_CONVERTER_EXPORT void converter_data_source_destroy(struct converter_data_source_t *converter_data_source);
 POINTS_CONVERTER_EXPORT struct render::data_source_t converter_data_source_get(struct converter_data_source_t *converter_data_source);
 POINTS_CONVERTER_EXPORT void converter_data_source_get_aabb(struct converter_data_source_t *converter_data_source, double aabb_min[3], double aabb_max[3]);

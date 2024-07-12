@@ -35,8 +35,9 @@ struct converter_t
   converter_t(const char *url, uint64_t url_size)
     : convert_callbacks(laszip_callbacks())
     , runtime_callbacks{}
-    , processor(url, convert_callbacks, error)
+    , processor(url, error)
   {
+    processor.set_converter_callbacks(convert_callbacks);
     if (error.code != 0)
     {
       fmt::print(stderr, "Failed to open cache file: {}\n", error.msg);

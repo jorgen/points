@@ -61,8 +61,8 @@ struct converter_data_source_t
   void add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render);
 
   const std::string url;
-
-  // storage_handler_t cache_file_handler;
+  error_t error;
+  processor_t processor;
   render::callback_manager_t &callbacks;
   render::data_source_t data_source;
 

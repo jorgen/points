@@ -49,10 +49,11 @@ class frustum_tree_walker_t;
 class processor_t : public about_to_block_t
 {
 public:
-  processor_t(std::string url, converter_file_convert_callbacks_t &convert_callbacks, error_t &error);
+  processor_t(std::string url, error_t &error);
   error_t upgrade_to_write(bool truncate);
   void set_pre_init_tree_config(const tree_config_t &tree_config);
   void set_pre_init_tree_node_limit(uint32_t node_limit);
+  void set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks);
   void add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files);
   void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
   void about_to_block() override;
@@ -66,7 +67,7 @@ public:
 private:
   std::string _url;
   thread_pool_t _thread_pool;
-  converter_file_convert_callbacks_t &_convert_callbacks;
+  converter_file_convert_callbacks_t _convert_callbacks;
 
   threaded_event_loop_t _event_loop;
 

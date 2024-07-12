@@ -38,6 +38,7 @@ inline void initialize_buffer(render::callback_manager_t &callbacks, std::vector
 
 converter_data_source_t::converter_data_source_t(const std::string &url, render::callback_manager_t &callbacks)
   : url(url)
+  , processor(url, error)
   , callbacks(callbacks)
 {
   memset(aabb.min, 0, sizeof(aabb.min));
@@ -151,9 +152,17 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   // }
 }
 
-struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, struct render::renderer_t *renderer)
+struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, error_t *error, struct render::renderer_t *renderer)
 {
-  return new converter_data_source_t(std::string(url, url_len), renderer->callbacks);
+  if (!error)
+    return nullptr;
+  auto ret = std::make_unique<converter_data_source_t>(std::string(url, url_len), renderer->callbacks);
+  if (ret->error.code != 0)
+  {
+    *error = ret->error;
+    return nullptr;
+  }
+  return ret.release();
 }
 
 void converter_data_source_destroy(struct converter_data_source_t *converter_data_source)
