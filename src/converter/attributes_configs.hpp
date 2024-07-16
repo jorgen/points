@@ -80,6 +80,7 @@ public:
   int get_attribute_index(attributes_id_t id, const std::string &name) const;
 
   serialized_attributes_t serialize() const;
+  [[nodiscard]] points::error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
 
 private:
   mutable std::mutex _mutex;

@@ -47,6 +47,12 @@ tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &fi
 {
   _event_loop.add_about_to_block_listener(this);
 }
+
+error_t tree_handler_t::deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size)
+{
+  return tree_registry_deserialize(tree_registry_buffer, tree_registry_blobs_size, _tree_registry);
+}
+
 void tree_handler_t::set_tree_initialization_config(const tree_config_t &config)
 {
   std::unique_lock<std::mutex> lock(_configuration_mutex);
@@ -142,10 +148,10 @@ void tree_handler_t::handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, 
     location = storage[i];
   }
   auto serialized_registry = tree_registry_serialize(_tree_registry);
-  _file_cache.write_tree_registry(std::move(serialized_registry), [this, old_locations = std::move(old_locations)](storage_location_t tree_registry_location, error_t &&error) mutable {
-    (void)error;
-    this->_file_cache.write_blob_locations_and_update_header(tree_registry_location, std::move(old_locations), [](error_t &&error) {
-      (void)error;
+  _file_cache.write_tree_registry(std::move(serialized_registry), [this, old_locations_moved = std::move(old_locations)](storage_location_t tree_registry_location, error_t &&error_arg) mutable {
+    (void)error_arg;
+    this->_file_cache.write_blob_locations_and_update_header(tree_registry_location, std::move(old_locations_moved), [](error_t &&err) {
+      (void)err;
       fmt::print("Trees serialized\n");
     });
   });

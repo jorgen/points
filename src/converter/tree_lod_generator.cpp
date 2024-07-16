@@ -768,7 +768,7 @@ static void quantize_morton_remember_indecies_t(storage_handler_t &cache, const 
 static void quantize_morton_remember_indecies(storage_handler_t &cache, const std::vector<points_collection_t> &child_data, const child_storage_map_t &child_storage_map, int lod, const std::vector<float> &random_offsets,
                                               std::unique_ptr<uint8_t[]> &morton_data, std::vector<std::pair<input_data_id_t, uint32_t>> &indecies)
 {
-  auto lod_format = morton_format_from_lod(lod);
+  auto lod_format = morton_type_from_lod(lod);
   switch (lod_format)
   {
   case type_m32:
@@ -798,7 +798,7 @@ void lod_worker_t::work()
     attribute_ids[child_data_count++] = storage_info.second.attributes_id;
   }
 
-  auto lod_format = morton_format_from_lod(data.lod);
+  auto lod_format = morton_type_from_lod(data.lod);
   auto lod_attrib_mapping = attributes_configs.get_lod_attribute_mapping(data.lod, attribute_ids.get(), attribute_ids.get() + data.child_storage_info.size());
 
   storage_header_t destination_header;

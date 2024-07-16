@@ -136,6 +136,7 @@ tree_id_t tree_add_points(uint32_t node_point_limit, tree_registry_t &tree_cache
 serialized_tree_t tree_serialize(const tree_t &tree);
 
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry);
+[[nodiscard]] error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry);
 
 } // namespace converter
 } // namespace points

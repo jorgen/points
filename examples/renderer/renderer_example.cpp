@@ -154,7 +154,6 @@ int main(int, char **)
   points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
 
   auto error = create_unique_ptr(points::error_create(), &points::error_destroy);
-
   bool render_converter_points = true;
   auto converter_points = create_unique_ptr(points::converter::converter_data_source_create(cache_file, uint32_t(sizeof(cache_file) - 1), error.get(), renderer.get()), &points::converter::converter_data_source_destroy);
   if (!converter_points)
@@ -321,19 +320,15 @@ int main(int, char **)
     clear clear_mask = clear(int(clear::color) | int(clear::depth));
 
     points_gl_renderer.draw(clear_mask, width, height);
-    double converter_min[3];
-    double converter_max[3];
-    double diff[3];
-    points::converter::converter_data_source_get_aabb(converter_points.get(), converter_min, converter_max);
-    diff[0] = converter_max[0] - converter_min[0];
-    diff[1] = converter_max[1] - converter_min[1];
-    diff[2] = converter_max[2] - converter_min[2];
-    // if (converter_min[0] != aabb2.min[0] && aabb2_id == -1)
-    // {
-    //   aabb2_id = points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
-    //   memcpy(aabb2.min, converter_min, sizeof(converter_min));
-    //   memcpy(aabb2.max, converter_max, sizeof(converter_max));
-    // }
+    // double converter_min[3];
+    // double converter_max[3];
+    // points::converter::converter_data_source_get_aabb(converter_points.get(), converter_min, converter_max);
+    //  if (converter_min[0] != aabb2.min[0] && aabb2_id == -1)
+    //  {
+    //    aabb2_id = points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
+    //    memcpy(aabb2.min, converter_min, sizeof(converter_min));
+    //    memcpy(aabb2.max, converter_max, sizeof(converter_max));
+    //  }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(window);
@@ -374,11 +369,11 @@ int main(int, char **)
     {
       if (render_converter_points)
       {
-        points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+        // points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
       }
       else
       {
-        points::render::renderer_remove_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+        // points::render::renderer_remove_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
       }
     }
     ImGui::EndGroup();

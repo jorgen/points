@@ -36,9 +36,14 @@ namespace converter
 processor_t::processor_t(std::string url, error_t &error)
   : _url(std::move(url))
   , _thread_pool(int(std::thread::hardware_concurrency()))
+  , _runtime_callbacks({})
+  , _runtime_callback_user_ptr(nullptr)
   , _convert_callbacks({})
   , _event_loop(_thread_pool)
-  , _storage_handler(_url, _thread_pool, _attributes_configs, _storage_handler_error, error)
+  , _generating_lod(false)
+  , _idle(true)
+  , _new_file_events_sent(0)
+  , _storage_handler(_url, _thread_pool, _attributes_configs, _storage_index_write_done, _storage_handler_error, error)
   , _tree_handler(_thread_pool, _storage_handler, _attributes_configs, _tree_done_with_input)
   , _files_added(_event_loop, bind(&processor_t::handle_new_files))
   , _pre_init_info_file_result(_event_loop, bind(&processor_t::handle_pre_init_info_for_files))
@@ -48,7 +53,7 @@ processor_t::processor_t(std::string url, error_t &error)
   , _sorted_points(_event_loop, bind(&processor_t::handle_sorted_points))
   , _point_reader_file_errors(_event_loop, bind(&processor_t::handle_file_errors))
   , _point_reader_done_with_file(_event_loop, bind(&processor_t::handle_file_reading_done))
-  , _lod_generation_done(_event_loop, bind(&processor_t::handle_tree_lod_done))
+  , _storage_index_write_done(_event_loop, bind(&processor_t::handle_index_write_done))
   , _storage_handler_error(_event_loop, bind(&processor_t::handle_storage_error))
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
   , _input_event_loop(_thread_pool)
@@ -57,16 +62,52 @@ processor_t::processor_t(std::string url, error_t &error)
   , _read_sort_active_approximate_size(0)
 {
   _event_loop.add_about_to_block_listener(this);
+
+  if (error.code != 0)
+    return;
+
+  if (_storage_handler.file_exists())
+  {
+    std::unique_ptr<uint8_t[]> free_blobs_buffer;
+    uint32_t free_blobs_buffer_size = 0;
+    std::unique_ptr<uint8_t[]> attribute_blobs_buffer;
+    uint32_t attribute_blobs_buffer_size = 0;
+    std::unique_ptr<uint8_t[]> tree_registry_buffer;
+    uint32_t tree_registry_blobs_size = 0;
+    error = _storage_handler.read_index(free_blobs_buffer, free_blobs_buffer_size, attribute_blobs_buffer, attribute_blobs_buffer_size, tree_registry_buffer, tree_registry_blobs_size);
+    if (error.code != 0)
+      return;
+    error = _storage_handler.deserialize_free_blobs(free_blobs_buffer, free_blobs_buffer_size);
+    if (error.code != 0)
+      return;
+    error = _attributes_configs.deserialize(attribute_blobs_buffer, attribute_blobs_buffer_size);
+    if (error.code != 0)
+      return;
+    error = _tree_handler.deserialize_tree_registry(tree_registry_buffer, tree_registry_blobs_size);
+    if (error.code != 0)
+      return;
+  }
 }
 
 void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files)
 {
+  {
+    std::unique_lock<std::mutex> lock(_idle_mutex);
+    _idle = false;
+    _new_file_events_sent++;
+  }
   _files_added.post_event(std::move(input_files));
 }
 
 void processor_t::walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event)
 {
   _tree_handler.walk_tree(event);
+}
+
+void processor_t::wait_idle()
+{
+  std::unique_lock<std::mutex> lock(_idle_mutex);
+  _idle_condition.wait(lock, [this] { return _idle; });
 }
 
 void processor_t::about_to_block()
@@ -82,6 +123,12 @@ void processor_t::about_to_block()
     file.id = next_input->id;
     file.filename = next_input->name;
     _point_reader.add_file(_tree_handler.tree_config(), std::move(file));
+  }
+  std::unique_lock<std::mutex> lock(_idle_mutex);
+  if (_input_data_source_registry.all_inserted_into_tree() && _new_file_events_sent == 0 && !_generating_lod)
+  {
+    _idle = true;
+    _idle_condition.notify_all();
   }
 }
 
@@ -99,6 +146,8 @@ void processor_t::handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>
     _pre_init_info_workers.emplace_back(new get_pre_init_info_worker_t(tree_config, input_ref.input_id, input_ref.name, _convert_callbacks, _pre_init_info_file_result, _pre_init_file_errors));
     _pre_init_info_workers.back()->enqueue(_event_loop);
   }
+  std::unique_lock<std::mutex> lock(_idle_mutex);
+  _new_file_events_sent--;
 }
 
 void processor_t::handle_pre_init_info_for_files(pre_init_info_file_result_t &&pre_init_for_file)
@@ -142,9 +191,14 @@ void processor_t::handle_file_reading_done(input_data_id_t &&file)
   _input_data_source_registry.handle_reading_done(file);
 }
 
-void processor_t::handle_tree_lod_done()
+void processor_t::handle_index_write_done()
 {
+  _generating_lod = false;
   fwrite(fmt::format("LOD done\n").c_str(), 1, 9, stderr);
+  if (_runtime_callbacks.done)
+  {
+    _runtime_callbacks.done(_runtime_callback_user_ptr);
+  }
 }
 
 void processor_t::handle_storage_error(error_t &&errors)
@@ -168,7 +222,10 @@ void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
   _input_data_source_registry.handle_tree_done_with_input(event);
   auto min = _input_data_source_registry.get_done_morton();
   if (min)
+  {
+    _generating_lod = true;
     _tree_handler.generate_lod(*min);
+  }
 }
 
 error_t processor_t::upgrade_to_write(bool truncate)
@@ -184,6 +241,13 @@ void processor_t::set_pre_init_tree_node_limit(uint32_t node_limit)
 {
   _tree_handler.set_tree_initialization_node_limit(node_limit);
 }
+
+void processor_t::set_runtime_callbacks(const converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr)
+{
+  _runtime_callbacks = runtime_callbacks;
+  _runtime_callback_user_ptr = user_ptr;
+}
+
 void processor_t::set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks)
 {
   _convert_callbacks = convert_callbacks;

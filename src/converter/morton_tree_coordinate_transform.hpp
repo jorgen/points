@@ -25,8 +25,8 @@ namespace points
 namespace converter
 {
 
-template<typename T, size_t C>
-inline void convert_morton_to_pos(const double scale, const double (&offset)[3], const morton::morton_t<T,C> &morton, double (&pos)[3])
+template <typename T, size_t C>
+inline void convert_morton_to_pos(const double scale, const double (&offset)[3], const morton::morton_t<T, C> &morton, double (&pos)[3])
 {
   uint64_t ipos[3];
   morton::decode(morton, ipos);
@@ -35,8 +35,8 @@ inline void convert_morton_to_pos(const double scale, const double (&offset)[3],
   pos[2] = double(ipos[2]) * scale + offset[2];
 }
 
-template<typename T, size_t C>
-inline void convert_pos_to_morton(const double scale, const double (&offset)[3], const double(&pos)[3], morton::morton_t<T,C> &morton)
+template <typename T, size_t C>
+inline void convert_pos_to_morton(const double scale, const double (&offset)[3], const double (&pos)[3], morton::morton_t<T, C> &morton)
 {
   uint64_t ipos[3];
   ipos[0] = uint64_t(round((pos[0] - offset[0]) / scale));
@@ -45,19 +45,19 @@ inline void convert_pos_to_morton(const double scale, const double (&offset)[3],
   encode(ipos, morton);
 }
 
-template<typename T, size_t C>
+template <typename T, size_t C>
 inline void convert_world_morton_to_local(const morton::morton192_t &world, morton::morton_t<T, C> &morton)
 {
   morton::morton_downcast(world, morton);
 }
 
-template<typename T, size_t C>
+template <typename T, size_t C>
 inline void convert_local_morton_to_world(const morton::morton_t<T, C> &local, const morton::morton192_t &min, morton::morton192_t &world)
 {
   morton::morton_upcast(local, min, world);
 }
 
-inline type_t morton_format_from_lod(int lod)
+inline type_t morton_type_from_lod(int lod)
 {
   int top_index = lod * 3 + 3;
   if (top_index < 32)
@@ -69,5 +69,5 @@ inline type_t morton_format_from_lod(int lod)
   return type_m192;
 }
 
-}
+} // namespace converter
 } // namespace points

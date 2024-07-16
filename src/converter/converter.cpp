@@ -40,14 +40,14 @@ void converter_destroy(converter_t *destroy)
   delete destroy;
 }
 
-void converter_add_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks)
+void converter_set_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks)
 {
-  converter->convert_callbacks = callbacks;
+  converter->processor.set_converter_callbacks(callbacks);
 }
 
-void converter_add_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks)
+void converter_set_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks, void *user_ptr)
 {
-  converter->runtime_callbacks = callbacks;
+  converter->processor.set_runtime_callbacks(callbacks, user_ptr);
 }
 
 void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count)
@@ -66,9 +66,9 @@ void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32
   converter->processor.add_files(std::move(input_files));
 }
 
-void converter_wait_finish(converter_t *converter)
+void converter_wait_idle(converter_t *converter)
 {
-  (void)converter;
+  converter->processor.wait_idle();
 }
 
 converter_conversion_status_t converter_status(converter_t *converter)

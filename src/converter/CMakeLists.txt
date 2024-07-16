@@ -57,34 +57,34 @@ set(sources
         input_storage_map.cpp
 )
 
-add_library(converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(converter_objects PRIVATE fmt glm unordered_dense points_render common)
-BuildExternalTargetLinkLibrary(converter_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
-target_include_directories(converter_objects
+add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
+target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render common)
+BuildExternalTargetLinkLibrary(points_converter_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
+target_include_directories(points_converter_objects
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:include>
 )
-target_include_directories(converter_objects
+target_include_directories(points_converter_objects
         PRIVATE
         ${libmorton_SOURCE_DIR}/include
 )
-setWarningflagsForTarget(converter_objects)
+setWarningflagsForTarget(points_converter_objects)
 
 if (MSVC)
-    target_compile_options(converter_objects PRIVATE /arch:AVX2)
+    target_compile_options(points_converter_objects PRIVATE /arch:AVX2)
 else ()
-    #target_compile_options(converter_objects PRIVATE -mavx2)
+    #target_compile_options(points_converter_objects PRIVATE -mavx2)
 endif ()
 
 if (BUILD_SHARED_LIBS)
-    target_compile_definitions(converter_objects PRIVATE POINTS_CONVERTER_EXPORTS)
-    #    target_compile_options(converter_objects PRIVATE -fsanitize=address)
-    #    target_link_libraries(converter_objects PRIVATE -fsanitize=address)
+    target_compile_definitions(points_converter_objects PRIVATE POINTS_CONVERTER_EXPORTS)
+    #    target_compile_options(points_converter_objects PRIVATE -fsanitize=address)
+    #    target_link_libraries(points_converter_objects PRIVATE -fsanitize=address)
 endif ()
 
-add_library(converter empty_dylib_function.cpp $<TARGET_OBJECTS:converter_objects>)
-#target_compile_options(converter PRIVATE -fsanitize=address)
-#target_link_options(converter PRIVATE -fsanitize=address)
-BuildExternalTargetLinkLibrary(converter PUBLIC converter_objects)
+add_library(points_converter empty_dylib_function.cpp $<TARGET_OBJECTS:points_converter_objects>)
+#target_compile_options(points_converter PRIVATE -fsanitize=address)
+#target_link_options(points_converter PRIVATE -fsanitize=address)
+BuildExternalTargetLinkLibrary(points_converter PUBLIC points_converter_objects)

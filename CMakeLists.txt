@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.16.0)
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
+if (CCACHE_PROGRAM)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
-endif()
+endif ()
 
 project(Points VERSION 0.0.1)
 
@@ -14,10 +14,10 @@ include(GenerateExportHeader)
 
 get_property(LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS)
 if ("${LIB64}" STREQUAL "TRUE" AND NOT FORCE_NO_LIBDIR_SUFFIX)
-  set(LIBSUFFIX 64)
-else()
-  set(LIBSUFFIX "")
-endif()
+    set(LIBSUFFIX 64)
+else ()
+    set(LIBSUFFIX "")
+endif ()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -60,44 +60,44 @@ include(CMake/CopyDllForTarget.cmake)
 add_subdirectory(src)
 
 if (BUILD_TESTS)
-  enable_testing()
-  add_subdirectory(tests)
-endif()
+    enable_testing()
+    add_subdirectory(tests)
+endif ()
 
 if (BUILD_EXAMPLES)
-  add_subdirectory(examples)
-endif()
+    add_subdirectory(examples)
+endif ()
 
 if (NOT DEFINED CPACK_GENERATOR)
-  if (UNIX)
-    set (CPACK_GENERATOR "TGZ")
-  elseif(WIN32)
-    set (CPACK_GENERATOR "ZIP")
-  endif()
-endif()
+    if (UNIX)
+        set(CPACK_GENERATOR "TGZ")
+    elseif (WIN32)
+        set(CPACK_GENERATOR "ZIP")
+    endif ()
+endif ()
 
 if (UNIX)
     find_program(LSB_RELEASE_EXEC lsb_release)
     if (LSB_RELEASE_EXEC)
-		execute_process(COMMAND ${LSB_RELEASE_EXEC} -irs
-			OUTPUT_VARIABLE OS_NAME
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-		)
-    else()
-      set(OS_NAME "linux")
-    endif()
+        execute_process(COMMAND ${LSB_RELEASE_EXEC} -irs
+                OUTPUT_VARIABLE OS_NAME
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+    else ()
+        set(OS_NAME "linux")
+    endif ()
 else ()
     # Always set OS_NAME to "win" for windows
     set(OS_NAME "win-${MSVC_TOOLSET_VERSION_LOCAL}")
 endif ()
 
 if (NOT DEFINED PACKAGE_RELEASE)
-   set(PACKAGE_RELEASE "1")
-endif()
+    set(PACKAGE_RELEASE "1")
+endif ()
 
-set (CPACK_PACKAGE_VERSION "${CMAKE_PROJECT_VERSION}")
-set (CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/package-install")
-set (CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${CMAKE_PROJECT_VERSION}-${PACKAGE_RELEASE}-${OS_NAME}")
+set(CPACK_PACKAGE_VERSION "${CMAKE_PROJECT_VERSION}")
+set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/package-install")
+set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${CMAKE_PROJECT_VERSION}-${PACKAGE_RELEASE}-${OS_NAME}")
 
 include(CPack)
 

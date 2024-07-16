@@ -46,7 +46,7 @@ struct attribute_t
 {
   const char *name;
   uint32_t name_size;
-  type_t format;
+  type_t type;
   components_t components;
 };
 
@@ -89,10 +89,10 @@ struct converter_file_convert_callbacks_t
   converter_file_destroy_user_ptr_t destroy_user_ptr;
 };
 
-typedef void (*converter_progress_callback_t)(float progress);
-typedef void (*converter_warning_callback_t)(const char *message);
-typedef void (*converter_error_callback_t)(const struct error_t *error);
-typedef void (*converter_done_callback_t)();
+typedef void (*converter_progress_callback_t)(void *user_ptr, float progress);
+typedef void (*converter_warning_callback_t)(void *user_ptr, const char *message);
+typedef void (*converter_error_callback_t)(void *user_ptr, const struct error_t *error);
+typedef void (*converter_done_callback_t)(void *user_ptr);
 
 struct converter_runtime_callbacks_t
 {
@@ -123,10 +123,10 @@ enum converter_conversion_status_t
 struct converter_t;
 POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size);
 POINTS_CONVERTER_EXPORT void converter_destroy(converter_t *destroy);
-POINTS_CONVERTER_EXPORT void converter_add_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks);
-POINTS_CONVERTER_EXPORT void converter_add_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks);
+POINTS_CONVERTER_EXPORT void converter_set_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks);
+POINTS_CONVERTER_EXPORT void converter_set_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks, void *user_ptr);
 POINTS_CONVERTER_EXPORT void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count);
-POINTS_CONVERTER_EXPORT void converter_wait_finish(converter_t *converter);
+POINTS_CONVERTER_EXPORT void converter_wait_idle(converter_t *converter);
 POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter_t *converter, error_t **errors, size_t *error_count);
 
 } // namespace converter

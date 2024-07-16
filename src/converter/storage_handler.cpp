@@ -65,7 +65,7 @@ static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
     ret.msg = "Wrong magic.";
     return ret;
   }
-  auto ptr = buffer + 4;
+  auto ptr = buffer + sizeof(magic);
   memcpy(&free_blobs, ptr, sizeof(free_blobs));
   ptr += sizeof(free_blobs);
 
@@ -165,7 +165,24 @@ struct close_file_on_error_t
   uv_loop_t *loop;
   error_t &error;
 };
-storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe, error_t &error)
+
+static std::unique_ptr<uint8_t[]> read_into_buffer(threaded_event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, error_t &error)
+{
+  assert(error.code == 0);
+  auto buffer = std::make_unique<uint8_t[]>(location.size);
+  uv_buf_t uv_buffer = {(char *)buffer.get(), location.size};
+  auto result = uv_fs_read(event_loop.loop(), &request, file_handle, &uv_buffer, 1, int64_t(location.offset), NULL);
+  if (result < 0 || request.result != location.size)
+  {
+    error.code = 1;
+    error.msg = "Could not read the entire buffer";
+    return nullptr;
+  }
+  return buffer;
+}
+
+storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<void> &index_written, event_pipe_t<error_t> &storage_error_pipe,
+                                     error_t &error)
   : _file_name(url)
   , _event_loop(thread_pool)
   , _file_handle(0)
@@ -174,6 +191,7 @@ storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thre
   , _file_opened_in_write_mode(false)
   , _attributes_configs(attributes_configs)
   , _serialized_index_size(128)
+  , _index_written(index_written)
   , _storage_error(storage_error_pipe)
   , _write_event_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_events))
   , _write_trees_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_trees))
@@ -199,6 +217,15 @@ storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thre
     //_storage_error.post_event(std::move(error));
     return;
   }
+
+  _file_opened = true;
+}
+
+error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
+                                      std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size)
+{
+  error_t error;
+  uv_fs_t request = {};
   close_file_on_error_t closer(_file_handle, _event_loop.loop(), error);
   auto index_buffer = std::make_unique<uint8_t[]>(_serialized_index_size);
   uv_buf_t index_uv_buf = {(char *)index_buffer.get(), _serialized_index_size};
@@ -207,13 +234,13 @@ storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thre
   {
     error.code = 1;
     error.msg = uv_strerror(read);
-    return;
+    return error;
   }
   if (uint32_t(read) != _serialized_index_size)
   {
     error.code = 1;
     error.msg = "could not read index";
-    return;
+    return error;
   }
   storage_location_t free_blobs;
   storage_location_t attribute_configs;
@@ -221,10 +248,41 @@ storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thre
   error = deserialize_index(index_buffer.get(), _serialized_index_size, free_blobs, attribute_configs, tree_registry);
   if (error.code != 0)
   {
-    return;
+    return error;
   }
 
-  _file_opened = true;
+  free_blobs_buffer = read_into_buffer(_event_loop, _file_handle, request, free_blobs, error);
+  free_blobs_size = free_blobs.size;
+  if (!free_blobs_buffer)
+  {
+    error.code = 1;
+    error.msg = "Failed to read free blobs: " + error.msg;
+    return error;
+  }
+
+  attribute_configs_buffer = read_into_buffer(_event_loop, _file_handle, request, attribute_configs, error);
+  attribute_configs_size = attribute_configs.size;
+  if (!attribute_configs_buffer)
+  {
+    error.code = 1;
+    error.msg = "Failed to read attribute_configs: " + error.msg;
+    return error;
+  }
+
+  tree_registry_buffer = read_into_buffer(_event_loop, _file_handle, request, tree_registry, error);
+  tree_registry_size = tree_registry.size;
+  if (!tree_registry_buffer)
+  {
+    error.code = 1;
+    error.msg = "Failed to read tree_registry: " + error.msg;
+    return error;
+  }
+  return error;
+}
+
+error_t storage_handler_t::deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+{
+  return _blob_manager.deserialize(data, size);
 }
 
 error_t storage_handler_t::upgrade_to_write(bool truncate)
@@ -514,6 +572,7 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
     this->_blob_manager = std::move(new_blob_manager_moved);
     this->blobs_location = free_blobs;
     this->attributes_location = attribute_configs;
+    this->_index_written.post_event();
     done_moved(std::move(error));
   };
 

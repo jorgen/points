@@ -31,9 +31,11 @@ static auto &get_item(input_data_id_t id, ankerl::unordered_dense::map<uint32_t,
 input_data_source_registry_t::input_data_source_registry_t()
   : _input_data_with_sub_parts(0)
   , _input_data_inserted_to_tree(0)
+  , _input_data_id_done_count(0)
   , _unsorted_input_sources_dirty(true)
 {
 }
+
 input_data_source_registry_t::~input_data_source_registry_t()
 {
 }
@@ -116,6 +118,7 @@ void input_data_source_registry_t::handle_reading_done(input_data_id_t id)
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = get_item(id, _registry);
   item.read_finished = true;
+  _input_data_id_done_count++;
 }
 
 void input_data_source_registry_t::handle_tree_done_with_input(input_data_id_t id)
@@ -129,7 +132,7 @@ void input_data_source_registry_t::handle_tree_done_with_input(input_data_id_t i
 bool input_data_source_registry_t::all_inserted_into_tree() const
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  return _input_data_with_sub_parts == _input_data_inserted_to_tree;
+  return _registry.size() == _input_data_id_done_count && _input_data_with_sub_parts == _input_data_inserted_to_tree;
 }
 
 std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_to_process()

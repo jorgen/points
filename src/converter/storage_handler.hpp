@@ -99,8 +99,15 @@ struct read_request_t : storage_handler_request_t
 class storage_handler_t
 {
 public:
-  storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<error_t> &storage_error_pipe, error_t &error);
-  error_t upgrade_to_write(bool truncate);
+  storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<void> &index_written, event_pipe_t<error_t> &storage_error_pipe, error_t &error);
+  [[nodiscard]] bool file_exists() const
+  {
+    return _file_exists;
+  }
+  [[nodiscard]] error_t read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
+                                   std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size);
+  [[nodiscard]] error_t deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
+  [[nodiscard]] error_t upgrade_to_write(bool truncate);
 
   void write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
              std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)> done);
@@ -114,10 +121,6 @@ public:
   void remove_request(storage_handler_request_t *request);
 
 private:
-  void handle_stat_file(uv_fs_t *request);
-  void handle_open_cache_file(uv_fs_t *request);
-  void handle_close_file(uv_fs_t *request);
-
   void handle_write_events(
     std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event);
   void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)>> &&event);
@@ -145,6 +148,7 @@ private:
   storage_location_t attributes_location;
   storage_location_t blobs_location;
 
+  event_pipe_t<void> &_index_written;
   event_pipe_t<error_t> &_storage_error;
   event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>>> _write_event_pipe;
   event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>>> _write_trees_pipe;

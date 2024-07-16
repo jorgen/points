@@ -1,1 +1,2 @@
-add_subdirectory(converter_renderer_example)
+add_subdirectory(renderer)
+add_subdirectory(converter)

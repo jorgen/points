@@ -209,7 +209,7 @@ static void reorder_buffer(uint32_t count, const INDEX_T *indecies_begin, std::p
 }
 
 template <typename T, typename INDEX_T, typename MT, size_t C>
-void convert_and_sort_morton(const tree_config_t &tree_config, attributes_configs_t &attributes_config, const header_t &public_header, points_t &points, double smallest_scale, type_t format, error_t &error)
+void convert_and_sort_morton(const tree_config_t &tree_config, attributes_configs_t &attributes_config, const header_t &public_header, points_t &points, double smallest_scale, type_t type, error_t &error)
 {
   (void)error;
   auto &header = points.header;
@@ -266,7 +266,7 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   morton::morton_t<MT, C> last = morton_begin[indecies_begin[count - 1]];
   assert(first < last);
   points.header.lod_span = morton::morton_lod(first, last);
-  type_t new_type = morton_format_from_lod(points.header.lod_span);
+  type_t new_type = morton_type_from_lod(points.header.lod_span);
   std::unique_ptr<uint8_t[]> new_data;
   uint32_t new_buffer_size = 0;
   if (new_type == type_m32 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton32_t))
@@ -277,13 +277,13 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
     downcast_point_buffer<INDEX_T, MT, C, uint64_t, 2>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
   else
   {
-    assert(format == new_type);
+    assert(type == new_type);
     reorder_buffer<INDEX_T>(count, indecies_begin, std::make_pair(new_type, components_1), world_morton_unique_ptr.get(), new_data, new_buffer_size);
   }
 
   world_morton_unique_ptr = std::move(new_data);
   buffer_size = new_buffer_size;
-  format = new_type;
+  type = new_type;
 
   points.buffers.data[0] = std::move(world_morton_unique_ptr);
   points.buffers.buffers[0].data = points.buffers.data[0].get();
@@ -292,7 +292,7 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   auto &orig_attributes = attributes_config.get(points.attributes_id);
   attributes_t attributes;
   attributes_copy(orig_attributes, attributes);
-  attributes.attributes[0].format = format;
+  attributes.attributes[0].type = type;
   attributes.attribute_names.push_back(std::unique_ptr<char[]>(new char[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER) + 1]));
   memcpy(attributes.attribute_names.back().get(), POINTS_ATTRIBUTE_ORIGINAL_ORDER, sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER));
   attributes.attribute_names.back().get()[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)] = 0;
@@ -301,13 +301,13 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   order_attr.components = components_1;
   order_attr.name = attributes.attribute_names.back().get();
   order_attr.name_size = sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER);
-  order_attr.format = type_from_type<INDEX_T>();
+  order_attr.type = type_from_type<INDEX_T>();
 
   for (int i = 1; i < int(attributes.attributes.size()) - 1; i++)
   {
     std::unique_ptr<uint8_t[]> new_attr_data;
     auto &attr = attributes.attributes[i];
-    auto attr_format = std::make_pair(attr.format, attr.components);
+    auto attr_format = std::make_pair(attr.type, attr.components);
     reorder_buffer<INDEX_T>(count, indecies_begin, attr_format, points.buffers.data[i].get(), new_attr_data, new_buffer_size);
     points.buffers.data[i] = std::move(new_attr_data);
     assert(new_buffer_size == points.buffers.buffers[i].size);
@@ -318,7 +318,7 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   points.buffers.buffers.emplace_back(points.buffers.data.back().get(), uint32_t(sizeof(INDEX_T)) * count);
 
   points.attributes_id = attributes_config.get_attribute_config_index(std::move(attributes));
-  points.header.point_format = {format, components_1};
+  points.header.point_format = {type, components_1};
   morton::morton_upcast(first, base_morton, points.header.morton_min);
   morton::morton_upcast(last, base_morton, points.header.morton_max);
   assert(points.header.lod_span == morton::morton_lod(points.header.morton_min, points.header.morton_max));
@@ -360,7 +360,7 @@ void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &at
     convert_pos_to_morton(smallest_scale, tree_config.offset, public_header.min, header.morton_min);
     convert_pos_to_morton(smallest_scale, tree_config.offset, public_header.max, header.morton_max);
     int lod = morton::morton_lod(header.morton_min, header.morton_max);
-    target_format = morton_format_from_lod(lod);
+    target_format = morton_type_from_lod(lod);
   }
 
   switch (target_format)

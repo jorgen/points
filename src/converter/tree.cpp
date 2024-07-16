@@ -565,4 +565,24 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   return {std::move(data), int(tree_registry_size)};
 }
 
+error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry)
+{
+  const uint8_t *ptr = data.get();
+  const uint8_t *end_ptr = ptr + data_size;
+  if (ptr + sizeof(tree_registry.current_id) > end_ptr)
+    return {1, "Invalid tree registry data"};
+  memcpy(&tree_registry.current_id, ptr, sizeof(tree_registry.current_id));
+  ptr += sizeof(tree_registry.current_id);
+  uint32_t tree_registry_count = 0;
+  if (ptr + sizeof(tree_registry_count) > end_ptr)
+    return {1, "Invalid tree registry data"};
+  memcpy(&tree_registry_count, ptr, sizeof(tree_registry_count));
+  ptr += sizeof(tree_registry_count);
+  if (ptr + sizeof(storage_location_t) * tree_registry_count > end_ptr)
+    return {1, "Invalid tree registry data"};
+  tree_registry.locations.resize(tree_registry_count);
+  memcpy(tree_registry.locations.data(), ptr, sizeof(storage_location_t) * tree_registry_count);
+  return {};
+}
+
 } // namespace points::converter

@@ -94,6 +94,7 @@ private:
   ankerl::unordered_dense::map<uint32_t, input_data_source_impl_t> _registry;
   uint32_t _input_data_with_sub_parts;
   uint32_t _input_data_inserted_to_tree;
+  uint32_t _input_data_id_done_count;
   std::vector<uint32_t> _unsorted_input_sources;
   std::vector<uint32_t> _sorted_input_sources;
   bool _unsorted_input_sources_dirty;

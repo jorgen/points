@@ -53,9 +53,12 @@ public:
   error_t upgrade_to_write(bool truncate);
   void set_pre_init_tree_config(const tree_config_t &tree_config);
   void set_pre_init_tree_node_limit(uint32_t node_limit);
+  void set_runtime_callbacks(const converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr);
   void set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks);
   void add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files);
   void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
+  void wait_idle();
+
   void about_to_block() override;
 
   storage_handler_t &storage_handler()
@@ -67,9 +70,18 @@ public:
 private:
   std::string _url;
   thread_pool_t _thread_pool;
+  converter_runtime_callbacks_t _runtime_callbacks;
+  void *_runtime_callback_user_ptr;
   converter_file_convert_callbacks_t _convert_callbacks;
 
   threaded_event_loop_t _event_loop;
+
+  bool _generating_lod;
+
+  bool _idle;
+  int _new_file_events_sent;
+  std::mutex _idle_mutex;
+  std::condition_variable _idle_condition;
 
   input_data_source_registry_t _input_data_source_registry;
   storage_handler_t _storage_handler;
@@ -86,8 +98,8 @@ private:
   event_pipe_t<std::pair<points_t, error_t>> _sorted_points;
   event_pipe_t<file_error_t> _point_reader_file_errors;
   event_pipe_t<input_data_id_t> _point_reader_done_with_file;
-  event_pipe_t<void> _lod_generation_done;
 
+  event_pipe_t<void> _storage_index_write_done;
   event_pipe_t<error_t> _storage_handler_error;
   event_pipe_t<input_data_id_t> _tree_done_with_input;
 
@@ -109,7 +121,7 @@ private:
   void handle_sorted_points(std::pair<points_t, error_t> &&event);
   void handle_file_errors(file_error_t &&error);
   void handle_file_reading_done(input_data_id_t &&file);
-  void handle_tree_lod_done();
+  void handle_index_write_done();
 
   void handle_storage_error(error_t &&errors);
   void handle_points_written(const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations);

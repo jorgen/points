@@ -15,6 +15,7 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
+#include "error.hpp"
 #include <ankerl/unordered_dense.h>
 #include <fmt/core.h>
 #include <vector>
@@ -84,4 +85,5 @@ public:
   offset_t get_file_size() const;
   uint32_t calculate_serialized_size() const;
   serialized_free_blob_manager_t serialize();
+  [[nodiscard]] points::error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
 };

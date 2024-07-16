@@ -276,3 +276,55 @@ serialized_free_blob_manager_t free_blob_manager_t::serialize()
   }
   return serialized;
 }
+
+points::error_t free_blob_manager_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+{
+  if (size < sizeof(_next_offset) + sizeof(uint32_t))
+  {
+    return {1, "Data size too small for deserialization"};
+  }
+
+  uint8_t *data_ptr = data.get();
+  uint32_t remaining_size = size;
+
+  memcpy(&_next_offset, data_ptr, sizeof(_next_offset));
+  data_ptr += sizeof(_next_offset);
+  remaining_size -= sizeof(_next_offset);
+
+  uint32_t page_count;
+  memcpy(&page_count, data_ptr, sizeof(page_count));
+  data_ptr += sizeof(page_count);
+  remaining_size -= sizeof(page_count);
+
+  for (uint32_t i = 0; i < page_count; i++)
+  {
+    if (remaining_size < sizeof(page_t) + sizeof(uint32_t))
+    {
+      return {1, "Insufficient data for page count"};
+    }
+
+    page_t page_number;
+    memcpy(&page_number, data_ptr, sizeof(page_number));
+    data_ptr += sizeof(page_number);
+    remaining_size -= sizeof(page_number);
+
+    uint32_t free_sections_in_page_count;
+    memcpy(&free_sections_in_page_count, data_ptr, sizeof(free_sections_in_page_count));
+    data_ptr += sizeof(free_sections_in_page_count);
+    remaining_size -= sizeof(free_sections_in_page_count);
+
+    if (remaining_size < free_sections_in_page_count * sizeof(section_t))
+    {
+      return {1, "Insufficient data for sections"};
+    }
+
+    std::vector<section_t> sections(free_sections_in_page_count);
+    memcpy(sections.data(), data_ptr, free_sections_in_page_count * sizeof(sections.front()));
+    data_ptr += free_sections_in_page_count * sizeof(sections.front());
+    remaining_size -= free_sections_in_page_count * sizeof(sections.front());
+
+    _free_sections_by_page.emplace(page_number, std::move(sections));
+  }
+
+  return {};
+}

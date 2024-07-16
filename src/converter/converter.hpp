@@ -33,11 +33,9 @@ namespace converter
 struct converter_t
 {
   converter_t(const char *url, uint64_t url_size)
-    : convert_callbacks(laszip_callbacks())
-    , runtime_callbacks{}
-    , processor(url, error)
+    : processor(url, error)
   {
-    processor.set_converter_callbacks(convert_callbacks);
+    processor.set_converter_callbacks(laszip_callbacks());
     if (error.code != 0)
     {
       fmt::print(stderr, "Failed to open cache file: {}\n", error.msg);
@@ -54,8 +52,6 @@ struct converter_t
   }
   error_t error;
   tree_config_t tree_config;
-  converter_file_convert_callbacks_t convert_callbacks;
-  converter_runtime_callbacks_t runtime_callbacks;
   converter_conversion_status_t status;
   processor_t processor;
 };

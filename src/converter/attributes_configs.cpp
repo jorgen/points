@@ -34,7 +34,7 @@ static bool compare_attribute(const attribute_t &a, const attribute_t &b)
 {
   if (a.name_size != b.name_size)
     return false;
-  if (a.format != b.format)
+  if (a.type != b.type)
     return false;
   if (a.components != b.components)
     return false;
@@ -107,7 +107,7 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
   std::sort(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data < b.data; });
   attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
 
-  auto lod_format = morton_format_from_lod(lod);
+  auto lod_type = morton_type_from_lod(lod);
   attributes_t target;
   {
     std::unique_lock<std::mutex> lock(_mutex);
@@ -117,11 +117,11 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
     {
       add_missing_attributes(_attributes_configs[it->data].attributes, target);
     }
-    target.attributes.front().format = lod_format;
+    target.attributes.front().type = lod_type;
     target.attributes.front().components = components_1;
   }
   auto id = get_attribute_config_index(std::move(target));
-  return get_lod_attribute_mapping(lod_format, id, attrib_begin, attrib_end);
+  return get_lod_attribute_mapping(lod_type, id, attrib_begin, attrib_end);
 }
 
 const attributes_t &attributes_configs_t::get(attributes_id_t id)
@@ -163,7 +163,7 @@ attribute_source_lod_into_t create_attribute_source_lod_into(const attribute_t &
     if (is_attribute_names_equal(attr, attributes.attributes[i]))
     {
       attribute_source_lod_into_t ret;
-      ret.source_format.type = attributes.attributes[i].format;
+      ret.source_format.type = attributes.attributes[i].type;
       ret.source_format.components = attributes.attributes[i].components;
       ret.source_index = i;
       return ret;
@@ -189,7 +189,7 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const ty
   ret.source.reserve(end - begin);
   for (auto &attr : target.attributes)
   {
-    ret.destination.emplace_back(attr.format, attr.components);
+    ret.destination.emplace_back(attr.type, attr.components);
   }
   for (auto it = begin; it != end; ++it)
   {
@@ -220,7 +220,7 @@ std::vector<point_format_t> attributes_configs_t::get_format_components(attribut
   ret.reserve(attrib_config.attributes.attributes.size());
   for (auto &attrib : attrib_config.attributes.attributes)
   {
-    ret.emplace_back(attrib.format, attrib.components);
+    ret.emplace_back(attrib.type, attrib.components);
   }
   return ret;
 }
@@ -230,7 +230,7 @@ point_format_t attributes_configs_t::get_point_format(attributes_id_t id)
   assert(id.data < _attributes_configs.size());
   std::unique_lock<std::mutex> lock(_mutex);
   auto &attrib = _attributes_configs[id.data].attributes.attributes[0];
-  return {attrib.format, attrib.components};
+  return {attrib.type, attrib.components};
 }
 int attributes_configs_t::get_attribute_index(attributes_id_t id, const std::string &name) const
 {
@@ -259,7 +259,7 @@ serialized_attributes_t attributes_configs_t::serialize() const
     size += uint32_t(attrib.attributes.attributes.size());
     for (auto &attr : attrib.attributes.attributes)
     {
-      size += sizeof(attr.format) + sizeof(attr.components) + sizeof(attr.name_size) + attr.name_size;
+      size += sizeof(attr.type) + sizeof(attr.components) + sizeof(attr.name_size) + attr.name_size;
     }
   }
   auto ret = serialized_attributes_t();
@@ -276,8 +276,8 @@ serialized_attributes_t attributes_configs_t::serialize() const
     data += sizeof(attrib_count);
     for (auto &attr : attrib.attributes.attributes)
     {
-      memcpy(data, &attr.format, sizeof(attr.format));
-      data += sizeof(attr.format);
+      memcpy(data, &attr.type, sizeof(attr.type));
+      data += sizeof(attr.type);
       memcpy(data, &attr.components, sizeof(attr.components));
       data += sizeof(attr.components);
       memcpy(data, &attr.name_size, sizeof(attr.name_size));
@@ -288,5 +288,62 @@ serialized_attributes_t attributes_configs_t::serialize() const
   }
   return ret;
 }
+
+points::error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+{
+  auto input_bytes = data.get();
+  auto end = input_bytes + size;
+  uint32_t count;
+
+  if (input_bytes + sizeof(uint32_t) > end)
+    return {1, "Invalid input size for count"};
+
+  memcpy(&count, input_bytes, sizeof(count));
+  input_bytes += sizeof(uint32_t);
+
+  for (uint32_t i = 0; i < count; i++)
+  {
+    uint32_t attrib_count;
+    if (input_bytes + sizeof(uint32_t) > end)
+      return {2, "Invalid input size for attribute count"};
+
+    memcpy(&attrib_count, input_bytes, sizeof(attrib_count));
+    input_bytes += sizeof(uint32_t);
+
+    attributes_t attributes;
+    for (uint32_t j = 0; j < attrib_count; j++)
+    {
+      if (input_bytes + sizeof(type_t) + sizeof(components_t) + sizeof(uint32_t) > end)
+        return {3, "Invalid input size for attribute details"};
+
+      type_t format;
+      components_t components;
+      uint32_t name_size;
+
+      memcpy(&format, input_bytes, sizeof(format));
+      input_bytes += sizeof(format);
+
+      memcpy(&components, input_bytes, sizeof(components));
+      input_bytes += sizeof(components);
+
+      memcpy(&name_size, input_bytes, sizeof(name_size));
+      input_bytes += sizeof(name_size);
+
+      if (input_bytes + name_size > end)
+        return {4, "Invalid input size for attribute name"};
+
+      auto name = std::make_unique<char[]>(name_size + 1);
+      memcpy(name.get(), input_bytes, name_size);
+      name[name_size] = '\0';
+      input_bytes += name_size;
+
+      attributes.attributes.emplace_back(name.get(), name_size, format, components);
+      attributes.attribute_names.push_back(std::move(name));
+    }
+    get_attribute_config_index(std::move(attributes));
+  }
+  return {};
+}
+
 } // namespace converter
 } // namespace points
