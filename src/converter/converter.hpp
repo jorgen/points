@@ -33,7 +33,7 @@ namespace converter
 struct converter_t
 {
   converter_t(const char *url, uint64_t url_size)
-    : processor(url, error)
+    : processor(std::string(url, url_size), error)
   {
     processor.set_converter_callbacks(laszip_callbacks());
     if (error.code != 0)

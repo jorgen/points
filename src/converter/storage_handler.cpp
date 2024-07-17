@@ -57,6 +57,7 @@ static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
 }
 [[nodiscard]] static error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry)
 {
+  (void)buffer_size; // buffer size is validated by the caller
   uint8_t magic[] = {'J', 'L', 'P', 0};
   if (memcmp(buffer, magic, sizeof(magic)) != 0)
   {
@@ -127,6 +128,7 @@ void storage_handler_request_t::do_write(const std::shared_ptr<uint8_t[]> &data,
 read_request_t::read_request_t(storage_handler_t &storage, std::function<void(const storage_handler_request_t &)> done)
   : storage_handler_request_t(storage,
                               [this, done_moved = std::move(done)](const storage_handler_request_t &request) {
+                                (void)request;
                                 std::unique_lock<std::mutex> lock(this->_mutex);
                                 this->_done = true;
                                 this->_block_for_read.notify_all();
@@ -170,7 +172,9 @@ static std::unique_ptr<uint8_t[]> read_into_buffer(threaded_event_loop_t &event_
 {
   assert(error.code == 0);
   auto buffer = std::make_unique<uint8_t[]>(location.size);
-  uv_buf_t uv_buffer = {(char *)buffer.get(), location.size};
+  uv_buf_t uv_buffer;
+  uv_buffer.base = (char *)buffer.get();
+  uv_buffer.len = location.size;
   auto result = uv_fs_read(event_loop.loop(), &request, file_handle, &uv_buffer, 1, int64_t(location.offset), NULL);
   if (result < 0 || request.result != location.size)
   {
@@ -228,7 +232,9 @@ error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buf
   uv_fs_t request = {};
   close_file_on_error_t closer(_file_handle, _event_loop.loop(), error);
   auto index_buffer = std::make_unique<uint8_t[]>(_serialized_index_size);
-  uv_buf_t index_uv_buf = {(char *)index_buffer.get(), _serialized_index_size};
+  uv_buf_t index_uv_buf;
+  index_uv_buf.base = (char *)index_buffer.get();
+  index_uv_buf.len = _serialized_index_size;
   auto read = uv_fs_read(_event_loop.loop(), &request, _file_handle, &index_uv_buf, 1, 0, NULL);
   if (read < 0)
   {

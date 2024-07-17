@@ -171,11 +171,11 @@ private:
   static void exit_event_loop_cb(uv_async_t *handle)
   {
     threaded_event_loop_t *event_loop = static_cast<threaded_event_loop_t *>(handle->data);
-    uv_prepare_stop(&event_loop->_about_to_block);
     for (auto close_handle : event_loop->_to_close_handles)
       uv_close(close_handle, nullptr);
     for (auto cancel_handle : event_loop->_to_cancel_work_handles)
       uv_cancel((uv_req_t *)cancel_handle);
+    uv_prepare_stop(&event_loop->_about_to_block);
   }
 
   uv_loop_t *_loop;

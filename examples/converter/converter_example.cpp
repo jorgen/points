@@ -6,18 +6,36 @@
 
 void converter_progress_callback_t(void *user_data, float progress)
 {
+  (void)user_data;
+  fmt::print("Progress: {:.2f}\n", progress);
 }
 
 void converter_warning_callback_t(void *user_data, const char *message)
 {
+  (void)user_data;
+  fmt::print("Warning: {}\n", message);
+}
+
+static std::string get_error_string(const points::error_t *error)
+{
+  int code;
+  const char *str;
+  size_t str_len;
+  points::error_get_info(error, &code, &str, &str_len);
+  return {str, str_len};
 }
 
 void converter_error_callback_t(void *user_data, const struct points::error_t *error)
 {
+  (void)user_data;
+  auto error_str = get_error_string(error);
+  fmt::print("Error: {}\n", error_str);
 }
 
 void converter_done_callback_t(void *user_data)
 {
+  (void)user_data;
+  fmt::print("Done\n");
 }
 
 template <typename T, typename Deleter>

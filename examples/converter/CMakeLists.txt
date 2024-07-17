@@ -6,5 +6,5 @@ add_executable(converter_example
 )
 
 BuildExternalTargetLinkLibrary(converter_example PRIVATE points_converter common fmt)
-copy_dll_for_target(converter_example points_converter)
+copy_dll_for_target(converter_example points_converter, common)
 setWarningFlagsForTarget(converter_example)
