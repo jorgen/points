@@ -40,7 +40,7 @@ tree_t &tree_cache_add_tree(tree_registry_t &tree_cache, tree_t *(&parent))
   return tree_cache.data.back();
 }
 
-tree_id_t tree_initialize(uint32_t node_point_limit, tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations)
+tree_id_t tree_initialize(tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations)
 {
   tree_t &tree = tree_cache_create_root_tree(tree_cache);
   morton::morton192_t mask = morton::morton_xor(header.morton_min, header.morton_max);
@@ -60,7 +60,7 @@ tree_id_t tree_initialize(uint32_t node_point_limit, tree_registry_t &tree_cache
   tree.mins[0].push_back(tree.morton_min);
 #endif
 
-  auto id = tree_add_points(node_point_limit, tree_cache, cache, tree.id, header, attributes, std::move(locations));
+  auto id = tree_add_points(tree_cache, cache, tree.id, header, attributes, std::move(locations));
   return id;
 }
 
@@ -161,7 +161,7 @@ static void move_storage_locations_to_subtree(const points_collection_t &collect
   }
 }
 
-static void sub_tree_insert_points(uint32_t node_point_limit, tree_registry_t &tree_cache, storage_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, int current_level, int skip, uint16_t current_name,
+static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_t &cache, tree_id_t tree_id, const morton::morton192_t &min, int current_level, int skip, uint16_t current_name,
                                    points_collection_t &&points) // NOLINT(*-no-recursion)
 {
   auto *tree = tree_cache.get(tree_id);
@@ -194,12 +194,12 @@ static void sub_tree_insert_points(uint32_t node_point_limit, tree_registry_t &t
         auto sub_tree_id = tree->sub_trees[sub_skip];
         auto *sub_tree = tree_cache.get(sub_tree_id);
         move_storage_locations_to_subtree(points, *tree, *sub_tree);
-        sub_tree_insert_points(node_point_limit, tree_cache, cache, sub_tree_id, new_min, 0, 0, sub_tree_name, std::move(points));
+        sub_tree_insert_points(tree_cache, cache, sub_tree_id, new_min, 0, 0, sub_tree_name, std::move(points));
       }
       else
       {
         auto child_name = morton::morton_get_name(current_name, current_level + 1, child_mask);
-        sub_tree_insert_points(node_point_limit, tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(points));
+        sub_tree_insert_points(tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(points));
       }
       return;
     }
@@ -216,7 +216,7 @@ static void sub_tree_insert_points(uint32_t node_point_limit, tree_registry_t &t
         tree_initialize_sub(*tree, tree_cache, points.min, sub_tree);
         uint16_t sub_tree_name = morton::morton_get_name(0, 0, child_mask);
         move_storage_locations_to_subtree(points, *tree, sub_tree);
-        sub_tree_insert_points(node_point_limit, tree_cache, cache, sub_tree.id, new_min, 0, 0, sub_tree_name, std::move(points));
+        sub_tree_insert_points(tree_cache, cache, sub_tree.id, new_min, 0, 0, sub_tree_name, std::move(points));
       }
       else
       {
@@ -227,13 +227,13 @@ static void sub_tree_insert_points(uint32_t node_point_limit, tree_registry_t &t
 #ifndef NDEBUG
         tree->mins[current_level + 1][sub_skip] = new_min;
 #endif
-        sub_tree_insert_points(node_point_limit, tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(points));
+        sub_tree_insert_points(tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(points));
       }
       return;
     }
   }
 
-  if (node == 0 && tree->data[current_level][skip].point_count + points.point_count <= node_point_limit)
+  if (node == 0 && tree->data[current_level][skip].point_count + points.point_count <= tree_cache.node_limit)
   {
     assert(!(points.min < min));
     points_data_add(tree->data[current_level][skip], std::move(points));
@@ -282,13 +282,13 @@ static void sub_tree_insert_points(uint32_t node_point_limit, tree_registry_t &t
           sub_tree_increase_skips(*tree, current_level, skip);
           tree_initialize_sub(*tree, tree_cache, child_data.min, sub_tree);
           move_storage_locations_to_subtree(child_data, *tree, sub_tree);
-          sub_tree_insert_points(node_point_limit, tree_cache, cache, sub_tree.id, new_min, 0, 0, sub_tree_name, std::move(child_data));
+          sub_tree_insert_points(tree_cache, cache, sub_tree.id, new_min, 0, 0, sub_tree_name, std::move(child_data));
         }
         else
         {
           tree_t *sub_tree = tree_cache.get(tree->sub_trees[sub_skip]);
           move_storage_locations_to_subtree(child_data, *tree, *sub_tree);
-          sub_tree_insert_points(node_point_limit, tree_cache, cache, sub_tree->id, new_min, 0, 0, sub_tree_name, std::move(child_data));
+          sub_tree_insert_points(tree_cache, cache, sub_tree->id, new_min, 0, 0, sub_tree_name, std::move(child_data));
         }
       }
       else
@@ -296,7 +296,7 @@ static void sub_tree_insert_points(uint32_t node_point_limit, tree_registry_t &t
         auto child_name = morton::morton_get_name(current_name, current_level + 1, i);
         if (has_this_child)
         {
-          sub_tree_insert_points(node_point_limit, tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(child_data));
+          sub_tree_insert_points(tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(child_data));
         }
         else
         {
@@ -307,7 +307,7 @@ static void sub_tree_insert_points(uint32_t node_point_limit, tree_registry_t &t
 #ifndef NDEBUG
           tree->mins[current_level + 1][sub_skip] = new_min;
 #endif
-          sub_tree_insert_points(node_point_limit, tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(child_data));
+          sub_tree_insert_points(tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(child_data));
         }
       }
       child_count++;
@@ -381,8 +381,7 @@ static tree_id_t reparent_tree(tree_registry_t &tree_cache, tree_id_t tree_id, c
   return new_parent.id;
 }
 
-tree_id_t tree_add_points(uint32_t node_point_limit, tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
-                          std::vector<storage_location_t> &&locations)
+tree_id_t tree_add_points(tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations)
 {
   tree_id_t ret = tree_id;
   auto *tree = tree_cache.get(tree_id);
@@ -399,7 +398,7 @@ tree_id_t tree_add_points(uint32_t node_point_limit, tree_registry_t &tree_cache
   uint16_t name = morton::morton_get_name(0, 0, morton::morton_get_child_mask(morton::morton_magnitude_to_lod(tree->magnitude) + 1, points_data.min));
   assert(name == tree->node_ids[0][0]);
   tree->storage_map.add_storage(header.input_id, attributes_id, std::move(locations));
-  sub_tree_insert_points(node_point_limit, tree_cache, cache, tree->id, min, 0, 0, name, std::move(points_data));
+  sub_tree_insert_points(tree_cache, cache, tree->id, min, 0, 0, name, std::move(points_data));
   return ret;
 }
 
@@ -542,7 +541,9 @@ serialized_tree_t tree_serialize(const tree_t &tree)
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry)
 {
   uint32_t tree_registry_size = 0;
+  tree_registry_size += sizeof(tree_registry.node_limit);
   tree_registry_size += sizeof(tree_registry.current_id);
+  tree_registry_size += sizeof(tree_registry.tree_config);
   auto tree_registry_count = uint32_t(tree_registry.locations.size());
   tree_registry_size += sizeof(tree_registry_count);
   tree_registry_size += sizeof(storage_location_t) * tree_registry_count;
@@ -550,10 +551,18 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   auto data = std::make_shared<uint8_t[]>(tree_registry_size);
   uint8_t *ptr = data.get();
   uint8_t *end_ptr = ptr + tree_registry_size;
+  if (ptr + sizeof(tree_registry.node_limit) > end_ptr)
+    return {nullptr, 0};
+  memcpy(ptr, &tree_registry.node_limit, sizeof(tree_registry.node_limit));
+  ptr += sizeof(tree_registry.node_limit);
   if (ptr + sizeof(tree_registry.current_id) > end_ptr)
     return {nullptr, 0};
   memcpy(ptr, &tree_registry.current_id, sizeof(tree_registry.current_id));
   ptr += sizeof(tree_registry.current_id);
+  if (ptr + sizeof(tree_registry.tree_config) > end_ptr)
+    return {nullptr, 0};
+  memcpy(ptr, &tree_registry.tree_config, sizeof(tree_registry.tree_config));
+  ptr += sizeof(tree_registry.tree_config);
   if (ptr + sizeof(tree_registry_count) > end_ptr)
     return {nullptr, 0};
   memcpy(ptr, &tree_registry_count, sizeof(tree_registry_count));
@@ -569,10 +578,18 @@ error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32
 {
   const uint8_t *ptr = data.get();
   const uint8_t *end_ptr = ptr + data_size;
+  if (ptr + sizeof(tree_registry.node_limit) > end_ptr)
+    return {1, "Invalid tree registry data"};
+  memcpy(&tree_registry.node_limit, ptr, sizeof(tree_registry.node_limit));
+  ptr += sizeof(tree_registry.node_limit);
   if (ptr + sizeof(tree_registry.current_id) > end_ptr)
     return {1, "Invalid tree registry data"};
   memcpy(&tree_registry.current_id, ptr, sizeof(tree_registry.current_id));
   ptr += sizeof(tree_registry.current_id);
+  if (ptr + sizeof(tree_registry.tree_config) > end_ptr)
+    return {1, "Invalid tree registry data"};
+  memcpy(&tree_registry.tree_config, ptr, sizeof(tree_registry.tree_config));
+  ptr += sizeof(tree_registry.tree_config);
   uint32_t tree_registry_count = 0;
   if (ptr + sizeof(tree_registry_count) > end_ptr)
     return {1, "Invalid tree registry data"};

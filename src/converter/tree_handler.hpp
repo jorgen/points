@@ -56,8 +56,8 @@ private:
     if (_configuration_initialized)
       return;
     _configuration_initialized = true;
-    _node_limit = _pre_init_node_limit;
-    _tree_config = _pre_init_tree_config;
+    _tree_registry.node_limit = _pre_init_node_limit;
+    _tree_registry.tree_config = _pre_init_tree_config;
   }
 
   threaded_event_loop_t _event_loop;
@@ -65,9 +65,7 @@ private:
   bool _initialized;
   bool _configuration_initialized;
   uint32_t _pre_init_node_limit;
-  uint32_t _node_limit;
   tree_config_t _pre_init_tree_config;
-  tree_config_t _tree_config;
 
   storage_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;

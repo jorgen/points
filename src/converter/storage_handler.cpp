@@ -48,11 +48,11 @@ static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   memcpy(data, &free_blobs, sizeof(free_blobs));
   data += sizeof(free_blobs);
 
-  memcpy(data, &tree_registry, sizeof(tree_registry));
-  data += sizeof(tree_registry);
-
   memcpy(data, &attribute_configs, sizeof(attribute_configs));
   data += sizeof(attribute_configs);
+
+  memcpy(data, &tree_registry, sizeof(tree_registry));
+
   return serialized_index;
 }
 [[nodiscard]] static error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry)
@@ -582,7 +582,7 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
     done_moved(std::move(error));
   };
 
-  fprintf(stderr, "Writing index\n");
+  fmt::print(stderr, "Writing index:\n  free_blobs: {}\n  attribute_configs: {}\n  tree_registry: {}\n", free_blobs, attribute_configs, tree_registry);
   handle_write(serialized_index, {0, _serialized_index_size, 0}, std::move(done_callback));
 }
 

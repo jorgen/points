@@ -33,9 +33,7 @@ tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &fi
   , _initialized(false)
   , _configuration_initialized(false)
   , _pre_init_node_limit(1000000)
-  , _node_limit(0)
   , _pre_init_tree_config({0.001, {100000, 100000, 100000}})
-  , _tree_config({})
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
   , _tree_lod_generator(_event_loop, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
@@ -50,7 +48,17 @@ tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &fi
 
 error_t tree_handler_t::deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size)
 {
-  return tree_registry_deserialize(tree_registry_buffer, tree_registry_blobs_size, _tree_registry);
+  auto ret = tree_registry_deserialize(tree_registry_buffer, tree_registry_blobs_size, _tree_registry);
+  if (ret.code == 0)
+  {
+    _initialized = true;
+    _configuration_initialized = true;
+  }
+  else
+  {
+    _tree_registry = {};
+  }
+  return ret;
 }
 
 void tree_handler_t::set_tree_initialization_config(const tree_config_t &config)
@@ -87,11 +95,11 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
   {
     _initialized = true;
     seal_configuration();
-    _tree_root = tree_initialize(_node_limit, _tree_registry, _file_cache, header, attributes_id, std::move(storage));
+    _tree_root = tree_initialize(_tree_registry, _file_cache, header, attributes_id, std::move(storage));
   }
   else
   {
-    _tree_root = tree_add_points(_node_limit, _tree_registry, _file_cache, _tree_root, header, attributes_id, std::move(storage));
+    _tree_root = tree_add_points(_tree_registry, _file_cache, _tree_root, header, attributes_id, std::move(storage));
   }
   auto to_send = header.input_id;
   _done_with_input.post_event(std::move(to_send));
@@ -99,7 +107,7 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
 
 void tree_handler_t::handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event)
 {
-  event->walk_tree(_tree_config, _tree_registry, _tree_root);
+  event->walk_tree(_tree_registry, _tree_root);
 }
 
 void tree_handler_t::generate_lod(const morton::morton192_t &max)
@@ -114,7 +122,7 @@ tree_config_t tree_handler_t::tree_config()
 {
   seal_configuration();
   std::unique_lock<std::mutex> lock(_configuration_mutex);
-  return _tree_config;
+  return _tree_registry.tree_config;
 }
 void tree_handler_t::handle_serialize_trees()
 {

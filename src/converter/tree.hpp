@@ -119,19 +119,20 @@ struct tree_t
 
 struct tree_registry_t
 {
+  uint32_t node_limit = 0;
+  uint32_t current_id = 0;
+  tree_config_t tree_config;
+  uint64_t current_lod_node_id = uint64_t(1) << 63;
   std::vector<tree_t> data;
   std::vector<storage_location_t> locations;
-  uint32_t current_id = 0;
-  uint64_t current_lod_node_id = uint64_t(1) << 63;
   tree_t *get(tree_id_t id)
   {
     return &data[id.data];
   }
 };
 
-tree_id_t tree_initialize(uint32_t node_point_limit, tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
-tree_id_t tree_add_points(uint32_t node_point_limit, tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id,
-                          std::vector<storage_location_t> &&locations);
+tree_id_t tree_initialize(tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
+tree_id_t tree_add_points(tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
 
 serialized_tree_t tree_serialize(const tree_t &tree);
 

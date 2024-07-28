@@ -58,7 +58,7 @@ set(sources
 )
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render common)
+target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common)
 BuildExternalTargetLinkLibrary(points_converter_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
 target_include_directories(points_converter_objects
         PUBLIC

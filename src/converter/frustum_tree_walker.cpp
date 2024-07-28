@@ -115,12 +115,12 @@ static void walk_tree_l(const tree_t &tree, const glm::dmat4 &view_perspective, 
   }
 }
 
-void frustum_tree_walker_t::walk_tree(const tree_config_t &tree_config, tree_registry_t tree_cache, tree_id_t tree_root)
+void frustum_tree_walker_t::walk_tree(tree_registry_t tree_cache, tree_id_t tree_root)
 {
   (void)tree_root;
   auto root_tree = tree_cache.get(tree_root);
-  convert_morton_to_pos(tree_config.scale, tree_config.offset, root_tree->morton_min, m_tree_aabb.min);
-  convert_morton_to_pos(tree_config.scale, tree_config.offset, root_tree->morton_max, m_tree_aabb.max);
+  convert_morton_to_pos(tree_cache.tree_config.scale, tree_cache.tree_config.offset, root_tree->morton_min, m_tree_aabb.min);
+  convert_morton_to_pos(tree_cache.tree_config.scale, tree_cache.tree_config.offset, root_tree->morton_max, m_tree_aabb.max);
 
   if (root_tree->nodes[0].size() && frustum_contains_aabb2(m_view_perspective, m_tree_aabb))
   {
