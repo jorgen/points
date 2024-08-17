@@ -41,6 +41,7 @@ tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &fi
   , _walk_tree(_event_loop, bind(&tree_handler_t::handle_walk_tree))
   , _serialize_trees(_event_loop, bind(&tree_handler_t::handle_serialize_trees))
   , _serialize_trees_done(_event_loop, bind(&tree_handler_t::handle_trees_serialized))
+  , _deserialize_tree(_event_loop, bind(&tree_handler_t::handle_deserialize_tree))
   , _done_with_input(done_with_input)
 {
   _event_loop.add_about_to_block_listener(this);
@@ -95,11 +96,11 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
   {
     _initialized = true;
     seal_configuration();
-    _tree_root = tree_initialize(_tree_registry, _file_cache, header, attributes_id, std::move(storage));
+    _tree_registry.root = tree_initialize(_tree_registry, _file_cache, header, attributes_id, std::move(storage));
   }
   else
   {
-    _tree_root = tree_add_points(_tree_registry, _file_cache, _tree_root, header, attributes_id, std::move(storage));
+    _tree_registry.root = tree_add_points(_tree_registry, _file_cache, _tree_registry.root, header, attributes_id, std::move(storage));
   }
   auto to_send = header.input_id;
   _done_with_input.post_event(std::move(to_send));
@@ -107,23 +108,57 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
 
 void tree_handler_t::handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event)
 {
-  event->walk_tree(_tree_registry, _tree_root);
+  attribute_index_map_t attribute_index_map(_attributes_configs, event->m_attribute_names);
+  event->m_new_nodes.point_subsets.resize(event->m_depth);
+  for (auto &list : event->m_new_nodes.point_subsets)
+  {
+    list.clear();
+  }
+  tree_walk_in_handler_thread(*this, _tree_registry, attribute_index_map, *event);
 }
 
 void tree_handler_t::generate_lod(const morton::morton192_t &max)
 {
-  _tree_lod_generator.generate_lods(_tree_root, max);
+  _tree_lod_generator.generate_lods(_tree_registry.root, max);
 }
-void tree_handler_t::serialize_trees()
-{
-  _serialize_trees.post_event();
-}
+
 tree_config_t tree_handler_t::tree_config()
 {
   seal_configuration();
   std::unique_lock<std::mutex> lock(_configuration_mutex);
   return _tree_registry.tree_config;
 }
+
+void tree_handler_t::request_tree(tree_id_t tree_id)
+{
+  assert(std::this_thread::get_id() == _event_loop.thread_id());
+
+  _tree_id_requested.resize(_tree_registry.data.size());
+  if (_tree_id_requested[tree_id.data])
+  {
+    return;
+  }
+  _tree_id_requested[tree_id.data] = true;
+  auto location = _tree_registry.locations[tree_id.data];
+  _file_cache.read(location, [this, tree_id](const storage_handler_request_t &request) {
+    if (request.error.code != 0)
+    {
+      fmt::print("Error reading tree\n");
+      return;
+    }
+    serialized_tree_t data;
+    data.size = int(request.buffer_info.size);
+    data.data = request.buffer;
+    this->_deserialize_tree.post_event(tree_id_t(tree_id.data), std::move(data));
+  });
+}
+
+bool tree_handler_t::tree_initialized(tree_id_t tree_id)
+{
+  assert(std::this_thread::get_id() == _event_loop.thread_id());
+  return _tree_registry.tree_id_initialized[tree_id.data];
+}
+
 void tree_handler_t::handle_serialize_trees()
 {
   std::vector<tree_id_t> tree_ids;
@@ -134,6 +169,11 @@ void tree_handler_t::handle_serialize_trees()
     {
       tree_ids.emplace_back(tree.id);
       serialized_trees.emplace_back(tree_serialize(tree));
+      if (serialized_trees.back().data == nullptr)
+      {
+        fmt::print(stderr, "Error serializing tree\n");
+        return;
+      }
       tree.is_dirty = false;
     }
   }
@@ -163,6 +203,22 @@ void tree_handler_t::handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, 
       fmt::print("Trees serialized\n");
     });
   });
+}
+
+void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tree_t &&data)
+{
+  auto tree = _tree_registry.get(tree_id);
+  assert(tree);
+  error_t error;
+  fmt::print(stderr, "Deserializing tree {}\n", tree_id.data);
+  auto ret = tree_deserialize(data, *tree, error);
+  if (!ret)
+  {
+    fmt::print("Error deserializing tree registry {}\n", error.msg);
+    return;
+  }
+  _tree_registry.tree_id_initialized.resize(_tree_registry.data.size());
+  _tree_registry.tree_id_initialized[tree_id.data] = true;
 }
 
 } // namespace converter

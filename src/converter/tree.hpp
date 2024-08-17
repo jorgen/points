@@ -121,20 +121,23 @@ struct tree_registry_t
 {
   uint32_t node_limit = 0;
   uint32_t current_id = 0;
+  tree_id_t root = tree_id_t(0);
   tree_config_t tree_config;
   uint64_t current_lod_node_id = uint64_t(1) << 63;
   std::vector<tree_t> data;
   std::vector<storage_location_t> locations;
+  std::vector<bool> tree_id_initialized;
   tree_t *get(tree_id_t id)
   {
     return &data[id.data];
   }
 };
 
-tree_id_t tree_initialize(tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
-tree_id_t tree_add_points(tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
+tree_id_t tree_initialize(tree_registry_t &tree_registry, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
+tree_id_t tree_add_points(tree_registry_t &tree_registry, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
 
 serialized_tree_t tree_serialize(const tree_t &tree);
+bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, error_t &error);
 
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry);
 [[nodiscard]] error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry);

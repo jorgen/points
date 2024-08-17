@@ -1,7 +1,7 @@
 include(BuildExternalTargetLinkLibrary)
 
 Find_Package(libuv REQUIRED)
-Find_Package(CURL REQUIRED)
+#Find_Package(CURL REQUIRED)
 
 set(public_headers
         points/converter/export.h
@@ -59,7 +59,7 @@ set(sources
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
 target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common)
-BuildExternalTargetLinkLibrary(points_converter_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
+BuildExternalTargetLinkLibrary(points_converter_objects PRIVATE libuv::libuv laszip::api)
 target_include_directories(points_converter_objects
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

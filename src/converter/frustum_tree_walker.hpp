@@ -17,41 +17,72 @@
 ************************************************************************/
 #pragma once
 
+#include <attributes_configs.hpp>
+#include <glm_include.hpp>
 #include <points/render/aabb.h>
 #include <tree_handler.hpp>
-
-#include <glm_include.hpp>
 
 namespace points
 {
 namespace converter
 {
 
+struct node_id_t
+{
+  tree_id_t tree_id;
+  uint16_t level;
+  uint16_t index;
+};
+
+static_assert(sizeof(node_id_t) == sizeof(uint64_t), "size mismatch");
+
 struct tree_walker_data_t
 {
-  offset_in_subset_t offset_in_buffer;
+  int lod;
+  node_id_t node_id;
+  glm::dvec3 center;
+  offset_in_subset_t offset_in_subset;
   point_count_t point_count;
-  storage_location_t location;
+  storage_location_t locations[4];
 };
 
 struct tree_walker_nodes_t
 {
-  morton::morton192_t min_morton;
-  tree_id_t id;
-  uint16_t level;
-  std::vector<uint16_t> morton_nodes[5];
-  std::vector<std::vector<tree_walker_data_t>> point_subsets[5];
+  std::vector<tree_walker_data_t> point_subsets;
 };
 
 class attribute_index_map_t
 {
 public:
-  attribute_index_map_t(const attributes_configs_t &m_attributes_configs, std::vector<std::string> attribute_names);
-  int attribute_count() const
+  attribute_index_map_t(const attributes_configs_t &m_attributes_configs, std::vector<std::string> attribute_names)
+    : m_attributes_configs(m_attributes_configs)
+    , m_attribute_names(std::move(attribute_names))
+  {
+  }
+
+  int get_attribute_count() const
   {
     return int(m_attribute_names.size());
   }
-  int get_index(attributes_id_t, int attribute_name_index);
+
+  int get_index(attributes_id_t id, int attribute_name_index)
+  {
+    assert(attribute_name_index < int(m_attribute_names.size()));
+    auto it = m_map.find(id);
+    if (it != m_map.end())
+    {
+      auto ret = it->second[attribute_name_index];
+      if (ret >= 0)
+      {
+        return ret;
+      }
+    }
+    auto &value = it != m_map.end() ? it->second : m_map[id];
+    value.resize(m_attribute_names.size(), -1);
+    auto index = m_attributes_configs.get_attribute_index(id, m_attribute_names[attribute_name_index]);
+    value[attribute_name_index] = index;
+    return index;
+  }
 
 private:
   struct index_pair_t
@@ -78,18 +109,20 @@ private:
 class frustum_tree_walker_t
 {
 public:
-  frustum_tree_walker_t(glm::dmat4 view_perspective, const attributes_configs_t &attributes_configs, std::vector<std::string> attribute_names);
-  void walk_tree(tree_registry_t tree_cache, tree_id_t tree_root);
-
+  frustum_tree_walker_t(glm::dmat4 view_perspective, int depth, std::vector<std::string> attribute_names);
   bool done();
+  void wait_done();
 
   glm::dmat4 m_view_perspective;
-  attribute_index_map_t m_attribute_index_map;
-  render::aabb_t m_tree_aabb;
+  int m_depth;
+  std::vector<std::string> m_attribute_names;
   std::mutex m_mutex;
+  std::condition_variable m_wait;
   tree_walker_nodes_t m_new_nodes;
   bool m_done;
 };
+
+void tree_walk_in_handler_thread(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker);
 
 } // namespace converter
 } // namespace points

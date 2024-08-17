@@ -194,7 +194,7 @@ void processor_t::handle_file_reading_done(input_data_id_t &&file)
 void processor_t::handle_index_write_done()
 {
   _generating_lod = false;
-  fwrite(fmt::format("LOD done\n").c_str(), 1, 9, stderr);
+  fwrite(fmt::format("index write done\n").c_str(), 1, 9, stderr);
   if (_runtime_callbacks.done)
   {
     _runtime_callbacks.done(_runtime_callback_user_ptr);
@@ -230,7 +230,19 @@ void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
 
 error_t processor_t::upgrade_to_write(bool truncate)
 {
-  return _storage_handler.upgrade_to_write(truncate);
+  auto ret = _storage_handler.upgrade_to_write(truncate);
+  if (truncate)
+  {
+    //_input_data_source_registry.~input_data_source_registry_t();
+    // new (&_input_data_source_registry) input_data_source_registry_t();
+
+    //_attributes_configs.~attributes_configs_t();
+    // new (&_attributes_configs) attributes_configs_t();
+
+    //_tree_handler.~tree_handler_t();
+    // new (&_tree_handler) tree_handler_t(_thread_pool, _storage_handler, _attributes_configs, _tree_done_with_input);
+  }
+  return ret;
 }
 
 void processor_t::set_pre_init_tree_config(const tree_config_t &tree_config)

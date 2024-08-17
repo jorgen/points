@@ -45,6 +45,13 @@ namespace points
 namespace converter
 {
 
+enum class processor_open_file_semantics_t
+{
+  read,
+  write,
+  write_truncate,
+};
+
 class frustum_tree_walker_t;
 class processor_t : public about_to_block_t
 {
@@ -83,8 +90,9 @@ private:
   std::mutex _idle_mutex;
   std::condition_variable _idle_condition;
 
-  input_data_source_registry_t _input_data_source_registry;
   storage_handler_t _storage_handler;
+  input_data_source_registry_t _input_data_source_registry;
+  attributes_configs_t _attributes_configs;
   tree_handler_t _tree_handler;
 
   event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
@@ -105,8 +113,6 @@ private:
 
   threaded_event_loop_t _input_event_loop;
   point_reader_t _point_reader;
-
-  attributes_configs_t _attributes_configs;
 
   int64_t _read_sort_budget;
   int64_t _read_sort_active_approximate_size;

@@ -120,8 +120,14 @@ enum converter_conversion_status_t
   conversion_status_completed
 };
 
+enum converter_open_file_semantics_t
+{
+  open_file_semantics_open_existing,
+  open_file_semantics_truncate
+};
+
 struct converter_t;
-POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size);
+POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size, enum converter_open_file_semantics_t open_file_semantics);
 POINTS_CONVERTER_EXPORT void converter_destroy(converter_t *destroy);
 POINTS_CONVERTER_EXPORT void converter_set_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks);
 POINTS_CONVERTER_EXPORT void converter_set_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks, void *user_ptr);

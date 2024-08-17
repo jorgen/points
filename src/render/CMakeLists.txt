@@ -1,7 +1,6 @@
 include(BuildExternalTargetLinkLibrary)
 
 Find_Package(libuv REQUIRED)
-Find_Package(CURL REQUIRED)
 
 set(public_headers
         points/render/export.h
@@ -35,7 +34,7 @@ set(sources
 add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources})
 target_link_libraries(points_render_objects PRIVATE fmt glm)
 target_link_libraries(points_render_objects PUBLIC points_common)
-BuildExternalTargetLinkLibrary(points_render_objects PRIVATE libuv::libuv CURL::libcurl laszip::api)
+BuildExternalTargetLinkLibrary(points_render_objects PRIVATE libuv::libuv laszip::api)
 target_include_directories(points_render_objects
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

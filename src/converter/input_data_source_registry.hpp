@@ -71,7 +71,6 @@ class input_data_source_registry_t
 {
 public:
   input_data_source_registry_t();
-  ~input_data_source_registry_t();
 
   input_data_reference_t register_file(std::unique_ptr<char[]> &&name, uint32_t name_length);
   void register_pre_init_result(const tree_config_t &tree_config, input_data_id_t id, bool found_min, double (&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes);

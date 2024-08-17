@@ -36,10 +36,6 @@ input_data_source_registry_t::input_data_source_registry_t()
 {
 }
 
-input_data_source_registry_t::~input_data_source_registry_t()
-{
-}
-
 input_data_id_t get_next_input_id()
 {
   static uint32_t next_input_id = 0;

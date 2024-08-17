@@ -100,6 +100,7 @@ class storage_handler_t
 {
 public:
   storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<void> &index_written, event_pipe_t<error_t> &storage_error_pipe, error_t &error);
+  ~storage_handler_t();
   [[nodiscard]] bool file_exists() const
   {
     return _file_exists;

@@ -58,7 +58,8 @@ public:
 
   ~event_pipe_t()
   {
-    uv_close((uv_handle_t *)&pipe, nullptr);
+    // this is closed by the eventloop
+    // uv_close((uv_handle_t *)&pipe, nullptr);
   }
 
   uv_handle_t *initialize_in_loop(uv_loop_t *loop)

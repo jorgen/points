@@ -32,7 +32,7 @@ namespace converter
 
 struct converter_t
 {
-  converter_t(const char *url, uint64_t url_size)
+  converter_t(const char *url, uint64_t url_size, enum converter_open_file_semantics_t semantics)
     : processor(std::string(url, url_size), error)
   {
     processor.set_converter_callbacks(laszip_callbacks());
@@ -41,7 +41,7 @@ struct converter_t
       fmt::print(stderr, "Failed to open cache file: {}\n", error.msg);
       exit(1);
     }
-    error = processor.upgrade_to_write(true);
+    error = processor.upgrade_to_write(semantics == converter_open_file_semantics_t::open_file_semantics_truncate);
     if (error.code != 0)
     {
       fmt::print(stderr, "Failed to make file writable: {}\n", error.msg);

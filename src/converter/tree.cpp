@@ -16,6 +16,7 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "tree.hpp"
+#include "memory_writer.hpp"
 #include "point_buffer_splitter.hpp"
 #include <cassert>
 
@@ -26,6 +27,7 @@ tree_t &tree_cache_create_root_tree(tree_registry_t &tree_cache)
 {
   tree_cache.data.emplace_back();
   tree_cache.locations.emplace_back(0, 0, 0);
+  tree_cache.tree_id_initialized.emplace_back(true);
   tree_cache.data.back().id.data = tree_cache.current_id++;
   return tree_cache.data.back();
 }
@@ -35,14 +37,15 @@ tree_t &tree_cache_add_tree(tree_registry_t &tree_cache, tree_t *(&parent))
   auto id = parent->id;
   tree_cache.data.emplace_back();
   tree_cache.locations.emplace_back(0, 0, 0);
+  tree_cache.tree_id_initialized.emplace_back(true);
   tree_cache.data.back().id.data = tree_cache.current_id++;
   parent = &tree_cache.data[id.data];
   return tree_cache.data.back();
 }
 
-tree_id_t tree_initialize(tree_registry_t &tree_cache, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations)
+tree_id_t tree_initialize(tree_registry_t &tree_registry, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations)
 {
-  tree_t &tree = tree_cache_create_root_tree(tree_cache);
+  tree_t &tree = tree_cache_create_root_tree(tree_registry);
   morton::morton192_t mask = morton::morton_xor(header.morton_min, header.morton_max);
   int magnitude = morton::morton_magnitude_from_bit_index(morton::morton_msb(mask));
   morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t, 3>(morton::morton_magnitude_to_lod(magnitude));
@@ -60,7 +63,7 @@ tree_id_t tree_initialize(tree_registry_t &tree_cache, storage_handler_t &cache,
   tree.mins[0].push_back(tree.morton_min);
 #endif
 
-  auto id = tree_add_points(tree_cache, cache, tree.id, header, attributes, std::move(locations));
+  auto id = tree_add_points(tree_registry, cache, tree.id, header, attributes, std::move(locations));
   return id;
 }
 
@@ -315,10 +318,10 @@ static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_
   }
 }
 
-static void insert_tree_in_tree(tree_registry_t &tree_cache, tree_id_t &parent_id, const tree_id_t &child_id) // NOLINT(*-no-recursion)
+static void insert_tree_in_tree(tree_registry_t &tree_registry, tree_id_t &parent_id, const tree_id_t &child_id) // NOLINT(*-no-recursion)
 {
-  tree_t *parent = tree_cache.get(parent_id);
-  tree_t *child = tree_cache.get(child_id);
+  tree_t *parent = tree_registry.get(parent_id);
+  tree_t *child = tree_registry.get(child_id);
   assert(memcmp(morton::morton_and(morton::morton_negate(morton::morton_xor(parent->morton_min, parent->morton_max)), child->morton_min).data, parent->morton_min.data, sizeof(parent->morton_min)) == 0);
   int current_skip = 0;
   int lod = morton::morton_magnitude_to_lod(parent->magnitude);
@@ -346,8 +349,8 @@ static void insert_tree_in_tree(tree_registry_t &tree_cache, tree_id_t &parent_i
   int current_skip_and_node = current_skip + node_skips;
   if (node & (1 << child_mask))
   {
-    auto *sub_tree = tree_cache.get(parent->sub_trees[current_skip_and_node]);
-    insert_tree_in_tree(tree_cache, sub_tree->id, child->id);
+    auto *sub_tree = tree_registry.get(parent->sub_trees[current_skip_and_node]);
+    insert_tree_in_tree(tree_registry, sub_tree->id, child->id);
   }
   else
   {
@@ -359,37 +362,37 @@ static void insert_tree_in_tree(tree_registry_t &tree_cache, tree_id_t &parent_i
     }
     else
     {
-      auto &sub_tree = tree_cache_add_tree(tree_cache, parent);
-      parent = tree_cache.get(parent_id);
-      child = tree_cache.get(child_id);
+      auto &sub_tree = tree_cache_add_tree(tree_registry, parent);
+      parent = tree_registry.get(parent_id);
+      child = tree_registry.get(child_id);
       parent->sub_trees.emplace(parent->sub_trees.begin() + current_skip_and_node, sub_tree.id);
       sub_tree_increase_skips(*parent, 4, current_skip);
-      tree_initialize_sub(*parent, tree_cache, child->morton_min, sub_tree);
-      insert_tree_in_tree(tree_cache, sub_tree.id, child->id);
+      tree_initialize_sub(*parent, tree_registry, child->morton_min, sub_tree);
+      insert_tree_in_tree(tree_registry, sub_tree.id, child->id);
     }
   }
 }
 
-static tree_id_t reparent_tree(tree_registry_t &tree_cache, tree_id_t tree_id, const morton::morton192_t &possible_min, const morton::morton192_t &possible_max)
+static tree_id_t reparent_tree(tree_registry_t &tree_registry, tree_id_t tree_id, const morton::morton192_t &possible_min, const morton::morton192_t &possible_max)
 {
-  tree_t *tree = tree_cache.get(tree_id);
-  tree_t &new_parent = tree_cache_add_tree(tree_cache, tree);
+  tree_t *tree = tree_registry.get(tree_id);
+  tree_t &new_parent = tree_cache_add_tree(tree_registry, tree);
   tree_initialize_new_parent(*tree, possible_min, possible_max, new_parent);
   assert(new_parent.magnitude != tree->magnitude);
 
-  insert_tree_in_tree(tree_cache, new_parent.id, tree->id);
+  insert_tree_in_tree(tree_registry, new_parent.id, tree->id);
   return new_parent.id;
 }
 
-tree_id_t tree_add_points(tree_registry_t &tree_cache, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations)
+tree_id_t tree_add_points(tree_registry_t &tree_registry, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations)
 {
   tree_id_t ret = tree_id;
-  auto *tree = tree_cache.get(tree_id);
+  auto *tree = tree_registry.get(tree_id);
   // assert(validate_points_offset(header));
   if (header.morton_min < tree->morton_min || tree->morton_max < header.morton_max)
   {
-    ret = reparent_tree(tree_cache, tree_id, header.morton_min, header.morton_max);
-    tree = tree_cache.get(ret);
+    ret = reparent_tree(tree_registry, tree_id, header.morton_min, header.morton_max);
+    tree = tree_registry.get(ret);
   }
 
   points_collection_t points_data;
@@ -398,25 +401,26 @@ tree_id_t tree_add_points(tree_registry_t &tree_cache, storage_handler_t &cache,
   uint16_t name = morton::morton_get_name(0, 0, morton::morton_get_child_mask(morton::morton_magnitude_to_lod(tree->magnitude) + 1, points_data.min));
   assert(name == tree->node_ids[0][0]);
   tree->storage_map.add_storage(header.input_id, attributes_id, std::move(locations));
-  sub_tree_insert_points(tree_cache, cache, tree->id, min, 0, 0, name, std::move(points_data));
+  sub_tree_insert_points(tree_registry, cache, tree->id, min, 0, 0, name, std::move(points_data));
   return ret;
 }
 
-static int points_collection_serialize_size(const points_collection_t &points)
+static uint32_t points_collection_serialize_size(const points_collection_t &points)
 {
-  size_t size = 0;
+  uint32_t size = 0;
   size += sizeof(points.point_count);
   size += sizeof(points.min);
   size += sizeof(points.max);
   size += sizeof(points.min_lod);
   size += sizeof(uint32_t(points.data.size()));
-  size += sizeof(points.data[0]) * points.data.size();
-  return int(size);
+  size += sizeof(points.data[0]) * uint32_t(points.data.size());
+  return size;
 }
 
-static int points_collections_serialize_size(const std::vector<points_collection_t> &points)
+static uint32_t points_collections_serialize_size(const std::vector<points_collection_t> &points)
 {
-  size_t size = 0;
+  uint32_t size = 0;
+  size += sizeof(uint32_t); // points.size()
   for (auto &p : points)
   {
     size += points_collection_serialize_size(p);
@@ -427,42 +431,55 @@ static int points_collections_serialize_size(const std::vector<points_collection
 static std::pair<bool, uint8_t *> points_collection_serialize(const points_collection_t &points, uint8_t *buffer, const uint8_t *end_ptr)
 {
   uint8_t *ptr = buffer;
-  if (ptr + sizeof(points.point_count) > end_ptr)
-    return {false, ptr};
-  memcpy(ptr, &points.point_count, sizeof(points.point_count));
-  ptr += sizeof(points.point_count);
 
-  if (ptr + sizeof(points.min) > end_ptr)
+  if (!write_memory(ptr, end_ptr, points.point_count))
     return {false, ptr};
-  memcpy(ptr, &points.min, sizeof(points.min));
-  ptr += sizeof(points.min);
-
-  if (ptr + sizeof(points.max) > end_ptr)
+  if (!write_memory(ptr, end_ptr, points.min))
     return {false, ptr};
-  memcpy(ptr, &points.max, sizeof(points.max));
-  ptr += sizeof(points.max);
-
-  if (ptr + sizeof(points.min_lod) > end_ptr)
+  if (!write_memory(ptr, end_ptr, points.max))
     return {false, ptr};
-  memcpy(ptr, &points.min_lod, sizeof(points.min_lod));
-  ptr += sizeof(points.min_lod);
+  if (!write_memory(ptr, end_ptr, points.min_lod))
+    return {false, ptr};
 
   auto data_size = uint32_t(points.data.size());
-  if (ptr + sizeof(data_size) > end_ptr)
+  if (!write_memory(ptr, end_ptr, data_size))
     return {false, ptr};
-  memcpy(ptr, &data_size, sizeof(data_size));
-  ptr += sizeof(data_size);
 
-  if (ptr + points.data.size() * sizeof(points.data[0]) > end_ptr)
+  if (!write_vec_type(ptr, end_ptr, points.data))
     return {false, ptr};
-  memcpy(ptr, points.data.data(), points.data.size() * sizeof(points.data[0]));
-  ptr += points.data.size() * sizeof(points.data[0]);
+  return {true, ptr};
+}
+
+static std::pair<bool, const uint8_t *> points_collection_deserialize(const uint8_t *buffer, const uint8_t *end_ptr, points_collection_t &points)
+{
+  auto ptr = buffer;
+  if (!read_memory(ptr, end_ptr, points.point_count))
+    return {false, ptr};
+  if (!read_memory(ptr, end_ptr, points.min))
+    return {false, ptr};
+  if (!read_memory(ptr, end_ptr, points.max))
+    return {false, ptr};
+  if (!read_memory(ptr, end_ptr, points.min_lod))
+    return {false, ptr};
+
+  uint32_t data_size = 0;
+  if (!read_memory(ptr, end_ptr, data_size))
+    return {false, ptr};
+
+  if (!read_vec_type(ptr, end_ptr, points.data, data_size))
+    return {false, ptr};
+
   return {true, ptr};
 }
 
 static std::pair<bool, uint8_t *> points_collections_serialize(const std::vector<points_collection_t> &points, uint8_t *buffer, const uint8_t *end_ptr)
 {
   uint8_t *ptr = buffer;
+
+  auto size = uint32_t(points.size());
+  if (!write_memory(ptr, end_ptr, size))
+    return {false, ptr};
+
   for (auto &p : points)
   {
     auto result = points_collection_serialize(p, ptr, end_ptr);
@@ -473,11 +490,31 @@ static std::pair<bool, uint8_t *> points_collections_serialize(const std::vector
   return {true, ptr};
 }
 
+static std::pair<bool, const uint8_t *> points_collections_deserialize(const uint8_t *start, const uint8_t *end, std::vector<points_collection_t> &points)
+{
+  auto ptr = start;
+  uint32_t size = 0;
+  if (!read_memory(ptr, end, size))
+    return {false, ptr};
+
+  points.resize(size);
+  for (auto &p : points)
+  {
+    auto result = points_collection_deserialize(ptr, end, p);
+    if (!result.first)
+      return result;
+    ptr = result.second;
+  }
+  return {true, ptr};
+}
+
 serialized_tree_t tree_serialize(const tree_t &tree)
 {
   size_t tree_size = 0;
   tree_size += sizeof(tree.morton_min);
   tree_size += sizeof(tree.morton_max);
+  tree_size += sizeof(tree.id);
+  tree_size += sizeof(tree.magnitude);
   for (int i = 0; i < 5; i++)
   {
     assert(tree.nodes[i].size() == tree.skips[i].size());
@@ -490,54 +527,148 @@ serialized_tree_t tree_serialize(const tree_t &tree)
     tree_size += level_size * sizeof(tree.node_ids[i][0]);
     tree_size += points_collections_serialize_size(tree.data[i]);
   }
+  tree_size += sizeof(uint32_t); // tree.sub_trees.size()
   tree_size += tree.sub_trees.size() * sizeof(tree.sub_trees[0]);
-  tree_size += sizeof(tree.id);
-  tree_size += sizeof(tree.magnitude);
   tree_size += tree.storage_map.serialized_size();
 
   auto data = std::make_shared<uint8_t[]>(tree_size);
   uint8_t *ptr = data.get();
   uint8_t *end_ptr = ptr + tree_size;
-  if (ptr + sizeof(tree.morton_min) > end_ptr)
-    return {nullptr, 0};
-  memcpy(ptr, &tree.morton_min, sizeof(tree.morton_min));
-  ptr += sizeof(tree.morton_min);
 
-  if (ptr + sizeof(tree.morton_max) > end_ptr)
+  if (!write_memory(ptr, end_ptr, tree.morton_min))
     return {nullptr, 0};
-  memcpy(ptr, &tree.morton_max, sizeof(tree.morton_max));
-  ptr += sizeof(tree.morton_max);
+  if (!write_memory(ptr, end_ptr, tree.morton_max))
+    return {nullptr, 0};
+  if (!write_memory(ptr, end_ptr, tree.id))
+    return {nullptr, 0};
+  if (!write_memory(ptr, end_ptr, tree.magnitude))
+    return {nullptr, 0};
 
   for (int i = 0; i < 5; i++)
   {
     auto level_size = uint32_t(tree.nodes[i].size());
-    if (ptr + sizeof(level_size) > end_ptr)
+    if (!write_memory(ptr, end_ptr, level_size))
       return {nullptr, 0};
-    memcpy(ptr, &level_size, sizeof(level_size));
-    ptr += sizeof(level_size);
-
-    if (ptr + level_size * sizeof(tree.nodes[i][0]) > end_ptr)
+    if (level_size == 0)
+      continue;
+    if (!write_vec_type(ptr, end_ptr, tree.nodes[i]))
       return {nullptr, 0};
-    memcpy(ptr, tree.nodes[i].data(), level_size * sizeof(tree.nodes[i][0]));
-    ptr += tree.nodes[i].size() * sizeof(tree.nodes[i][0]);
-
-    if (ptr + level_size * sizeof(tree.skips[i][0]) > end_ptr)
+    if (!write_vec_type(ptr, end_ptr, tree.skips[i]))
       return {nullptr, 0};
-    memcpy(ptr, tree.skips[i].data(), level_size * sizeof(tree.skips[i][0]));
-    ptr += tree.skips[i].size() * sizeof(tree.skips[i][0]);
-
-    if (ptr + level_size * sizeof(tree.node_ids[i][0]) > end_ptr)
+    if (!write_vec_type(ptr, end_ptr, tree.node_ids[i]))
       return {nullptr, 0};
-    memcpy(ptr, tree.node_ids[i].data(), level_size * sizeof(tree.node_ids[i][0]));
-    ptr += tree.node_ids[i].size() * sizeof(tree.node_ids[i][0]);
 
     auto result = points_collections_serialize(tree.data[i], ptr, end_ptr);
     ptr = result.second;
     if (!result.first)
       return {nullptr, 0};
   }
+
+  auto sub_trees_size = uint32_t(tree.sub_trees.size());
+  if (!write_memory(ptr, end_ptr, sub_trees_size))
+    return {nullptr, 0};
+
+  if (sub_trees_size > 0 && !write_vec_type(ptr, end_ptr, tree.sub_trees))
+    return {nullptr, 0};
+
+  auto result = tree.storage_map.serialize(ptr, end_ptr);
+  ptr = result.second;
+  if (!result.first)
+    return {nullptr, 0};
+
   return {std::move(data), int(tree_size)};
 }
+
+bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, error_t &error)
+{
+  const uint8_t *ptr = serialized_tree.data.get();
+  const uint8_t *end_ptr = ptr + serialized_tree.size;
+
+  if (!read_memory(ptr, end_ptr, tree.morton_min))
+  {
+    error = {1, "Invalid tree data"};
+    return false;
+  }
+
+  if (!read_memory(ptr, end_ptr, tree.morton_max))
+  {
+    error = {1, "Invalid tree data"};
+    return false;
+  }
+
+  if (!read_memory(ptr, end_ptr, tree.id))
+  {
+    error = {1, "Invalid tree data"};
+    return false;
+  }
+
+  if (!read_memory(ptr, end_ptr, tree.magnitude))
+  {
+    error = {1, "Invalid tree data"};
+    return false;
+  }
+
+  for (int i = 0; i < 5; i++)
+  {
+    uint32_t level_size = 0;
+    if (!read_memory(ptr, end_ptr, level_size))
+    {
+      error = {1, "Invalid tree data"};
+      return false;
+    }
+    if (level_size == 0)
+      continue;
+    if (!read_vec_type(ptr, end_ptr, tree.nodes[i], level_size))
+    {
+      error = {1, "Invalid tree data"};
+      return false;
+    }
+
+    if (!read_vec_type(ptr, end_ptr, tree.skips[i], level_size))
+    {
+      error = {1, "Invalid tree data"};
+      return false;
+    }
+
+    if (!read_vec_type(ptr, end_ptr, tree.node_ids[i], level_size))
+    {
+      error = {1, "Invalid tree data"};
+      return false;
+    }
+
+    auto result = points_collections_deserialize(ptr, end_ptr, tree.data[i]);
+    ptr = result.second;
+    if (!result.first)
+    {
+      error = {1, "Invalid tree data"};
+      return false;
+    }
+  }
+
+  uint32_t sub_trees_size = 0;
+  if (!read_memory(ptr, end_ptr, sub_trees_size))
+  {
+    error = {1, "Invalid tree data"};
+    return false;
+  }
+
+  if (sub_trees_size > 0 && !read_vec_type(ptr, end_ptr, tree.sub_trees, sub_trees_size))
+  {
+    error = {1, "Invalid tree data"};
+    return false;
+  }
+
+  auto result = tree.storage_map.deserialize(ptr, end_ptr);
+  ptr = result.second;
+  if (!result.first)
+  {
+    error = {1, "Invalid tree data"};
+    return false;
+  }
+
+  return true;
+}
+
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry)
 {
   uint32_t tree_registry_size = 0;
@@ -551,26 +682,17 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   auto data = std::make_shared<uint8_t[]>(tree_registry_size);
   uint8_t *ptr = data.get();
   uint8_t *end_ptr = ptr + tree_registry_size;
-  if (ptr + sizeof(tree_registry.node_limit) > end_ptr)
+
+  if (!write_memory(ptr, end_ptr, tree_registry.node_limit))
     return {nullptr, 0};
-  memcpy(ptr, &tree_registry.node_limit, sizeof(tree_registry.node_limit));
-  ptr += sizeof(tree_registry.node_limit);
-  if (ptr + sizeof(tree_registry.current_id) > end_ptr)
+  if (!write_memory(ptr, end_ptr, tree_registry.current_id))
     return {nullptr, 0};
-  memcpy(ptr, &tree_registry.current_id, sizeof(tree_registry.current_id));
-  ptr += sizeof(tree_registry.current_id);
-  if (ptr + sizeof(tree_registry.tree_config) > end_ptr)
+  if (!write_memory(ptr, end_ptr, tree_registry.tree_config))
     return {nullptr, 0};
-  memcpy(ptr, &tree_registry.tree_config, sizeof(tree_registry.tree_config));
-  ptr += sizeof(tree_registry.tree_config);
-  if (ptr + sizeof(tree_registry_count) > end_ptr)
+  if (!write_memory(ptr, end_ptr, tree_registry_count))
     return {nullptr, 0};
-  memcpy(ptr, &tree_registry_count, sizeof(tree_registry_count));
-  ptr += sizeof(tree_registry_count);
-  if (ptr + sizeof(storage_location_t) * tree_registry_count > end_ptr)
+  if (!write_vec_type(ptr, end_ptr, tree_registry.locations))
     return {nullptr, 0};
-  memcpy(ptr, tree_registry.locations.data(), sizeof(storage_location_t) * tree_registry_count);
-  ptr += sizeof(storage_location_t) * tree_registry_count;
   return {std::move(data), int(tree_registry_size)};
 }
 
@@ -578,27 +700,20 @@ error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32
 {
   const uint8_t *ptr = data.get();
   const uint8_t *end_ptr = ptr + data_size;
-  if (ptr + sizeof(tree_registry.node_limit) > end_ptr)
+  if (!read_memory(ptr, end_ptr, tree_registry.node_limit))
     return {1, "Invalid tree registry data"};
-  memcpy(&tree_registry.node_limit, ptr, sizeof(tree_registry.node_limit));
-  ptr += sizeof(tree_registry.node_limit);
-  if (ptr + sizeof(tree_registry.current_id) > end_ptr)
+  if (!read_memory(ptr, end_ptr, tree_registry.current_id))
     return {1, "Invalid tree registry data"};
-  memcpy(&tree_registry.current_id, ptr, sizeof(tree_registry.current_id));
-  ptr += sizeof(tree_registry.current_id);
-  if (ptr + sizeof(tree_registry.tree_config) > end_ptr)
+  if (!read_memory(ptr, end_ptr, tree_registry.tree_config))
     return {1, "Invalid tree registry data"};
-  memcpy(&tree_registry.tree_config, ptr, sizeof(tree_registry.tree_config));
-  ptr += sizeof(tree_registry.tree_config);
   uint32_t tree_registry_count = 0;
-  if (ptr + sizeof(tree_registry_count) > end_ptr)
+  if (!read_memory(ptr, end_ptr, tree_registry_count))
     return {1, "Invalid tree registry data"};
-  memcpy(&tree_registry_count, ptr, sizeof(tree_registry_count));
-  ptr += sizeof(tree_registry_count);
-  if (ptr + sizeof(storage_location_t) * tree_registry_count > end_ptr)
+  if (!read_vec_type(ptr, end_ptr, tree_registry.locations, tree_registry_count))
     return {1, "Invalid tree registry data"};
-  tree_registry.locations.resize(tree_registry_count);
-  memcpy(tree_registry.locations.data(), ptr, sizeof(storage_location_t) * tree_registry_count);
+
+  tree_registry.data.resize(tree_registry_count);
+  tree_registry.tree_id_initialized.resize(tree_registry_count);
   return {};
 }
 

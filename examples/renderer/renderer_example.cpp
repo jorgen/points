@@ -147,11 +147,10 @@ int main(int, char **)
   // auto converter = create_unique_ptr(points::converter::converter_create(cache_file, sizeof(cache_file)), &points::converter::converter_destroy);
   // points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
 
-  bool render_flat_points = true;
-  auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size), &points::render::flat_points_data_source_destroy);
-  points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
+  // auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size), &points::render::flat_points_data_source_destroy);
+  // points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
   points::render::aabb_t aabb;
-  points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
+  // points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
 
   auto error = create_unique_ptr(points::error_create(), &points::error_destroy);
   bool render_converter_points = true;
@@ -354,17 +353,6 @@ int main(int, char **)
       }
     }
 
-    if (ImGui::Checkbox("Render flat", &render_flat_points))
-    {
-      if (render_flat_points)
-      {
-        points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
-      }
-      else
-      {
-        points::render::renderer_remove_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
-      }
-    }
     if (ImGui::Checkbox("Render converter", &render_converter_points))
     {
       if (render_converter_points)

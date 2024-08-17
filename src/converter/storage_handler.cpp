@@ -225,6 +225,15 @@ storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thre
   _file_opened = true;
 }
 
+storage_handler_t::~storage_handler_t()
+{
+  if (_file_handle > 0)
+  {
+    uv_fs_t request = {};
+    uv_fs_close(_event_loop.loop(), &request, _file_handle, NULL);
+  }
+}
+
 error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
                                       std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size)
 {
@@ -299,11 +308,6 @@ error_t storage_handler_t::upgrade_to_write(bool truncate)
     open_flags |= UV_FS_O_CREAT;
   }
 
-  if (truncate)
-  {
-    open_flags |= UV_FS_O_TRUNC;
-  }
-
   uv_fs_t request = {};
   if (_file_handle > 0)
   {
@@ -328,6 +332,11 @@ error_t storage_handler_t::upgrade_to_write(bool truncate)
     auto error_copy = error;
     _storage_error.post_event(std::move(error));
     return error_copy;
+  }
+
+  if (truncate)
+  {
+    uv_fs_ftruncate(_event_loop.loop(), &request, _file_handle, 0, NULL);
   }
 
   return {};
@@ -578,6 +587,8 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
     this->_blob_manager = std::move(new_blob_manager_moved);
     this->blobs_location = free_blobs;
     this->attributes_location = attribute_configs;
+    uv_fs_t req = {};
+    uv_fs_fsync(_event_loop.loop(), &req, _file_handle, NULL);
     this->_index_written.post_event();
     done_moved(std::move(error));
   };
@@ -630,6 +641,7 @@ void storage_handler_t::remove_request(storage_handler_request_t *request)
   assert(it != _requests.end());
   _requests.erase(it);
 }
+
 void storage_handler_t::handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location)
 {
   add_request(read_request);

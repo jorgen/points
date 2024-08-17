@@ -193,6 +193,7 @@ struct point_count_t
 
 struct points_subset_t
 {
+  points_subset_t() = default;
   points_subset_t(input_data_id_t id, offset_in_subset_t offset, point_count_t count)
     : input_id(id)
     , offset(offset)

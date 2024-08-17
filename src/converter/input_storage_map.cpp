@@ -20,7 +20,7 @@
 //
 
 #include "input_storage_map.hpp"
-
+#include "memory_writer.hpp"
 namespace points
 {
 namespace converter
@@ -72,51 +72,72 @@ attributes_id_t input_storage_map_t::attribute_id(input_data_id_t id)
   auto &value = _map[id];
   return value.attributes_id;
 }
-int input_storage_map_t::serialized_size() const
+uint32_t input_storage_map_t::serialized_size() const
 {
-  int size = 0;
+  uint32_t size = 0;
+  size += sizeof(uint32_t); // map size
   for (auto &[id, value] : _map)
   {
-    size += sizeof(id) + sizeof(value.attributes_id) + sizeof(value.ref_count) + sizeof(uint32_t);
-    for (auto &loc : value.storage)
-    {
-      size += sizeof(loc);
-    }
+    size += sizeof(id);
+    size += sizeof(value.attributes_id);
+    size += sizeof(value.ref_count);
+    size += sizeof(uint32_t);
+    size += uint32_t(value.storage.size()) * sizeof(value.storage[0]);
   }
   return size;
 }
-bool input_storage_map_t::serialize(uint8_t *buffer, int buffer_size) const
+
+std::pair<bool, uint8_t *> input_storage_map_t::serialize(uint8_t *buffer, const uint8_t *end) const
 {
   uint8_t *ptr = buffer;
-  uint8_t *end = buffer + buffer_size;
+
+  auto map_size = uint32_t(_map.size());
+  if (!write_memory(ptr, end, map_size))
+    return {false, ptr};
+
   for (auto &[id, value] : _map)
   {
-    memcpy(ptr, &id, sizeof(id));
-    ptr += sizeof(id);
-    if (ptr >= end)
-      return false;
-    memcpy(ptr, &value.attributes_id, sizeof(value.attributes_id));
-    ptr += sizeof(value.attributes_id);
-    if (ptr >= end)
-      return false;
-    memcpy(ptr, &value.ref_count, sizeof(value.ref_count));
-    ptr += sizeof(value.ref_count);
-    if (ptr >= end)
-      return false;
-    uint32_t storage_size = uint32_t(value.storage.size());
-    memcpy(ptr, &storage_size, sizeof(storage_size));
-    ptr += sizeof(storage_size);
-    if (ptr >= end)
-      return false;
-    for (auto &loc : value.storage)
-    {
-      memcpy(ptr, &loc, sizeof(loc));
-      ptr += sizeof(loc);
-      if (ptr >= end)
-        return false;
-    }
+    if (!write_memory(ptr, end, id))
+      return {false, ptr};
+    if (!write_memory(ptr, end, value.attributes_id))
+      return {false, ptr};
+    if (!write_memory(ptr, end, value.ref_count))
+      return {false, ptr};
+    auto storage_size = uint32_t(value.storage.size());
+    if (!write_memory(ptr, end, storage_size))
+      return {false, ptr};
+    if (!write_vec_type(ptr, end, value.storage))
+      return {false, ptr};
   }
-  return true;
+  return {true, ptr};
+}
+
+std::pair<bool, const uint8_t *> input_storage_map_t::deserialize(const uint8_t *buffer, const uint8_t *end)
+{
+  auto ptr = buffer;
+  uint32_t map_size;
+  if (!read_memory(ptr, end, map_size))
+    return {false, ptr};
+  for (uint32_t i = 0; i < map_size; i++)
+  {
+    input_data_id_t id;
+    attributes_id_t attributes_id;
+    uint32_t ref_count;
+    uint32_t storage_size;
+    std::vector<storage_location_t> storage;
+    if (!read_memory(ptr, end, id))
+      return {false, ptr};
+    if (!read_memory(ptr, end, attributes_id))
+      return {false, ptr};
+    if (!read_memory(ptr, end, ref_count))
+      return {false, ptr};
+    if (!read_memory(ptr, end, storage_size))
+      return {false, ptr};
+    if (!read_vec_type(ptr, end, storage, storage_size))
+      return {false, ptr};
+    _map[id] = {attributes_id, std::move(storage), ref_count};
+  }
+  return {true, ptr};
 }
 
 } // namespace converter

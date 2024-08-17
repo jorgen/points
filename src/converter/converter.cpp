@@ -30,9 +30,9 @@ namespace points
 {
 namespace converter
 {
-struct converter_t *converter_create(const char *url, uint64_t url_size)
+struct converter_t *converter_create(const char *url, uint64_t url_size, enum converter_open_file_semantics_t semantics)
 {
-  return new converter_t(url, url_size);
+  return new converter_t(url, url_size, semantics);
 }
 
 void converter_destroy(converter_t *destroy)
