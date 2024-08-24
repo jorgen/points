@@ -43,10 +43,10 @@ struct tree_walker_with_buffer_t
   tree_walker_with_buffer_t(tree_walker_nodes_t &&node_data)
     : node_data(std::move(node_data))
   {
-    for (int i = 0; i < 5; i++)
-    {
-      buffers[i].resize(this->node_data.point_subsets[i].size());
-    }
+    //  for (int i = 0; i < 5; i++)
+    //  {
+    //    buffers[i].resize(this->node_data.point_subsets[i].size());
+    //  }
   }
   tree_walker_with_buffer_t(tree_walker_with_buffer_t &&) = default;
   ~tree_walker_with_buffer_t() = default;

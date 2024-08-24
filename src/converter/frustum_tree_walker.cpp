@@ -44,10 +44,10 @@ void frustum_tree_walker_t::wait_done()
   m_wait.wait(lock, [this] { return m_done; });
 }
 
-static node_id_t create_node_id(tree_id_t tree_id, int level, int index)
-{
-  return {tree_id, uint16_t(level), uint16_t(index)};
-}
+// static node_id_t create_node_id(tree_id_t tree_id, int level, int index)
+//{
+//   return {tree_id, uint16_t(level), uint16_t(index)};
+// }
 
 struct tree_walker_possible_nodes_t
 {
@@ -59,6 +59,8 @@ struct tree_walker_possible_nodes_t
 
 static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, tree_id_t tree_id, int depth_left, frustum_tree_walker_t &walker)
 {
+  (void)attribute_index_map;
+  (void)walker;
   if (!tree_handler.tree_initialized(tree_id))
   {
     tree_handler.request_tree(tree_id);
@@ -82,27 +84,28 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
 
   for (int depth = 0; depth < depth_left; depth++)
   {
-    int current_depth_in_tree = depth % 5;
+    // int current_depth_in_tree = depth % 5;
     for (auto &possible_nodes : alternating_possible_nodes[current_buffer_index])
     {
-      auto &tree = *possible_nodes.tree;
-      auto &skips = possible_nodes.skips;
-      auto &centers = possible_nodes.centers;
-      auto &is_completely_inside_frustum = possible_nodes.is_completly_inside_frustum;
-      std::vector<tree_walker_possible_nodes_t> new_possible_nodes;
-      assert(skips.size() == centers.size());
-      assert(skips.size() == is_completely_inside_frustum.size());
-      for (int index_in_possible_nodes = 0; index_in_possible_nodes < possible_nodes.skips.size(); index_in_possible_nodes++)
-      {
-        auto node = tree.nodes[current_depth_in_tree][skip];
-        const auto &node_data = tree.data[current_depth_in_tree][skip];
-        const auto &tree_skip = tree.skips[current_depth_in_tree][skip];
-        auto &node_id = tree.node_ids[current_depth_in_tree][skip];
-        auto &center = centers[skip];
-        auto is_completely_inside = is_completely_inside_frustum[skip];
-        auto &tree_walker_node = walker.m_new_nodes.point_subsets.emplace_back();
-        tree_walker_node.lod = tree.magnitude * 5 + current_depth_in_tree;
-      }
+      (void)possible_nodes;
+      //  auto &tree = *possible_nodes.tree;
+      //  auto &skips = possible_nodes.skips;
+      //  auto &centers = possible_nodes.centers;
+      //  auto &is_completely_inside_frustum = possible_nodes.is_completly_inside_frustum;
+      //  std::vector<tree_walker_possible_nodes_t> new_possible_nodes;
+      //  assert(skips.size() == centers.size());
+      //  assert(skips.size() == is_completely_inside_frustum.size());
+      //  for (int index_in_possible_nodes = 0; index_in_possible_nodes < possible_nodes.skips.size(); index_in_possible_nodes++)
+      //  {
+      //    auto node = tree.nodes[current_depth_in_tree][skip];
+      //    const auto &node_data = tree.data[current_depth_in_tree][skip];
+      //    const auto &tree_skip = tree.skips[current_depth_in_tree][skip];
+      //    auto &node_id = tree.node_ids[current_depth_in_tree][skip];
+      //    auto &center = centers[skip];
+      //    auto is_completely_inside = is_completely_inside_frustum[skip];
+      //    auto &tree_walker_node = walker.m_new_nodes.point_subsets.emplace_back();
+      //    tree_walker_node.lod = tree.magnitude * 5 + current_depth_in_tree;
+      //  }
     }
   }
 }

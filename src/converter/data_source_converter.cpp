@@ -60,11 +60,6 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   auto buffer = back_buffer->m_new_nodes.point_subsets;
   if (buffer.size() == 0)
     return;
-  if (buffer[0].size() == 0)
-    return;
-  auto &points_subset = buffer[0][0];
-
-  (void)points_subset;
 }
 
 struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, error_t *error, struct render::renderer_t *renderer)

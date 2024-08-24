@@ -100,6 +100,11 @@ static void tree_initialize_new_parent(const tree_t &some_child, const morton::m
   new_parent.nodes[0].push_back(0);
   new_parent.skips[0].push_back(int16_t(0));
   new_parent.data[0].emplace_back();
+  uint16_t root_name = morton::morton_get_name(0, 0, morton::morton_get_child_mask(morton::morton_magnitude_to_lod(new_parent.magnitude) + 1, some_child.morton_min));
+  new_parent.node_ids[0].emplace_back(root_name);
+#ifndef NDEBUG
+  new_parent.mins[0].push_back(new_parent.morton_min);
+#endif
 }
 
 static int sub_tree_count_skips(uint8_t node, int index)
@@ -325,6 +330,9 @@ static void insert_tree_in_tree(tree_registry_t &tree_registry, tree_id_t &paren
   assert(memcmp(morton::morton_and(morton::morton_negate(morton::morton_xor(parent->morton_min, parent->morton_max)), child->morton_min).data, parent->morton_min.data, sizeof(parent->morton_min)) == 0);
   int current_skip = 0;
   int lod = morton::morton_magnitude_to_lod(parent->magnitude);
+
+  auto current_name = parent->node_ids[0][0];
+  morton::morton192_t new_min = parent->morton_min;
   for (int i = 0; i < 4; i++, lod--)
   {
     auto &node = parent->nodes[i][current_skip];
@@ -339,7 +347,13 @@ static void insert_tree_in_tree(tree_registry_t &tree_registry, tree_id_t &paren
       node |= 1 << child_mask;
       sub_tree_alloc_children(*parent, i + 1, parent->skips[i][current_skip] + node_skips);
       sub_tree_increase_skips(*parent, i, current_skip);
-      current_skip = parent->skips[i][current_skip] + node_skips;
+      current_name = morton::morton_get_name(current_name, i + 1, child_mask);
+      parent->node_ids[i + 1][current_skip] = current_name;
+#ifndef NDEBUG
+      morton::morton_set_child_mask(lod, child_mask, new_min);
+      parent->mins[i + 1][0] = new_min;
+#endif
+      current_skip = parent->skips[i][0] + node_skips;
     }
   }
 

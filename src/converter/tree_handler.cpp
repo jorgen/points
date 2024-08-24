@@ -112,7 +112,7 @@ void tree_handler_t::handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&e
   event->m_new_nodes.point_subsets.resize(event->m_depth);
   for (auto &list : event->m_new_nodes.point_subsets)
   {
-    list.clear();
+    (void)list;
   }
   tree_walk_in_handler_thread(*this, _tree_registry, attribute_index_map, *event);
 }
