@@ -16,7 +16,6 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "converter.hpp"
-#include "conversion_types.hpp"
 #include <points/converter/converter.h>
 
 #include "error.hpp"

@@ -186,7 +186,7 @@ input_data_source_t input_data_source_registry_t::get(input_data_id_t input_id)
   input_data_source_t ret;
   ret.input_id = item.input_id;
   ret.attribute_id = item.attribute_id;
-  ret.name = input_name_ref_t(item.name.get(), item.name_length);
+  ret.name = {item.name.get(), item.name_length};
   ret.public_header = item.public_header;
   return ret;
 }

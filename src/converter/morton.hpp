@@ -341,7 +341,7 @@ inline uint16_t morton_get_name(uint16_t parent, int level, int child_index)
 {
   assert(4 - level >= 0);
   assert((4 - level) * 3 <= 12);
- return parent | (uint16_t(child_index) << (4 - level) * 3);
+  return parent | (uint16_t(child_index) << (4 - level) * 3);
 }
 
 template<typename T, size_t C>

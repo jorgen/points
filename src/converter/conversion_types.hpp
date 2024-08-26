@@ -31,7 +31,6 @@ namespace points
 {
 namespace converter
 {
-
 struct input_data_id_t
 {
   uint32_t data;
@@ -42,10 +41,12 @@ inline bool operator<(const input_data_id_t a, const input_data_id_t b)
 {
   return a.data < b.data || (a.data == b.data && a.sub < b.sub);
 }
+
 inline bool operator==(const input_data_id_t a, const input_data_id_t b)
 {
   return a.data == b.data && a.sub == b.sub;
 }
+
 inline bool operator!=(const input_data_id_t a, const input_data_id_t b)
 {
   return !(a == b);
@@ -55,6 +56,7 @@ inline bool input_data_id_is_leaf(input_data_id_t input)
 {
   return !(input.sub & decltype(input.sub)(1) << 31);
 }
+
 struct file_error_t
 {
   input_data_id_t input_id;
@@ -65,10 +67,12 @@ struct attributes_id_t
 {
   uint32_t data;
 };
+
 inline bool operator==(const attributes_id_t a, const attributes_id_t b)
 {
   return memcmp(&a, &b, sizeof(a)) == 0;
 }
+
 inline bool operator!=(const attributes_id_t a, const attributes_id_t b)
 {
   return memcmp(&a, &b, sizeof(a)) != 0;
@@ -94,15 +98,30 @@ struct attribute_buffers_t
 
 struct storage_location_t
 {
-  uint32_t file_id = 0;
-  uint32_t size = 0;
-  uint64_t offset = 0;
+  storage_location_t()
+    : file_id(0)
+    , size(0)
+    , offset(0)
+  {
+  }
+
+  storage_location_t(uint32_t file_id, uint32_t size, uint64_t offset)
+    : file_id(file_id)
+    , size(size)
+    , offset(offset)
+  {
+  }
+
+  uint32_t file_id;
+  uint32_t size;
+  uint64_t offset;
 };
 
 inline bool operator==(const storage_location_t a, const storage_location_t b)
 {
   return memcmp(&a, &b, sizeof(a)) == 0;
 }
+
 inline bool operator!=(const storage_location_t a, const storage_location_t b)
 {
   return memcmp(&a, &b, sizeof(a)) != 0;
@@ -110,9 +129,18 @@ inline bool operator!=(const storage_location_t a, const storage_location_t b)
 
 struct point_format_t
 {
+  point_format_t() = default;
+
+  point_format_t(type_t type, components_t components)
+    : type(type)
+    , components(components)
+  {
+  }
+
   type_t type;
   components_t components;
 };
+
 struct storage_header_t
 {
   input_data_id_t input_id;
@@ -151,10 +179,12 @@ struct offset_t
     : data(data)
   {
   }
+
   offset_t()
     : data(0)
   {
   }
+
   uint64_t data;
 };
 
@@ -164,47 +194,55 @@ struct offset_in_subset_t
     : data(data)
   {
   }
+
   offset_in_subset_t()
     : data(0)
   {
   }
+
   uint32_t data;
 };
+
 struct index_t
 {
   explicit index_t(uint32_t data)
     : data(data)
   {
   }
+
   uint32_t data;
 };
+
 struct point_count_t
 {
   explicit point_count_t()
     : data(0)
   {
   }
+
   explicit point_count_t(uint32_t data)
     : data(data)
   {
   }
+
   uint32_t data = 0;
 };
 
 struct points_subset_t
 {
   points_subset_t() = default;
+
   points_subset_t(input_data_id_t id, offset_in_subset_t offset, point_count_t count)
     : input_id(id)
     , offset(offset)
     , count(count)
   {
   }
+
   input_data_id_t input_id;
   offset_in_subset_t offset;
   point_count_t count;
 };
-
 } // namespace converter
 } // namespace points
 

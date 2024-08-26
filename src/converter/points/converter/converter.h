@@ -40,10 +40,19 @@ struct header_t
   double min[3];
   double max[3];
 };
+
 POINTS_CONVERTER_EXPORT void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum type_t format, enum components_t components);
 
 struct attribute_t
 {
+  attribute_t(const char *name, uint32_t name_size, enum type_t format, enum components_t components)
+    : name(name)
+    , name_size(name_size)
+    , type(format)
+    , components(components)
+  {
+  }
+
   const char *name;
   uint32_t name_size;
   type_t type;
@@ -57,11 +66,13 @@ struct buffer_t
     , size(0)
   {
   }
+
   buffer_t(void *data, uint32_t size)
     : data(data)
     , size(size)
   {
   }
+
   void *data;
   uint32_t size;
 };
@@ -76,9 +87,12 @@ struct converter_file_pre_init_info_t
 };
 
 typedef converter_file_pre_init_info_t (*converter_file_pre_init_callback_t)(const char *filename, size_t filename_size, struct error_t **error);
+
 typedef void (*converter_file_init_callback_t)(const char *filename, size_t filename_size, header_t *header, attributes_t *attributes, void **user_ptr, struct error_t **error);
+
 typedef void (*converter_file_convert_data_callback_t)(void *user_ptr, const header_t *header, const attribute_t *attributes, uint32_t attributes_size, uint32_t max_points_to_convert, buffer_t *buffers,
                                                        uint32_t buffers_size, uint32_t *points_read, uint8_t *done, struct error_t **error);
+
 typedef void (*converter_file_destroy_user_ptr_t)(void *user_ptr);
 
 struct converter_file_convert_callbacks_t
@@ -90,8 +104,11 @@ struct converter_file_convert_callbacks_t
 };
 
 typedef void (*converter_progress_callback_t)(void *user_ptr, float progress);
+
 typedef void (*converter_warning_callback_t)(void *user_ptr, const char *message);
+
 typedef void (*converter_error_callback_t)(void *user_ptr, const struct error_t *error);
+
 typedef void (*converter_done_callback_t)(void *user_ptr);
 
 struct converter_runtime_callbacks_t
@@ -128,15 +145,19 @@ enum converter_open_file_semantics_t
 
 struct converter_t;
 POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size, enum converter_open_file_semantics_t open_file_semantics);
+
 POINTS_CONVERTER_EXPORT void converter_destroy(converter_t *destroy);
+
 POINTS_CONVERTER_EXPORT void converter_set_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks);
+
 POINTS_CONVERTER_EXPORT void converter_set_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks, void *user_ptr);
+
 POINTS_CONVERTER_EXPORT void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count);
+
 POINTS_CONVERTER_EXPORT void converter_wait_idle(converter_t *converter);
+
 POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter_t *converter, error_t **errors, size_t *error_count);
-
 } // namespace converter
-
 } // namespace points
 #ifdef __cplusplus
 }

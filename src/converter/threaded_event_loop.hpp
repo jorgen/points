@@ -173,11 +173,9 @@ private:
     threaded_event_loop_t *event_loop = static_cast<threaded_event_loop_t *>(handle->data);
     for (auto cancel_handle : event_loop->_to_cancel_work_handles)
       uv_cancel((uv_req_t *)cancel_handle);
-    int i = 0;
     for (auto close_handle : event_loop->_to_close_handles)
     {
       uv_close(close_handle, nullptr);
-      i++;
     }
 
     uv_prepare_stop(&event_loop->_about_to_block);

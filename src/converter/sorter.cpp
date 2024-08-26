@@ -31,11 +31,9 @@
 #include <fmt/printf.h>
 
 #include <assert.h>
-namespace points
-{
-namespace converter
-{
 
+namespace points::converter
+{
 template <typename T>
 struct vec_t
 {
@@ -56,6 +54,7 @@ typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) > sizeof(morton::morto
     morton::morton_downcast(source_morton[indecies_begin[i]], target_morton[i]);
   }
 }
+
 template <typename INDEX_T, typename T1, size_t C1, typename T2, size_t C2>
 typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) <= sizeof(morton::morton_t<T2, C2>))>::type downcast_point_buffer(const INDEX_T *indecies_begin, const std::unique_ptr<uint8_t[]> &source, uint32_t source_size,
                                                                                                                             std::unique_ptr<uint8_t[]> &target, uint32_t &target_size)
@@ -296,13 +295,7 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   attributes.attribute_names.push_back(std::unique_ptr<char[]>(new char[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER) + 1]));
   memcpy(attributes.attribute_names.back().get(), POINTS_ATTRIBUTE_ORIGINAL_ORDER, sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER));
   attributes.attribute_names.back().get()[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)] = 0;
-  attributes.attributes.emplace_back();
-  auto &order_attr = attributes.attributes.back();
-  order_attr.components = components_1;
-  order_attr.name = attributes.attribute_names.back().get();
-  order_attr.name_size = sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER);
-  order_attr.type = type_from_type<INDEX_T>();
-
+  attributes.attributes.emplace_back(attributes.attribute_names.back().get(), sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER), type_from_type<INDEX_T>(), components_1);
   for (int i = 1; i < int(attributes.attributes.size()) - 1; i++)
   {
     std::unique_ptr<uint8_t[]> new_attr_data;
@@ -412,5 +405,4 @@ void sort_points(const tree_config_t &tree_config, attributes_configs_t &attribu
     assert(false);
   }
 }
-} // namespace converter
-} // namespace points
+} // namespace points::converter

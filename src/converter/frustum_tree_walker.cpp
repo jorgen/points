@@ -113,7 +113,7 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
 void tree_walk_in_handler_thread(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker)
 {
   auto root = tree_registry.root;
-  assert(walker.m_new_nodes.point_subsets.size() == walker.m_depth);
+  assert(int(walker.m_new_nodes.point_subsets.size()) == walker.m_depth);
   walk_tree(tree_handler, tree_registry, attribute_index_map, root, walker.m_depth, walker);
 
   std::unique_lock<std::mutex> lock(walker.m_mutex);

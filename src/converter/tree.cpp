@@ -22,11 +22,10 @@
 
 namespace points::converter
 {
-
 tree_t &tree_cache_create_root_tree(tree_registry_t &tree_cache)
 {
   tree_cache.data.emplace_back();
-  tree_cache.locations.emplace_back(0, 0, 0);
+  tree_cache.locations.emplace_back();
   tree_cache.tree_id_initialized.emplace_back(true);
   tree_cache.data.back().id.data = tree_cache.current_id++;
   return tree_cache.data.back();
@@ -36,7 +35,7 @@ tree_t &tree_cache_add_tree(tree_registry_t &tree_cache, tree_t *(&parent))
 {
   auto id = parent->id;
   tree_cache.data.emplace_back();
-  tree_cache.locations.emplace_back(0, 0, 0);
+  tree_cache.locations.emplace_back();
   tree_cache.tree_id_initialized.emplace_back(true);
   tree_cache.data.back().id.data = tree_cache.current_id++;
   parent = &tree_cache.data[id.data];
@@ -213,7 +212,6 @@ static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_
     }
     else if (node)
     {
-
       node |= uint8_t(1) << child_mask;
 
       if (current_level == 4)
@@ -323,7 +321,8 @@ static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_
   }
 }
 
-static void insert_tree_in_tree(tree_registry_t &tree_registry, tree_id_t &parent_id, const tree_id_t &child_id) // NOLINT(*-no-recursion)
+static void insert_tree_in_tree(tree_registry_t &tree_registry, tree_id_t &parent_id, const tree_id_t &child_id)
+// NOLINT(*-no-recursion)
 {
   tree_t *parent = tree_registry.get(parent_id);
   tree_t *child = tree_registry.get(child_id);
@@ -730,5 +729,4 @@ error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32
   tree_registry.tree_id_initialized.resize(tree_registry_count);
   return {};
 }
-
 } // namespace points::converter
