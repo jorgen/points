@@ -54,7 +54,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
 {
   (void)to_render;
   const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
-  back_buffer = std::make_shared<frustum_tree_walker_t>(camera.view_projection, 1, std::vector<std::string>({std::string("xyz"), std::string("rgb")}));
+  back_buffer = std::make_shared<frustum_tree_walker_t>(camera.view_projection, 3, std::vector<std::string>({std::string("xyz"), std::string("intensity")}));
   processor.walk_tree(back_buffer);
   back_buffer->wait_done();
   auto buffer = back_buffer->m_new_nodes.point_subsets;

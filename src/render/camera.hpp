@@ -17,8 +17,8 @@
 ************************************************************************/
 #pragma once
 
-#include "glm_include.hpp"
 #include "frustum.hpp"
+#include "glm_include.hpp"
 
 #ifdef _MSC_VER
 #define M_PI 3.14159265358979323846
@@ -35,48 +35,6 @@ struct camera_t
   glm::dmat4 view;
   glm::dmat4 projection;
 };
-
-inline frustum_t make_frustum(const glm::dmat4 &view_perspective)
-{
-  glm::dvec4 perspective_vec(view_perspective[0][3], view_perspective[1][3], view_perspective[2][3],
-                             view_perspective[3][3]);
-
-  frustum_t frustum;
-  frustum.planes[frustum_t::left].x = view_perspective[0][3] + view_perspective[0][0];
-  frustum.planes[frustum_t::left].y = view_perspective[1][3] + view_perspective[1][0];
-  frustum.planes[frustum_t::left].z = view_perspective[2][3] + view_perspective[2][0];
-  frustum.planes[frustum_t::left].w = view_perspective[3][3] + view_perspective[3][0];
-
-  frustum.planes[frustum_t::right].x = view_perspective[0][3] - view_perspective[0][0];
-  frustum.planes[frustum_t::right].y = view_perspective[1][3] - view_perspective[1][0];
-  frustum.planes[frustum_t::right].z = view_perspective[2][3] - view_perspective[2][0];
-  frustum.planes[frustum_t::right].w = view_perspective[3][3] - view_perspective[3][0];
-
-  frustum.planes[frustum_t::bottom].x = view_perspective[0][3] + view_perspective[0][1];
-  frustum.planes[frustum_t::bottom].y = view_perspective[1][3] + view_perspective[1][1];
-  frustum.planes[frustum_t::bottom].z = view_perspective[2][3] + view_perspective[2][1];
-  frustum.planes[frustum_t::bottom].w = view_perspective[3][3] + view_perspective[3][1];
-
-  frustum.planes[frustum_t::top].x = view_perspective[0][3] - view_perspective[0][1];
-  frustum.planes[frustum_t::top].y = view_perspective[1][3] - view_perspective[1][1];
-  frustum.planes[frustum_t::top].z = view_perspective[2][3] - view_perspective[2][1];
-  frustum.planes[frustum_t::top].w = view_perspective[3][3] - view_perspective[3][1];
-
-  frustum.planes[frustum_t::near].x = view_perspective[0][3] + view_perspective[0][2];
-  frustum.planes[frustum_t::near].y = view_perspective[1][3] + view_perspective[1][2];
-  frustum.planes[frustum_t::near].z = view_perspective[2][3] + view_perspective[2][2];
-  frustum.planes[frustum_t::near].w = view_perspective[3][3] + view_perspective[3][2];
-
-  frustum.planes[frustum_t::far].x = view_perspective[0][3] - view_perspective[0][2];
-  frustum.planes[frustum_t::far].y = view_perspective[1][3] - view_perspective[1][2];
-  frustum.planes[frustum_t::far].z = view_perspective[2][3] - view_perspective[2][2];
-  frustum.planes[frustum_t::far].w = view_perspective[3][3] - view_perspective[3][2];
-  for (auto &plane : frustum.planes)
-  {
-    plane_normalize(plane);
-  }
-  return frustum;
-}
 
 template <typename R>
 inline R to_radians(R degrees)

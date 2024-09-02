@@ -15,145 +15,93 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef POINTS_FRUSTUM_P_H
-#define POINTS_FRUSTUM_P_H
-
-#include <points/render/aabb.h>
+#pragma once
 
 #include "glm_include.hpp"
+#include <array>
 
-#ifdef near
-#undef near
-#endif
-
-#ifdef far
-#undef far
-#endif
-
-namespace points
+namespace points::render
 {
-  namespace render
+
+enum class frustum_intersection_t
+{
+  outside,
+  intersects,
+  inside
+};
+
+struct frustum_t
+{
+  std::array<glm::vec4, 6> planes;
+
+  void update(const glm::mat4 &view_projection_matrix)
   {
-    typedef glm::dvec4 plane_t;
-    struct frustum_t
-    {
-      enum plane_names_t
-      {
-        left,
-        right,
-        bottom,
-        top,
-        near,
-        far
-      };
-      plane_t planes[6];
-    };
+    // Extract frustum planes from the view-projection matrix
+    planes[0] = glm::vec4(view_projection_matrix[0][3] + view_projection_matrix[0][0], view_projection_matrix[1][3] + view_projection_matrix[1][0], view_projection_matrix[2][3] + view_projection_matrix[2][0],
+                          view_projection_matrix[3][3] + view_projection_matrix[3][0]); // Left
 
-    inline void plane_normalize(plane_t& plane)
+    planes[1] = glm::vec4(view_projection_matrix[0][3] - view_projection_matrix[0][0], view_projection_matrix[1][3] - view_projection_matrix[1][0], view_projection_matrix[2][3] - view_projection_matrix[2][0],
+                          view_projection_matrix[3][3] - view_projection_matrix[3][0]); // Right
+
+    planes[2] = glm::vec4(view_projection_matrix[0][3] + view_projection_matrix[0][1], view_projection_matrix[1][3] + view_projection_matrix[1][1], view_projection_matrix[2][3] + view_projection_matrix[2][1],
+                          view_projection_matrix[3][3] + view_projection_matrix[3][1]); // Bottom
+
+    planes[3] = glm::vec4(view_projection_matrix[0][3] - view_projection_matrix[0][1], view_projection_matrix[1][3] - view_projection_matrix[1][1], view_projection_matrix[2][3] - view_projection_matrix[2][1],
+                          view_projection_matrix[3][3] - view_projection_matrix[3][1]); // Top
+
+    planes[4] = glm::vec4(view_projection_matrix[0][3] + view_projection_matrix[0][2], view_projection_matrix[1][3] + view_projection_matrix[1][2], view_projection_matrix[2][3] + view_projection_matrix[2][2],
+                          view_projection_matrix[3][3] + view_projection_matrix[3][2]); // Near
+
+    planes[5] = glm::vec4(view_projection_matrix[0][3] - view_projection_matrix[0][2], view_projection_matrix[1][3] - view_projection_matrix[1][2], view_projection_matrix[2][3] - view_projection_matrix[2][2],
+                          view_projection_matrix[3][3] - view_projection_matrix[3][2]); // Far
+
+    // Normalize the planes
+    for (auto &plane : planes)
     {
-      //glm::normalize(plane);
-      double mag = sqrt(plane.x * plane.x + plane.y * plane.y + plane.z * plane.z);
-      plane.x = plane.x / mag;
-      plane.y = plane.y / mag;
-      plane.z = plane.z / mag;
-      plane.w = plane.w / mag;
+      float length = glm::length(glm::vec3(plane));
+      plane /= length;
     }
-
-    template<typename T>
-    inline double plane_distance(const plane_t& plane, const T& pos)
-    {
-      return plane.x * pos[0] + plane.y * pos[1] + plane.z * pos[2] + plane.w;
-    }
-   
-    inline bool frustum_contains_point(const frustum_t &frustum, const glm::dvec3 &point)
-    {
-      for (int i = 0; i < 6; i++)
-      {
-        if (plane_distance(frustum.planes[i], point) < 0.0)
-          return false;
-      }
-      return true;
-    }
-
-    inline bool frustum_contains_aabb(const frustum_t& frustum, const aabb_t& aabb)
-    {
-      if (frustum_contains_point(frustum, glm::dvec3(aabb.min[0], aabb.min[1], aabb.min[2])))
-        return true;
-      if (frustum_contains_point(frustum, glm::dvec3(aabb.max[0], aabb.min[1], aabb.min[2])))
-        return true;
-      if (frustum_contains_point(frustum, glm::dvec3(aabb.min[0], aabb.max[1], aabb.min[2])))
-        return true;
-      if (frustum_contains_point(frustum, glm::dvec3(aabb.min[0], aabb.min[1], aabb.max[2])))
-        return true;
-      if (frustum_contains_point(frustum, glm::dvec3(aabb.max[0], aabb.max[1], aabb.min[2])))
-        return true;
-      if (frustum_contains_point(frustum, glm::dvec3(aabb.max[0], aabb.min[1], aabb.max[2])))
-        return true;
-      if (frustum_contains_point(frustum, glm::dvec3(aabb.min[0], aabb.max[1], aabb.max[2])))
-        return true;
-      if (frustum_contains_point(frustum, glm::dvec3(aabb.max[0], aabb.max[1], aabb.max[2])))
-        return true;
-
-      return false;
-    }
-
-    inline bool frustum_contains_aabb2(const glm::dmat4 &view_perspective, const aabb_t &aabb)
-    {
-      glm::dvec4 min_vec(aabb.min[0], aabb.min[1], aabb.min[2], 1.0);
-      glm::dvec4 max_vec(aabb.max[0], aabb.max[1], aabb.max[2], 1.0);
-
-      glm::dvec4 projected_min = view_perspective * min_vec;
-      glm::dvec4 projected_max = view_perspective * max_vec;
-
-      if (projected_min.x < projected_max.x)
-      {
-        if (projected_max.x < -projected_max.w || projected_min.x > projected_min.w)
-        {
-          return false;
-        }
-      }
-      else
-      {
-        if (projected_min.x < -projected_min.w || projected_max.x > projected_max.w)
-        {
-          return false;
-        }
-      }
-      if (projected_min.y < projected_max.y)
-      {
-        if (projected_max.y < -projected_max.w || projected_min.y > projected_min.w)
-        {
-          return false;
-        }
-      }
-      else
-      {
-        if (projected_min.y < -projected_min.w || projected_max.y > projected_max.w)
-        {
-          return false;
-        }
-      }
-      if (projected_min.z < projected_max.z)
-      {
-        if (projected_max.z < -projected_max.w || projected_min.z > projected_min.w)
-        {
-          return false;
-        }
-      }
-      else
-      {
-        if (projected_min.z < -projected_min.w || projected_max.z > projected_max.w)
-        {
-          return false;
-        }
-      }
-
-       
-      return true;
-    }
-
-
   }
-}
 
-#endif
+  [[nodiscard]] frustum_intersection_t test_aabb(const glm::vec3 &min, const glm::vec3 &max) const
+  {
+    bool intersecting = false;
+
+    for (const auto &plane : planes)
+    {
+      glm::vec3 positive_vertex = min;
+      glm::vec3 negative_vertex = max;
+
+      if (plane.x >= 0)
+      {
+        positive_vertex.x = max.x;
+        negative_vertex.x = min.x;
+      }
+      if (plane.y >= 0)
+      {
+        positive_vertex.y = max.y;
+        negative_vertex.y = min.y;
+      }
+      if (plane.z >= 0)
+      {
+        positive_vertex.z = max.z;
+        negative_vertex.z = min.z;
+      }
+
+      // Check if the positive vertex is outside the frustum
+      if (glm::dot(glm::vec3(plane), positive_vertex) + plane.w < 0)
+      {
+        return frustum_intersection_t::outside;
+      }
+
+      // Check if the negative vertex is inside the frustum
+      if (glm::dot(glm::vec3(plane), negative_vertex) + plane.w < 0)
+      {
+        intersecting = true;
+      }
+    }
+
+    return intersecting ? frustum_intersection_t::intersects : frustum_intersection_t::inside;
+  }
+};
+} // namespace points::render

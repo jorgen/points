@@ -18,6 +18,7 @@
 #include "frustum_tree_walker.hpp"
 
 #include "attributes_configs.hpp"
+#include "frustum.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 #include <fmt/printf.h>
 #include <points/render/aabb.h>
@@ -51,11 +52,34 @@ void frustum_tree_walker_t::wait_done()
 
 struct tree_walker_possible_nodes_t
 {
+  tree_walker_possible_nodes_t() = default;
+  tree_walker_possible_nodes_t(tree_t *tree, uint16_t skip, node_aabb_t aabbs, bool is_completely_inside_frustum)
+    : tree(tree)
+    , skip(skip)
+    , aabbs(aabbs)
+    , is_completely_inside_frustum(is_completely_inside_frustum)
+  {
+  }
   tree_t *tree;
-  std::vector<uint16_t> skips;
-  std::vector<glm::dvec3> centers;
-  std::vector<bool> is_completly_inside_frustum;
+  uint16_t skip;
+  node_aabb_t aabbs;
+  bool is_completely_inside_frustum;
 };
+
+static node_aabb_t make_aabb_from_child_index(const node_aabb_t &parent, int child_index)
+{
+  node_aabb_t aabb;
+  aabb.min = parent.min;
+  aabb.max = parent.max;
+  for (int i = 0; i < 3; i++)
+  {
+    if (child_index & (1 << i))
+      aabb.min[i] = (aabb.min[i] + aabb.max[i]) / 2;
+    else
+      aabb.max[i] = (aabb.min[i] + aabb.max[i]) / 2;
+  }
+  return aabb;
+}
 
 static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, tree_id_t tree_id, int depth_left, frustum_tree_walker_t &walker)
 {
@@ -74,38 +98,59 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
   std::vector<tree_walker_possible_nodes_t> alternating_possible_nodes[2];
 
   double min[3];
+  double max[3];
   convert_morton_to_pos(tree_registry.tree_config.scale, tree_registry.tree_config.offset, tree->morton_min, min);
+  convert_morton_to_pos(tree_registry.tree_config.scale, tree_registry.tree_config.offset, tree->morton_max, max);
+
+  node_aabb_t aabb = {glm::dvec3(min[0], min[1], min[2]), glm::dvec3(max[0], max[1], max[2])};
 
   auto tree_lod = morton::morton_tree_level_to_lod(tree->magnitude, 0); // we skip the + 1, since we want the half
   double aabb_width_half = double(uint64_t(1) << tree_lod) * tree_registry.tree_config.scale;
   glm::dvec3 center = {min[0] + aabb_width_half, min[1] + aabb_width_half, min[2] + aabb_width_half};
 
-  alternating_possible_nodes[current_buffer_index].push_back({tree, {0}, {center}, {false}});
-
-  for (int depth = 0; depth < depth_left; depth++)
+  alternating_possible_nodes[current_buffer_index].emplace_back(tree, 0, aabb, false);
+  render::frustum_t frustum;
+  frustum.update(walker.m_view_perspective);
+  int lod = tree->magnitude * 5 + 5;
+  for (int depth = 0; depth < depth_left; depth++, current_buffer_index = !current_buffer_index, lod--)
   {
-    // int current_depth_in_tree = depth % 5;
+    int current_depth_in_tree = depth % 5;
     for (auto &possible_nodes : alternating_possible_nodes[current_buffer_index])
     {
-      (void)possible_nodes;
-      //  auto &tree = *possible_nodes.tree;
-      //  auto &skips = possible_nodes.skips;
-      //  auto &centers = possible_nodes.centers;
-      //  auto &is_completely_inside_frustum = possible_nodes.is_completly_inside_frustum;
-      //  std::vector<tree_walker_possible_nodes_t> new_possible_nodes;
-      //  assert(skips.size() == centers.size());
-      //  assert(skips.size() == is_completely_inside_frustum.size());
-      //  for (int index_in_possible_nodes = 0; index_in_possible_nodes < possible_nodes.skips.size(); index_in_possible_nodes++)
-      //  {
-      //    auto node = tree.nodes[current_depth_in_tree][skip];
-      //    const auto &node_data = tree.data[current_depth_in_tree][skip];
-      //    const auto &tree_skip = tree.skips[current_depth_in_tree][skip];
-      //    auto &node_id = tree.node_ids[current_depth_in_tree][skip];
-      //    auto &center = centers[skip];
-      //    auto is_completely_inside = is_completely_inside_frustum[skip];
-      //    auto &tree_walker_node = walker.m_new_nodes.point_subsets.emplace_back();
-      //    tree_walker_node.lod = tree.magnitude * 5 + current_depth_in_tree;
-      //  }
+      auto hit_test = possible_nodes.is_completely_inside_frustum ? render::frustum_intersection_t::inside : frustum.test_aabb(possible_nodes.aabbs.min, possible_nodes.aabbs.max);
+      if (hit_test == render::frustum_intersection_t::outside)
+        continue;
+      auto node_name = possible_nodes.tree->node_ids[current_depth_in_tree][possible_nodes.skip];
+      node_id_t node_id = {tree->id, uint16_t(current_depth_in_tree), node_name};
+      auto &points_collection = tree->data[current_depth_in_tree][possible_nodes.skip];
+      for (auto &points : points_collection.data)
+      {
+        auto &to_add = walker.m_new_nodes.point_subsets.emplace_back();
+        memset(to_add.locations, 0, sizeof(to_add.locations));
+        to_add.lod = lod;
+        to_add.node_id = node_id;
+        to_add.aabb = possible_nodes.aabbs;
+        to_add.offset_in_subset = points.offset;
+        to_add.point_count = points.count;
+        auto attr_id = tree->storage_map.attribute_id(points.input_id);
+        for (int i = 0; i < 4 && i < attribute_index_map.get_attribute_count(); i++)
+        {
+          auto index = attribute_index_map.get_index(attr_id, i);
+          auto location = tree->storage_map.location(points.input_id, index);
+          to_add.locations[i] = location;
+        }
+      }
+
+      auto children = tree->nodes[current_depth_in_tree][possible_nodes.skip];
+      for (int i = 0; i < 8 && children; i++, children >>= 1)
+      {
+        if (children & 1)
+        {
+          auto child_aabb = make_aabb_from_child_index(possible_nodes.aabbs, i);
+          bool is_completely_inside_frustum = hit_test == render::frustum_intersection_t::inside;
+          alternating_possible_nodes[!current_buffer_index].emplace_back(possible_nodes.tree, tree->skips[current_depth_in_tree][possible_nodes.skip] + i, child_aabb, is_completely_inside_frustum);
+        }
+      }
     }
   }
 }

@@ -34,13 +34,19 @@ struct node_id_t
   uint16_t index;
 };
 
+struct node_aabb_t
+{
+  glm::dvec3 min;
+  glm::dvec3 max;
+};
+
 static_assert(sizeof(node_id_t) == sizeof(uint64_t), "size mismatch");
 
 struct tree_walker_data_t
 {
   int lod;
   node_id_t node_id;
-  glm::dvec3 center;
+  node_aabb_t aabb;
   offset_in_subset_t offset_in_subset;
   point_count_t point_count;
   storage_location_t locations[4];

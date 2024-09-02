@@ -19,6 +19,7 @@ add_executable(private_interface_unit_tests
         $<TARGET_OBJECTS:points_common_objects>
         $<TARGET_OBJECTS:points_converter_objects>
         $<TARGET_OBJECTS:points_render_objects>
+        private/frustum.cpp
 )
 BuildExternalTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm unordered_dense libuv::libuv laszip::api)
 target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
