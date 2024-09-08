@@ -20,7 +20,7 @@
 #include "buffer.hpp"
 #include "converter.hpp"
 #include "frustum_tree_walker.hpp"
-#include "point_buffer_render_helper.h"
+#include "point_buffer_render_helper.hpp"
 #include "renderer_callbacks.hpp"
 #include <points/render/aabb_data_source.h>
 #include <points/render/camera.h>
@@ -32,15 +32,13 @@
 #include <memory>
 #include <vector>
 
-namespace points
-{
-namespace converter
+namespace points::converter
 {
 
 struct tree_walker_with_buffer_t
 {
   tree_walker_with_buffer_t() = default;
-  tree_walker_with_buffer_t(tree_walker_nodes_t &&node_data)
+  explicit tree_walker_with_buffer_t(tree_walker_nodes_t &&node_data)
     : node_data(std::move(node_data))
   {
     //  for (int i = 0; i < 5; i++)
@@ -66,15 +64,12 @@ struct converter_data_source_t
   render::callback_manager_t &callbacks;
   render::data_source_t data_source;
 
-  render::aabb_t aabb;
-
   std::shared_ptr<frustum_tree_walker_t> back_buffer;
 
   render::buffer_t index_buffer;
   std::vector<tree_walker_with_buffer_t> current_tree_nodes[2];
   bool current_tree_nodes_index = false;
 
-  std::vector<dyn_points_draw_buffer_t> buffers;
+  std::vector<std::unique_ptr<dyn_points_draw_buffer_t>> render_buffers;
 };
-} // namespace converter
-} // namespace points
+} // namespace points::converter

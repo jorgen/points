@@ -86,6 +86,7 @@ processor_t::processor_t(std::string url, error_t &error)
     error = _tree_handler.deserialize_tree_registry(tree_registry_buffer, tree_registry_blobs_size);
     if (error.code != 0)
       return;
+    _tree_handler.request_root();
   }
 }
 
@@ -102,6 +103,16 @@ void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint3
 void processor_t::walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event)
 {
   _tree_handler.walk_tree(event);
+}
+
+tree_config_t processor_t::tree_config()
+{
+  return _tree_handler.tree_config();
+}
+
+void processor_t::request_aabb(std::function<void(double[3], double[3])> callback)
+{
+  _tree_handler.request_aabb(callback);
 }
 
 void processor_t::wait_idle()

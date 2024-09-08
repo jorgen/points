@@ -34,6 +34,19 @@ struct node_id_t
   uint16_t index;
 };
 
+inline std::strong_ordering operator<=>(const node_id_t &a, const node_id_t &b)
+{
+  if (a.tree_id.data != b.tree_id.data)
+  {
+    return a.tree_id.data < b.tree_id.data ? std::strong_ordering::less : std::strong_ordering::greater;
+  }
+  if (a.level != b.level)
+  {
+    return a.level < b.level ? std::strong_ordering::less : std::strong_ordering::greater;
+  }
+  return a.index < b.index ? std::strong_ordering::less : (a.index == b.index ? std::strong_ordering::equal : std::strong_ordering::greater);
+}
+
 struct node_aabb_t
 {
   glm::dvec3 min;
@@ -44,11 +57,13 @@ static_assert(sizeof(node_id_t) == sizeof(uint64_t), "size mismatch");
 
 struct tree_walker_data_t
 {
+  node_id_t parent;
   int lod;
-  node_id_t node_id;
+  node_id_t node;
   node_aabb_t aabb;
   offset_in_subset_t offset_in_subset;
   point_count_t point_count;
+  input_data_id_t input_id;
   storage_location_t locations[4];
 };
 
@@ -78,13 +93,13 @@ public:
     if (it != m_map.end())
     {
       auto ret = it->second[attribute_name_index];
-      if (ret >= 0)
+      if (ret >= -1)
       {
         return ret;
       }
     }
     auto &value = it != m_map.end() ? it->second : m_map[id];
-    value.resize(m_attribute_names.size(), -1);
+    value.resize(m_attribute_names.size(), -2);
     auto index = m_attributes_configs.get_attribute_index(id, m_attribute_names[attribute_name_index]);
     value[attribute_name_index] = index;
     return index;

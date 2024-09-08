@@ -295,7 +295,7 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   attributes.attribute_names.push_back(std::unique_ptr<char[]>(new char[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER) + 1]));
   memcpy(attributes.attribute_names.back().get(), POINTS_ATTRIBUTE_ORIGINAL_ORDER, sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER));
   attributes.attribute_names.back().get()[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)] = 0;
-  attributes.attributes.emplace_back(attributes.attribute_names.back().get(), sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER), type_from_type<INDEX_T>(), components_1);
+  attributes.attributes.emplace_back(attributes.attribute_names.back().get(), uint32_t(sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)), type_from_type<INDEX_T>(), components_1);
   for (int i = 1; i < int(attributes.attributes.size()) - 1; i++)
   {
     std::unique_ptr<uint8_t[]> new_attr_data;

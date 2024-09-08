@@ -164,6 +164,30 @@ int main(int, char **)
     fprintf(stderr, "Failed to create converter_data_source: %d - %s\n", code, str);
     exit(1);
   }
+
+  {
+    struct aabb_callback_state_t
+    {
+      std::mutex wait;
+      std::condition_variable cv;
+      double aabb_min[3];
+      double aabb_max[3];
+    };
+
+    aabb_callback_state_t state;
+    std::unique_lock<std::mutex> lock(state.wait);
+    auto callback = [](double aabb_min[3], double aabb_max[3], void *user_ptr) {
+      auto state = (aabb_callback_state_t *)user_ptr;
+      memcpy(state->aabb_min, aabb_min, sizeof(state->aabb_min));
+      memcpy(state->aabb_max, aabb_max, sizeof(state->aabb_max));
+      state->cv.notify_one();
+    };
+    points::converter::converter_data_source_request_aabb(converter_points.get(), callback, &state);
+    state.cv.wait(lock);
+    memcpy(aabb.min, state.aabb_min, sizeof(state.aabb_min));
+    memcpy(aabb.max, state.aabb_max, sizeof(state.aabb_max));
+  }
+
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
 
   std::vector<uint32_t> storage_ids;
@@ -308,7 +332,7 @@ int main(int, char **)
           case SDL_WINDOWEVENT_SIZE_CHANGED:
             SDL_GL_GetDrawableSize(window, &width, &height);
             glViewport(0, 0, width, height);
-            points::render::camera_set_perspective(camera.get(), 45, width, height, 0.01, 1000);
+            points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 1000);
             break;
           }
           break;

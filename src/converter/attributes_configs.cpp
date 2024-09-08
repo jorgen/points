@@ -25,9 +25,7 @@
 #include <mutex>
 #include <points/converter/default_attribute_names.h>
 
-namespace points
-{
-namespace converter
+namespace points::converter
 {
 
 static bool compare_attribute(const attribute_t &a, const attribute_t &b)
@@ -345,5 +343,4 @@ points::error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[
   return {};
 }
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter

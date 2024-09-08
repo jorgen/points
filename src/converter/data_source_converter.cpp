@@ -21,7 +21,6 @@
 #include <array>
 #include <points/common/format.h>
 #include <points/converter/converter_data_source.h>
-#include <points/render/buffer.h>
 
 #include "renderer.hpp"
 
@@ -41,8 +40,6 @@ converter_data_source_t::converter_data_source_t(const std::string &url, render:
   , processor(url, error)
   , callbacks(callbacks)
 {
-  memset(aabb.min, 0, sizeof(aabb.min));
-  memset(aabb.max, 0, sizeof(aabb.max));
   data_source.user_ptr = this;
   data_source.add_to_frame = [](render::frame_camera_t *camera, render::to_render_t *to_render, void *user_ptr) {
     auto *thiz = static_cast<converter_data_source_t *>(user_ptr);
@@ -50,16 +47,115 @@ converter_data_source_t::converter_data_source_t(const std::string &url, render:
   };
 }
 
+bool less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs)
+{
+  if (lhs.lod == rhs.lod)
+  {
+    auto node_equals = lhs.node <=> rhs.node;
+    if (node_equals == std::strong_ordering::equal)
+    {
+      return lhs.input_id < rhs.input_id;
+    }
+    return node_equals == std::strong_ordering::less;
+  }
+  return lhs.lod < rhs.lod;
+}
+
+static void add_request_to_dynbuffer(storage_handler_t &storage_handler, dyn_points_draw_buffer_t &buffer, const tree_walker_data_t &node)
+{
+  buffer.node_info = node;
+  buffer.data_handler = std::make_shared<dyn_points_data_handler_t>();
+  buffer.data_handler->start_requests(buffer.data_handler, storage_handler, node.locations);
+}
+
 void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, render::to_render_t *to_render)
 {
   (void)to_render;
   const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
-  back_buffer = std::make_shared<frustum_tree_walker_t>(camera.view_projection, 3, std::vector<std::string>({std::string("xyz"), std::string("intensity")}));
+  back_buffer = std::make_shared<frustum_tree_walker_t>(camera.view_projection, 3, std::vector<std::string>({std::string("xyz"), std::string("rgb")}));
   processor.walk_tree(back_buffer);
   back_buffer->wait_done();
-  auto buffer = back_buffer->m_new_nodes.point_subsets;
-  if (buffer.size() == 0)
-    return;
+  auto &buffer = back_buffer->m_new_nodes.point_subsets;
+  std::sort(buffer.begin(), buffer.end(), less_than);
+
+  std::vector<std::unique_ptr<dyn_points_draw_buffer_t>> new_render_buffers;
+  new_render_buffers.reserve(buffer.size());
+
+  auto render_buffers_it = render_buffers.begin();
+  int i;
+  for (i = 0; i < buffer.size() && render_buffers_it != render_buffers.end(); i++)
+  {
+    auto &node = buffer[i];
+    while (render_buffers_it != render_buffers.end() && less_than(render_buffers_it->get()->node_info, node))
+    {
+      render_buffers_it++;
+    }
+    if (render_buffers_it == render_buffers.end())
+    {
+      break;
+    }
+    if (less_than(node, render_buffers_it->get()->node_info))
+    {
+      auto &new_buffer = new_render_buffers.emplace_back(new dyn_points_draw_buffer_t());
+      add_request_to_dynbuffer(processor.storage_handler(), *new_buffer, node);
+    }
+    else
+    {
+      new_render_buffers.emplace_back(std::move(*render_buffers_it));
+      render_buffers_it++;
+    }
+  }
+  for (; i < buffer.size(); i++)
+  {
+    auto &node = buffer[i];
+    auto &new_buffer = new_render_buffers.emplace_back(new dyn_points_draw_buffer_t());
+    add_request_to_dynbuffer(processor.storage_handler(), *new_buffer, node);
+  }
+
+  render_buffers = std::move(new_render_buffers);
+
+  for (auto &render_buffer_ptr : render_buffers)
+  {
+    assert(render_buffer_ptr);
+    auto &render_buffer = *render_buffer_ptr;
+    if (render_buffer.data_handler)
+    {
+      if (render_buffer.data_handler->is_done())
+      {
+        render_buffer.point_count = render_buffer.data_handler->header.point_count;
+        convert_points_to_vertex_data(processor.tree_config(), *render_buffer.data_handler, render_buffer);
+        callbacks.do_create_buffer(render_buffer.render_buffers[0], points::render::buffer_type_vertex);
+        callbacks.do_initialize_buffer(render_buffer.render_buffers[0], render_buffer.format[0].type, render_buffer.format[0].components, int(render_buffer.data_info[0].size), render_buffer.data_info[0].data);
+
+        convert_attribute_to_draw_buffer_data(*render_buffer.data_handler, render_buffer, 1);
+        callbacks.do_create_buffer(render_buffer.render_buffers[1], points::render::buffer_type_vertex);
+        callbacks.do_initialize_buffer(render_buffer.render_buffers[1], render_buffer.format[1].type, render_buffer.format[1].components, int(render_buffer.data_info[1].size), render_buffer.data_info[1].data);
+
+        render_buffer.camera_view = camera.projection * glm::translate(camera.view, to_glm(render_buffer.offset));
+
+        callbacks.do_create_buffer(render_buffer.render_buffers[2], points::render::buffer_type_uniform);
+        callbacks.do_initialize_buffer(render_buffer.render_buffers[2], type_r32, points::components_4x4, sizeof(render_buffer.camera_view), &render_buffer.camera_view);
+
+        render_buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;
+        render_buffer.render_list[0].user_ptr = render_buffer.render_buffers[0].user_ptr;
+        render_buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;
+        render_buffer.render_list[1].user_ptr = render_buffer.render_buffers[1].user_ptr;
+        render_buffer.render_list[2].buffer_mapping = render::dyn_points_bm_camera;
+        render_buffer.render_list[2].user_ptr = render_buffer.render_buffers[2].user_ptr;
+        render_buffer.rendered = true;
+        render_buffer.data_handler.reset();
+      }
+      else
+      {
+        continue;
+      }
+    }
+    assert(render_buffer.rendered);
+    render_buffer.camera_view = camera.projection * glm::translate(camera.view, to_glm(render_buffer.offset));
+    callbacks.do_modify_buffer(render_buffer.render_buffers[2], 0, sizeof(render_buffer.camera_view), &render_buffer.camera_view);
+    render::draw_group_t draw_group = {render::dyn_points, render_buffer.render_list, 3, render_buffer.point_count};
+    to_render_add_render_group(to_render, draw_group);
+  }
 }
 
 struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, error_t *error, struct render::renderer_t *renderer)
@@ -85,10 +181,11 @@ struct render::data_source_t converter_data_source_get(struct converter_data_sou
   return converter_data_source->data_source;
 }
 
-void converter_data_source_get_aabb(struct converter_data_source_t *converter_data_source, double aabb_min[3], double aabb_max[3])
+void converter_data_source_request_aabb(struct converter_data_source_t *converter_data_source, converter_data_source_request_aabb_callback_t callback, void *user_ptr)
 {
-  memcpy(aabb_min, converter_data_source->aabb.min, sizeof(converter_data_source->aabb.min));
-  memcpy(aabb_max, converter_data_source->aabb.max, sizeof(converter_data_source->aabb.max));
+  auto callback_cpp = [callback, user_ptr](double aabb_min[3], double aabb_max[3]) { callback(aabb_min, aabb_max, user_ptr); };
+
+  converter_data_source->processor.request_aabb(callback_cpp);
 }
 
 } // namespace converter

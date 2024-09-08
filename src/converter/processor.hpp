@@ -64,6 +64,8 @@ public:
   void set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks);
   void add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files);
   void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
+  tree_config_t tree_config();
+  void request_aabb(std::function<void(double[3], double[3])> callback);
   void wait_idle();
 
   void about_to_block() override;

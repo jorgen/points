@@ -20,6 +20,7 @@
 #include "frustum_tree_walker.hpp"
 #include "tree_lod_generator.hpp"
 
+#include "morton_tree_coordinate_transform.hpp"
 #include "storage_handler.hpp"
 
 #include <fmt/printf.h>
@@ -34,6 +35,7 @@ tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &fi
   , _configuration_initialized(false)
   , _pre_init_node_limit(1000000)
   , _pre_init_tree_config({0.001, {100000, 100000, 100000}})
+  , _first_root_initialized(false)
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
   , _tree_lod_generator(_event_loop, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
@@ -43,6 +45,8 @@ tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &fi
   , _serialize_trees_done(_event_loop, bind(&tree_handler_t::handle_trees_serialized))
   , _deserialize_tree(_event_loop, bind(&tree_handler_t::handle_deserialize_tree))
   , _done_with_input(done_with_input)
+  , _request_aabb(_event_loop, bind(&tree_handler_t::handle_request_aabb))
+  , _request_root(_event_loop, bind(&tree_handler_t::handle_request_root))
 {
   _event_loop.add_about_to_block_listener(this);
 }
@@ -60,6 +64,13 @@ error_t tree_handler_t::deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tr
     _tree_registry = {};
   }
   return ret;
+}
+
+void tree_handler_t::request_root()
+{
+  _request_root.post_event();
+  std::unique_lock<std::mutex> lock(_root_mutex);
+  _root_cv.wait(lock, [this] { return _first_root_initialized; });
 }
 
 void tree_handler_t::set_tree_initialization_config(const tree_config_t &config)
@@ -109,7 +120,6 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
 void tree_handler_t::handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event)
 {
   attribute_index_map_t attribute_index_map(_attributes_configs, event->m_attribute_names);
-  event->m_new_nodes.point_subsets.resize(event->m_depth);
   for (auto &list : event->m_new_nodes.point_subsets)
   {
     (void)list;
@@ -127,6 +137,11 @@ tree_config_t tree_handler_t::tree_config()
   seal_configuration();
   std::unique_lock<std::mutex> lock(_configuration_mutex);
   return _tree_registry.tree_config;
+}
+
+void tree_handler_t::request_aabb(std::function<void(double *, double *)> function)
+{
+  _request_aabb.post_event(std::move(function));
 }
 
 void tree_handler_t::request_tree(tree_id_t tree_id)
@@ -219,6 +234,29 @@ void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tre
   }
   _tree_registry.tree_id_initialized.resize(_tree_registry.data.size());
   _tree_registry.tree_id_initialized[tree_id.data] = true;
+  if (tree_id.data == _tree_registry.root.data)
+  {
+    std::unique_lock<std::mutex> lock(_root_mutex);
+    _first_root_initialized = true;
+    _root_cv.notify_all();
+  }
+}
+
+void tree_handler_t::handle_request_aabb(std::function<void(double *, double *)> &&function)
+{
+  double min[3];
+  double max[3];
+  auto tree = _tree_registry.get(_tree_registry.root);
+  auto &offset = _tree_registry.tree_config.offset;
+  auto &scale = _tree_registry.tree_config.scale;
+  convert_morton_to_pos(scale, offset, tree->morton_min, min);
+  convert_morton_to_pos(scale, offset, tree->morton_max, max);
+  function(min, max);
+}
+
+void tree_handler_t::handle_request_root()
+{
+  request_tree(_tree_registry.root);
 }
 
 } // namespace converter

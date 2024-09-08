@@ -32,45 +32,45 @@ enum class frustum_intersection_t
 
 struct frustum_t
 {
-  std::array<glm::vec4, 6> planes;
+  std::array<glm::dvec4, 6> planes;
 
-  void update(const glm::mat4 &view_projection_matrix)
+  void update(const glm::dmat4 &view_projection_matrix)
   {
     // Extract frustum planes from the view-projection matrix
-    planes[0] = glm::vec4(view_projection_matrix[0][3] + view_projection_matrix[0][0], view_projection_matrix[1][3] + view_projection_matrix[1][0], view_projection_matrix[2][3] + view_projection_matrix[2][0],
-                          view_projection_matrix[3][3] + view_projection_matrix[3][0]); // Left
+    planes[0] = glm::dvec4(view_projection_matrix[0][3] + view_projection_matrix[0][0], view_projection_matrix[1][3] + view_projection_matrix[1][0], view_projection_matrix[2][3] + view_projection_matrix[2][0],
+                           view_projection_matrix[3][3] + view_projection_matrix[3][0]); // Left
 
-    planes[1] = glm::vec4(view_projection_matrix[0][3] - view_projection_matrix[0][0], view_projection_matrix[1][3] - view_projection_matrix[1][0], view_projection_matrix[2][3] - view_projection_matrix[2][0],
-                          view_projection_matrix[3][3] - view_projection_matrix[3][0]); // Right
+    planes[1] = glm::dvec4(view_projection_matrix[0][3] - view_projection_matrix[0][0], view_projection_matrix[1][3] - view_projection_matrix[1][0], view_projection_matrix[2][3] - view_projection_matrix[2][0],
+                           view_projection_matrix[3][3] - view_projection_matrix[3][0]); // Right
 
-    planes[2] = glm::vec4(view_projection_matrix[0][3] + view_projection_matrix[0][1], view_projection_matrix[1][3] + view_projection_matrix[1][1], view_projection_matrix[2][3] + view_projection_matrix[2][1],
-                          view_projection_matrix[3][3] + view_projection_matrix[3][1]); // Bottom
+    planes[2] = glm::dvec4(view_projection_matrix[0][3] + view_projection_matrix[0][1], view_projection_matrix[1][3] + view_projection_matrix[1][1], view_projection_matrix[2][3] + view_projection_matrix[2][1],
+                           view_projection_matrix[3][3] + view_projection_matrix[3][1]); // Bottom
 
-    planes[3] = glm::vec4(view_projection_matrix[0][3] - view_projection_matrix[0][1], view_projection_matrix[1][3] - view_projection_matrix[1][1], view_projection_matrix[2][3] - view_projection_matrix[2][1],
-                          view_projection_matrix[3][3] - view_projection_matrix[3][1]); // Top
+    planes[3] = glm::dvec4(view_projection_matrix[0][3] - view_projection_matrix[0][1], view_projection_matrix[1][3] - view_projection_matrix[1][1], view_projection_matrix[2][3] - view_projection_matrix[2][1],
+                           view_projection_matrix[3][3] - view_projection_matrix[3][1]); // Top
 
-    planes[4] = glm::vec4(view_projection_matrix[0][3] + view_projection_matrix[0][2], view_projection_matrix[1][3] + view_projection_matrix[1][2], view_projection_matrix[2][3] + view_projection_matrix[2][2],
-                          view_projection_matrix[3][3] + view_projection_matrix[3][2]); // Near
+    planes[4] = glm::dvec4(view_projection_matrix[0][3] + view_projection_matrix[0][2], view_projection_matrix[1][3] + view_projection_matrix[1][2], view_projection_matrix[2][3] + view_projection_matrix[2][2],
+                           view_projection_matrix[3][3] + view_projection_matrix[3][2]); // Near
 
-    planes[5] = glm::vec4(view_projection_matrix[0][3] - view_projection_matrix[0][2], view_projection_matrix[1][3] - view_projection_matrix[1][2], view_projection_matrix[2][3] - view_projection_matrix[2][2],
-                          view_projection_matrix[3][3] - view_projection_matrix[3][2]); // Far
+    planes[5] = glm::dvec4(view_projection_matrix[0][3] - view_projection_matrix[0][2], view_projection_matrix[1][3] - view_projection_matrix[1][2], view_projection_matrix[2][3] - view_projection_matrix[2][2],
+                           view_projection_matrix[3][3] - view_projection_matrix[3][2]); // Far
 
     // Normalize the planes
     for (auto &plane : planes)
     {
-      float length = glm::length(glm::vec3(plane));
+      double length = glm::length(glm::dvec3(plane));
       plane /= length;
     }
   }
 
-  [[nodiscard]] frustum_intersection_t test_aabb(const glm::vec3 &min, const glm::vec3 &max) const
+  [[nodiscard]] frustum_intersection_t test_aabb(const glm::dvec3 &min, const glm::dvec3 &max) const
   {
     bool intersecting = false;
 
     for (const auto &plane : planes)
     {
-      glm::vec3 positive_vertex = min;
-      glm::vec3 negative_vertex = max;
+      glm::dvec3 positive_vertex = min;
+      glm::dvec3 negative_vertex = max;
 
       if (plane.x >= 0)
       {
@@ -89,13 +89,13 @@ struct frustum_t
       }
 
       // Check if the positive vertex is outside the frustum
-      if (glm::dot(glm::vec3(plane), positive_vertex) + plane.w < 0)
+      if (glm::dot(glm::dvec3(plane), positive_vertex) + plane.w < 0)
       {
         return frustum_intersection_t::outside;
       }
 
       // Check if the negative vertex is inside the frustum
-      if (glm::dot(glm::vec3(plane), negative_vertex) + plane.w < 0)
+      if (glm::dot(glm::dvec3(plane), negative_vertex) + plane.w < 0)
       {
         intersecting = true;
       }

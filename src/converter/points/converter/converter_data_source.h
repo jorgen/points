@@ -36,9 +36,11 @@ struct converter_data_source_t;
 POINTS_CONVERTER_EXPORT struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, error_t *error, struct render::renderer_t *renderer);
 POINTS_CONVERTER_EXPORT void converter_data_source_destroy(struct converter_data_source_t *converter_data_source);
 POINTS_CONVERTER_EXPORT struct render::data_source_t converter_data_source_get(struct converter_data_source_t *converter_data_source);
-POINTS_CONVERTER_EXPORT void converter_data_source_get_aabb(struct converter_data_source_t *converter_data_source, double aabb_min[3], double aabb_max[3]);
-} // namespace converter
 
+typedef void (*converter_data_source_request_aabb_callback_t)(double aabb_min[3], double aabb_max[3], void *user_ptr);
+POINTS_CONVERTER_EXPORT void converter_data_source_request_aabb(struct converter_data_source_t *converter_data_source, converter_data_source_request_aabb_callback_t callback, void *user_ptr);
+
+} // namespace converter
 } // namespace points
 
 #ifdef __cplusplus
