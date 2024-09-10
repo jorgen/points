@@ -326,10 +326,7 @@ void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &at
   double smallest_scale = tree_config.scale;
 
   morton::morton192_t global_min = {};
-  morton::morton192_t global_max;
-  global_max.data[0] = ~uint64_t(0);
-  global_max.data[1] = ~uint64_t(0);
-  global_max.data[2] = ~uint64_t(0);
+  morton::morton192_t global_max = morton::morton_negate(global_min);
   double global_min_pos[3];
   double global_max_pos[3];
   convert_morton_to_pos(smallest_scale, tree_config.offset, global_min, global_min_pos);

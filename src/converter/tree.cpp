@@ -90,8 +90,9 @@ static void tree_initialize_new_parent(const tree_t &some_child, const morton::m
   morton::morton192_t new_min = some_child.morton_min < possible_min ? some_child.morton_min : possible_min;
   morton::morton192_t new_max = some_child.morton_max < possible_max ? possible_max : some_child.morton_max;
 
-  int lod = morton::morton_lod(new_min, new_max);
-  new_parent.magnitude = uint8_t(morton::morton_magnitude_from_lod(uint8_t(lod)));
+  auto min_max_msb = morton::morton_msb(morton::morton_xor(new_min, new_max));
+  new_parent.magnitude = uint8_t(morton::morton_magnitude_from_bit_index(min_max_msb));
+  int lod = morton::morton_magnitude_to_lod(new_parent.magnitude);
   morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t, 3>(lod);
   morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
   new_parent.morton_min = morton::morton_and(new_tree_mask_inv, new_min);
@@ -402,7 +403,7 @@ tree_id_t tree_add_points(tree_registry_t &tree_registry, storage_handler_t &cac
   tree_id_t ret = tree_id;
   auto *tree = tree_registry.get(tree_id);
   // assert(validate_points_offset(header));
-  if (header.morton_min < tree->morton_min || tree->morton_max < header.morton_max)
+  if (header.morton_min < tree->morton_min || header.morton_max >= tree->morton_max)
   {
     ret = reparent_tree(tree_registry, tree_id, header.morton_min, header.morton_max);
     tree = tree_registry.get(ret);

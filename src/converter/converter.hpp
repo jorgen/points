@@ -48,7 +48,7 @@ struct converter_t
       exit(1);
     }
     processor.set_pre_init_tree_node_limit(100000);
-    processor.set_pre_init_tree_config({0.00025, {0, 0, 0}});
+    processor.set_pre_init_tree_config({0.00025, {-10000, -10000, -10000}});
   }
   error_t error;
   tree_config_t tree_config;

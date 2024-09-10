@@ -244,11 +244,25 @@ void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tre
 
 void tree_handler_t::handle_request_aabb(std::function<void(double *, double *)> &&function)
 {
+  auto tree = _tree_registry.get(_tree_registry.root);
+
+  morton::morton192_t morton_max = {};
+  morton::morton192_t morton_min = morton::morton_negate(morton_max);
+  for (auto &data : tree->data[0])
+  {
+    if (data.min < morton_min)
+    {
+      morton_min = data.min;
+    }
+    if (morton_max < data.max)
+    {
+      morton_max = data.max;
+    }
+  }
+  const auto &offset = _tree_registry.tree_config.offset;
+  const auto &scale = _tree_registry.tree_config.scale;
   double min[3];
   double max[3];
-  auto tree = _tree_registry.get(_tree_registry.root);
-  auto &offset = _tree_registry.tree_config.offset;
-  auto &scale = _tree_registry.tree_config.scale;
   convert_morton_to_pos(scale, offset, tree->morton_min, min);
   convert_morton_to_pos(scale, offset, tree->morton_max, max);
   function(min, max);

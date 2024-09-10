@@ -123,6 +123,7 @@ void point_buffer_subdivide_type(const read_only_points_t &points, input_storage
 
 #ifndef NDEBUG
   morton::morton192_t node_max = morton::morton_or(node_min, morton::morton_mask_create<uint64_t, 3>(lod));
+  assert(points.header.morton_min < node_max);
   morton::morton_t<T, C> local_node_max;
   morton::morton_downcast(node_max, local_node_max);
   assert(!((*morton_begin) < local_node_min));
@@ -144,7 +145,8 @@ void point_buffer_subdivide_type(const read_only_points_t &points, input_storage
     {
       if (i == 7)
       {
-        node_mask = morton::morton_or(local_node_min, morton::morton_mask_create<T, C>(lod));
+        auto mask = morton::morton_mask_create<T, C>(lod);
+        node_mask = morton::morton_or(local_node_min, mask);
         morton::morton_add_one(node_mask);
       }
       else
@@ -153,7 +155,7 @@ void point_buffer_subdivide_type(const read_only_points_t &points, input_storage
         morton::morton_set_child_mask(lod, uint8_t(i + 1), node_mask);
       }
 
-      if (!(*morton_current_start < node_mask))
+      if (*morton_current_start >= node_mask)
         continue;
 
       morton_current_end = std::lower_bound(morton_current_start, morton_end, node_mask);
