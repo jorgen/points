@@ -543,6 +543,23 @@ inline void morton_cast(const morton_t<T1, C1> &a, const morton::morton192_t &mi
     b = a;
   }
 }
+
+template <typename T, size_t C>
+inline morton192_t create_min_for_downcast(const morton_t<T, C> &dummy, const morton192_t &a)
+{
+  (void)dummy;
+  morton192_t all_ones = {};
+  all_ones = morton_negate(all_ones);
+  morton_t<T, C> all_ones_downcasted;
+  morton_downcast(all_ones, all_ones_downcasted);
+  auto ret = a;
+  for (int i = 0; i < C; i++)
+  {
+    ret.data[i] &= ~uint64_t(all_ones_downcasted.data[i]);
+  }
+  return ret;
+}
+
 inline void decode(const morton192_t &morton, std::array<uint64_t, 3> &decoded)
 {
   uint32_t lower[3];

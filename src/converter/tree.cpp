@@ -53,6 +53,7 @@ tree_id_t tree_initialize(tree_registry_t &tree_registry, storage_handler_t &cac
   tree.morton_max = morton::morton_or(header.morton_min, new_tree_mask);
   tree.is_dirty = true;
   tree.magnitude = uint8_t(magnitude);
+  fmt::print(stderr, "tree_initialize with magnitude {}\n", tree.magnitude);
   tree.nodes[0].push_back(0);
   tree.skips[0].push_back(int16_t(0));
   tree.data[0].emplace_back();
@@ -92,6 +93,7 @@ static void tree_initialize_new_parent(const tree_t &some_child, const morton::m
 
   auto min_max_msb = morton::morton_msb(morton::morton_xor(new_min, new_max));
   new_parent.magnitude = uint8_t(morton::morton_magnitude_from_bit_index(min_max_msb));
+  fmt::print(stderr, "initialize new parent with magnitude {}\n", new_parent.magnitude);
   int lod = morton::morton_magnitude_to_lod(new_parent.magnitude);
   morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t, 3>(lod);
   morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
@@ -688,6 +690,7 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   uint32_t tree_registry_size = 0;
   tree_registry_size += sizeof(tree_registry.node_limit);
   tree_registry_size += sizeof(tree_registry.current_id);
+  tree_registry_size += sizeof(tree_registry.root);
   tree_registry_size += sizeof(tree_registry.tree_config);
   auto tree_registry_count = uint32_t(tree_registry.locations.size());
   tree_registry_size += sizeof(tree_registry_count);
@@ -700,6 +703,8 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   if (!write_memory(ptr, end_ptr, tree_registry.node_limit))
     return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry.current_id))
+    return {nullptr, 0};
+  if (!write_memory(ptr, end_ptr, tree_registry.root))
     return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry.tree_config))
     return {nullptr, 0};
@@ -717,6 +722,8 @@ error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32
   if (!read_memory(ptr, end_ptr, tree_registry.node_limit))
     return {1, "Invalid tree registry data"};
   if (!read_memory(ptr, end_ptr, tree_registry.current_id))
+    return {1, "Invalid tree registry data"};
+  if (!read_memory(ptr, end_ptr, tree_registry.root))
     return {1, "Invalid tree registry data"};
   if (!read_memory(ptr, end_ptr, tree_registry.tree_config))
     return {1, "Invalid tree registry data"};

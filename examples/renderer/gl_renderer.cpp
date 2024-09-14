@@ -273,6 +273,8 @@ void gl_dyn_points_handler::draw(points::render::draw_group_t &group)
     initialize();
   glUseProgram(program);
 
+  glPointSize(2);
+
   glBindVertexArray(vao);
   glUseProgram(program);
   for (int i = 0; i < group.buffers_size; i++)

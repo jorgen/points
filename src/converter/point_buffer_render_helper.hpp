@@ -118,7 +118,7 @@ struct dyn_points_draw_buffer_t
   point_format_t format[3];
   std::unique_ptr<uint8_t[]> data[2];
   buffer_t data_info[2];
-  int point_count;
+  uint32_t point_count;
   std::array<double, 3> offset;
   std::array<double, 3> scale;
   glm::mat4 camera_view;
@@ -142,8 +142,7 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   auto vertex_data_ptr = vertex_data.get();
   auto *decoded_array = reinterpret_cast<std::array<float, 3> *>(vertex_data_ptr);
 
-  morton::morton192_t current;
-  morton::morton192_t morton_min = data_handler.header.morton_min;
+  morton::morton192_t morton_min = morton::create_min_for_downcast(MORTON_TYPE(), data_handler.header.morton_min);
 
   uint64_t min_int[3];
   morton::decode(morton_min, min_int);
@@ -159,11 +158,9 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   uint64_t tmp_pos[3];
   for (uint64_t i = 0; i < point_count; i++)
   {
-    morton::morton_upcast(morton_array[i], morton_min, current);
-    morton::decode(current, tmp_pos);
+    morton::decode(morton_array[i], tmp_pos);
     for (int n = 0; n < 3; n++)
     {
-      tmp_pos[n] -= min_int[n];
       decoded_array[i][n] = float(double(tmp_pos[n]) * tree_config.scale);
     }
   }

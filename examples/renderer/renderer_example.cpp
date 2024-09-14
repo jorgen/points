@@ -133,24 +133,25 @@ int main(int, char **)
   get_texture_data_size("textures/front.jpg", skybox_data.positive_z, skybox_data.positive_z_size);
   get_texture_data_size("textures/back.jpg", skybox_data.negative_z, skybox_data.negative_z_size);
   auto skybox = create_unique_ptr(points::render::skybox_data_source_create(renderer.get(), skybox_data), &points::render::skybox_data_source_destroy);
-  // points::render::renderer_add_data_source(renderer.get(), points::render::skybox_data_source_get(skybox.get()));
+  // flat_points::render::renderer_add_data_source(renderer.get(), flat_points::render::skybox_data_source_get(skybox.get()));
 
   std::vector<points::converter::str_buffer> input_files;
   // input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
   // input_files.push_back(make_str_buffer("D:/LazData/Kosciol_Libusza/K_Libusza_ext_18.laz"));
-  input_files.push_back(make_str_buffer("D:/LazData/Palac_Moszna/Palac_Moszna.laz"));
-  // input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
+  // input_files.push_back(make_str_buffer("D:/LazData/Palac_Moszna/Palac_Moszna.laz"));
+  input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
   // input_files.push_back(make_str_buffer("D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-63.laz"));
   // input_files.push_back(make_str_buffer("/Users/jlind/Downloads/Palac_Moszna.laz"));
 
   const char cache_file[] = "c:/Users/jorge/out.jlp";
-  // auto converter = create_unique_ptr(points::converter::converter_create(cache_file, sizeof(cache_file)), &points::converter::converter_destroy);
-  // points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
+  // auto converter = create_unique_ptr(flat_points::converter::converter_create(cache_file, sizeof(cache_file)), &flat_points::converter::converter_destroy);
+  // flat_points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
 
-  // auto points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size), &points::render::flat_points_data_source_destroy);
-  // points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(points.get()));
+  // bool render_flat_points = true;
+  // auto flat_points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size), &points::render::flat_points_data_source_destroy);
+  // points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(flat_points.get()));
   points::render::aabb_t aabb;
-  // points::render::flat_points_get_aabb(points.get(), aabb.min, aabb.max);
+  // flat_points::render::flat_points_get_aabb(flat_points.get(), aabb.min, aabb.max);
 
   auto error = create_unique_ptr(points::error_create(), &points::error_destroy);
   bool render_converter_points = true;
@@ -193,12 +194,12 @@ int main(int, char **)
   std::vector<uint32_t> storage_ids;
   std::vector<uint32_t> storage_subs;
   std::vector<std::string> storage_strings;
-  // auto aabb_ds = create_unique_ptr(points::render::aabb_data_source_create(renderer.get(), aabb.min),
-  //                                  &points::render::aabb_data_source_destroy);
-  // points::render::renderer_add_data_source(renderer.get(), points::render::aabb_data_source_get(aabb_ds.get()));
-  // points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
-  // points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
-  //(void)points;
+  // auto aabb_ds = create_unique_ptr(flat_points::render::aabb_data_source_create(renderer.get(), aabb.min),
+  //                                  &flat_points::render::aabb_data_source_destroy);
+  // flat_points::render::renderer_add_data_source(renderer.get(), flat_points::render::aabb_data_source_get(aabb_ds.get()));
+  // flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  // flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  //(void)flat_points;
 
   double aabb_center[3] = {5.0, 0.0, 5.0};
   double up[3];
@@ -216,7 +217,7 @@ int main(int, char **)
   aabb2.max[0] = 0.0;
   aabb2.max[1] = 0.0;
   aabb2.max[2] = 0.0;
-  // int aabb2_id =  -1; //points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  // int aabb2_id =  -1; //flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
 
   bool loop = true;
   bool left_pressed = false;
@@ -276,9 +277,9 @@ int main(int, char **)
             if (arcball)
               points::render::camera_manipulator::arcball_detect_upside_down(arcball.get());
             // if (arcball)
-            //   points::render::camera_manipulator::arcball_reset(arcball.get());
+            //   flat_points::render::camera_manipulator::arcball_reset(arcball.get());
             // else
-            //   points::render::camera_manipulator::fps_reset(fps.get());
+            //   flat_points::render::camera_manipulator::fps_reset(fps.get());
           }
           else if (event.button.button == SDL_BUTTON_RIGHT)
           {
@@ -345,10 +346,10 @@ int main(int, char **)
     points_gl_renderer.draw(clear_mask, width, height);
     // double converter_min[3];
     // double converter_max[3];
-    // points::converter::converter_data_source_get_aabb(converter_points.get(), converter_min, converter_max);
+    // flat_points::converter::converter_data_source_get_aabb(converter_points.get(), converter_min, converter_max);
     //  if (converter_min[0] != aabb2.min[0] && aabb2_id == -1)
     //  {
-    //    aabb2_id = points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
+    //    aabb2_id = flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
     //    memcpy(aabb2.min, converter_min, sizeof(converter_min));
     //    memcpy(aabb2.max, converter_max, sizeof(converter_max));
     //  }
@@ -376,16 +377,26 @@ int main(int, char **)
         fps.reset(points::render::camera_manipulator::fps_create(camera.get()));
       }
     }
-
+    // if (ImGui::Checkbox("Render flat", &render_flat_points))
+    //{
+    //   if (render_flat_points)
+    //   {
+    //     points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(flat_points.get()));
+    //   }
+    //   else
+    //   {
+    //     points::render::renderer_remove_data_source(renderer.get(), points::render::flat_points_data_source_get(flat_points.get()));
+    //   }
+    // }
     if (ImGui::Checkbox("Render converter", &render_converter_points))
     {
       if (render_converter_points)
       {
-        // points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+        points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
       }
       else
       {
-        // points::render::renderer_remove_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+        points::render::renderer_remove_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
       }
     }
     ImGui::EndGroup();

@@ -120,7 +120,8 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
     int current_depth_in_tree = depth % 5;
     for (auto &possible_nodes : alternating_possible_nodes[current_buffer_index])
     {
-      auto hit_test = possible_nodes.is_completely_inside_frustum ? render::frustum_intersection_t::inside : frustum.test_aabb(possible_nodes.aabbs.min, possible_nodes.aabbs.max);
+      auto hit_test =
+        render::frustum_intersection_t::inside; // possible_nodes.is_completely_inside_frustum ? render::frustum_intersection_t::inside : frustum.test_aabb(possible_nodes.aabbs.min, possible_nodes.aabbs.max);
       if (hit_test == render::frustum_intersection_t::outside)
         continue;
       auto node_name = possible_nodes.tree->node_ids[current_depth_in_tree][possible_nodes.skip];

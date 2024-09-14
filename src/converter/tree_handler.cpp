@@ -108,10 +108,12 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
     _initialized = true;
     seal_configuration();
     _tree_registry.root = tree_initialize(_tree_registry, _file_cache, header, attributes_id, std::move(storage));
+    fmt::print("tree initialized with id {} and magnitude {}\n", _tree_registry.root.data, _tree_registry.get(_tree_registry.root)->magnitude);
   }
   else
   {
     _tree_registry.root = tree_add_points(_tree_registry, _file_cache, _tree_registry.root, header, attributes_id, std::move(storage));
+    fmt::print("tree add points with id {} and magnitude {}\n", _tree_registry.root.data, _tree_registry.get(_tree_registry.root)->magnitude);
   }
   auto to_send = header.input_id;
   _done_with_input.post_event(std::move(to_send));

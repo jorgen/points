@@ -140,6 +140,7 @@ public:
   std::mutex m_mutex;
   std::condition_variable m_wait;
   tree_walker_nodes_t m_new_nodes;
+  double m_tree_offset[3];
   bool m_done;
 };
 

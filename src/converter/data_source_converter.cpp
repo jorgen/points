@@ -22,6 +22,8 @@
 #include <points/common/format.h>
 #include <points/converter/converter_data_source.h>
 
+#include <fmt/printf.h>
+
 #include "renderer.hpp"
 
 namespace points
@@ -113,7 +115,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   }
 
   render_buffers = std::move(new_render_buffers);
-
+  auto tree_config = processor.tree_config();
   for (auto &render_buffer_ptr : render_buffers)
   {
     assert(render_buffer_ptr);
@@ -123,9 +125,11 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
       if (render_buffer.data_handler->is_done())
       {
         render_buffer.point_count = render_buffer.data_handler->header.point_count;
-        convert_points_to_vertex_data(processor.tree_config(), *render_buffer.data_handler, render_buffer);
+        convert_points_to_vertex_data(tree_config, *render_buffer.data_handler, render_buffer);
         callbacks.do_create_buffer(render_buffer.render_buffers[0], points::render::buffer_type_vertex);
         callbacks.do_initialize_buffer(render_buffer.render_buffers[0], render_buffer.format[0].type, render_buffer.format[0].components, int(render_buffer.data_info[0].size), render_buffer.data_info[0].data);
+
+        fmt::print(stderr, "datahandler on sub {}, has points {} with {}\n", render_buffer.data_handler->header.input_id.data, render_buffer.point_count, render_buffer.data_handler->header.point_count);
 
         convert_attribute_to_draw_buffer_data(*render_buffer.data_handler, render_buffer, 1);
         callbacks.do_create_buffer(render_buffer.render_buffers[1], points::render::buffer_type_vertex);
@@ -151,9 +155,10 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
       }
     }
     assert(render_buffer.rendered);
-    render_buffer.camera_view = camera.projection * glm::translate(camera.view, to_glm(render_buffer.offset));
+    auto offset = to_glm(tree_config.offset) + to_glm(render_buffer.offset);
+    render_buffer.camera_view = camera.projection * glm::translate(camera.view, offset);
     callbacks.do_modify_buffer(render_buffer.render_buffers[2], 0, sizeof(render_buffer.camera_view), &render_buffer.camera_view);
-    render::draw_group_t draw_group = {render::dyn_points, render_buffer.render_list, 3, render_buffer.point_count};
+    render::draw_group_t draw_group = {render::dyn_points, render_buffer.render_list, 3, int(render_buffer.point_count)};
     to_render_add_render_group(to_render, draw_group);
   }
 }
