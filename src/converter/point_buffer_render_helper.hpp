@@ -31,7 +31,8 @@ namespace points::converter
 
 struct dyn_points_data_handler_t
 {
-  dyn_points_data_handler_t()
+  dyn_points_data_handler_t(const point_format_t (&point_format)[4])
+    : point_format{point_format[0], point_format[1], point_format[2], point_format[3]}
   {
   }
 
@@ -107,16 +108,18 @@ struct dyn_points_data_handler_t
   error_t error;
 
   storage_header_t header{};
+  point_format_t point_format[4];
   buffer_t data_info[4];
 };
 
 struct dyn_points_draw_buffer_t
 {
   tree_walker_data_t node_info;
+  render::draw_type_t draw_type;
   render::draw_buffer_t render_list[4];
   render::buffer_t render_buffers[3];
   point_format_t format[3];
-  std::unique_ptr<uint8_t[]> data[2];
+  std::shared_ptr<uint8_t[]> data[2];
   buffer_t data_info[2];
   uint32_t point_count;
   std::array<double, 3> offset;
@@ -128,7 +131,7 @@ struct dyn_points_draw_buffer_t
 
 template <typename MORTON_TYPE, typename DECODED_T>
 void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const dyn_points_data_handler_t &data_handler, buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
-                                          std::unique_ptr<uint8_t[]> &vertex_data)
+                                          std::shared_ptr<uint8_t[]> &vertex_data)
 {
   assert(data_handler.read_request[0]);
   assert(data_handler.data_info[0].size % sizeof(MORTON_TYPE) == 0);
@@ -137,12 +140,14 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   auto point_count = data_handler.header.point_count;
 
   auto buffer_size = uint32_t(point_count * sizeof(DECODED_T));
-  vertex_data.reset(new uint8_t[buffer_size]);
+  vertex_data = std::make_shared<uint8_t[]>(buffer_size);
   vertex_data_info = buffer_t(vertex_data.get(), buffer_size);
   auto vertex_data_ptr = vertex_data.get();
   auto *decoded_array = reinterpret_cast<std::array<float, 3> *>(vertex_data_ptr);
 
-  morton::morton192_t morton_min = morton::create_min_for_downcast(MORTON_TYPE(), data_handler.header.morton_min);
+  auto mask = morton::morton_negate(morton::morton_mask_create<uint64_t, 3>(data_handler.header.lod_span));
+
+  morton::morton192_t morton_min = morton::morton_and(data_handler.header.morton_min, mask);
 
   uint64_t min_int[3];
   morton::decode(morton_min, min_int);
@@ -156,9 +161,12 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   output_offset[2] = min[2];
 
   uint64_t tmp_pos[3];
+  MORTON_TYPE downcasted_mask = {};
+  morton::morton_downcast(mask, downcasted_mask);
+  downcasted_mask = morton::morton_negate(downcasted_mask);
   for (uint64_t i = 0; i < point_count; i++)
   {
-    morton::decode(morton_array[i], tmp_pos);
+    morton::decode(morton::morton_and(morton_array[i], downcasted_mask), tmp_pos);
     for (int n = 0; n < 3; n++)
     {
       decoded_array[i][n] = float(double(tmp_pos[n]) * tree_config.scale);
@@ -209,21 +217,10 @@ inline void convert_points_to_vertex_data(const tree_config_t &tree_config, cons
 }
 inline void convert_attribute_to_draw_buffer_data(const dyn_points_data_handler_t &data_handler, dyn_points_draw_buffer_t &draw_buffer, int data_slot)
 {
-  auto count = data_handler.header.point_count;
-  auto source_ptr = reinterpret_cast<std::array<uint16_t, 3> *>(data_handler.data_info[1].data);
-
-  auto target_size = uint32_t(count * sizeof(std::array<uint8_t, 3>));
-  draw_buffer.data[data_slot].reset(new uint8_t[target_size]);
-  draw_buffer.data_info[data_slot] = buffer_t(draw_buffer.data[data_slot].get(), target_size);
-  draw_buffer.format[data_slot] = point_format_t(points::type_u8, components_3);
-  auto target_ptr = reinterpret_cast<std::array<uint8_t, 3> *>(draw_buffer.data[data_slot].get());
-  for (uint64_t i = 0; i < count; i++)
-  {
-    for (int n = 0; n < 3; n++)
-    {
-      target_ptr[i][n] = source_ptr[i][n] >> 8;
-    }
-  }
+  draw_buffer.draw_type = data_handler.point_format[1].components == components_3 ? render::dyn_points_3 : render::dyn_points_1;
+  draw_buffer.data[data_slot] = data_handler.read_request[1]->buffer;
+  draw_buffer.data_info[data_slot] = draw_buffer.data_handler->data_info[data_slot];
+  draw_buffer.format[data_slot] = draw_buffer.data_handler->point_format[data_slot];
 }
 } // namespace points::converter
 

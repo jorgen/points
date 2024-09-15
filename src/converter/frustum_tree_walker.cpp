@@ -130,13 +130,13 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
       for (auto &points : points_collection.data)
       {
         auto attr_id = tree->storage_map.attribute_id(points.input_id);
-        int attrib_indexes[] = {-2, -2, -2, -2};
+        attribute_index_t attrib_indexes[] = {{-2, {}}, {-2, {}}, {-2, {}}, {-2, {}}};
         bool valid = true;
         for (int i = 0; i < 4 && i < attribute_index_map.get_attribute_count(); i++)
         {
           auto index = attribute_index_map.get_index(attr_id, i);
           attrib_indexes[i] = index;
-          if (index == -1)
+          if (index.index == -1)
           {
             valid = false;
             break;
@@ -157,8 +157,10 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
         to_add.input_id = points.input_id;
         for (int i = 0; i < 4 && i < attribute_index_map.get_attribute_count(); i++)
         {
-          auto location = tree->storage_map.location(points.input_id, attrib_indexes[i]);
+          auto attrib_index = attrib_indexes[i];
+          auto location = tree->storage_map.location(points.input_id, attrib_index.index);
           to_add.locations[i] = location;
+          to_add.format[i] = attrib_index.format;
         }
       }
 

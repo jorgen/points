@@ -65,6 +65,12 @@ struct serialized_attributes_t
   uint32_t size = 0;
 };
 
+struct attribute_index_t
+{
+  int index;
+  point_format_t format;
+};
+
 class attributes_configs_t
 {
 public:
@@ -77,7 +83,7 @@ public:
   std::vector<point_format_t> get_format_components(attributes_id_t id);
   point_format_t get_point_format(attributes_id_t id);
 
-  int get_attribute_index(attributes_id_t id, const std::string &name) const;
+  attribute_index_t get_attribute_index(attributes_id_t id, const std::string &name) const;
 
   serialized_attributes_t serialize() const;
   [[nodiscard]] points::error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);

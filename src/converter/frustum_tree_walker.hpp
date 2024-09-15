@@ -64,6 +64,7 @@ struct tree_walker_data_t
   offset_in_subset_t offset_in_subset;
   point_count_t point_count;
   input_data_id_t input_id;
+  point_format_t format[4];
   storage_location_t locations[4];
 };
 
@@ -81,25 +82,25 @@ public:
   {
   }
 
-  int get_attribute_count() const
+  [[nodiscard]] int get_attribute_count() const
   {
     return int(m_attribute_names.size());
   }
 
-  int get_index(attributes_id_t id, int attribute_name_index)
+  attribute_index_t get_index(attributes_id_t id, int attribute_name_index)
   {
     assert(attribute_name_index < int(m_attribute_names.size()));
     auto it = m_map.find(id);
     if (it != m_map.end())
     {
       auto ret = it->second[attribute_name_index];
-      if (ret >= -1)
+      if (ret.index >= -1)
       {
         return ret;
       }
     }
     auto &value = it != m_map.end() ? it->second : m_map[id];
-    value.resize(m_attribute_names.size(), -2);
+    value.resize(m_attribute_names.size(), {-2, {}});
     auto index = m_attributes_configs.get_attribute_index(id, m_attribute_names[attribute_name_index]);
     value[attribute_name_index] = index;
     return index;
@@ -124,7 +125,7 @@ private:
   };
   const attributes_configs_t &m_attributes_configs;
   std::vector<std::string> m_attribute_names;
-  ankerl::unordered_dense::map<attributes_id_t, std::vector<int>, hash> m_map;
+  ankerl::unordered_dense::map<attributes_id_t, std::vector<attribute_index_t>, hash> m_map;
 };
 
 class frustum_tree_walker_t

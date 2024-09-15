@@ -33,7 +33,8 @@ cmrc_add_resource_library(renderer_example_shaders ALIAS renderer_example::shade
         shaders/points.frag
         shaders/points.vert
         shaders/dynpoints.frag
-        shaders/dynpoints.vert
+        shaders/dynpoints_1.vert
+        shaders/dynpoints_3.vert
 )
 cmrc_add_resource_library(renderer_example_fonts ALIAS renderer_example::fonts NAMESPACE fonts
         fonts/Cousine-Regular.ttf

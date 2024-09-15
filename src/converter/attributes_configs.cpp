@@ -230,19 +230,20 @@ point_format_t attributes_configs_t::get_point_format(attributes_id_t id)
   auto &attrib = _attributes_configs[id.data].attributes.attributes[0];
   return {attrib.type, attrib.components};
 }
-int attributes_configs_t::get_attribute_index(attributes_id_t id, const std::string &name) const
+
+attribute_index_t attributes_configs_t::get_attribute_index(attributes_id_t id, const std::string &name) const
 {
   std::unique_lock<std::mutex> lock(_mutex);
   if (id.data >= _attributes_configs.size())
-    return -1;
+    return {-1, {}};
   if (_attributes_configs[id.data].attributes.attributes.empty())
-    return -1;
+    return {-1, {}};
   for (int i = 0; i < int(_attributes_configs[id.data].attributes.attributes.size()); i++)
   {
     if (_attributes_configs[id.data].attributes.attribute_names[i].get() == name)
-      return i;
+      return {i, {_attributes_configs[id.data].attributes.attributes[i].type, _attributes_configs[id.data].attributes.attributes[i].components}};
   }
-  return -1;
+  return {-1, {}};
 }
 
 serialized_attributes_t attributes_configs_t::serialize() const

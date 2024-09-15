@@ -333,7 +333,7 @@ int main(int, char **)
           case SDL_WINDOWEVENT_SIZE_CHANGED:
             SDL_GL_GetDrawableSize(window, &width, &height);
             glViewport(0, 0, width, height);
-            points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 1000);
+            points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
             break;
           }
           break;

@@ -66,7 +66,7 @@ bool less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs)
 static void add_request_to_dynbuffer(storage_handler_t &storage_handler, dyn_points_draw_buffer_t &buffer, const tree_walker_data_t &node)
 {
   buffer.node_info = node;
-  buffer.data_handler = std::make_shared<dyn_points_data_handler_t>();
+  buffer.data_handler = std::make_shared<dyn_points_data_handler_t>(node.format);
   buffer.data_handler->start_requests(buffer.data_handler, storage_handler, node.locations);
 }
 
@@ -158,7 +158,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
     auto offset = to_glm(tree_config.offset) + to_glm(render_buffer.offset);
     render_buffer.camera_view = camera.projection * glm::translate(camera.view, offset);
     callbacks.do_modify_buffer(render_buffer.render_buffers[2], 0, sizeof(render_buffer.camera_view), &render_buffer.camera_view);
-    render::draw_group_t draw_group = {render::dyn_points, render_buffer.render_list, 3, int(render_buffer.point_count)};
+    render::draw_group_t draw_group = {render_buffer.draw_type, render_buffer.render_list, 3, int(render_buffer.point_count)};
     to_render_add_render_group(to_render, draw_group);
   }
 }

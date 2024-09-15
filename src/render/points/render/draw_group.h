@@ -40,7 +40,8 @@ enum draw_type_t
   aabb_triangle_mesh,
   skybox_triangle,
   flat_points,
-  dyn_points
+  dyn_points_1,
+  dyn_points_3,
 };
 
 struct draw_group_t
@@ -51,8 +52,8 @@ struct draw_group_t
   int draw_size;
 };
 
-}
-}
+} // namespace render
+} // namespace points
 
 #ifdef __cplusplus
 }
