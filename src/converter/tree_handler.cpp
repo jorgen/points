@@ -108,12 +108,10 @@ void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_i
     _initialized = true;
     seal_configuration();
     _tree_registry.root = tree_initialize(_tree_registry, _file_cache, header, attributes_id, std::move(storage));
-    fmt::print("tree initialized with id {} and magnitude {}\n", _tree_registry.root.data, _tree_registry.get(_tree_registry.root)->magnitude);
   }
   else
   {
     _tree_registry.root = tree_add_points(_tree_registry, _file_cache, _tree_registry.root, header, attributes_id, std::move(storage));
-    fmt::print("tree add points with id {} and magnitude {}\n", _tree_registry.root.data, _tree_registry.get(_tree_registry.root)->magnitude);
   }
   auto to_send = header.input_id;
   _done_with_input.post_event(std::move(to_send));
@@ -182,16 +180,16 @@ void tree_handler_t::handle_serialize_trees()
   std::vector<serialized_tree_t> serialized_trees;
   for (auto &tree : _tree_registry.data)
   {
-    if (tree.is_dirty)
+    if (tree->is_dirty)
     {
-      tree_ids.emplace_back(tree.id);
-      serialized_trees.emplace_back(tree_serialize(tree));
+      tree_ids.emplace_back(tree->id);
+      serialized_trees.emplace_back(tree_serialize(*tree));
       if (serialized_trees.back().data == nullptr)
       {
         fmt::print(stderr, "Error serializing tree\n");
         return;
       }
-      tree.is_dirty = false;
+      tree->is_dirty = false;
     }
   }
   _file_cache.write_trees(std::move(tree_ids), std::move(serialized_trees), [this](std::vector<tree_id_t> &&tree_ids, std::vector<storage_location_t> &&new_locations, error_t &&error) {
@@ -224,6 +222,8 @@ void tree_handler_t::handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, 
 
 void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tree_t &&data)
 {
+  assert(_tree_registry.get(tree_id) == nullptr);
+  _tree_registry.data[tree_id.data] = std::make_unique<tree_t>();
   auto tree = _tree_registry.get(tree_id);
   assert(tree);
   error_t error;

@@ -704,6 +704,8 @@ inline void encode(const uint64_t (&pos)[3], morton128_t &morton)
   // X starts at LSB
   morton.data[0] = libmorton::morton3D_64_encode(x_lower, y_lower, z_lower);
   morton.data[1] = libmorton::morton3D_64_encode(y_mid, z_mid, x_mid);
+  auto mask = (uint64_t(1) << 62) - 1;
+  morton.data[1] &= mask;
 }
 
 inline void encode(const uint64_t (&pos)[3], morton_t<uint64_t, 1> &morton)
@@ -714,6 +716,8 @@ inline void encode(const uint64_t (&pos)[3], morton_t<uint64_t, 1> &morton)
 
   // X starts at LSB
   morton.data[0] = libmorton::morton3D_64_encode(x_lower, y_lower, z_lower);
+  uint64_t mask = (uint64_t(1) << 63) - 1;
+  morton.data[0] &= mask;
 }
 
 inline void encode(const uint64_t (&pos)[3], morton32_t &morton)
@@ -721,9 +725,9 @@ inline void encode(const uint64_t (&pos)[3], morton32_t &morton)
   uint_fast16_t x_lower = uint_fast16_t(pos[0]);
   uint_fast16_t y_lower = uint_fast16_t(pos[1]);
   uint_fast16_t z_lower = uint_fast16_t(pos[2]);
-
-  // X starts at LSB
   morton.data[0] = libmorton::morton3D_32_encode(x_lower, y_lower, z_lower);
+  auto mask = (uint32_t(1) << 30) - 1;
+  morton.data[0] &= mask;
 }
 
 inline uint16_t get_name_from_morton(int lod, const morton192_t &morton)

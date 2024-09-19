@@ -177,7 +177,7 @@ struct tree_iterator_t
 static void tree_get_work_items(tree_registry_t &tree_cache, storage_handler_t &cache, tree_id_t &tree_id, lod_node_worker_data_t &parent_node, std::vector<lod_tree_worker_data_t> &to_lod)
 {
   auto tree = tree_cache.get(tree_id);
-  assert(!(tree->morton_min < parent_node.node_min));
+  assert(tree->morton_min >= parent_node.node_min);
   auto lod_tree_worker_data = make_tree_worker_data(*tree);
 
   if (tree->nodes->empty())
@@ -946,7 +946,7 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
   // auto &worker_data = batch.worker_data;
   std::vector<lod_tree_worker_data_t> to_lod;
   lod_node_worker_data_t fake_parent;
-  fake_parent.node_min = _tree_cache.data[tree_id.data].morton_min;
+  fake_parent.node_min = _tree_cache.data[tree_id.data]->morton_min;
   tree_get_work_items(_tree_cache, _file_cache, tree_id, fake_parent, to_lod);
   if (!to_lod.empty())
   {

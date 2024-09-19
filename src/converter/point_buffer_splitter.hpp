@@ -116,7 +116,7 @@ void point_buffer_subdivide_type(const read_only_points_t &points, input_storage
   const morton::morton_t<T, C> *morton_end = morton_begin + subset.count.data;
   const morton::morton_t<T, C> *morton_current_start = morton_begin;
   const morton::morton_t<T, C> *morton_current_end = nullptr;
-  assert(!(*(morton_end - 1) < *morton_begin));
+  assert(*morton_begin <= *(morton_end - 1));
 
   morton::morton_t<T, C> local_node_min;
   morton::morton_downcast(node_min, local_node_min);
@@ -126,8 +126,8 @@ void point_buffer_subdivide_type(const read_only_points_t &points, input_storage
   assert(points.header.morton_min < node_max);
   morton::morton_t<T, C> local_node_max;
   morton::morton_downcast(node_max, local_node_max);
-  assert(!((*morton_begin) < local_node_min));
-  assert(!(local_node_max < (*(morton_end - 1))));
+  assert(*morton_begin >= local_node_min);
+  assert(*(morton_end - 1) <= local_node_max);
 #endif
 
   if (lod * 3 + 3 > int(sizeof(T) * 8 * C))

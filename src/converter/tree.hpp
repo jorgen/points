@@ -17,7 +17,6 @@
 ************************************************************************/
 #pragma once
 
-#include <list>
 #include <vector>
 
 #include "conversion_types.hpp"
@@ -138,13 +137,13 @@ struct tree_registry_t
   tree_id_t root = {};
   tree_config_t tree_config;
   uint64_t current_lod_node_id = uint64_t(1) << 63;
-  std::vector<tree_t> data;
+  std::vector<std::unique_ptr<tree_t>> data;
   std::vector<storage_location_t> locations;
   std::vector<bool> tree_id_initialized;
 
   tree_t *get(tree_id_t id)
   {
-    return &data[id.data];
+    return data[id.data].get();
   }
 };
 

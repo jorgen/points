@@ -24,22 +24,22 @@ namespace points::converter
 {
 tree_t &tree_cache_create_root_tree(tree_registry_t &tree_cache)
 {
-  tree_cache.data.emplace_back();
+  tree_cache.data.emplace_back(new tree_t());
   tree_cache.locations.emplace_back();
   tree_cache.tree_id_initialized.emplace_back(true);
-  tree_cache.data.back().id.data = tree_cache.current_id++;
-  return tree_cache.data.back();
+  tree_cache.data.back()->id.data = tree_cache.current_id++;
+  return *tree_cache.data.back();
 }
 
 tree_t &tree_cache_add_tree(tree_registry_t &tree_cache, tree_t *(&parent))
 {
   auto id = parent->id;
-  tree_cache.data.emplace_back();
+  tree_cache.data.emplace_back(new tree_t());
   tree_cache.locations.emplace_back();
   tree_cache.tree_id_initialized.emplace_back(true);
-  tree_cache.data.back().id.data = tree_cache.current_id++;
-  parent = &tree_cache.data[id.data];
-  return tree_cache.data.back();
+  tree_cache.data.back()->id.data = tree_cache.current_id++;
+  parent = tree_cache.data[id.data].get();
+  return *tree_cache.data.back();
 }
 
 tree_id_t tree_initialize(tree_registry_t &tree_registry, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations)
@@ -61,6 +61,7 @@ tree_id_t tree_initialize(tree_registry_t &tree_registry, storage_handler_t &cac
   tree.node_ids[0].emplace_back(root_name);
 #ifndef NDEBUG
   tree.mins[0].push_back(tree.morton_min);
+  assert((tree.morton_min.data[0] & 1) == 0);
 #endif
 
   auto id = tree_add_points(tree_registry, cache, tree.id, header, attributes, std::move(locations));
@@ -83,6 +84,7 @@ static void tree_initialize_sub(const tree_t &parent_tree, tree_registry_t &tree
   sub_tree.node_ids[0].emplace_back(root_name);
 #ifndef NDEBUG
   sub_tree.mins[0].push_back(sub_tree.morton_min);
+  assert((sub_tree.morton_min.data[0] & 1) == 0);
 #endif
 }
 
@@ -235,6 +237,7 @@ static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_
         tree->node_ids[current_level + 1][sub_skip] = child_name;
 #ifndef NDEBUG
         tree->mins[current_level + 1][sub_skip] = new_min;
+        assert((new_min.data[0] & 1) == 0);
 #endif
         sub_tree_insert_points(tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(points));
       }
@@ -315,6 +318,7 @@ static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_
           tree->node_ids[current_level + 1][sub_skip] = child_name;
 #ifndef NDEBUG
           tree->mins[current_level + 1][sub_skip] = new_min;
+          assert((new_min.data[0] & 1) == 0);
 #endif
           sub_tree_insert_points(tree_cache, cache, tree_id, new_min, current_level + 1, sub_skip, child_name, std::move(child_data));
         }
@@ -354,6 +358,7 @@ static void insert_tree_in_tree(tree_registry_t &tree_registry, tree_id_t &paren
 #ifndef NDEBUG
       morton::morton_set_child_mask(lod, child_mask, new_min);
       parent->mins[i + 1][0] = new_min;
+      assert((new_min.data[0] & 1) == 0);
 #endif
       current_skip = parent->skips[i][0] + node_skips;
     }

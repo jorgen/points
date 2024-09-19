@@ -40,6 +40,30 @@ struct vec_t
   T data[3];
 };
 
+template <typename T1, size_t C1, typename T2, size_t C2>
+  typename std::enable_if < C2<C1>::type assert_morton_downcast(uint32_t point_count, const morton::morton_t<T1, C1> *source_morton)
+{
+  T1 mask[C1 - C2];
+  for (int i = 0; i < int(C1 - C2); i++)
+  {
+    mask[i] = source_morton[0].data[C2 + i];
+  }
+  for (uint32_t i = 0; i < point_count; i++)
+  {
+    for (int j = 0; j < int(C1 - C2); j++)
+    {
+      assert(source_morton[i].data[C2 + j] == mask[j]);
+    }
+  }
+}
+
+template <typename T1, size_t C1, typename T2, size_t C2>
+typename std::enable_if<C1 <= C2>::type assert_morton_downcast(uint32_t point_count, const morton::morton_t<T1, C1> *source_morton)
+{
+  (void)point_count;
+  (void)source_morton;
+}
+
 template <typename INDEX_T, typename T1, size_t C1, typename T2, size_t C2>
 typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) > sizeof(morton::morton_t<T2, C2>))>::type downcast_point_buffer(const INDEX_T *indecies_begin, const std::unique_ptr<uint8_t[]> &source, uint32_t source_size,
                                                                                                                            std::unique_ptr<uint8_t[]> &target, uint32_t &target_size)
@@ -49,6 +73,11 @@ typename std::enable_if<(sizeof(morton::morton_t<T1, C1>) > sizeof(morton::morto
   target.reset(new uint8_t[target_size]);
   const morton::morton_t<T1, C1> *source_morton = reinterpret_cast<const morton::morton_t<T1, C1> *>(source.get());
   morton::morton_t<T2, C2> *target_morton = reinterpret_cast<morton::morton_t<T2, C2> *>(target.get());
+
+#ifndef NDEBUG
+  assert_morton_downcast<T1, C1, T2, C2>(point_count, source_morton);
+#endif
+
   for (uint32_t i = 0; i < point_count; i++)
   {
     morton::morton_downcast(source_morton[indecies_begin[i]], target_morton[i]);

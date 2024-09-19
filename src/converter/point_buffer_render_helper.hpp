@@ -160,12 +160,12 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   output_offset[1] = min[1];
   output_offset[2] = min[2];
 
-  uint64_t tmp_pos[3];
   MORTON_TYPE downcasted_mask = {};
   morton::morton_downcast(mask, downcasted_mask);
   downcasted_mask = morton::morton_negate(downcasted_mask);
   for (uint64_t i = 0; i < point_count; i++)
   {
+    uint64_t tmp_pos[3];
     morton::decode(morton::morton_and(morton_array[i], downcasted_mask), tmp_pos);
     for (int n = 0; n < 3; n++)
     {
