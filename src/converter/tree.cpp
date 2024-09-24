@@ -53,7 +53,6 @@ tree_id_t tree_initialize(tree_registry_t &tree_registry, storage_handler_t &cac
   tree.morton_max = morton::morton_or(header.morton_min, new_tree_mask);
   tree.is_dirty = true;
   tree.magnitude = uint8_t(magnitude);
-  fmt::print(stderr, "tree_initialize with magnitude {}\n", tree.magnitude);
   tree.nodes[0].push_back(0);
   tree.skips[0].push_back(int16_t(0));
   tree.data[0].emplace_back();

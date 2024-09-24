@@ -58,7 +58,7 @@ processor_t::processor_t(std::string url, error_t &error)
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
   , _input_event_loop(_thread_pool)
   , _point_reader(_input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
-  , _read_sort_budget(uint64_t(1) << 20)
+  , _read_sort_budget(uint64_t(1) << 30)
   , _read_sort_active_approximate_size(0)
 {
   _event_loop.add_about_to_block_listener(this);

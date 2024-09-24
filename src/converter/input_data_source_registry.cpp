@@ -167,15 +167,25 @@ std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_
 std::optional<morton::morton192_t> input_data_source_registry_t::get_done_morton()
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  for (auto it = _sorted_input_sources.rbegin(); it != _sorted_input_sources.rend(); ++it)
+  // for (auto it = _sorted_input_sources.rbegin(); it != _sorted_input_sources.rend(); ++it)
+  //{
+  //   auto &item = _registry[*it];
+  //   if (item.read_finished && item.inserted_into_tree == item.sub_count)
+  //   {
+  //     return item.morton_min;
+  //   }
+  // }
+  if (_sorted_input_sources.empty())
+    return {};
+  for (auto &id : _sorted_input_sources)
   {
-    auto &item = _registry[*it];
-    if (item.read_finished && item.inserted_into_tree == item.sub_count)
+    auto &item = _registry[id];
+    if (!item.read_finished)
     {
-      return item.morton_min;
+      return {};
     }
   }
-  return {};
+  return _registry[_sorted_input_sources.front()].morton_min;
 }
 
 input_data_source_t input_data_source_registry_t::get(input_data_id_t input_id)

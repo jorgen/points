@@ -58,6 +58,8 @@ struct lod_node_worker_data_t
   std::vector<tree_id_t> child_trees;
   child_storage_map_t child_storage_info;
   point_count_t generated_point_count;
+  morton::morton192_t generated_min;
+  morton::morton192_t generated_max;
   attributes_id_t generated_attributes_id;
   std::vector<storage_location_t> generated_locations;
 };
