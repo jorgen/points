@@ -66,6 +66,9 @@ public:
   void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
   tree_config_t tree_config();
   void request_aabb(std::function<void(double[3], double[3])> callback);
+  uint32_t attrib_name_registry_count();
+  uint32_t attrib_name_registry_get(uint32_t index, char *name, uint32_t buffer_size);
+
   void wait_idle();
 
   void about_to_block() override;

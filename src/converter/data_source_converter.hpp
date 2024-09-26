@@ -64,6 +64,10 @@ struct converter_data_source_t
   render::callback_manager_t &callbacks;
   render::data_source_t data_source;
 
+  std::mutex mutex;
+  std::string current_attribute_name;
+  std::string next_attribute_name;
+
   std::shared_ptr<frustum_tree_walker_t> back_buffer;
 
   render::buffer_t index_buffer;

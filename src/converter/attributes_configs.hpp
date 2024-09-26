@@ -88,9 +88,13 @@ public:
   serialized_attributes_t serialize() const;
   [[nodiscard]] points::error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
 
+  uint32_t attrib_name_registry_count() const;
+  uint32_t attrib_name_registry_get(uint32_t index, char *name, uint32_t buffer_size) const;
+
 private:
   mutable std::mutex _mutex;
   std::vector<attribute_config_t> _attributes_configs;
+  std::vector<std::string> _attribute_name_registry;
 };
 
 } // namespace converter

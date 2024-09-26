@@ -40,6 +40,11 @@ POINTS_CONVERTER_EXPORT struct render::data_source_t converter_data_source_get(s
 typedef void (*converter_data_source_request_aabb_callback_t)(double aabb_min[3], double aabb_max[3], void *user_ptr);
 POINTS_CONVERTER_EXPORT void converter_data_source_request_aabb(struct converter_data_source_t *converter_data_source, converter_data_source_request_aabb_callback_t callback, void *user_ptr);
 
+POINTS_CONVERTER_EXPORT uint32_t converter_data_attribute_count(struct converter_data_source_t *converter_data_source);
+POINTS_CONVERTER_EXPORT uint32_t converter_data_get_attribute_name(struct converter_data_source_t *converter_data_source, int index, char *name, uint32_t name_buffer_size);
+
+POINTS_CONVERTER_EXPORT void converter_data_set_rendered_attribute(struct converter_data_source_t *converter_data_source, const char *name, uint32_t name_len);
+
 } // namespace converter
 } // namespace points
 

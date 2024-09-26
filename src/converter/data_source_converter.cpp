@@ -42,11 +42,22 @@ converter_data_source_t::converter_data_source_t(const std::string &url, render:
   , processor(url, error)
   , callbacks(callbacks)
 {
+  if (error.code != 0)
+  {
+    return;
+  }
   data_source.user_ptr = this;
   data_source.add_to_frame = [](render::frame_camera_t *camera, render::to_render_t *to_render, void *user_ptr) {
     auto *thiz = static_cast<converter_data_source_t *>(user_ptr);
     thiz->add_to_frame(camera, to_render);
   };
+
+  if (processor.attrib_name_registry_count() > 2)
+  {
+    char buffer[256];
+    auto str_size = processor.attrib_name_registry_get(1, buffer, sizeof(buffer));
+    next_attribute_name.assign(buffer, str_size);
+  }
 }
 
 bool less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs)
@@ -74,7 +85,17 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
 {
   (void)to_render;
   const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
-  back_buffer = std::make_shared<frustum_tree_walker_t>(camera.view_projection, 3, std::vector<std::string>({std::string("xyz"), std::string("rgb")}));
+  bool new_attribute = false;
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    new_attribute = current_attribute_name != next_attribute_name;
+    current_attribute_name = next_attribute_name;
+  }
+  if (new_attribute)
+  {
+    render_buffers.clear();
+  }
+  back_buffer = std::make_shared<frustum_tree_walker_t>(camera.view_projection, 7, std::vector<std::string>({std::string("xyz"), current_attribute_name}));
   processor.walk_tree(back_buffer);
   back_buffer->wait_done();
   auto &buffer = back_buffer->m_new_nodes.point_subsets;
@@ -128,8 +149,6 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
         convert_points_to_vertex_data(tree_config, *render_buffer.data_handler, render_buffer);
         callbacks.do_create_buffer(render_buffer.render_buffers[0], points::render::buffer_type_vertex);
         callbacks.do_initialize_buffer(render_buffer.render_buffers[0], render_buffer.format[0].type, render_buffer.format[0].components, int(render_buffer.data_info[0].size), render_buffer.data_info[0].data);
-
-        fmt::print(stderr, "datahandler on sub {}, has points {} with {}\n", render_buffer.data_handler->header.input_id.data, render_buffer.point_count, render_buffer.data_handler->header.point_count);
 
         convert_attribute_to_draw_buffer_data(*render_buffer.data_handler, render_buffer, 1);
         callbacks.do_create_buffer(render_buffer.render_buffers[1], points::render::buffer_type_vertex);
@@ -191,6 +210,21 @@ void converter_data_source_request_aabb(struct converter_data_source_t *converte
   auto callback_cpp = [callback, user_ptr](double aabb_min[3], double aabb_max[3]) { callback(aabb_min, aabb_max, user_ptr); };
 
   converter_data_source->processor.request_aabb(callback_cpp);
+}
+
+uint32_t converter_data_attribute_count(struct converter_data_source_t *converter_data_source)
+{
+  return converter_data_source->processor.attrib_name_registry_count();
+}
+
+uint32_t converter_data_get_attribute_name(struct converter_data_source_t *converter_data_source, int index, char *name, uint32_t name_size)
+{
+  return converter_data_source->processor.attrib_name_registry_get(index, name, name_size);
+}
+void converter_data_set_rendered_attribute(struct converter_data_source_t *converter_data_source, const char *name, uint32_t name_len)
+{
+  std::unique_lock<std::mutex> lock(converter_data_source->mutex);
+  converter_data_source->next_attribute_name.assign(name, name_len);
 }
 
 } // namespace converter

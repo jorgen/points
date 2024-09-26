@@ -275,6 +275,14 @@ void processor_t::set_converter_callbacks(const converter_file_convert_callbacks
 {
   _convert_callbacks = convert_callbacks;
 }
+uint32_t processor_t::attrib_name_registry_count()
+{
+  return _attributes_configs.attrib_name_registry_count();
+}
+uint32_t processor_t::attrib_name_registry_get(uint32_t index, char *name, uint32_t buffer_size)
+{
+  return _attributes_configs.attrib_name_registry_get(index, name, buffer_size);
+}
 
 } // namespace converter
 } // namespace points

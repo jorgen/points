@@ -166,6 +166,18 @@ int main(int, char **)
     exit(1);
   }
 
+  uint32_t attribute_count = points::converter::converter_data_attribute_count(converter_points.get());
+  std::vector<std::string> attribute_names;
+  attribute_names.resize(attribute_count);
+  {
+    char buffer[256];
+    for (uint32_t i = 0; i < attribute_count; i++)
+    {
+      auto str_size = points::converter::converter_data_get_attribute_name(converter_points.get(), i, buffer, sizeof(buffer));
+      attribute_names[i].assign(buffer, str_size);
+    }
+  }
+  int selected_attribute = 1;
   {
     struct aabb_callback_state_t
     {
@@ -398,6 +410,24 @@ int main(int, char **)
       {
         points::render::renderer_remove_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
       }
+    }
+    if (ImGui::BeginCombo("Attribute", attribute_names[selected_attribute].c_str()))
+    {
+      for (int i = 0; i < attribute_names.size(); i++)
+      {
+        bool is_selected = (selected_attribute == i);
+        if (ImGui::Selectable(attribute_names[i].c_str(), is_selected))
+        {
+          selected_attribute = i;
+          auto &name = attribute_names[selected_attribute];
+          points::converter::converter_data_set_rendered_attribute(converter_points.get(), name.c_str(), uint32_t(name.size()));
+        }
+        if (is_selected)
+        {
+          ImGui::SetItemDefaultFocus();
+        }
+      }
+      ImGui::EndCombo();
     }
     ImGui::EndGroup();
     ImGui::SetItemDefaultFocus();

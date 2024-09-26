@@ -118,18 +118,19 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
   for (int depth = 0; depth < depth_left; depth++, current_buffer_index = !current_buffer_index, lod--)
   {
     int current_depth_in_tree = depth % 5;
+    alternating_possible_nodes[!current_buffer_index].clear();
     for (auto &possible_nodes : alternating_possible_nodes[current_buffer_index])
     {
-      auto hit_test =
-        render::frustum_intersection_t::inside; // possible_nodes.is_completely_inside_frustum ? render::frustum_intersection_t::inside : frustum.test_aabb(possible_nodes.aabbs.min, possible_nodes.aabbs.max);
+      auto hit_test = possible_nodes.is_completely_inside_frustum ? render::frustum_intersection_t::inside : frustum.test_aabb(possible_nodes.aabbs.min, possible_nodes.aabbs.max);
       if (hit_test == render::frustum_intersection_t::outside)
         continue;
-      auto node_name = possible_nodes.tree->node_ids[current_depth_in_tree][possible_nodes.skip];
-      node_id_t node_id = {tree->id, uint16_t(current_depth_in_tree), node_name};
-      auto &points_collection = tree->data[current_depth_in_tree][possible_nodes.skip];
+      auto current_tree = possible_nodes.tree;
+      auto node_name = current_tree->node_ids[current_depth_in_tree][possible_nodes.skip];
+      node_id_t node_id = {current_tree->id, uint16_t(current_depth_in_tree), node_name};
+      auto &points_collection = current_tree->data[current_depth_in_tree][possible_nodes.skip];
       for (auto &points : points_collection.data)
       {
-        auto attr_id = tree->storage_map.attribute_id(points.input_id);
+        auto attr_id = current_tree->storage_map.attribute_id(points.input_id);
         attribute_index_t attrib_indexes[] = {{-2, {}}, {-2, {}}, {-2, {}}, {-2, {}}};
         bool valid = true;
         for (int i = 0; i < 4 && i < attribute_index_map.get_attribute_count(); i++)
@@ -158,13 +159,13 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
         for (int i = 0; i < 4 && i < attribute_index_map.get_attribute_count(); i++)
         {
           auto attrib_index = attrib_indexes[i];
-          auto location = tree->storage_map.location(points.input_id, attrib_index.index);
+          auto location = current_tree->storage_map.location(points.input_id, attrib_index.index);
           to_add.locations[i] = location;
           to_add.format[i] = attrib_index.format;
         }
       }
 
-      auto children = tree->nodes[current_depth_in_tree][possible_nodes.skip];
+      auto children = current_tree->nodes[current_depth_in_tree][possible_nodes.skip];
       int child_count = 0;
       for (int i = 0; i < 8 && children; i++, children >>= 1)
       {
@@ -172,7 +173,23 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
         {
           auto child_aabb = make_aabb_from_child_index(possible_nodes.aabbs, i);
           bool is_completely_inside_frustum = hit_test == render::frustum_intersection_t::inside;
-          alternating_possible_nodes[!current_buffer_index].emplace_back(possible_nodes.tree, node_id, tree->skips[current_depth_in_tree][possible_nodes.skip] + child_count, child_aabb, is_completely_inside_frustum);
+          auto next_tree = current_tree;
+          auto next_skip = current_tree->skips[current_depth_in_tree][possible_nodes.skip] + child_count;
+          if (current_depth_in_tree == 4)
+          {
+            auto next_sub_tree_skip = current_tree->skips[4][possible_nodes.skip] + child_count;
+            auto next_tree_id = current_tree->sub_trees[next_sub_tree_skip];
+
+            if (!tree_handler.tree_initialized(next_tree_id))
+            {
+              tree_handler.request_tree(next_tree_id);
+              continue;
+            }
+
+            next_tree = tree_registry.get(next_tree_id);
+            next_skip = 0;
+          }
+          alternating_possible_nodes[!current_buffer_index].emplace_back(next_tree, node_id, next_skip, child_aabb, is_completely_inside_frustum);
           child_count++;
         }
       }

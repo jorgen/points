@@ -50,6 +50,29 @@ static bool compare_attributes(const attributes_t &a, const attributes_t &b)
   return true;
 }
 
+bool attributes_name_in_registry(const attribute_t &attribute, const std::vector<std::string> &registry)
+{
+  for (auto &name : registry)
+  {
+    if (attribute.name_size == uint32_t(name.size()) && memcmp(attribute.name, name.data(), name.size()) == 0)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void insert_new_names(const attributes_t &source, std::vector<std::string> &target)
+{
+  for (auto &attrib : source.attributes)
+  {
+    if (!attributes_name_in_registry(attrib, target))
+    {
+      target.emplace_back(attrib.name, attrib.name_size);
+    }
+  }
+}
+
 attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&attr)
 {
   std::unique_lock<std::mutex> lock(_mutex);
@@ -64,6 +87,7 @@ attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&
   _attributes_configs.emplace_back();
   auto &new_config = _attributes_configs.back();
   new_config.attributes = std::move(attr);
+  insert_new_names(new_config.attributes, _attribute_name_registry);
   return {uint32_t(ret)};
 }
 
@@ -240,8 +264,11 @@ attribute_index_t attributes_configs_t::get_attribute_index(attributes_id_t id, 
     return {-1, {}};
   for (int i = 0; i < int(_attributes_configs[id.data].attributes.attributes.size()); i++)
   {
-    if (_attributes_configs[id.data].attributes.attribute_names[i].get() == name)
-      return {i, {_attributes_configs[id.data].attributes.attributes[i].type, _attributes_configs[id.data].attributes.attributes[i].components}};
+    auto &attrib = _attributes_configs[id.data].attributes.attributes[i];
+    if (attrib.name_size == name.size() && memcmp(attrib.name, name.data(), name.size()) == 0)
+    {
+      return {i, {attrib.type, attrib.components}};
+    }
   }
   return {-1, {}};
 }
@@ -342,6 +369,24 @@ points::error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[
     get_attribute_config_index(std::move(attributes));
   }
   return {};
+}
+uint32_t attributes_configs_t::attrib_name_registry_count() const
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  return uint32_t(_attribute_name_registry.size());
+}
+uint32_t attributes_configs_t::attrib_name_registry_get(uint32_t index, char *name, uint32_t buffer_size) const
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  if (index >= _attribute_name_registry.size())
+    return 0;
+  auto &attrib = _attribute_name_registry[index];
+  auto size = uint32_t(attrib.size()) + 1;
+  if (size > buffer_size)
+    size = buffer_size;
+  memcpy(name, attrib.data(), size - 1);
+  name[size - 1] = 0;
+  return size - 1;
 }
 
 } // namespace points::converter
