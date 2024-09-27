@@ -57,3 +57,4 @@ cmrc_add_resource_library(renderer_example_textures ALIAS renderer_example::text
 BuildExternalTargetLinkLibrary(renderer_example PRIVATE points_render points_converter fmt glm OpenGL::GL renderer_example::shaders renderer_example::fonts renderer_example::textures SDL2::SDL2 SDL2::SDL2main)
 copy_dll_for_target(renderer_example points_render points_converter points_common SDL2::SDL2)
 setWarningFlagsForTarget(renderer_example)
+set_example_properties(renderer_example)

@@ -63,7 +63,7 @@ struct dyn_points_data_handler_t
       };
       if (i == 0)
       {
-        read_request.emplace_back(storage_handler.read(locations[i], [self, set_error, i](const storage_handler_request_t &request) {
+        read_request.emplace_back(storage_handler.read(locations[i], [self, set_error](const storage_handler_request_t &request) {
           if (set_error(request.error))
           {
             return;

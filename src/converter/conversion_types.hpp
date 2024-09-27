@@ -258,6 +258,6 @@ struct fmt::formatter<points::converter::storage_location_t>
   template <typename FormatContext>
   auto format(points::converter::storage_location_t const &location, FormatContext &ctx)
   {
-    return format_to(ctx.out(), "storage_location_t(file_id={}, size={}, offset={})", location.file_id, location.size, location.offset);
+    return fmt::format_to(ctx.out(), "storage_location_t(file_id={}, size={}, offset={})", location.file_id, location.size, location.offset);
   }
 };

@@ -413,7 +413,7 @@ int main(int, char **)
     }
     if (ImGui::BeginCombo("Attribute", attribute_names[selected_attribute].c_str()))
     {
-      for (int i = 0; i < attribute_names.size(); i++)
+      for (int i = 0; i < int(attribute_names.size()); i++)
       {
         bool is_selected = (selected_attribute == i);
         if (ImGui::Selectable(attribute_names[i].c_str(), is_selected))

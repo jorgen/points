@@ -106,7 +106,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
 
   auto render_buffers_it = render_buffers.begin();
   int i;
-  for (i = 0; i < buffer.size() && render_buffers_it != render_buffers.end(); i++)
+  for (i = 0; i < int(buffer.size()) && render_buffers_it != render_buffers.end(); i++)
   {
     auto &node = buffer[i];
     while (render_buffers_it != render_buffers.end() && less_than(render_buffers_it->get()->node_info, node))
@@ -128,7 +128,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
       render_buffers_it++;
     }
   }
-  for (; i < buffer.size(); i++)
+  for (; i < int(buffer.size()); i++)
   {
     auto &node = buffer[i];
     auto &new_buffer = new_render_buffers.emplace_back(new dyn_points_draw_buffer_t());
