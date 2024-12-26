@@ -17,19 +17,17 @@
 ************************************************************************/
 #pragma once
 
-#include <aabb.hpp>
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
+#include "buffer.hpp"
 #include "data_source.hpp"
 #include "glm_include.hpp"
-#include "buffer.hpp"
 #include "renderer_callbacks.hpp"
-#include <vector>
-#include <memory>
+#include <points/render/aabb.h>
+#include <points/render/renderer.h>
 
-namespace points
-{
-namespace render
+#include <memory>
+#include <vector>
+
+namespace points::render
 {
 
 struct aabb_buffer_t
@@ -40,7 +38,6 @@ struct aabb_buffer_t
 
   draw_buffer_t render_list[4];
 };
-
 
 struct aabb_data_source_t : public data_source_cpp_t
 {
@@ -63,7 +60,5 @@ struct aabb_data_source_t : public data_source_cpp_t
 
   buffer_t color_buffer;
   std::vector<glm::u8vec3> colors;
-
 };
-} // namespace render
-} // namespace points
+} // namespace points::render

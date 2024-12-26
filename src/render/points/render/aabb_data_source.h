@@ -19,7 +19,6 @@
 #define POINTS_AABB_DATA_SOURCE_H
 
 #include <points/render/export.h>
-#include <points/render/aabb.h>
 #include <points/render/data_source.h>
 
 #ifdef __cplusplus

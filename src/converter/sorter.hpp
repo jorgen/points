@@ -20,12 +20,10 @@
 #include "attributes_configs.hpp"
 #include "conversion_types.hpp"
 #include "converter.hpp"
-#include <type_traits>
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error);
 }
-} // namespace points
+

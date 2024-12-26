@@ -24,9 +24,8 @@ extern "C" {
 
 #include <points/render/export.h>
 
-namespace points
-{
-namespace render
+
+namespace points::render
 {
   struct camera_t;
   POINTS_RENDER_EXPORT struct camera_t *camera_create();
@@ -59,8 +58,8 @@ namespace render
   POINTS_RENDER_EXPORT void fps_move(struct fps_t *fps, float dx, float dy, float dz);
 
   } // namespace camera_manipulator
-  } // namespace render
-  } // namespace points
+  } // namespace points::render
+
 
 #ifdef __cplusplus
 }

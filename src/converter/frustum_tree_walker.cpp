@@ -21,7 +21,6 @@
 #include "frustum.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 #include <fmt/printf.h>
-#include <points/render/aabb.h>
 
 namespace points::converter
 {

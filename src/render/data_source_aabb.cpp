@@ -24,9 +24,7 @@
 
 #include <fmt/printf.h>
 
-namespace points
-{
-namespace render
+namespace points::render
 {
 
 template<typename T, int SIZE>
@@ -207,4 +205,4 @@ void aabb_data_source_get_center(struct aabb_data_source_t *aabb_data_source, in
 }
 
 }
-} // namespace points
+

@@ -23,7 +23,6 @@
 #include "morton_tree_coordinate_transform.hpp"
 #include <algorithm>
 #include <mutex>
-#include <points/converter/default_attribute_names.h>
 
 namespace points::converter
 {
@@ -184,19 +183,14 @@ attribute_source_lod_into_t create_attribute_source_lod_into(const attribute_t &
   {
     if (is_attribute_names_equal(attr, attributes.attributes[i]))
     {
-      attribute_source_lod_into_t ret;
-      ret.source_format.type = attributes.attributes[i].type;
-      ret.source_format.components = attributes.attributes[i].components;
-      ret.source_index = i;
-      return ret;
+      const point_format_t source_format{attributes.attributes[i].type, attributes.attributes[i].components};
+      return {i, source_format};
     }
   }
-  attribute_source_lod_into_t ret;
-  ret.source_index = -1;
-  return ret;
+  return {-1, {}};
 }
 
-attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end)
+attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const
 {
   (void)point_type;
   assert(begin < end);

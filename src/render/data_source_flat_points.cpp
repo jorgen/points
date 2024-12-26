@@ -25,9 +25,7 @@
 
 #include <laszip/laszip_api.h>
 
-namespace points
-{
-namespace render
+namespace points::render
 {
 
 static glm::vec3 get_point(laszip_point *point, double (&offset)[3], double (&scale)[3], aabb_t &aabb)
@@ -181,4 +179,4 @@ void flat_points_get_aabb(struct flat_points_data_source_t *points, double aabb_
   memcpy(aabb_max, points->aabb.max, sizeof(points->aabb.max));
 }
 }
-}
+

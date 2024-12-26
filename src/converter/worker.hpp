@@ -17,12 +17,9 @@
 ************************************************************************/
 #pragma once
 
-#include "thread_pool.hpp"
 #include <uv.h>
 
-namespace points
-{
-namespace converter
+namespace points::converter
 {
 class threaded_event_loop_t;
 class worker_t
@@ -52,5 +49,4 @@ private:
   bool _done;
   uv_async_t async;
 };
-} // namespace converter
-} // namespace points
+} // namespace points::converter

@@ -19,9 +19,8 @@
 #include <ankerl/unordered_dense.h>
 #include <conversion_types.hpp>
 #include <vector>
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 
 class input_storage_map_t
@@ -92,5 +91,5 @@ private:
   std::vector<input_data_id_t> _ids;
 };
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

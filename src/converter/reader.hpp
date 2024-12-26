@@ -21,8 +21,6 @@
 
 #include <memory>
 #include <mutex>
-#include <string>
-#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -37,9 +35,8 @@
 #include "threaded_event_loop.hpp"
 #include "worker.hpp"
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 class storage_handler_t;
 struct get_points_file_t
@@ -182,5 +179,5 @@ private:
   event_pipe_t<unsorted_points_event_t> _unsorted_points;
   std::vector<std::unique_ptr<point_reader_file_t>> _point_reader_files;
 };
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

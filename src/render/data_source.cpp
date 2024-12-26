@@ -17,9 +17,7 @@
 ************************************************************************/
 #include <data_source.hpp>
 
-namespace points
+namespace points::render
 {
-namespace render
-{
-} // namespace render
-} // namespace points
+} // namespace points::render
+

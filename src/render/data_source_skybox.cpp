@@ -21,9 +21,7 @@
 #include "renderer_callbacks.hpp"
 #include "image_decoder.hpp"
 
-namespace points
-{
-namespace render
+namespace points::render
 {
 
 skybox_data_source_t::skybox_data_source_t(callback_manager_t &c, skybox_data_t skybox_data)
@@ -94,4 +92,4 @@ struct data_source_t skybox_data_source_get(struct skybox_data_source_t *skybox_
 }
 
 }
-}
+

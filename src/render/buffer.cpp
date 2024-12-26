@@ -15,13 +15,11 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <points/render/renderer.h>
 #include <points/render/buffer.h>
 #include "buffer.hpp"
 
-namespace points
-{
-namespace render
+
+namespace points::render
 {
 void buffer_set_rendered(struct buffer_t *buffer)
 {
@@ -34,4 +32,4 @@ void buffer_release_data(struct buffer_t *buffer)
     buffer->releaseBuffer();
 }
 }
-} // namespace points
+

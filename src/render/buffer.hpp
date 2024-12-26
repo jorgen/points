@@ -16,9 +16,6 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #pragma once 
-#include <atomic>
-#include <cstdint>
-#include <vector>
 #include <functional>
 
 #include <points/render/buffer.h>

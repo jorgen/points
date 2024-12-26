@@ -20,7 +20,6 @@
 
 #include <points/common/format.h>
 #include <points/render/export.h>
-#include <points/render/aabb.h>
 #include <points/render/buffer.h>
 #include <points/render/draw_group.h>
 
@@ -28,9 +27,8 @@
 extern "C" {
 #endif
 
-namespace points
-{
-namespace render
+
+namespace points::render
 {
 enum buffer_type_t
 {
@@ -127,7 +125,7 @@ POINTS_RENDER_EXPORT void renderer_remove_data_source(struct renderer_t *rendere
 
 POINTS_RENDER_EXPORT void to_render_add_render_group(struct to_render_t *to_render, draw_group_t draw_group);
 }
-}
+
 
 #ifdef __cplusplus
 }

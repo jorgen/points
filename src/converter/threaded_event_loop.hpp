@@ -28,9 +28,8 @@
 #include "thread_pool.hpp"
 #include "worker.hpp"
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 
 class about_to_block_t
@@ -197,5 +196,5 @@ private:
   friend class worker_t;
 };
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

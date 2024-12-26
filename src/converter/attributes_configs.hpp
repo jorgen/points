@@ -24,9 +24,7 @@
 
 #include <conversion_types.hpp>
 
-namespace points
-{
-namespace converter
+namespace points::converter
 {
 
 struct attribute_source_lod_into_t
@@ -76,7 +74,7 @@ class attributes_configs_t
 public:
   attributes_id_t get_attribute_config_index(attributes_t &&attr);
   attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end);
-  attribute_lod_mapping_t get_lod_attribute_mapping(const type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end);
+  attribute_lod_mapping_t get_lod_attribute_mapping(type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const;
 
   const attributes_t &get(attributes_id_t id);
 
@@ -97,6 +95,6 @@ private:
   std::vector<std::string> _attribute_name_registry;
 };
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+
 #endif // ATTRIBUTES_CONFIGS_HPP

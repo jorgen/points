@@ -27,9 +27,8 @@
 #include "data_source.hpp"
 #include "renderer_callbacks.hpp"
 
-namespace points
-{
-namespace render
+
+namespace points::render
 {
 struct renderer_t* renderer_create()
 {
@@ -108,4 +107,4 @@ void to_render_add_render_group(struct to_render_t *to_render, draw_group_t draw
 }
 
 }
-}
+

@@ -17,8 +17,6 @@
 ************************************************************************/
 #include "data_source_converter.hpp"
 #include "data_source.hpp"
-#include "vector_updater.hpp"
-#include <array>
 #include <points/common/format.h>
 #include <points/converter/converter_data_source.h>
 
@@ -26,13 +24,12 @@
 
 #include "renderer.hpp"
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 bool has_rendered = false;
 template <typename buffer_data_t>
-inline void initialize_buffer(render::callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, render::buffer_type_t buffer_type, type_t type, components_t components, render::buffer_t &buffer)
+void initialize_buffer(render::callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, render::buffer_type_t buffer_type, type_t type, components_t components, render::buffer_t &buffer)
 {
   assert(data_vector.size());
 }
@@ -96,7 +93,8 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
     render_buffers.clear();
   }
   back_buffer = std::make_shared<frustum_tree_walker_t>(camera.view_projection, 7, std::vector<std::string>({std::string("xyz"), current_attribute_name}));
-  processor.walk_tree(back_buffer);
+  auto copy_back_buffer_ptr = back_buffer;
+  processor.walk_tree(std::move(copy_back_buffer_ptr));
   back_buffer->wait_done();
   auto &buffer = back_buffer->m_new_nodes.point_subsets;
   std::sort(buffer.begin(), buffer.end(), less_than);
@@ -227,5 +225,5 @@ void converter_data_set_rendered_attribute(struct converter_data_source_t *conve
   converter_data_source->next_attribute_name.assign(name, name_len);
 }
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

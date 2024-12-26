@@ -30,7 +30,6 @@
 #include "conversion_types.hpp"
 #include "event_pipe.hpp"
 #include "input_data_source_registry.hpp"
-#include "morton.hpp"
 #include "pre_init_file_retriever.hpp"
 #include "reader.hpp"
 #include "storage_handler.hpp"
@@ -38,13 +37,8 @@
 #include "threaded_event_loop.hpp"
 #include "tree_handler.hpp"
 
-#include <memory>
-
-namespace points
+namespace points::converter
 {
-namespace converter
-{
-
 enum class processor_open_file_semantics_t
 {
   read,
@@ -63,7 +57,7 @@ public:
   void set_runtime_callbacks(const converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr);
   void set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks);
   void add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files);
-  void walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event);
+  void walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event);
   tree_config_t tree_config();
   void request_aabb(std::function<void(double[3], double[3])> callback);
   uint32_t attrib_name_registry_count();
@@ -77,6 +71,7 @@ public:
   {
     return _storage_handler;
   }
+
   const attributes_t &get_attributes(attributes_id_t id);
 
 private:
@@ -123,20 +118,16 @@ private:
   int64_t _read_sort_active_approximate_size;
 
   void handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files);
-
   void handle_pre_init_info_for_files(pre_init_info_file_result_t &&pre_init_info_for_files);
   void handle_file_errors_headers(file_error_t &&error);
-
   void handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t> &&event);
   void handle_sub_added(input_data_id_t &&event);
   void handle_sorted_points(std::pair<points_t, error_t> &&event);
   void handle_file_errors(file_error_t &&error);
   void handle_file_reading_done(input_data_id_t &&file);
   void handle_index_write_done();
-
   void handle_storage_error(error_t &&errors);
   void handle_points_written(const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations);
   void handle_tree_done_with_input(input_data_id_t &&events);
 };
-} // namespace converter
-} // namespace points
+} // namespace points::converter

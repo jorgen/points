@@ -22,9 +22,7 @@
 #include <uv.h>
 #include <vector>
 
-namespace points
-{
-namespace converter
+namespace points::converter
 {
 struct event_bind_t
 {
@@ -40,6 +38,7 @@ class event_pipe_t
 {
 public:
   using tuple_t = std::tuple<std::decay_t<ARGS>...>;
+
   template <typename EventLoop>
   event_pipe_t(EventLoop &eventLoop, std::function<void(ARGS &&...event)> event_callback)
     : event_callback(event_callback)
@@ -83,6 +82,11 @@ public:
     uv_async_send(&pipe);
   }
 
+  void operator()(ARGS &&...args)
+  {
+    post_event(std::forward<ARGS>(args)...);
+  }
+
   void swap_events(std::vector<tuple_t> &to_swap)
   {
     std::unique_lock<std::mutex> lock(mutex);
@@ -96,6 +100,7 @@ private:
   uv_async_t pipe;
   std::mutex mutex;
 };
+
 template <>
 class event_pipe_t<void>
 {
@@ -134,6 +139,7 @@ private:
   std::function<void()> event_callback;
   uv_async_t pipe;
 };
+
 template <typename T>
 class event_pipe_multi_t
 {
@@ -192,6 +198,7 @@ private:
   uv_async_t pipe;
   std::mutex mutex;
 };
+
 template <>
 class event_pipe_multi_t<void>
 {
@@ -230,5 +237,5 @@ private:
   std::function<void()> event_callback;
   uv_async_t pipe;
 };
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

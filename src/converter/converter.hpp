@@ -25,9 +25,7 @@
 
 #include "processor.hpp"
 
-namespace points
-{
-namespace converter
+namespace points::converter
 {
 
 struct converter_t
@@ -56,5 +54,5 @@ struct converter_t
   processor_t processor;
 };
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

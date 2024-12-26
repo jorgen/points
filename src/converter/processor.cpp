@@ -26,13 +26,9 @@
 
 #include <algorithm>
 #include <functional>
-#include <stdlib.h>
 
-namespace points
+namespace points::converter
 {
-namespace converter
-{
-
 processor_t::processor_t(std::string url, error_t &error)
   : _url(std::move(url))
   , _thread_pool(int(std::thread::hardware_concurrency()))
@@ -100,9 +96,9 @@ void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint3
   _files_added.post_event(std::move(input_files));
 }
 
-void processor_t::walk_tree(const std::shared_ptr<frustum_tree_walker_t> &event)
+void processor_t::walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event)
 {
-  _tree_handler.walk_tree(event);
+  _tree_handler.walk_tree(std::move(event));
 }
 
 tree_config_t processor_t::tree_config()
@@ -174,6 +170,7 @@ void processor_t::handle_file_errors_headers(file_error_t &&error)
   assert(std::count_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == error.input_id; }) == 1);
   _pre_init_info_workers.erase(std::find_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == error.input_id; }));
 }
+
 void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t> &&event)
 {
   _input_data_source_registry.handle_input_init(std::get<0>(event), std::get<1>(event), std::get<2>(event));
@@ -260,6 +257,7 @@ void processor_t::set_pre_init_tree_config(const tree_config_t &tree_config)
 {
   _tree_handler.set_tree_initialization_config(tree_config);
 }
+
 void processor_t::set_pre_init_tree_node_limit(uint32_t node_limit)
 {
   _tree_handler.set_tree_initialization_node_limit(node_limit);
@@ -275,14 +273,14 @@ void processor_t::set_converter_callbacks(const converter_file_convert_callbacks
 {
   _convert_callbacks = convert_callbacks;
 }
+
 uint32_t processor_t::attrib_name_registry_count()
 {
   return _attributes_configs.attrib_name_registry_count();
 }
+
 uint32_t processor_t::attrib_name_registry_get(uint32_t index, char *name, uint32_t buffer_size)
 {
   return _attributes_configs.attrib_name_registry_get(index, name, buffer_size);
 }
-
-} // namespace converter
-} // namespace points
+} // namespace points::converter

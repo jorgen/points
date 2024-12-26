@@ -18,14 +18,9 @@
 #pragma once
 
 #include <points/render/data_source.h>
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
 #include "glm_include.hpp"
-#include <vector>
 
-namespace points
-{
-namespace render
+namespace points::render
 {
 
 struct frame_camera_cpp_t
@@ -62,6 +57,6 @@ struct data_source_cpp_t
   virtual void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) = 0;
   data_source_t data_source;
 };
-} // namespace render
-} // namespace points
+} // namespace points::render
+
 

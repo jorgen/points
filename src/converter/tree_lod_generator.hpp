@@ -24,9 +24,8 @@
 #include <ankerl/unordered_dense.h>
 #include <deque>
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 
 struct lod_child_storage_info_t
@@ -129,5 +128,5 @@ private:
   std::deque<std::unique_ptr<lod_worker_batch_t>> _lod_batches;
 };
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

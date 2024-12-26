@@ -22,13 +22,8 @@
 #include "frustum_tree_walker.hpp"
 #include "point_buffer_render_helper.hpp"
 #include "renderer_callbacks.hpp"
-#include <points/render/aabb_data_source.h>
-#include <points/render/camera.h>
 #include <points/render/data_source.h>
-#include <points/render/draw_group.h>
-#include <points/render/renderer.h>
 
-#include <array>
 #include <memory>
 #include <vector>
 

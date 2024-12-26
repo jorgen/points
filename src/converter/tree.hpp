@@ -23,9 +23,8 @@
 #include "input_storage_map.hpp"
 #include "morton.hpp"
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 class storage_handler_t;
 
@@ -158,5 +157,5 @@ bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, er
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry);
 
 [[nodiscard]] error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry);
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

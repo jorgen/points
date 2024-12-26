@@ -18,16 +18,13 @@
 #pragma once
 
 #include <libmorton/morton.h>
-#include <math.h>
 
 #include <assert.h>
 
 #include <array>
-namespace points
-{
-namespace converter
-{
-namespace morton
+
+
+namespace points::converter::morton
 {
 
 template <typename T, size_t C>
@@ -773,9 +770,9 @@ inline morton_t<T, S> create_max(int lod, const morton_t<T, S> &min)
   return morton_or(morton_mask_create<T, S>(lod), min);
 }
 
-} // namespace morton
-} // namespace converter
-} // namespace points
+} // namespace points::converter::morton
+
+
 
 namespace std
 {

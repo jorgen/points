@@ -26,9 +26,8 @@
 
 #include "conversion_types.hpp"
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 inline int size_for_format(type_t format)
 {
@@ -72,5 +71,5 @@ void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_
 void attribute_buffers_adjust_buffers_to_size(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count);
 void attributes_copy(const attributes_t &source, attributes_t &target);
 }
-}
+
 

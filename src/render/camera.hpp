@@ -17,18 +17,14 @@
 ************************************************************************/
 #pragma once
 
-#include "frustum.hpp"
 #include "glm_include.hpp"
 
 #ifdef _MSC_VER
 #define M_PI 3.14159265358979323846
 #endif
 
-#include <cmath>
 
-namespace points
-{
-namespace render
+namespace points::render
 {
 struct camera_t
 {
@@ -72,5 +68,5 @@ struct fps_t
 };
 
 } // namespace camera_manipulator
-} // namespace render
-} // namespace points
+} // namespace points::render
+

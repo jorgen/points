@@ -24,12 +24,9 @@
 
 #include <fmt/core.h>
 #include <memory>
-#include <string>
 #include <vector>
 
-namespace points
-{
-namespace converter
+namespace points::converter
 {
 struct input_data_id_t
 {
@@ -243,8 +240,8 @@ struct points_subset_t
   offset_in_subset_t offset;
   point_count_t count;
 };
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+
 
 template <>
 struct fmt::formatter<points::converter::storage_location_t>

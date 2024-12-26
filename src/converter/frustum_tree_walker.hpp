@@ -19,12 +19,10 @@
 
 #include <attributes_configs.hpp>
 #include <glm_include.hpp>
-#include <points/render/aabb.h>
 #include <tree_handler.hpp>
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 
 struct node_id_t
@@ -147,5 +145,5 @@ public:
 
 void tree_walk_in_handler_thread(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker);
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

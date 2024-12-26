@@ -17,9 +17,7 @@
 ************************************************************************/
 #pragma once
 
-namespace points
-{
-namespace converter
+namespace points::converter
 {
 template<typename T, int SIZE>
 void memcpy_array(T (&dest)[SIZE], const T (&source)[SIZE])
@@ -27,4 +25,4 @@ void memcpy_array(T (&dest)[SIZE], const T (&source)[SIZE])
   memcpy(dest, source, sizeof(dest));
 }
 }
-} // namespace points
+

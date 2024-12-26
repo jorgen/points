@@ -19,9 +19,8 @@
 
 #include <assert.h>
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 void attributes_add_attribute(struct attributes_t *attributes, const char *name, uint32_t name_size, enum type_t format, enum components_t components)
 {
@@ -88,5 +87,5 @@ void attribute_buffers_adjust_buffers_to_size(const std::vector<point_format_t> 
     buffer.size = size_for_format(attributes_def[i].type) * uint32_t(attributes_def[i].components) * point_count;
   }
 }
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

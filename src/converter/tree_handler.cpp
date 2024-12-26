@@ -23,11 +23,8 @@
 #include "morton_tree_coordinate_transform.hpp"
 #include "storage_handler.hpp"
 
-#include <fmt/printf.h>
 
-namespace points
-{
-namespace converter
+namespace points::converter
 {
 tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
   : _event_loop(thread_pool)
@@ -39,8 +36,8 @@ tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &fi
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
   , _tree_lod_generator(_event_loop, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
-  , _add_points(_event_loop, bind(&tree_handler_t::handle_add_points))
-  , _walk_tree(_event_loop, bind(&tree_handler_t::handle_walk_tree))
+  , add_points(_event_loop, bind(&tree_handler_t::handle_add_points))
+  , walk_tree(_event_loop, bind(&tree_handler_t::handle_walk_tree))
   , _serialize_trees(_event_loop, bind(&tree_handler_t::handle_serialize_trees))
   , _serialize_trees_done(_event_loop, bind(&tree_handler_t::handle_trees_serialized))
   , _deserialize_tree(_event_loop, bind(&tree_handler_t::handle_deserialize_tree))
@@ -79,6 +76,7 @@ void tree_handler_t::set_tree_initialization_config(const tree_config_t &config)
   assert(!_configuration_initialized);
   _pre_init_tree_config = config;
 }
+
 void tree_handler_t::set_tree_initialization_node_limit(uint32_t limit)
 {
   std::unique_lock<std::mutex> lock(_configuration_mutex);
@@ -90,19 +88,8 @@ void tree_handler_t::about_to_block()
 {
 }
 
-void tree_handler_t::add_points(storage_header_t &&header, attributes_id_t &&attributes_id, std::vector<storage_location_t> &&storage)
+void tree_handler_t::handle_add_points(storage_header_t &&header, attributes_id_t &&attributes_id, std::vector<storage_location_t> &&storage)
 {
-  _add_points.post_event(std::make_tuple(std::move(header), std::move(attributes_id), std::move(storage)));
-}
-
-void tree_handler_t::walk_tree(std::shared_ptr<frustum_tree_walker_t> event)
-{
-  _walk_tree.post_event(std::move(event));
-}
-
-void tree_handler_t::handle_add_points(std::tuple<storage_header_t, attributes_id_t, std::vector<storage_location_t>> &&event)
-{
-  auto &&[header, attributes_id, storage] = event;
   if (!_initialized)
   {
     _initialized = true;
@@ -196,6 +183,7 @@ void tree_handler_t::handle_serialize_trees()
     this->_serialize_trees_done.post_event(std::move(tree_ids), std::move(new_locations), std::move(error));
   });
 }
+
 void tree_handler_t::handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, std::vector<storage_location_t> &&storage, error_t &&error)
 {
   (void)error;
@@ -274,6 +262,5 @@ void tree_handler_t::handle_request_root()
 {
   request_tree(_tree_registry.root);
 }
+} // namespace points::converter
 
-} // namespace converter
-} // namespace points

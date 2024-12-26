@@ -24,7 +24,6 @@
 #include "event_pipe.hpp"
 #include "threaded_event_loop.hpp"
 #include "tree.hpp"
-#include "worker.hpp"
 #include <ankerl/unordered_dense.h>
 
 #include <memory>

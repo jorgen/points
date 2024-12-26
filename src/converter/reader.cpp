@@ -19,7 +19,6 @@
 
 #include "input_header.hpp"
 #include "morton.hpp"
-#include "morton_tree_coordinate_transform.hpp"
 #include "sorter.hpp"
 #include "threaded_event_loop.hpp"
 
@@ -29,9 +28,8 @@
 
 #include <assert.h>
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 get_data_worker_t::get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, const get_points_file_t &file,
                                      event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_t<input_data_id_t> &sub_added,
@@ -207,5 +205,5 @@ void point_reader_t::handle_unsorted_points(unsorted_points_event_t &&unsorted_p
   unsorted_points.reader_file.sort_workers.back()->enqueue(unsorted_points.reader_file.event_loop);
 }
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

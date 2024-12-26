@@ -20,14 +20,11 @@
 #include "conversion_types.hpp"
 #include "error.hpp"
 #include "event_pipe.hpp"
-#include "input_data_source_registry.hpp"
 #include "input_header.hpp"
-#include "threaded_event_loop.hpp"
 #include "worker.hpp"
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 struct get_file_pre_init_t
 {
@@ -63,5 +60,5 @@ struct get_pre_init_info_worker_t : worker_t
   pre_init_info_file_result_t _pre_init_file;
 };
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

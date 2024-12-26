@@ -25,9 +25,8 @@
 
 #include <fmt/printf.h>
 
-namespace points
-{
-namespace render
+
+namespace points::render
 {
 struct camera_t *camera_create()
 {
@@ -279,5 +278,5 @@ void fps_move(struct fps_t *fps, float dx, float dy, float dz)
 }
 
 } // namespace camera_manipulator
-} // namespace render
-} // namespace points
+} // namespace points::render
+

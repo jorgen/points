@@ -18,16 +18,13 @@
 #include "converter.hpp"
 #include <points/converter/converter.h>
 
-#include "error.hpp"
 #include "processor.hpp"
 
 #include <memory>
-#include <string>
 #include <vector>
 
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 struct converter_t *converter_create(const char *url, uint64_t url_size, enum converter_open_file_semantics_t semantics)
 {
@@ -75,5 +72,5 @@ converter_conversion_status_t converter_status(converter_t *converter)
   return converter->status;
 }
 
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+

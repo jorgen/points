@@ -25,9 +25,8 @@
 #include <laszip/laszip_api.h>
 
 #include <assert.h>
-namespace points
-{
-namespace converter
+
+namespace points::converter
 {
 
 struct load_dll_t
@@ -546,5 +545,5 @@ struct converter_file_convert_callbacks_t laszip_callbacks()
   ret.destroy_user_ptr = &laszip_converter_file_destroy_user_ptr;
   return ret;
 }
-} // namespace converter
-} // namespace points
+} // namespace points::converter
+
