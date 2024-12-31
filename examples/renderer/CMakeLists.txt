@@ -1,7 +1,5 @@
 include(BuildExternalTargetLinkLibrary)
 
-find_package(OpenGL REQUIRED)
-find_package(SDL2 REQUIRED)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 configure_file(${imgui_SOURCE_DIR}/misc/fonts/Cousine-Regular.ttf ${CMAKE_CURRENT_SOURCE_DIR}/fonts/Cousine-Regular.ttf COPYONLY)
 configure_file(${imgui_SOURCE_DIR}/misc/fonts/DroidSans.ttf ${CMAKE_CURRENT_SOURCE_DIR}/fonts/DroidSans.ttf COPYONLY)
@@ -20,8 +18,9 @@ add_executable(renderer_example
         ${imgui_SOURCE_DIR}/imgui_demo.cpp
         ${imgui_SOURCE_DIR}/imgui.h
         ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-        ${imgui_SOURCE_DIR}/examples/imgui_impl_sdl.cpp
-        ${imgui_SOURCE_DIR}/examples/imgui_impl_opengl3.cpp
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
 target_include_directories(renderer_example PRIVATE include ${imgui_SOURCE_DIR})
@@ -54,7 +53,7 @@ cmrc_add_resource_library(renderer_example_textures ALIAS renderer_example::text
         textures/top.jpg
 )
 
-BuildExternalTargetLinkLibrary(renderer_example PRIVATE points_render points_converter fmt glm OpenGL::GL renderer_example::shaders renderer_example::fonts renderer_example::textures SDL2::SDL2 SDL2::SDL2main)
-copy_dll_for_target(renderer_example points_render points_converter points_common SDL2::SDL2)
+BuildExternalTargetLinkLibrary(renderer_example PRIVATE points_render points_converter fmt glm renderer_example::shaders renderer_example::fonts renderer_example::textures SDL3::SDL3 SDL3::SDL3main)
+copy_dll_for_target(renderer_example points_render points_converter points_common SDL3::SDL3)
 setWarningFlagsForTarget(renderer_example)
 set_example_properties(renderer_example)

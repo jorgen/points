@@ -1,14 +1,14 @@
 #include <fmt/printf.h>
 
 #include "include/glad/glad.h"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <fmt/printf.h>
 #include <stdio.h>
 
 #include "gl_renderer.h"
 
-#include <examples/imgui_impl_opengl3.h>
-#include <examples/imgui_impl_sdl.h>
+#include <backends/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_sdl3.h>
 
 #include <points/render/aabb.h>
 #include <points/render/aabb_data_source.h>
@@ -63,11 +63,17 @@ points::converter::str_buffer make_str_buffer(const char (&data)[N])
 
 int main(int, char **)
 {
-  if (SDL_Init(SDL_INIT_VIDEO) < 0)
+  if (!SDL_Init(SDL_INIT_VIDEO))
   {
     fmt::print(stderr, "could not initialize sdl video.");
     return -1;
   }
+  if (!SDL_GL_LoadLibrary(nullptr))
+  {
+    fmt::print(stderr, "Failed to load opengl library");
+    return -1;
+  }
+
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
   SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
@@ -83,16 +89,28 @@ int main(int, char **)
   int width = 800;
   int height = 600;
 
-  SDL_Window *window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+  SDL_Window *window = SDL_CreateWindow("points", width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  if (!window)
+  {
+    fmt::print(stderr, "Failed to create window.");
+  }
   SDL_GLContext context = SDL_GL_CreateContext(window);
+  if (!context)
+  {
+    fmt::print(stderr, "Failed to create context.");
+  }
+  if (!SDL_GL_MakeCurrent(window, context))
+  {
+    fmt::print(stderr, "Failed to make current context active.");
+  }
 
-  if (!gladLoadGL())
+  if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress))
   {
     fmt::print(stderr, "Failed to load opengl.");
     return 1;
   }
 
-  SDL_GL_GetDrawableSize(window, &width, &height);
+  SDL_GetWindowSizeInPixels(window, &width, &height);
   SDL_GL_SetSwapInterval(1);
 
   IMGUI_CHECKVERSION();
@@ -102,7 +120,7 @@ int main(int, char **)
   // Setup Dear ImGui style
   ImGui::StyleColorsDark();
   const char *glsl_version = "#version 330";
-  ImGui_ImplSDL2_InitForOpenGL(window, context);
+  ImGui_ImplSDL3_InitForOpenGL(window, context);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   auto fontsfs = cmrc::fonts::get_filesystem();
@@ -247,42 +265,42 @@ int main(int, char **)
     SDL_Event event;
     while (SDL_PollEvent(&event))
     {
-      if (event.type == SDL_QUIT)
+      if (event.type == SDL_EVENT_QUIT)
         loop = false;
-      if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
+      if (event.window.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window))
         loop = false;
-      ImGui_ImplSDL2_ProcessEvent(&event);
+      ImGui_ImplSDL3_ProcessEvent(&event);
       if (!(io.WantCaptureKeyboard && (event.type & 0x300)) && !(io.WantCaptureMouse && (event.type & 0x400)))
       {
         switch (event.type)
         {
-        case SDL_KEYDOWN:
+        case SDL_EVENT_KEY_DOWN:
           if (fps)
           {
-            if (event.key.keysym.sym == SDLK_w || event.key.keysym.sym == SDLK_UP)
+            if (event.key.key == SDLK_W || event.key.key == SDLK_UP)
               points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, -1.3f);
-            if (event.key.keysym.sym == SDLK_s || event.key.keysym.sym == SDLK_DOWN)
+            if (event.key.key == SDLK_S || event.key.key == SDLK_DOWN)
               points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, 1.3f);
-            if (event.key.keysym.sym == SDLK_a || event.key.keysym.sym == SDLK_LEFT)
+            if (event.key.key == SDLK_A || event.key.key == SDLK_LEFT)
               points::render::camera_manipulator::fps_move(fps.get(), -1.3f, 0.0f, 0.0f);
-            if (event.key.keysym.sym == SDLK_d || event.key.keysym.sym == SDLK_RIGHT)
+            if (event.key.key == SDLK_D || event.key.key == SDLK_RIGHT)
               points::render::camera_manipulator::fps_move(fps.get(), 1.3f, 0.0f, 0.0f);
-            if (event.key.keysym.sym == SDLK_q)
+            if (event.key.key == SDLK_Q)
               points::render::camera_manipulator::fps_move(fps.get(), 0.0f, -1.3f, 0.0f);
-            if (event.key.keysym.sym == SDLK_e)
+            if (event.key.key == SDLK_E)
               points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 1.3f, 0.0f);
           }
 
-          if (event.key.keysym.sym == SDLK_LCTRL || event.key.keysym.sym == SDLK_RCTRL)
+          if (event.key.key == SDLK_LCTRL || event.key.key == SDLK_RCTRL)
             ctrl_modifier = true;
           break;
-        case SDL_KEYUP:
-          if (event.key.keysym.sym == SDLK_ESCAPE)
+        case SDL_EVENT_KEY_UP:
+          if (event.key.key == SDLK_ESCAPE)
             loop = false;
-          if (event.key.keysym.sym == SDLK_LCTRL || event.key.keysym.sym == SDLK_RCTRL)
+          if (event.key.key == SDLK_LCTRL || event.key.key == SDLK_RCTRL)
             ctrl_modifier = false;
           break;
-        case SDL_MOUSEBUTTONDOWN:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
           if (event.button.button == SDL_BUTTON_LEFT)
           {
             left_pressed = true;
@@ -298,7 +316,7 @@ int main(int, char **)
             right_pressed = true;
           }
           break;
-        case SDL_MOUSEMOTION:
+        case SDL_EVENT_MOUSE_MOTION:
           if ((right_pressed && !left_pressed) || (left_pressed && ctrl_modifier))
           {
             float dx = (float(event.motion.xrel) / float(width));
@@ -319,7 +337,7 @@ int main(int, char **)
               points::render::camera_manipulator::fps_rotate(fps.get(), dx, dy, 0.0f);
           }
           break;
-        case SDL_MOUSEBUTTONUP:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
           if (event.button.button == SDL_BUTTON_LEFT)
           {
             left_pressed = false;
@@ -333,21 +351,19 @@ int main(int, char **)
               points::render::camera_manipulator::fps_reset(fps.get());
           }
           break;
-        case SDL_MOUSEWHEEL:
+        case SDL_EVENT_MOUSE_WHEEL:
           if (arcball && event.wheel.y)
           {
             points::render::camera_manipulator::arcball_zoom(arcball.get(), -float(event.wheel.y) / 30);
           }
           break;
-        case SDL_WINDOWEVENT:
-          switch (event.window.event)
-          {
-          case SDL_WINDOWEVENT_SIZE_CHANGED:
-            SDL_GL_GetDrawableSize(window, &width, &height);
-            glViewport(0, 0, width, height);
-            points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
-            break;
-          }
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
+          SDL_GetWindowSizeInPixels(window, &width, &height);
+          glViewport(0, 0, width, height);
+          points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
+          break;
+        }
+        default:
           break;
         }
       }
@@ -367,7 +383,7 @@ int main(int, char **)
     //  }
 
     ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL2_NewFrame(window);
+    ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 
     ImGui::Begin("Input", 0, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
@@ -441,7 +457,7 @@ int main(int, char **)
     SDL_GL_SwapWindow(window);
   }
 
-  SDL_GL_DeleteContext(context);
+  SDL_GL_DestroyContext(context);
   SDL_DestroyWindow(window);
   SDL_Quit();
 

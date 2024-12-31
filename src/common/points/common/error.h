@@ -18,6 +18,7 @@
 #ifndef POINTS_ERROR_H
 #define POINTS_ERROR_H
 #include <points/common/export.h>
+#include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
