@@ -11,9 +11,7 @@
 #include <backends/imgui_impl_sdl3.h>
 
 #include <points/render/aabb.h>
-#include <points/render/aabb_data_source.h>
 #include <points/render/camera.h>
-#include <points/render/flat_points_data_source.h>
 #include <points/render/renderer.h>
 #include <points/render/skybox_data_source.h>
 
@@ -161,7 +159,7 @@ int main(int, char **)
   // input_files.push_back(make_str_buffer("D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-63.laz"));
   // input_files.push_back(make_str_buffer("/Users/jlind/Downloads/Palac_Moszna.laz"));
 
-  const char cache_file[] = "c:/Users/jorge/out.jlp";
+  const char cache_file[] = "/Users/jlind/test.jlp";
   // auto converter = create_unique_ptr(flat_points::converter::converter_create(cache_file, sizeof(cache_file)), &flat_points::converter::converter_destroy);
   // flat_points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
 

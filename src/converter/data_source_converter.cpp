@@ -24,7 +24,6 @@
 
 #include "renderer.hpp"
 
-
 namespace points::converter
 {
 bool has_rendered = false;
@@ -36,7 +35,7 @@ void initialize_buffer(render::callback_manager_t &callbacks, std::vector<buffer
 
 converter_data_source_t::converter_data_source_t(const std::string &url, render::callback_manager_t &callbacks)
   : url(url)
-  , processor(url, error)
+  , processor(url, file_existence_requirement_t::exist, error)
   , callbacks(callbacks)
 {
   if (error.code != 0)
@@ -226,4 +225,3 @@ void converter_data_set_rendered_attribute(struct converter_data_source_t *conve
 }
 
 } // namespace points::converter
-

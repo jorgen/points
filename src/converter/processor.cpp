@@ -29,7 +29,7 @@
 
 namespace points::converter
 {
-processor_t::processor_t(std::string url, error_t &error)
+processor_t::processor_t(std::string url, file_existence_requirement_t existence_requirement, error_t &error)
   : _url(std::move(url))
   , _thread_pool(int(std::thread::hardware_concurrency()))
   , _runtime_callbacks({})
@@ -62,6 +62,22 @@ processor_t::processor_t(std::string url, error_t &error)
   if (error.code != 0)
     return;
 
+  if (existence_requirement == file_existence_requirement_t::exist)
+  {
+    if (!_storage_handler.file_exists())
+    {
+      error = {1, "File does not exist"};
+      return;
+    }
+  }
+  else if (existence_requirement == file_existence_requirement_t::not_exist)
+  {
+    if (_storage_handler.file_exists())
+    {
+      error = {1, "File exists"};
+      return;
+    }
+  }
   if (_storage_handler.file_exists())
   {
     std::unique_ptr<uint8_t[]> free_blobs_buffer;

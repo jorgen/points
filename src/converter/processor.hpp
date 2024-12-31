@@ -46,11 +46,18 @@ enum class processor_open_file_semantics_t
   write_truncate,
 };
 
+enum class file_existence_requirement_t
+{
+  exist,
+  not_exist,
+  can_exist,
+};
+
 class frustum_tree_walker_t;
 class processor_t : public about_to_block_t
 {
 public:
-  processor_t(std::string url, error_t &error);
+  processor_t(std::string url, file_existence_requirement_t existence_requirement, error_t &error);
   error_t upgrade_to_write(bool truncate);
   void set_pre_init_tree_config(const tree_config_t &tree_config);
   void set_pre_init_tree_node_limit(uint32_t node_limit);

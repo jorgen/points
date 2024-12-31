@@ -31,7 +31,7 @@ namespace points::converter
 struct converter_t
 {
   converter_t(const char *url, uint64_t url_size, enum converter_open_file_semantics_t semantics)
-    : processor(std::string(url, url_size), error)
+    : processor(std::string(url, url_size), file_existence_requirement_t::can_exist, error)
   {
     processor.set_converter_callbacks(laszip_callbacks());
     if (error.code != 0)
@@ -55,4 +55,3 @@ struct converter_t
 };
 
 } // namespace points::converter
-
