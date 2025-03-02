@@ -61,6 +61,7 @@ void verify_points_range(const read_only_points_t &points, int start_index, int 
 template <typename T, size_t C>
 void verify_points_less_than(const tree_config_t &tree_config, const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &max)
 {
+  (void)tree_config;
   morton::morton_t<T, C> local_max;
   convert_world_morton_to_local(max, local_max);
   const auto *morton_begin = static_cast<const morton::morton_t<T, C> *>(points.data.data);

@@ -41,7 +41,8 @@ struct tree_test_infrastructure : points::converter::about_to_block_t
 {
   tree_test_infrastructure(uint32_t node_limit = 1000)
     : worker_thread_pool(4)
-    , event_loop(worker_thread_pool)
+    , event_loop_thread(worker_thread_pool)
+    , event_loop(event_loop_thread.event_loop())
     , node_limit(node_limit)
     , tree_config(create_tree_config(0.001, 0.0))
     , tree_registry(node_limit, tree_config)
@@ -93,7 +94,8 @@ struct tree_test_infrastructure : points::converter::about_to_block_t
 
   points::error_t error;
   points::converter::thread_pool_t worker_thread_pool;
-  points::converter::threaded_event_loop_t event_loop;
+  points::converter::thread_with_event_loop_t event_loop_thread;
+  points::converter::event_loop_t &event_loop;
   uint32_t node_limit;
   points::converter::tree_config_t tree_config;
   points::converter::tree_registry_t tree_registry;

@@ -339,6 +339,9 @@ template <size_t FORMAT>
 static void copy_point_for_format(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert(false);
+  (void) buffers;
+  (void) i;
+  (void) point;
   // default should never be instansiated
 }
 

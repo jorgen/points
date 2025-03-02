@@ -105,7 +105,7 @@ static void request_done_callback(uv_fs_t *req)
 
 void storage_handler_request_t::do_read(uint64_t offset, uint32_t size)
 {
-  assert(std::this_thread::get_id() == storage_handler._event_loop.thread_id());
+  assert(std::this_thread::get_id() == storage_handler._event_loop_thread.thread_id());
   uv_request.data = this;
   buffer = std::make_shared<uint8_t[]>(size);
   uv_buffer.base = (char *)buffer.get();
@@ -115,7 +115,7 @@ void storage_handler_request_t::do_read(uint64_t offset, uint32_t size)
 
 void storage_handler_request_t::do_write(const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size)
 {
-  assert(std::this_thread::get_id() == storage_handler._event_loop.thread_id());
+  assert(std::this_thread::get_id() == storage_handler._event_loop_thread.thread_id());
   uv_request.data = this;
   buffer = data;
   uv_buffer.base = (char *)buffer.get();
@@ -168,7 +168,7 @@ struct close_file_on_error_t
   error_t &error;
 };
 
-static std::unique_ptr<uint8_t[]> read_into_buffer(threaded_event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, error_t &error)
+static std::unique_ptr<uint8_t[]> read_into_buffer(event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, error_t &error)
 {
   assert(error.code == 0);
   auto buffer = std::make_unique<uint8_t[]>(location.size);
@@ -188,7 +188,8 @@ static std::unique_ptr<uint8_t[]> read_into_buffer(threaded_event_loop_t &event_
 storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<void> &index_written, event_pipe_t<error_t> &storage_error_pipe,
                                      error_t &error)
   : _file_name(url)
-  , _event_loop(thread_pool)
+  , _event_loop_thread(thread_pool)
+  , _event_loop(_event_loop_thread.event_loop())
   , _file_handle(0)
   , _file_opened(false)
   , _file_exists(false)

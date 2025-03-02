@@ -20,6 +20,7 @@
 //
 
 #include "input_storage_map.hpp"
+#include "awaitable_event_pipe.hpp"
 #include "memory_writer.hpp"
 
 namespace points::converter
@@ -140,4 +141,3 @@ std::pair<bool, const uint8_t *> input_storage_map_t::deserialize(const uint8_t 
 }
 
 } // namespace points::converter
-

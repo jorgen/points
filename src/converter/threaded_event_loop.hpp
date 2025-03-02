@@ -28,6 +28,7 @@
 #include "thread_pool.hpp"
 #include "worker.hpp"
 
+#include <cassert>
 
 namespace points::converter
 {
@@ -35,89 +36,95 @@ namespace points::converter
 class about_to_block_t
 {
 public:
+  virtual ~about_to_block_t() = default;
+
   virtual void about_to_block() = 0;
 
   template <typename Ret, typename Class, typename... Args>
   std::function<void(Args &&...)> bind(Ret (Class::*f)(Args &&...))
   {
-    return [this, f](Args &&...args) { return ((*static_cast<Class *>(this)).*f)(std::move(args)...); };
+    return [this, f](Args &&... args) {
+      return ((*static_cast<Class *>(this)).*f)(std::move(args)...);
+    };
   }
 };
 
-class threaded_event_loop_t
+class event_loop_t
 {
 public:
-  threaded_event_loop_t(thread_pool_t &worker_thread_pool)
+  event_loop_t(thread_pool_t &worker_thread_pool)
     : _loop(nullptr)
-    , _worker_thread_pool(worker_thread_pool)
-    , _add_pipe([this](std::vector<std::function<uv_handle_t *(uv_loop_t *)>> &&events) { add_event_pipe_cb(std::move(events)); })
-    , _run_in_loop([](std::vector<std::function<void()>> &&events) {
-      for (auto &to_run : events)
-        to_run();
-    })
+      , _worker_thread_pool(worker_thread_pool)
+      , _add_pipe([this](std::function<uv_handle_t *(uv_loop_t *)> &&event) {
+        add_event_pipe_cb(std::move(event));
+      })
+      , _run_in_loop([](std::function<void()> &&event) {
+        event();
+      })
   {
     _to_close_handles.reserve(16);
-    barrier_t barrier;
-    std::unique_lock<std::mutex> lock(barrier.mutex);
+    _loop = new uv_loop_t();
+    uv_loop_init(_loop);
 
-    auto run = [&barrier, this] {
-      _loop = new uv_loop_t();
-      uv_loop_init(_loop);
+    uv_async_init(_loop, &_async_stop, &exit_event_loop_cb);
+    _async_stop.data = this;
+    _to_close_handles.push_back((uv_handle_t *)&_async_stop);
+    _to_close_handles.push_back(_add_pipe.initialize_in_loop(_loop));
+    _to_close_handles.push_back(_run_in_loop.initialize_in_loop(_loop));
 
-      uv_async_init(_loop, &_async_stop, &exit_event_loop_cb);
-      _async_stop.data = this;
-      _to_close_handles.push_back((uv_handle_t *)&_async_stop);
-      _to_close_handles.push_back(_add_pipe.initialize_in_loop(_loop));
-      _to_close_handles.push_back(_run_in_loop.initialize_in_loop(_loop));
-
-      uv_prepare_init(_loop, &_about_to_block);
-      _about_to_block.data = this;
-      uv_prepare_start(&_about_to_block, &about_to_block_cb);
-      _to_close_handles.push_back((uv_handle_t *)&_about_to_block);
-
-      {
-        std::unique_lock<std::mutex> lock(barrier.mutex);
-        barrier.wait.notify_one();
-      }
-
-      uv_run(_loop, UV_RUN_DEFAULT);
-
-      uv_loop_close(_loop);
-      delete _loop;
-      _loop = nullptr;
-    };
-
-    _thread.reset(new std::thread(run));
-    barrier.wait.wait(lock);
+    uv_prepare_init(_loop, &_about_to_block);
+    _about_to_block.data = this;
+    uv_prepare_start(&_about_to_block, &about_to_block_cb);
+    _to_close_handles.push_back((uv_handle_t *)&_about_to_block);
   }
 
-  ~threaded_event_loop_t()
+  event_loop_t(const event_loop_t &) = delete;
+
+  event_loop_t &operator=(const event_loop_t &) = delete;
+
+  event_loop_t(event_loop_t &&other) = delete;
+
+  event_loop_t &operator=(event_loop_t &&other) = delete;
+
+  ~event_loop_t()
+  {
+    auto close_result = uv_loop_close(_loop);
+    assert(close_result == 0);
+    delete _loop;
+    _loop = nullptr;
+  }
+
+  auto run()
+  {
+    return uv_run(_loop, UV_RUN_DEFAULT);
+  }
+
+  void stop()
   {
     uv_async_send(&_async_stop);
-    _thread->join();
-  }
-
-  template <typename... ARGS>
-  void add_event_pipe(event_pipe_multi_t<ARGS...> &event_pipe)
-  {
-    std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
-    _add_pipe.post_event(func);
   }
 
   template <typename... ARGS>
   void add_event_pipe(event_pipe_t<ARGS...> &event_pipe)
   {
-    std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
-    _add_pipe.post_event(func);
+    std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) {
+      return event_pipe.initialize_in_loop(loop);
+    };
+    _add_pipe.post_event(std::move(func));
   }
 
   void add_about_to_block_listener(about_to_block_t *listener)
   {
-    _run_in_loop.post_event([this, listener] { _about_to_block_listeners.push_back(listener); });
+    _run_in_loop.post_event([this, listener] {
+      _about_to_block_listeners.push_back(listener);
+    });
   }
+
   void remove_about_to_block_listener(about_to_block_t *listener)
   {
-    _run_in_loop.post_event([this, listener] { _about_to_block_listeners.erase(std::remove(_about_to_block_listeners.begin(), _about_to_block_listeners.end(), listener), _about_to_block_listeners.end()); });
+    _run_in_loop.post_event([this, listener] {
+      _about_to_block_listeners.erase(std::remove(_about_to_block_listeners.begin(), _about_to_block_listeners.end(), listener), _about_to_block_listeners.end());
+    });
   }
 
   void add_worker_done(worker_t *done)
@@ -128,39 +135,25 @@ public:
     });
   }
 
-  uv_loop_t *loop() const
+  [[nodiscard]] uv_loop_t *loop() const
   {
     return _loop;
   }
 
-  std::thread::id thread_id() const
-  {
-    return _thread->get_id();
-  }
-
-  thread_pool_t &worker_thread_pool()
+  [[nodiscard]] thread_pool_t &worker_thread_pool() const
   {
     return _worker_thread_pool;
   }
 
 private:
-  void add_event_pipe_cb(std::vector<std::function<uv_handle_t *(uv_loop_t *)>> &&events)
+  void add_event_pipe_cb(std::function<uv_handle_t *(uv_loop_t *)> &&event)
   {
-    for (auto f : events)
-    {
-      _to_close_handles.push_back(f(_loop));
-    }
+    _to_close_handles.emplace_back(event(_loop));
   }
-
-  struct barrier_t
-  {
-    std::mutex mutex;
-    std::condition_variable wait;
-  };
 
   static void about_to_block_cb(uv_prepare_t *handle)
   {
-    threaded_event_loop_t *event_loop = static_cast<threaded_event_loop_t *>(handle->data);
+    auto *event_loop = static_cast<event_loop_t *>(handle->data);
     for (auto listener : event_loop->_about_to_block_listeners)
     {
       listener->about_to_block();
@@ -169,7 +162,7 @@ private:
 
   static void exit_event_loop_cb(uv_async_t *handle)
   {
-    threaded_event_loop_t *event_loop = static_cast<threaded_event_loop_t *>(handle->data);
+    auto event_loop = static_cast<event_loop_t *>(handle->data);
     for (auto cancel_handle : event_loop->_to_cancel_work_handles)
       uv_cancel((uv_req_t *)cancel_handle);
     for (auto close_handle : event_loop->_to_close_handles)
@@ -182,13 +175,12 @@ private:
 
   uv_loop_t *_loop;
   uv_async_t _async_stop;
-  std::unique_ptr<std::thread> _thread;
   std::mutex _mutex;
   std::vector<uv_handle_t *> _to_close_handles;
   std::vector<uv_work_t *> _to_cancel_work_handles;
   thread_pool_t &_worker_thread_pool;
-  event_pipe_multi_t<std::function<uv_handle_t *(uv_loop_t *)>> _add_pipe;
-  event_pipe_multi_t<std::function<void()>> _run_in_loop;
+  event_pipe_t<std::function<uv_handle_t *(uv_loop_t *)> > _add_pipe;
+  event_pipe_t<std::function<void()> > _run_in_loop;
 
   uv_prepare_t _about_to_block;
   std::vector<about_to_block_t *> _about_to_block_listeners;
@@ -196,5 +188,57 @@ private:
   friend class worker_t;
 };
 
-} // namespace points::converter
+class thread_with_event_loop_t
+{
+public:
+  thread_with_event_loop_t(thread_pool_t &worker_thread_pool)
+    : _event_loop(worker_thread_pool)
+  {
+    barrier_t barrier;
+    std::unique_lock<std::mutex> lock(barrier.mutex);
 
+    auto run = [&barrier, this] {
+      {
+        std::unique_lock<std::mutex> lock(barrier.mutex);
+        barrier.wait.notify_one();
+      }
+      _event_loop.run();
+    };
+
+    _thread.reset(new std::thread(run));
+    barrier.wait.wait(lock);
+  }
+
+  ~thread_with_event_loop_t()
+  {
+    _event_loop.stop();
+    _thread->join();
+  }
+
+  event_loop_t &event_loop()
+  {
+    return _event_loop;
+  }
+
+  const event_loop_t &event_loop() const
+  {
+    return _event_loop;
+  }
+
+  [[nodiscard]] std::thread::id thread_id() const
+  {
+    return _thread->get_id();
+  }
+
+private:
+  struct barrier_t
+  {
+    std::mutex mutex;
+    std::condition_variable wait;
+  };
+
+  event_loop_t _event_loop;
+  std::unique_ptr<std::thread> _thread;
+};
+
+} // namespace points::converter

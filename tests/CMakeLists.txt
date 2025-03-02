@@ -16,6 +16,8 @@ add_executable(private_interface_unit_tests
         private/converter_tests.cpp
         private/deque_map_test.cpp
         private/blob_manager_test.cpp
+        private/libuv_coroutine_test.cpp
+        private/basic_coroutine_test.cpp
         $<TARGET_OBJECTS:points_common_objects>
         $<TARGET_OBJECTS:points_converter_objects>
         $<TARGET_OBJECTS:points_render_objects>
@@ -27,3 +29,4 @@ if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
     #target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)
 endif ()
 copy_dll_for_target(public_interface_unit_tests points_render points_converter)
+copy_dll_for_target(private_interface_unit_tests points_render points_converter)

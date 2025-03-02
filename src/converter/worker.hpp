@@ -21,7 +21,7 @@
 
 namespace points::converter
 {
-class threaded_event_loop_t;
+class event_loop_t;
 class worker_t
 {
 public:
@@ -35,7 +35,7 @@ public:
   virtual void work() = 0;
   virtual void after_work(completion_t completion) = 0;
 
-  void enqueue(threaded_event_loop_t &loop);
+  void enqueue(event_loop_t &loop);
   void mark_done()
   {
     _done = true;

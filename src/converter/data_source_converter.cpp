@@ -27,16 +27,21 @@
 namespace points::converter
 {
 bool has_rendered = false;
+
 template <typename buffer_data_t>
 void initialize_buffer(render::callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, render::buffer_type_t buffer_type, type_t type, components_t components, render::buffer_t &buffer)
 {
+  (void)callbacks;
+  (void)buffer_type;
+  (void)type;
+  (void)components;
+  (void)buffer;
   assert(data_vector.size());
 }
 
 converter_data_source_t::converter_data_source_t(const std::string &url, render::callback_manager_t &callbacks)
   : url(url)
   , processor(url, file_existence_requirement_t::exist, error)
-  , callbacks(callbacks)
 {
   if (error.code != 0)
   {
@@ -81,8 +86,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
 {
   (void)to_render;
   const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
-  bool new_attribute = false;
-  {
+  bool new_attribute = false; {
     std::unique_lock<std::mutex> lock(mutex);
     new_attribute = current_attribute_name != next_attribute_name;
     current_attribute_name = next_attribute_name;
@@ -98,7 +102,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   auto &buffer = back_buffer->m_new_nodes.point_subsets;
   std::sort(buffer.begin(), buffer.end(), less_than);
 
-  std::vector<std::unique_ptr<dyn_points_draw_buffer_t>> new_render_buffers;
+  std::vector<std::unique_ptr<dyn_points_draw_buffer_t> > new_render_buffers;
   new_render_buffers.reserve(buffer.size());
 
   auto render_buffers_it = render_buffers.begin();
@@ -204,7 +208,9 @@ struct render::data_source_t converter_data_source_get(struct converter_data_sou
 
 void converter_data_source_request_aabb(struct converter_data_source_t *converter_data_source, converter_data_source_request_aabb_callback_t callback, void *user_ptr)
 {
-  auto callback_cpp = [callback, user_ptr](double aabb_min[3], double aabb_max[3]) { callback(aabb_min, aabb_max, user_ptr); };
+  auto callback_cpp = [callback, user_ptr](double aabb_min[3], double aabb_max[3]) {
+    callback(aabb_min, aabb_max, user_ptr);
+  };
 
   converter_data_source->processor.request_aabb(callback_cpp);
 }
@@ -218,6 +224,7 @@ uint32_t converter_data_get_attribute_name(struct converter_data_source_t *conve
 {
   return converter_data_source->processor.attrib_name_registry_get(index, name, name_size);
 }
+
 void converter_data_set_rendered_attribute(struct converter_data_source_t *converter_data_source, const char *name, uint32_t name_len)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);

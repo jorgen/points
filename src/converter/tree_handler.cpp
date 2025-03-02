@@ -23,11 +23,11 @@
 #include "morton_tree_coordinate_transform.hpp"
 #include "storage_handler.hpp"
 
-
 namespace points::converter
 {
 tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
-  : _event_loop(thread_pool)
+  : _event_loop_thread(thread_pool)
+  , _event_loop(_event_loop_thread.event_loop())
   , _initialized(false)
   , _configuration_initialized(false)
   , _pre_init_node_limit(1000000)
@@ -133,7 +133,7 @@ void tree_handler_t::request_aabb(std::function<void(double *, double *)> functi
 
 void tree_handler_t::request_tree(tree_id_t tree_id)
 {
-  assert(std::this_thread::get_id() == _event_loop.thread_id());
+  assert(std::this_thread::get_id() == _event_loop_thread.thread_id());
 
   _tree_id_requested.resize(_tree_registry.data.size());
   if (_tree_id_requested[tree_id.data])
@@ -157,7 +157,7 @@ void tree_handler_t::request_tree(tree_id_t tree_id)
 
 bool tree_handler_t::tree_initialized(tree_id_t tree_id)
 {
-  assert(std::this_thread::get_id() == _event_loop.thread_id());
+  assert(std::this_thread::get_id() == _event_loop_thread.thread_id());
   return _tree_registry.tree_id_initialized[tree_id.data];
 }
 
@@ -263,4 +263,3 @@ void tree_handler_t::handle_request_root()
   request_tree(_tree_registry.root);
 }
 } // namespace points::converter
-

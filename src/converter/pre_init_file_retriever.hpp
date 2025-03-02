@@ -23,7 +23,6 @@
 #include "input_header.hpp"
 #include "worker.hpp"
 
-
 namespace points::converter
 {
 struct get_file_pre_init_t
@@ -61,4 +60,3 @@ struct get_pre_init_info_worker_t : worker_t
 };
 
 } // namespace points::converter
-

@@ -887,7 +887,7 @@ static void adjust_tree_after_lod(tree_registry_t &tree_cache, std::vector<lod_t
 }
 
 static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_registry_t &tree_cache, storage_handler_t &cache_file,
-                          attributes_configs_t &attributes_configs, threaded_event_loop_t &loop)
+                          attributes_configs_t &attributes_configs, event_loop_t &loop)
 {
   if (!batch.new_batch)
     adjust_tree_after_lod(tree_cache, batch.worker_data, batch.level);
@@ -925,7 +925,7 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
   }
 }
 
-tree_lod_generator_t::tree_lod_generator_t(threaded_event_loop_t &loop, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<void> &lod_done)
+tree_lod_generator_t::tree_lod_generator_t(event_loop_t &loop, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<void> &lod_done)
   : _loop(loop)
   , _tree_cache(tree_cache)
   , _file_cache(file_cache)

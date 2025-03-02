@@ -20,7 +20,6 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <uv.h>
 #include <vector>
 
@@ -88,7 +87,8 @@ private:
   void *_runtime_callback_user_ptr;
   converter_file_convert_callbacks_t _convert_callbacks;
 
-  threaded_event_loop_t _event_loop;
+  thread_with_event_loop_t _thread_with_event_loop;
+  event_loop_t &_event_loop;
 
   bool _generating_lod;
 
@@ -118,7 +118,8 @@ private:
   event_pipe_t<error_t> _storage_handler_error;
   event_pipe_t<input_data_id_t> _tree_done_with_input;
 
-  threaded_event_loop_t _input_event_loop;
+  thread_with_event_loop_t _input_event_loop_thread;
+  event_loop_t &_input_event_loop;
   point_reader_t _point_reader;
 
   int64_t _read_sort_budget;

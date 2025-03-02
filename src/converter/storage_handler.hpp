@@ -135,7 +135,8 @@ private:
   std::shared_ptr<storage_handler_request_t> handle_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location, std::function<void(const storage_handler_request_t &)> done_callback);
 
   std::string _file_name;
-  threaded_event_loop_t _event_loop;
+  thread_with_event_loop_t _event_loop_thread;
+  event_loop_t &_event_loop;
   uv_file _file_handle;
   std::atomic_bool _file_opened;
   std::atomic_bool _file_exists;

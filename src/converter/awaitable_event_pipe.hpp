@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2021  Jørgen Lind
+** Copyright (C) 2025  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -15,31 +15,22 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "worker.hpp"
-
+#pragma once
 #include "threaded_event_loop.hpp"
 
-#include <cassert>
+namespace points::converter {
+  template<typename RET, typename... ARGS>
+  class awaitable_event_pipe_t {
+  public:
+    awaitable_event_pipe_t(event_loop_t &request_loop, event_loop_t &response_loop,
+                           std::function<RET(ARGS...)> &&function) {
+      (void) request_loop;
+      (void) response_loop;
+      (void) function;
+    }
 
-namespace points::converter
-{
-
-worker_t::worker_t()
-  : _done(false)
-{
-  async.data = this;
-}
-
-worker_t::~worker_t()
-{
-  assert(_done);
-}
-void worker_t::enqueue(event_loop_t &loop)
-{
-  loop.worker_thread_pool().enqueue([this, &loop] {
-    this->work();
-    loop.add_worker_done(this);
-  });
-}
-
+  private:
+    event_pipe_t<ARGS...> request_pipe;
+    event_pipe_t<RET> response_pipe;
+  };
 } // namespace points::converter

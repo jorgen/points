@@ -65,7 +65,8 @@ private:
     _tree_registry.tree_config = _pre_init_tree_config;
   }
 
-  threaded_event_loop_t _event_loop;
+  thread_with_event_loop_t _event_loop_thread;
+  event_loop_t &_event_loop;
   std::mutex _configuration_mutex;
   bool _initialized;
   bool _configuration_initialized;
