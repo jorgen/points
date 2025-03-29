@@ -43,9 +43,7 @@ public:
   template <typename Ret, typename Class, typename... Args>
   std::function<void(Args &&...)> bind(Ret (Class::*f)(Args &&...))
   {
-    return [this, f](Args &&... args) {
-      return ((*static_cast<Class *>(this)).*f)(std::move(args)...);
-    };
+    return [this, f](Args &&...args) { return ((*static_cast<Class *>(this)).*f)(std::move(args)...); };
   }
 };
 
@@ -54,13 +52,10 @@ class event_loop_t
 public:
   event_loop_t(thread_pool_t &worker_thread_pool)
     : _loop(nullptr)
-      , _worker_thread_pool(worker_thread_pool)
-      , _add_pipe([this](std::function<uv_handle_t *(uv_loop_t *)> &&event) {
-        add_event_pipe_cb(std::move(event));
-      })
-      , _run_in_loop([](std::function<void()> &&event) {
-        event();
-      })
+    , _worker_thread_pool(worker_thread_pool)
+    , _add_pipe([this](std::function<uv_handle_t *(uv_loop_t *)> &&event) { add_event_pipe_cb(std::move(event)); })
+    , _run_in_loop([](std::function<void()> &&event) { event(); })
+    , _thread_id(std::this_thread::get_id())
   {
     _to_close_handles.reserve(16);
     _loop = new uv_loop_t();
@@ -76,6 +71,7 @@ public:
     _about_to_block.data = this;
     uv_prepare_start(&_about_to_block, &about_to_block_cb);
     _to_close_handles.push_back((uv_handle_t *)&_about_to_block);
+    uv_run(_loop, UV_RUN_NOWAIT);
   }
 
   event_loop_t(const event_loop_t &) = delete;
@@ -94,8 +90,19 @@ public:
     _loop = nullptr;
   }
 
+  void run_in_loop(std::function<void()> &&event)
+  {
+    _run_in_loop.post_event(std::move(event));
+  }
+
+  void override_thread_id(std::thread::id thread_id)
+  {
+    _thread_id = thread_id;
+  }
+
   auto run()
   {
+    _thread_id = std::this_thread::get_id();
     return uv_run(_loop, UV_RUN_DEFAULT);
   }
 
@@ -107,32 +114,35 @@ public:
   template <typename... ARGS>
   void add_event_pipe(event_pipe_t<ARGS...> &event_pipe)
   {
-    std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) {
-      return event_pipe.initialize_in_loop(loop);
-    };
-    _add_pipe.post_event(std::move(func));
+    if (_thread_id == std::this_thread::get_id())
+    {
+      _to_close_handles.push_back(event_pipe.initialize_in_loop(_loop));
+    }
+    else
+    {
+      std::function<uv_handle_t *(uv_loop_t *)> func = [&event_pipe](uv_loop_t *loop) { return event_pipe.initialize_in_loop(loop); };
+      _add_pipe.post_event(std::move(func));
+    }
   }
 
   void add_about_to_block_listener(about_to_block_t *listener)
   {
-    _run_in_loop.post_event([this, listener] {
-      _about_to_block_listeners.push_back(listener);
-    });
+    _run_in_loop.post_event([this, listener] { _about_to_block_listeners.push_back(listener); });
   }
 
   void remove_about_to_block_listener(about_to_block_t *listener)
   {
-    _run_in_loop.post_event([this, listener] {
-      _about_to_block_listeners.erase(std::remove(_about_to_block_listeners.begin(), _about_to_block_listeners.end(), listener), _about_to_block_listeners.end());
-    });
+    _run_in_loop.post_event([this, listener] { _about_to_block_listeners.erase(std::remove(_about_to_block_listeners.begin(), _about_to_block_listeners.end(), listener), _about_to_block_listeners.end()); });
   }
 
   void add_worker_done(worker_t *done)
   {
-    _run_in_loop.post_event([done] {
-      done->mark_done();
-      done->after_work(worker_t::completed);
-    });
+    _run_in_loop.post_event(
+      [done]
+      {
+        done->mark_done();
+        done->after_work(worker_t::completed);
+      });
   }
 
   [[nodiscard]] uv_loop_t *loop() const
@@ -179,11 +189,13 @@ private:
   std::vector<uv_handle_t *> _to_close_handles;
   std::vector<uv_work_t *> _to_cancel_work_handles;
   thread_pool_t &_worker_thread_pool;
-  event_pipe_t<std::function<uv_handle_t *(uv_loop_t *)> > _add_pipe;
-  event_pipe_t<std::function<void()> > _run_in_loop;
+  event_pipe_t<std::function<uv_handle_t *(uv_loop_t *)>> _add_pipe;
+  event_pipe_t<std::function<void()>> _run_in_loop;
 
   uv_prepare_t _about_to_block;
   std::vector<about_to_block_t *> _about_to_block_listeners;
+
+  std::thread::id _thread_id;
 
   friend class worker_t;
 };
@@ -197,7 +209,8 @@ public:
     barrier_t barrier;
     std::unique_lock<std::mutex> lock(barrier.mutex);
 
-    auto run = [&barrier, this] {
+    auto run = [&barrier, this]
+    {
       {
         std::unique_lock<std::mutex> lock(barrier.mutex);
         barrier.wait.notify_one();

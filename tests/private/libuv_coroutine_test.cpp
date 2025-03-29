@@ -21,7 +21,7 @@ public:
   uv_coroutine_t(coro_handle co)
     : _co(co)
   {
-    fprintf(stderr, "%s\n", __FUNCTION__);
+    fprintf(stderr, "%s %p : %p\n", __FUNCTION__, this, _co.address());
   }
 
   uv_coroutine_t(const uv_coroutine_t &) = delete;
@@ -157,7 +157,7 @@ struct final_awaitable
   explicit final_awaitable(std::coroutine_handle<> co)
     : _co(co)
   {
-    fprintf(stderr, "%s\n", __FUNCTION__);
+    fprintf(stderr, "%s %p\n", __FUNCTION__, _co.address());
   }
 
   bool await_ready() noexcept
@@ -165,9 +165,9 @@ struct final_awaitable
     return false;
   }
 
-  std::coroutine_handle<> await_suspend(std::coroutine_handle<>) noexcept
+  std::coroutine_handle<> await_suspend(std::coroutine_handle<> handle) noexcept
   {
-    fprintf(stderr, "%s\n", __FUNCTION__);
+    fprintf(stderr, "%s %p : %p : %p\n", __FUNCTION__, this, handle.address(), _co.address());
     if (_co)
     {
       return _co;
@@ -183,6 +183,29 @@ struct final_awaitable
   }
 };
 
+struct has_executed_awaitable_t
+{
+  bool is_done = false;
+
+  has_executed_awaitable_t(bool is_done)
+    : is_done(is_done)
+  {
+  }
+
+  [[nodiscard]] constexpr bool await_ready() const noexcept
+  {
+    return is_done;
+  }
+
+  constexpr void await_suspend(std::coroutine_handle<>) const noexcept
+  {
+  }
+
+  constexpr void await_resume() const noexcept
+  {
+  }
+};
+
 class uv_coroutine_event_loop_t;
 
 struct uv_coroutine_t::promise_type
@@ -190,8 +213,8 @@ struct uv_coroutine_t::promise_type
   using coro_handle = std::coroutine_handle<promise_type>;
 
   uv_coroutine_event_loop_t &_event_loop;
-  std::function<uv_coroutine_t()> _func;
   std::coroutine_handle<> _continuation;
+
 
   promise_type(uv_coroutine_event_loop_t &event_loop)
     : _event_loop(event_loop)
@@ -201,7 +224,6 @@ struct uv_coroutine_t::promise_type
 
   promise_type(uv_coroutine_event_loop_t &event_loop, std::function<uv_coroutine_t()> &&func)
     : _event_loop(event_loop)
-      , _func(std::move(func))
   {
   }
 
@@ -247,33 +269,11 @@ struct uv_coroutine_t::promise_type
 
   auto await_transform(uv_coroutine_event_loop_t::async_function_t func)
   {
-    struct async_function_awaitable_t
-    {
-      bool is_done = false;
-
-      async_function_awaitable_t(bool is_done)
-        : is_done(is_done)
-      {
-      }
-
-      constexpr bool await_ready() const noexcept
-      {
-        return is_done;
-      }
-
-      constexpr void await_suspend(std::coroutine_handle<>) const noexcept
-      {
-      }
-
-      constexpr void await_resume() const noexcept
-      {
-      }
-    };
     fprintf(stderr, "%s %d\n", __FUNCTION__, __LINE__);
     assert(func._inner);
     assert(func._inner->data == nullptr);
     func._inner->data = coro_handle::from_promise(*this).address();
-    return async_function_awaitable_t(func._inner->called);
+    return has_executed_awaitable_t(func._inner->called);
   }
 
   struct internal_uv_async_t : uv_async_t
@@ -325,13 +325,13 @@ struct uv_coroutine_t::awaiter
 
   bool await_ready()
   {
-    fprintf(stderr, "%s\n", __FUNCTION__);
+    fprintf(stderr, "%s %p\n", __FUNCTION__, this);
     return false;
   }
 
   auto await_suspend(std::coroutine_handle<> co_cont)
   {
-    fprintf(stderr, "%s\n", __FUNCTION__);
+    fprintf(stderr, "%s %p : %p\n", __FUNCTION__, this, co_cont.address());
     _co.promise()._continuation = co_cont;
     return true;
   }
@@ -343,6 +343,7 @@ struct uv_coroutine_t::awaiter
 
 uv_coroutine_t::awaiter uv_coroutine_t::operator co_await()
 {
+  fprintf(stderr, "%s %p : %p\n", __FUNCTION__, this, _co.address());
   return {_co};
 }
 
@@ -387,13 +388,12 @@ uv_coroutine_t fourth(uv_coroutine_event_loop_t &event_loop)
   });
   fprintf(stderr, "12\n");
   co_await event_loop.async_coroutine(fifth);
-  event_loop.stop();
 }
 
 uv_coroutine_t sixth(uv_coroutine_event_loop_t &event_loop)
 {
   (void)event_loop;
-  fprintf(stderr, "14\n");
+  fprintf(stderr, "19\n");
   co_await sleep_t(DELAY / 2);
   fprintf(stderr, "16\n");
 }
@@ -406,7 +406,6 @@ uv_coroutine_t seventh(uv_coroutine_event_loop_t &event_loop)
   fprintf(stderr, "17\n");
 }
 
-
 uv_coroutine_t service_main(uv_coroutine_event_loop_t &event_loop)
 {
   fprintf(stderr, "1\n");
@@ -418,8 +417,12 @@ uv_coroutine_t service_main(uv_coroutine_event_loop_t &event_loop)
   co_await fourth(event_loop);
 
   auto sixth_coro = sixth(event_loop);
+  fprintf(stderr, "sixth coro %p\n", sixth_coro._co.address());
   co_await seventh(event_loop);
+  fprintf(stderr, "about to await sixth coro %p\n", sixth_coro._co.address());
   co_await sixth_coro;
+  event_loop.stop();
+  co_return;
 }
 
 TEST_CASE("libuv coroutine", "[converter]")

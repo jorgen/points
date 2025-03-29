@@ -17,6 +17,7 @@ add_executable(private_interface_unit_tests
         private/deque_map_test.cpp
         private/blob_manager_test.cpp
         private/libuv_coroutine_test.cpp
+        private/libuv_coroutine_take_2.cpp
         private/basic_coroutine_test.cpp
         $<TARGET_OBJECTS:points_common_objects>
         $<TARGET_OBJECTS:points_converter_objects>
