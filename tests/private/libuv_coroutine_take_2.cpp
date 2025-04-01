@@ -11,6 +11,8 @@
 
 #define DELAY 1000
 
+namespace vio
+{
 class task_t
 {
 public:
@@ -21,6 +23,7 @@ public:
 
   ~task_t()
   {
+    fprintf(stderr, "%s\n", __FUNCTION__);
   }
 
   struct promise_t
@@ -46,23 +49,24 @@ public:
 
     struct final_awaitable_t
     {
-      bool await_ready()
+      bool await_ready() const noexcept
       {
         return false;
       }
 
       void await_suspend(std::coroutine_handle<promise_t> co) noexcept
       {
+        fprintf(stderr, "%s\n", __FUNCTION__);
         if (co.promise().continuation)
           co.promise().continuation.resume();
       }
 
-      void await_resume()
+      void await_resume() const noexcept
       {
       }
     };
 
-    std::suspend_never final_suspend() noexcept
+    final_awaitable_t final_suspend() noexcept
     {
       return {};
     }
@@ -83,7 +87,7 @@ private:
   }
 
   std::coroutine_handle<promise_t> _coro;
-};
+}; // namespace class task_t
 
 class task_t::awaiter
 {
@@ -96,7 +100,6 @@ public:
   void await_suspend(std::coroutine_handle<> continuation) noexcept
   {
     coro_.promise().continuation = continuation;
-    coro_.resume();
   }
 
   void await_resume() noexcept
@@ -114,6 +117,7 @@ private:
 
 task_t::awaiter task_t::operator co_await() && noexcept
 {
+  fprintf(stderr, "%s\n", __FUNCTION__);
   return awaiter{_coro};
 }
 
@@ -176,24 +180,32 @@ uv_awaitable_timer sleep(points::converter::event_loop_t &event_loop, int millis
   uv_timer_start(&ret.state->timer, callback, milliseconds, 0);
   return ret;
 }
+} // namespace vio
 
-task_t sleep_task_2(points::converter::event_loop_t &event_loop)
+vio::task_t sleep_task_2(points::converter::event_loop_t &event_loop)
 {
-  auto to_wait = sleep(event_loop, DELAY);
+  fprintf(stderr, "%s 1\n", __FUNCTION__);
+  auto to_wait = vio::sleep(event_loop, DELAY);
+  fprintf(stderr, "%s 2\n", __FUNCTION__);
   co_await to_wait;
+  fprintf(stderr, "%s 3\n", __FUNCTION__);
+  co_return;
 }
 
-task_t sleep_task(points::converter::event_loop_t &event_loop)
+vio::task_t sleep_task(points::converter::event_loop_t &event_loop)
 {
-  auto to_wait = sleep(event_loop, DELAY);
+  auto to_wait = vio::sleep(event_loop, DELAY);
   co_await to_wait;
 
-  auto to_wait2 = sleep(event_loop, DELAY * 2);
-  auto to_wait3 = sleep(event_loop, DELAY);
+  auto to_wait2 = vio::sleep(event_loop, DELAY * 2);
+  auto to_wait3 = vio::sleep(event_loop, DELAY);
   co_await to_wait2;
   co_await to_wait3;
-
-  co_await sleep_task_2(event_loop);
+  fprintf(stderr, "%s 1\n", __FUNCTION__);
+  auto to_wait_4 = sleep_task_2(event_loop);
+  fprintf(stderr, "%s 2\n", __FUNCTION__);
+  co_await std::move(to_wait_4);
+  fprintf(stderr, "%s 3\n", __FUNCTION__);
 
   event_loop.stop();
 }
@@ -202,6 +214,12 @@ TEST_CASE("libuv coroutine take 2", "[converter]")
 {
   points::converter::thread_pool_t thread_pool(1);
   points::converter::event_loop_t event_loop(thread_pool);
-  event_loop.run_in_loop([&event_loop] { sleep_task(event_loop); });
+  event_loop.run_in_loop(
+    [&event_loop]
+    {
+      fprintf(stderr, "calling sleep_task 1\n");
+      sleep_task(event_loop);
+      fprintf(stderr, "calling sleep_task 2\n");
+    });
   event_loop.run();
 }
