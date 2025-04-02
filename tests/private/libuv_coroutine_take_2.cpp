@@ -13,7 +13,125 @@
 
 namespace vio
 {
+template <typename T>
 class task_t
+{
+public:
+  task_t(task_t &&t) noexcept
+    : _coro(std::exchange(t._coro, {}))
+  {
+  }
+
+  ~task_t()
+  {
+    fprintf(stderr, "%s\n", __FUNCTION__);
+  }
+
+  struct promise_t
+  {
+    task_t get_return_object()
+    {
+      return task_t{std::coroutine_handle<promise_t>::from_promise(*this)};
+    }
+
+    void unhandled_exception()
+    {
+      std::terminate();
+    }
+
+    void return_value(T &&value)
+    {
+      return_value_holder = std::move(value);
+    }
+
+    std::suspend_never initial_suspend()
+    {
+      return {};
+    }
+
+    struct final_awaitable_t
+    {
+      bool await_ready() const noexcept
+      {
+        return false;
+      }
+
+      std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_t> co) noexcept
+      {
+        if (co.promise().continuation)
+        {
+          return co.promise().continuation;
+        }
+
+        return std::noop_coroutine();
+      }
+
+      void await_resume() const noexcept
+      {
+      }
+    };
+
+    final_awaitable_t final_suspend() noexcept
+    {
+      return {};
+    }
+
+    std::coroutine_handle<> continuation;
+    T return_value_holder;
+  };
+
+  class awaiter;
+
+  awaiter operator co_await() && noexcept;
+
+  using promise_type = promise_t;
+
+private:
+  explicit task_t(std::coroutine_handle<promise_t> coro) noexcept
+    : _coro(coro)
+  {
+  }
+
+  std::coroutine_handle<promise_t> _coro;
+}; // namespace class task_t
+
+template <typename T>
+class task_t<T>::awaiter
+{
+public:
+  bool await_ready() noexcept
+  {
+    return coro_.done();
+  }
+
+  void await_suspend(std::coroutine_handle<> continuation) noexcept
+  {
+    coro_.promise().continuation = continuation;
+  }
+
+  T await_resume() noexcept
+  {
+    return std::move(coro_.promise().return_value_holder);
+  }
+
+  explicit awaiter(std::coroutine_handle<task_t::promise_type> h) noexcept
+    : coro_(h)
+  {
+  }
+
+private:
+  std::coroutine_handle<task_t::promise_type> coro_;
+};
+
+template <typename T>
+task_t<T>::awaiter task_t<T>::operator co_await() && noexcept
+{
+  fprintf(stderr, "%s\n", __FUNCTION__);
+  return awaiter{_coro};
+}
+
+template <>
+class task_t<void>
 {
 public:
   task_t(task_t &&t) noexcept
@@ -54,11 +172,14 @@ public:
         return false;
       }
 
-      void await_suspend(std::coroutine_handle<promise_t> co) noexcept
+      std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_t> co) noexcept
       {
-        fprintf(stderr, "%s\n", __FUNCTION__);
         if (co.promise().continuation)
-          co.promise().continuation.resume();
+        {
+          return co.promise().continuation;
+        }
+
+        return std::noop_coroutine();
       }
 
       void await_resume() const noexcept
@@ -89,12 +210,12 @@ private:
   std::coroutine_handle<promise_t> _coro;
 }; // namespace class task_t
 
-class task_t::awaiter
+class task_t<void>::awaiter
 {
 public:
   bool await_ready() noexcept
   {
-    return false;
+    return coro_.done();
   }
 
   void await_suspend(std::coroutine_handle<> continuation) noexcept
@@ -115,7 +236,7 @@ private:
   std::coroutine_handle<task_t::promise_type> coro_;
 };
 
-task_t::awaiter task_t::operator co_await() && noexcept
+task_t<void>::awaiter task_t<void>::operator co_await() && noexcept
 {
   fprintf(stderr, "%s\n", __FUNCTION__);
   return awaiter{_coro};
@@ -182,17 +303,20 @@ uv_awaitable_timer sleep(points::converter::event_loop_t &event_loop, int millis
 }
 } // namespace vio
 
-vio::task_t sleep_task_2(points::converter::event_loop_t &event_loop)
+vio::task_t<int> sleep_task_2(points::converter::event_loop_t &event_loop)
 {
-  fprintf(stderr, "%s 1\n", __FUNCTION__);
   auto to_wait = vio::sleep(event_loop, DELAY);
-  fprintf(stderr, "%s 2\n", __FUNCTION__);
   co_await to_wait;
-  fprintf(stderr, "%s 3\n", __FUNCTION__);
-  co_return;
+  co_return 1;
 }
 
-vio::task_t sleep_task(points::converter::event_loop_t &event_loop)
+vio::task_t<void> sleep_task_3(points::converter::event_loop_t &event_loop)
+{
+  auto to_wait = vio::sleep(event_loop, DELAY * 2);
+  co_await to_wait;
+}
+
+vio::task_t<int> sleep_task(points::converter::event_loop_t &event_loop)
 {
   auto to_wait = vio::sleep(event_loop, DELAY);
   co_await to_wait;
@@ -201,25 +325,18 @@ vio::task_t sleep_task(points::converter::event_loop_t &event_loop)
   auto to_wait3 = vio::sleep(event_loop, DELAY);
   co_await to_wait2;
   co_await to_wait3;
-  fprintf(stderr, "%s 1\n", __FUNCTION__);
   auto to_wait_4 = sleep_task_2(event_loop);
-  fprintf(stderr, "%s 2\n", __FUNCTION__);
+  co_await sleep_task_3(event_loop);
   co_await std::move(to_wait_4);
-  fprintf(stderr, "%s 3\n", __FUNCTION__);
 
   event_loop.stop();
+  co_return 3;
 }
 
 TEST_CASE("libuv coroutine take 2", "[converter]")
 {
   points::converter::thread_pool_t thread_pool(1);
   points::converter::event_loop_t event_loop(thread_pool);
-  event_loop.run_in_loop(
-    [&event_loop]
-    {
-      fprintf(stderr, "calling sleep_task 1\n");
-      sleep_task(event_loop);
-      fprintf(stderr, "calling sleep_task 2\n");
-    });
+  event_loop.run_in_loop([&event_loop] { sleep_task(event_loop); });
   event_loop.run();
 }
