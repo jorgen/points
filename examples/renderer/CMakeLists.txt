@@ -1,4 +1,3 @@
-include(BuildExternalTargetLinkLibrary)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 configure_file(${imgui_SOURCE_DIR}/misc/fonts/Cousine-Regular.ttf ${CMAKE_CURRENT_SOURCE_DIR}/fonts/Cousine-Regular.ttf COPYONLY)
@@ -53,7 +52,12 @@ cmrc_add_resource_library(renderer_example_textures ALIAS renderer_example::text
         textures/top.jpg
 )
 
-BuildExternalTargetLinkLibrary(renderer_example PRIVATE points_render points_converter fmt glm renderer_example::shaders renderer_example::fonts renderer_example::textures SDL3::SDL3 SDL3::SDL3main)
+set(_renderer_example_deps points_render points_converter fmt glm renderer_example::shaders renderer_example::fonts renderer_example::textures SDL3::SDL3)
+if(TARGET SDL3::SDL3main)
+    list(APPEND _renderer_example_deps SDL3::SDL3main)
+endif()
+CmDepBuildExternalTargetLinkLibrary(renderer_example PRIVATE ${_renderer_example_deps})
 copy_dll_for_target(renderer_example points_render points_converter points_common SDL3::SDL3)
 setWarningFlagsForTarget(renderer_example)
+target_compile_options(renderer_example PRIVATE -Wno-language-extension-token)
 set_example_properties(renderer_example)

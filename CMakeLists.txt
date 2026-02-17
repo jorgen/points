@@ -8,6 +8,14 @@ project(Points VERSION 0.0.1)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 
+include(FetchContent)
+FetchContent_Declare(cmake-dep
+    GIT_REPOSITORY https://github.com/jorgen/cmake-dep.git
+    GIT_TAG 2667e3f
+)
+FetchContent_MakeAvailable(cmake-dep)
+list(APPEND CMAKE_MODULE_PATH "${cmake-dep_SOURCE_DIR}/cmake")
+include(CmDepMain)
 
 include(GNUInstallDirs)
 include(GenerateExportHeader)
@@ -55,8 +63,9 @@ find_package(Threads)
 
 include(CMake/SetWarnings.cmake)
 
-include(CMake/Fetch3rdParty.cmake)
-Fetch3rdParty()
+set(CMDEP_3RD_PARTY_PACKAGES_FILE "${CMAKE_CURRENT_SOURCE_DIR}/CMake/3rdPartyPackages.cmake")
+CmDepFetch3rdParty()
+
 include(CMake/Build3rdParty.cmake)
 Build3rdParty()
 include(CMake/AddSystemHeadersToTarget.cmake)

@@ -1,4 +1,3 @@
-include(BuildExternalTargetLinkLibrary)
 
 set(public_headers
         points/converter/export.h
@@ -52,7 +51,7 @@ set(sources
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
 target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio)
-BuildExternalTargetLinkLibrary(points_converter_objects PRIVATE laszip::api)
+CmDepBuildExternalTargetLinkLibrary(points_converter_objects PRIVATE laszip::api)
 target_include_directories(points_converter_objects
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -80,4 +79,4 @@ endif ()
 add_library(points_converter empty_dylib_function.cpp $<TARGET_OBJECTS:points_converter_objects>)
 #target_compile_options(points_converter PRIVATE -fsanitize=address)
 #target_link_options(points_converter PRIVATE -fsanitize=address)
-BuildExternalTargetLinkLibrary(points_converter PUBLIC points_converter_objects)
+CmDepBuildExternalTargetLinkLibrary(points_converter PUBLIC points_converter_objects)
