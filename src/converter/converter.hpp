@@ -35,16 +35,10 @@ struct converter_t
   {
     processor.set_converter_callbacks(laszip_callbacks());
     if (error.code != 0)
-    {
-      fmt::print(stderr, "Failed to open cache file: {}\n", error.msg);
-      exit(1);
-    }
+      return;
     error = processor.upgrade_to_write(semantics == converter_open_file_semantics_t::open_file_semantics_truncate);
     if (error.code != 0)
-    {
-      fmt::print(stderr, "Failed to make file writable: {}\n", error.msg);
-      exit(1);
-    }
+      return;
     processor.set_pre_init_tree_node_limit(100000);
     processor.set_pre_init_tree_config({0.00025, {-10000, -10000, -10000}});
   }

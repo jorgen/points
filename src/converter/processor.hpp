@@ -74,6 +74,11 @@ public:
 
   void about_to_block() override;
 
+  bool has_errors() const
+  {
+    return _has_errors;
+  }
+
   storage_handler_t &storage_handler()
   {
     return _storage_handler;
@@ -92,6 +97,7 @@ private:
   vio::event_loop_t &_event_loop;
 
   bool _generating_lod;
+  bool _has_errors;
 
   bool _idle;
   int _new_file_events_sent;

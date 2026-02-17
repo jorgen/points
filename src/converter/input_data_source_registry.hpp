@@ -80,6 +80,7 @@ public:
   void handle_points_written(input_data_id_t id, std::vector<storage_location_t> &&location);
   void handle_reading_done(input_data_id_t id);
   void handle_tree_done_with_input(input_data_id_t id);
+  void handle_file_failed(input_data_id_t id);
   bool all_inserted_into_tree() const;
 
   std::optional<input_data_next_input_t> next_input_to_process();

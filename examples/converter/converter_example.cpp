@@ -83,7 +83,18 @@ int main(int argc, char **argv)
   std::vector<points::converter::str_buffer> input_str_buf(args.input.size());
   std::transform(args.input.begin(), args.input.end(), input_str_buf.begin(), [](const std::string &str) -> points::converter::str_buffer { return {str.c_str(), static_cast<uint32_t>(str.size())}; });
 
-  auto converter = create_unique_ptr(points::converter::converter_create(args.output.data(), args.output.size(), points::converter::open_file_semantics_truncate), &points::converter::converter_destroy);
+  points::error_t *create_error = nullptr;
+  auto converter = create_unique_ptr(points::converter::converter_create(args.output.data(), args.output.size(), points::converter::open_file_semantics_truncate, &create_error), &points::converter::converter_destroy);
+  if (!converter)
+  {
+    if (create_error)
+    {
+      auto error_str = get_error_string(create_error);
+      fmt::print(stderr, "Failed to create converter: {}\n", error_str);
+      points::error_destroy(create_error);
+    }
+    return 1;
+  }
   points::converter::converter_runtime_callbacks_t runtime_callbacks = {&converter_progress_callback_t, &converter_warning_callback_t, &converter_error_callback_t, &converter_done_callback_t};
   points::converter::converter_set_runtime_callbacks(converter.get(), runtime_callbacks, nullptr);
   points::converter::converter_add_data_file(converter.get(), input_str_buf.data(), int(input_str_buf.size()));
