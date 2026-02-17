@@ -20,7 +20,6 @@
 #include "input_header.hpp"
 #include "morton.hpp"
 #include "sorter.hpp"
-#include "threaded_event_loop.hpp"
 
 #include <fmt/printf.h>
 
@@ -31,8 +30,8 @@
 namespace points::converter
 {
 get_data_worker_t::get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, const get_points_file_t &file,
-                                     event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, event_pipe_t<input_data_id_t> &sub_added,
-                                     event_pipe_t<unsorted_points_event_t> &unsorted_points_queue)
+                                     vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added,
+                                     vio::event_pipe_t<unsorted_points_event_t> &unsorted_points_queue)
   : point_reader_file(point_reader_file)
   , attribute_configs(attribute_configs)
   , input_init_pipe(input_init_pipe)
@@ -149,10 +148,11 @@ void sort_worker_t::after_work(completion_t completion)
   reader_file.sorted_points_pipe.post_event(std::make_pair(std::move(points), std::move(error)));
 }
 
-point_reader_t::point_reader_t(event_loop_t &event_loop, attributes_configs_t &attributes_configs, event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,
-                               event_pipe_t<input_data_id_t> &sub_added, event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, event_pipe_t<input_data_id_t> &done_with_file,
-                               event_pipe_t<file_error_t> &file_errors)
+point_reader_t::point_reader_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,
+                               vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, vio::event_pipe_t<input_data_id_t> &done_with_file,
+                               vio::event_pipe_t<file_error_t> &file_errors)
   : _event_loop(event_loop)
+  , _thread_pool(thread_pool)
   , _attributes_configs(attributes_configs)
   , _input_init_pipe(input_init_pipe)
   , _sub_added(sub_added)
@@ -193,7 +193,7 @@ void point_reader_t::about_to_block()
 
 void point_reader_t::handle_new_files(tree_config_t &&tree_config, get_points_file_t &&new_file)
 {
-  _point_reader_files.emplace_back(new point_reader_file_t(tree_config, _event_loop, _attributes_configs, new_file, _input_init_pipe, _sub_added, _unsorted_points, _sorted_points_pipe));
+  _point_reader_files.emplace_back(new point_reader_file_t(tree_config, _event_loop, _thread_pool, _attributes_configs, new_file, _input_init_pipe, _sub_added, _unsorted_points, _sorted_points_pipe));
 }
 
 void point_reader_t::handle_unsorted_points(unsorted_points_event_t &&unsorted_points)
@@ -201,7 +201,7 @@ void point_reader_t::handle_unsorted_points(unsorted_points_event_t &&unsorted_p
   auto &tree_config = unsorted_points.reader_file.tree_config;
   auto &reader_file = unsorted_points.reader_file;
   unsorted_points.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_config, reader_file, _attributes_configs, unsorted_points.public_header, std::move(unsorted_points.points)));
-  unsorted_points.reader_file.sort_workers.back()->enqueue(unsorted_points.reader_file.event_loop);
+  unsorted_points.reader_file.sort_workers.back()->enqueue(unsorted_points.reader_file.event_loop, unsorted_points.reader_file.thread_pool);
 }
 
 } // namespace points::converter

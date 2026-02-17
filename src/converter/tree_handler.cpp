@@ -25,8 +25,9 @@
 
 namespace points::converter
 {
-tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_with_input)
-  : _event_loop_thread(thread_pool)
+tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, vio::event_pipe_t<input_data_id_t> &done_with_input)
+  : _thread_pool(thread_pool)
+  , _event_loop_thread()
   , _event_loop(_event_loop_thread.event_loop())
   , _initialized(false)
   , _configuration_initialized(false)
@@ -35,7 +36,7 @@ tree_handler_t::tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &fi
   , _first_root_initialized(false)
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
-  , _tree_lod_generator(_event_loop, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
+  , _tree_lod_generator(_event_loop, _thread_pool, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
   , add_points(_event_loop, bind(&tree_handler_t::handle_add_points))
   , walk_tree(_event_loop, bind(&tree_handler_t::handle_walk_tree))
   , _serialize_trees(_event_loop, bind(&tree_handler_t::handle_serialize_trees))

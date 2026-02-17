@@ -20,8 +20,6 @@
 #include "conversion_types.hpp"
 #include "converter.hpp"
 
-#include "threaded_event_loop.hpp"
-
 #include "morton_tree_coordinate_transform.hpp"
 
 #include <algorithm>
@@ -35,7 +33,7 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
   , _runtime_callbacks({})
   , _runtime_callback_user_ptr(nullptr)
   , _convert_callbacks({})
-  , _thread_with_event_loop(_thread_pool)
+  , _thread_with_event_loop()
   , _event_loop(_thread_with_event_loop.event_loop())
   , _generating_lod(false)
   , _idle(true)
@@ -53,9 +51,9 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
   , _storage_index_write_done(_event_loop, bind(&processor_t::handle_index_write_done))
   , _storage_handler_error(_event_loop, bind(&processor_t::handle_storage_error))
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
-  , _input_event_loop_thread(_thread_pool)
+  , _input_event_loop_thread()
   , _input_event_loop(_input_event_loop_thread.event_loop())
-  , _point_reader(_input_event_loop, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
+  , _point_reader(_input_event_loop, _thread_pool, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _read_sort_budget(uint64_t(1) << 30)
   , _read_sort_active_approximate_size(0)
 {
@@ -169,7 +167,7 @@ void processor_t::handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>
   {
     auto input_ref = _input_data_source_registry.register_file(std::move(new_file.first), new_file.second);
     _pre_init_info_workers.emplace_back(new get_pre_init_info_worker_t(tree_config, input_ref.input_id, input_ref.name, _convert_callbacks, _pre_init_info_file_result, _pre_init_file_errors));
-    _pre_init_info_workers.back()->enqueue(_event_loop);
+    _pre_init_info_workers.back()->enqueue(_event_loop, _thread_pool);
   }
   std::unique_lock<std::mutex> lock(_idle_mutex);
   _new_file_events_sent--;

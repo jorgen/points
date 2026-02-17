@@ -17,12 +17,14 @@
 ************************************************************************/
 #pragma once
 
+#include <vio/event_loop.h>
+#include <vio/event_pipe.h>
+#include <vio/thread_pool.h>
+
 #include "attributes_configs.hpp"
 #include "blob_manager.hpp"
 #include "conversion_types.hpp"
 #include "error.hpp"
-#include "event_pipe.hpp"
-#include "threaded_event_loop.hpp"
 #include "tree.hpp"
 #include <ankerl/unordered_dense.h>
 
@@ -98,7 +100,7 @@ struct read_request_t : storage_handler_request_t
 class storage_handler_t
 {
 public:
-  storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<void> &index_written, event_pipe_t<error_t> &storage_error_pipe, error_t &error);
+  storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, vio::event_pipe_t<void> &index_written, vio::event_pipe_t<error_t> &storage_error_pipe, error_t &error);
   ~storage_handler_t();
   [[nodiscard]] bool file_exists() const
   {
@@ -135,8 +137,8 @@ private:
   std::shared_ptr<storage_handler_request_t> handle_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location, std::function<void(const storage_handler_request_t &)> done_callback);
 
   std::string _file_name;
-  thread_with_event_loop_t _event_loop_thread;
-  event_loop_t &_event_loop;
+  vio::thread_with_event_loop_t _event_loop_thread;
+  vio::event_loop_t &_event_loop;
   uv_file _file_handle;
   std::atomic_bool _file_opened;
   std::atomic_bool _file_exists;
@@ -149,13 +151,13 @@ private:
   storage_location_t attributes_location;
   storage_location_t blobs_location;
 
-  event_pipe_t<void> &_index_written;
-  event_pipe_t<error_t> &_storage_error;
-  event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>>> _write_event_pipe;
-  event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>>> _write_trees_pipe;
-  event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, error_t &&error)>> _write_tree_registry_pipe;
-  event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(error_t &&error)>> _write_blob_locations_and_update_header_pipe;
-  event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;
+  vio::event_pipe_t<void> &_index_written;
+  vio::event_pipe_t<error_t> &_storage_error;
+  vio::event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>>> _write_event_pipe;
+  vio::event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>>> _write_trees_pipe;
+  vio::event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, error_t &&error)>> _write_tree_registry_pipe;
+  vio::event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(error_t &&error)>> _write_blob_locations_and_update_header_pipe;
+  vio::event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;
 
   std::mutex _mutex;
 

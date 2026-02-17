@@ -17,7 +17,10 @@
 ************************************************************************/
 #pragma once
 
-#include "threaded_event_loop.hpp"
+#include <vio/event_loop.h>
+#include <vio/event_pipe.h>
+#include <vio/thread_pool.h>
+
 #include "tree.hpp"
 #include "tree_lod_generator.hpp"
 
@@ -31,10 +34,10 @@ struct waiting_for_root_t
 
 class frustum_tree_walker_t;
 
-class tree_handler_t : public about_to_block_t
+class tree_handler_t : public vio::about_to_block_t
 {
 public:
-  tree_handler_t(thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<input_data_id_t> &done_input);
+  tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, vio::event_pipe_t<input_data_id_t> &done_input);
   [[nodiscard]] error_t deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size);
   void request_root();
   void set_tree_initialization_config(const tree_config_t &config);
@@ -65,8 +68,9 @@ private:
     _tree_registry.tree_config = _pre_init_tree_config;
   }
 
-  thread_with_event_loop_t _event_loop_thread;
-  event_loop_t &_event_loop;
+  vio::thread_pool_t &_thread_pool;
+  vio::thread_with_event_loop_t _event_loop_thread;
+  vio::event_loop_t &_event_loop;
   std::mutex _configuration_mutex;
   bool _initialized;
   bool _configuration_initialized;
@@ -88,14 +92,14 @@ private:
   std::vector<std::function<void()>> _tree_deserialized_callbacks;
 
 public:
-  event_pipe_t<storage_header_t, attributes_id_t, std::vector<storage_location_t>> add_points;
-  event_pipe_t<std::shared_ptr<frustum_tree_walker_t>> walk_tree;
-  event_pipe_t<void> _serialize_trees;
-  event_pipe_t<std::vector<tree_id_t>, std::vector<storage_location_t>, error_t> _serialize_trees_done;
-  event_pipe_t<tree_id_t, serialized_tree_t> _deserialize_tree;
-  event_pipe_t<input_data_id_t> &_done_with_input;
-  event_pipe_t<std::function<void(double *, double *)>> _request_aabb;
-  event_pipe_t<void> _request_root;
+  vio::event_pipe_t<storage_header_t, attributes_id_t, std::vector<storage_location_t>> add_points;
+  vio::event_pipe_t<std::shared_ptr<frustum_tree_walker_t>> walk_tree;
+  vio::event_pipe_t<void> _serialize_trees;
+  vio::event_pipe_t<std::vector<tree_id_t>, std::vector<storage_location_t>, error_t> _serialize_trees_done;
+  vio::event_pipe_t<tree_id_t, serialized_tree_t> _deserialize_tree;
+  vio::event_pipe_t<input_data_id_t> &_done_with_input;
+  vio::event_pipe_t<std::function<void(double *, double *)>> _request_aabb;
+  vio::event_pipe_t<void> _request_root;
 
 private:
 };

@@ -20,7 +20,6 @@
 //
 
 #include "input_storage_map.hpp"
-#include "awaitable_event_pipe.hpp"
 #include "memory_writer.hpp"
 
 namespace points::converter
