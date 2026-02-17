@@ -36,6 +36,7 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
   , _thread_with_event_loop()
   , _event_loop(_thread_with_event_loop.event_loop())
   , _generating_lod(false)
+  , _has_errors(false)
   , _idle(true)
   , _new_file_events_sent(0)
   , _storage_handler(_url, _thread_pool, _attributes_configs, _storage_index_write_done, _storage_handler_error, error)
@@ -185,6 +186,10 @@ void processor_t::handle_file_errors_headers(file_error_t &&error)
 {
   assert(std::count_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == error.input_id; }) == 1);
   _pre_init_info_workers.erase(std::find_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == error.input_id; }));
+  _input_data_source_registry.handle_file_failed(error.input_id);
+  _has_errors = true;
+  if (_runtime_callbacks.error)
+    _runtime_callbacks.error(_runtime_callback_user_ptr, &error.error);
 }
 
 void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t> &&event)
@@ -205,9 +210,11 @@ void processor_t::handle_sorted_points(std::pair<points_t, error_t> &&event)
     [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations, const error_t &) { this->handle_points_written(header, attributes, std::move(locations)); });
 }
 
-void processor_t::handle_file_errors(file_error_t &&errors)
+void processor_t::handle_file_errors(file_error_t &&error)
 {
-  (void)errors;
+  _has_errors = true;
+  if (_runtime_callbacks.error)
+    _runtime_callbacks.error(_runtime_callback_user_ptr, &error.error);
 }
 
 void processor_t::handle_file_reading_done(input_data_id_t &&file)
@@ -225,9 +232,11 @@ void processor_t::handle_index_write_done()
   }
 }
 
-void processor_t::handle_storage_error(error_t &&errors)
+void processor_t::handle_storage_error(error_t &&error)
 {
-  fmt::print(stderr, "File error {} {}\n", errors.code, errors.msg);
+  _has_errors = true;
+  if (_runtime_callbacks.error)
+    _runtime_callbacks.error(_runtime_callback_user_ptr, &error);
 }
 
 void processor_t::handle_points_written(const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations)
@@ -244,6 +253,8 @@ void processor_t::handle_points_written(const storage_header_t &header, attribut
 void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
 {
   _input_data_source_registry.handle_tree_done_with_input(event);
+  if (_generating_lod)
+    return;
   auto min = _input_data_source_registry.get_done_morton();
   if (min)
   {

@@ -144,7 +144,7 @@ enum converter_open_file_semantics_t
 };
 
 struct converter_t;
-POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size, enum converter_open_file_semantics_t open_file_semantics);
+POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size, enum converter_open_file_semantics_t open_file_semantics, struct error_t **error);
 
 POINTS_CONVERTER_EXPORT void converter_destroy(converter_t *destroy);
 
@@ -156,7 +156,7 @@ POINTS_CONVERTER_EXPORT void converter_add_data_file(converter_t *converter, str
 
 POINTS_CONVERTER_EXPORT void converter_wait_idle(converter_t *converter);
 
-POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter_t *converter, error_t **errors, size_t *error_count);
+POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter_t *converter);
 } // namespace converter
 } // namespace points
 #ifdef __cplusplus

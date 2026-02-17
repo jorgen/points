@@ -26,9 +26,21 @@
 
 namespace points::converter
 {
-struct converter_t *converter_create(const char *url, uint64_t url_size, enum converter_open_file_semantics_t semantics)
+struct converter_t *converter_create(const char *url, uint64_t url_size, enum converter_open_file_semantics_t semantics, error_t **error)
 {
-  return new converter_t(url, url_size, semantics);
+  auto *converter = new converter_t(url, url_size, semantics);
+  if (converter->error.code != 0)
+  {
+    if (error)
+    {
+      *error = new error_t();
+      (*error)->code = converter->error.code;
+      (*error)->msg = converter->error.msg;
+    }
+    delete converter;
+    return nullptr;
+  }
+  return converter;
 }
 
 void converter_destroy(converter_t *destroy)
@@ -69,6 +81,8 @@ void converter_wait_idle(converter_t *converter)
 
 converter_conversion_status_t converter_status(converter_t *converter)
 {
+  if (converter->processor.has_errors())
+    return conversion_status_error;
   return converter->status;
 }
 

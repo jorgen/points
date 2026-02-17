@@ -117,6 +117,15 @@ void input_data_source_registry_t::handle_reading_done(input_data_id_t id)
   _input_data_id_done_count++;
 }
 
+void input_data_source_registry_t::handle_file_failed(input_data_id_t id)
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  auto &item = get_item(id, _registry);
+  item.read_started = true;
+  item.read_finished = true;
+  _input_data_id_done_count++;
+}
+
 void input_data_source_registry_t::handle_tree_done_with_input(input_data_id_t id)
 {
   std::unique_lock<std::mutex> lock(_mutex);
