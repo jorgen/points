@@ -50,16 +50,11 @@ TEST_CASE("Check_Frustum_AABB_Culling", "[render]")
   frustum.update(camera->projection * camera->view);
   REQUIRE(frustum.test_aabb(aabb_min, aabb_max) == points::render::frustum_intersection_t::inside);
 
-  glm::dvec3 pos(camera->view[3]);
-  glm::dmat4 origin_view = glm::translate(camera->view, pos * -1.0);
-  glm::dmat4 rotated80 = glm::rotate(origin_view, points::render::to_radians(80.0), glm::dvec3(0.0, 1.0, 0.0));
-  glm::dmat4 rotated80View = glm::translate(rotated80, pos);
-
-  frustum.update(camera->projection * rotated80View);
+  glm::dmat4 rot25 = glm::rotate(glm::dmat4(1.0), points::render::to_radians(25.0), glm::dvec3(0.0, 1.0, 0.0));
+  frustum.update(camera->projection * rot25 * camera->view);
   REQUIRE(frustum.test_aabb(aabb_min, aabb_max) == points::render::frustum_intersection_t::intersects);
 
-  glm::dmat4 rotated130 = glm::rotate(origin_view, points::render::to_radians(130.0), glm::dvec3(0.0, 1.0, 0.0));
-  glm::dmat4 rotated130View = glm::translate(rotated130, pos);
-  frustum.update(camera->projection * rotated130View);
+  glm::dmat4 rot50 = glm::rotate(glm::dmat4(1.0), points::render::to_radians(50.0), glm::dvec3(0.0, 1.0, 0.0));
+  frustum.update(camera->projection * rot50 * camera->view);
   REQUIRE(frustum.test_aabb(aabb_min, aabb_max) == points::render::frustum_intersection_t::outside);
 }

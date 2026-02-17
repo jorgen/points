@@ -27,6 +27,7 @@ namespace points::converter
 void input_storage_map_t::add_storage(input_data_id_t id, attributes_id_t attributes_id, std::vector<storage_location_t> &&storage)
 {
   assert(storage.size());
+  assert(!_map.contains(id));
   auto &value = _map[id];
   value.attributes_id = attributes_id;
   value.storage = std::move(storage);
