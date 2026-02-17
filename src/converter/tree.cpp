@@ -350,16 +350,17 @@ static void insert_tree_in_tree(tree_registry_t &tree_registry, tree_id_t &paren
     else
     {
       node |= 1 << child_mask;
-      sub_tree_alloc_children(*parent, i + 1, parent->skips[i][current_skip] + node_skips);
+      int new_child_skip = parent->skips[i][current_skip] + node_skips;
+      sub_tree_alloc_children(*parent, i + 1, new_child_skip);
       sub_tree_increase_skips(*parent, i, current_skip);
       current_name = morton::morton_get_name(current_name, i + 1, child_mask);
-      parent->node_ids[i + 1][current_skip] = current_name;
+      parent->node_ids[i + 1][new_child_skip] = current_name;
 #ifndef NDEBUG
       morton::morton_set_child_mask(lod, child_mask, new_min);
-      parent->mins[i + 1][0] = new_min;
+      parent->mins[i + 1][new_child_skip] = new_min;
       assert((new_min.data[0] & 1) == 0);
 #endif
-      current_skip = parent->skips[i][0] + node_skips;
+      current_skip = new_child_skip;
     }
   }
 
@@ -409,7 +410,7 @@ tree_id_t tree_add_points(tree_registry_t &tree_registry, storage_handler_t &cac
   tree_id_t ret = tree_id;
   auto *tree = tree_registry.get(tree_id);
   // assert(validate_points_offset(header));
-  if (header.morton_min < tree->morton_min || header.morton_max >= tree->morton_max)
+  if (header.morton_min < tree->morton_min || header.morton_max > tree->morton_max)
   {
     ret = reparent_tree(tree_registry, tree_id, header.morton_min, header.morton_max);
     tree = tree_registry.get(ret);

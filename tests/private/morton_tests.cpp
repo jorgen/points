@@ -250,7 +250,7 @@ TEST_CASE("Morton 128 encode/decode x", "[converter]")
   morton::encode(pos,m);
 
   morton::morton128_t expected = {};
-  for (int i = 0; i < 128; i++)
+  for (int i = 0; i < 126; i++)
   {
     if (i % 3 == 0)
       expected.data[i / 64] |= uint64_t(1) << (i % 64);
@@ -259,13 +259,10 @@ TEST_CASE("Morton 128 encode/decode x", "[converter]")
   REQUIRE(m.data[0] == expected.data[0]);
   REQUIRE(m.data[1] == expected.data[1]);
 
-  constexpr uint64_t mask21 = (uint64_t(1) << 21) - 1;
-  constexpr uint64_t mask22 = (uint64_t(1) << 22) - 1;
-
   uint64_t outpos[3];
   morton::decode(m, outpos);
-  int xmask = 64 - (22 + 21);
-  int ymask = 64 - (21 + 22);
+  int xmask = 64 - (21 + 21);
+  int ymask = 64 - (21 + 21);
   int zmask = 64 - (21 + 21);
   REQUIRE(outpos[0] == (pos[0] << xmask) >> xmask);
   REQUIRE(outpos[1] == (pos[1] << ymask) >> ymask);
@@ -283,7 +280,7 @@ TEST_CASE("Morton 128 encode/decode y", "[converter]")
   morton::encode(pos,m);
 
   morton::morton128_t expected = {};
-  for (int i = 0; i < 128; i++)
+  for (int i = 0; i < 126; i++)
   {
     if (i % 3 == 1)
       expected.data[i / 64] |= uint64_t(1) << (i % 64);
@@ -294,8 +291,8 @@ TEST_CASE("Morton 128 encode/decode y", "[converter]")
 
   uint64_t outpos[3];
   morton::decode(m, outpos);
-  int xmask = 64 - (22 + 21);
-  int ymask = 64 - (21 + 22);
+  int xmask = 64 - (21 + 21);
+  int ymask = 64 - (21 + 21);
   int zmask = 64 - (21 + 21);
   REQUIRE(outpos[0] == (pos[0] << xmask) >> xmask);
   REQUIRE(outpos[1] == (pos[1] << ymask) >> ymask);
@@ -313,7 +310,7 @@ TEST_CASE("Morton 128 encode/decode z", "[converter]")
   morton::encode(pos,m);
 
   morton::morton128_t expected = {};
-  for (int i = 0; i < 128; i++)
+  for (int i = 0; i < 126; i++)
   {
     if (i % 3 == 2)
       expected.data[i / 64] |= uint64_t(1) << (i % 64);
@@ -322,13 +319,10 @@ TEST_CASE("Morton 128 encode/decode z", "[converter]")
   REQUIRE(m.data[0] == expected.data[0]);
   REQUIRE(m.data[1] == expected.data[1]);
 
-  constexpr uint64_t mask21 = (uint64_t(1) << 21) - 1;
-  constexpr uint64_t mask22 = (uint64_t(1) << 22) - 1;
-
   uint64_t outpos[3];
   morton::decode(m, outpos);
-  int xmask = 64 - (22 + 21);
-  int ymask = 64 - (21 + 22);
+  int xmask = 64 - (21 + 21);
+  int ymask = 64 - (21 + 21);
   int zmask = 64 - (21 + 21);
   REQUIRE(outpos[0] == (pos[0] << xmask) >> xmask);
   REQUIRE(outpos[1] == (pos[1] << ymask) >> ymask);
@@ -346,7 +340,7 @@ TEST_CASE("Morton 64 encode/decode x", "[converter]")
   morton::encode(pos,m);
 
   morton::morton64_t expected = {};
-  for (int i = 0; i < 64; i++)
+  for (int i = 0; i < 63; i++)
   {
     if (i % 3 == 0)
       expected.data[i / 64] |= uint64_t(1) << (i % 64);
@@ -357,9 +351,8 @@ TEST_CASE("Morton 64 encode/decode x", "[converter]")
   uint64_t outpos[3];
   morton::decode(m, outpos);
   constexpr uint32_t mask21 = (uint32_t(1) << 21) - 1;
-  constexpr uint32_t mask22 = (uint32_t(1) << 22) - 1;
   uint64_t expected_output[3];
-  expected_output[0] = (pos[0] & mask22);
+  expected_output[0] = (pos[0] & mask21);
   expected_output[1] = (pos[1] & mask21);
   expected_output[2] = (pos[2] & mask21);
 
@@ -390,9 +383,8 @@ TEST_CASE("Morton 64 encode/decode y", "[converter]")
   uint64_t outpos[3];
   morton::decode(m, outpos);
   constexpr uint32_t mask21 = (uint32_t(1) << 21) - 1;
-  constexpr uint32_t mask22 = (uint32_t(1) << 22) - 1;
   uint64_t expected_output[3];
-  expected_output[0] = (pos[0] & mask22);
+  expected_output[0] = (pos[0] & mask21);
   expected_output[1] = (pos[1] & mask21);
   expected_output[2] = (pos[2] & mask21);
 
@@ -423,9 +415,8 @@ TEST_CASE("Morton 64 encode/decode z", "[converter]")
   uint64_t outpos[3];
   morton::decode(m, outpos);
   constexpr uint32_t mask21 = (uint32_t(1) << 21) - 1;
-  constexpr uint32_t mask22 = (uint32_t(1) << 22) - 1;
   uint64_t expected_output[3];
-  expected_output[0] = (pos[0] & mask22);
+  expected_output[0] = (pos[0] & mask21);
   expected_output[1] = (pos[1] & mask21);
   expected_output[2] = (pos[2] & mask21);
 
@@ -445,7 +436,7 @@ TEST_CASE("Morton 32 encode/decode x", "[converter]")
   morton::encode(pos,m);
 
   morton::morton32_t expected = {};
-  for (int i = 0; i < 32; i++)
+  for (int i = 0; i < 30; i++)
   {
     if (i % 3 == 0)
       expected.data[i / 32] |= uint32_t(1) << (i % 32);
@@ -456,10 +447,9 @@ TEST_CASE("Morton 32 encode/decode x", "[converter]")
   uint64_t outpos[3];
   morton::decode(m, outpos);
   uint64_t expected_output[3];
-  constexpr uint64_t mask11 = (uint64_t(1) << 11) - 1;
   constexpr uint64_t mask10 = (uint64_t(1) << 10) - 1;
-  expected_output[0] = pos[0] & mask11;
-  expected_output[1] = pos[1] & mask11;
+  expected_output[0] = pos[0] & mask10;
+  expected_output[1] = pos[1] & mask10;
   expected_output[2] = pos[2] & mask10;
 
   REQUIRE(outpos[0] == expected_output[0]);
@@ -478,7 +468,7 @@ TEST_CASE("Morton 32 encode/decode y", "[converter]")
   morton::encode(pos,m);
 
   morton::morton32_t expected = {};
-  for (int i = 0; i < 32; i++)
+  for (int i = 0; i < 30; i++)
   {
     if (i % 3 == 1)
       expected.data[i / 32] |= uint32_t(1) << (i % 32);
@@ -489,10 +479,9 @@ TEST_CASE("Morton 32 encode/decode y", "[converter]")
   uint64_t outpos[3];
   morton::decode(m, outpos);
   uint64_t expected_output[3];
-  constexpr uint64_t mask11 = (uint64_t(1) << 11) - 1;
   constexpr uint64_t mask10 = (uint64_t(1) << 10) - 1;
-  expected_output[0] = pos[0] & mask11;
-  expected_output[1] = pos[1] & mask11;
+  expected_output[0] = pos[0] & mask10;
+  expected_output[1] = pos[1] & mask10;
   expected_output[2] = pos[2] & mask10;
 
   REQUIRE(outpos[0] == expected_output[0]);
@@ -511,7 +500,7 @@ TEST_CASE("Morton 32 encode/decode z", "[converter]")
   morton::encode(pos,m);
 
   morton::morton32_t expected = {};
-  for (int i = 0; i < 32; i++)
+  for (int i = 0; i < 30; i++)
   {
     if (i % 3 == 2)
       expected.data[i / 32] |= uint32_t(1) << (i % 32);
@@ -522,10 +511,9 @@ TEST_CASE("Morton 32 encode/decode z", "[converter]")
   uint64_t outpos[3];
   morton::decode(m, outpos);
   uint64_t expected_output[3];
-  constexpr uint64_t mask11 = (uint64_t(1) << 11) - 1;
   constexpr uint64_t mask10 = (uint64_t(1) << 10) - 1;
-  expected_output[0] = pos[0] & mask11;
-  expected_output[1] = pos[1] & mask11;
+  expected_output[0] = pos[0] & mask10;
+  expected_output[1] = pos[1] & mask10;
   expected_output[2] = pos[2] & mask10;
 
   REQUIRE(outpos[0] == expected_output[0]);
