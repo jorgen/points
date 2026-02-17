@@ -22,7 +22,6 @@
 #include "morton.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 #include "storage_handler.hpp"
-#include "worker.hpp"
 
 #include <fixed_size_vector.hpp>
 #include <fmt/printf.h>
@@ -887,7 +886,7 @@ static void adjust_tree_after_lod(tree_registry_t &tree_cache, std::vector<lod_t
 }
 
 static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, tree_registry_t &tree_cache, storage_handler_t &cache_file,
-                          attributes_configs_t &attributes_configs, event_loop_t &loop)
+                          attributes_configs_t &attributes_configs, vio::event_loop_t &loop, vio::thread_pool_t &pool)
 {
   if (!batch.new_batch)
     adjust_tree_after_lod(tree_cache, batch.worker_data, batch.level);
@@ -920,18 +919,19 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
       assert(!node.child_data.empty());
       get_storage_info(tree_cache, node);
       auto &lod_worker = batch.lod_workers.emplace_back(lod_generator, batch, cache_file, attributes_configs, node, random_offsets);
-      lod_worker.enqueue(loop);
+      lod_worker.enqueue(loop, pool);
     }
   }
 }
 
-tree_lod_generator_t::tree_lod_generator_t(event_loop_t &loop, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, event_pipe_t<void> &lod_done)
+tree_lod_generator_t::tree_lod_generator_t(vio::event_loop_t &loop, vio::thread_pool_t &thread_pool, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, vio::event_pipe_t<void> &lod_done)
   : _loop(loop)
+  , _thread_pool(thread_pool)
   , _tree_cache(tree_cache)
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
   , _lod_done(lod_done)
-  , _iterate_workers(_loop, event_bind_t::bind(*this, &tree_lod_generator_t::iterate_workers))
+  , _iterate_workers(_loop, vio::event_bind_t::bind(*this, &tree_lod_generator_t::iterate_workers))
 {
   _random_offsets.resize(256);
   std::mt19937 gen(4244);
@@ -985,7 +985,7 @@ void tree_lod_generator_t::iterate_workers()
     _lod_batches.pop_front();
   }
   if (!_lod_batches.empty() && (_lod_batches.front()->new_batch || _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size())))
-    iterate_batch(_random_offsets, *this, *_lod_batches.front(), _tree_cache, _file_cache, _attributes_configs, _loop);
+    iterate_batch(_random_offsets, *this, *_lod_batches.front(), _tree_cache, _file_cache, _attributes_configs, _loop, _thread_pool);
   if (_lod_batches.empty())
   {
     _lod_done.post_event();

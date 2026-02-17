@@ -17,11 +17,12 @@
 ************************************************************************/
 #pragma once
 
+#include <vio/event_pipe.h>
+#include <vio/worker.h>
+
 #include "conversion_types.hpp"
 #include "error.hpp"
-#include "event_pipe.hpp"
 #include "input_header.hpp"
-#include "worker.hpp"
 
 namespace points::converter
 {
@@ -40,10 +41,10 @@ struct pre_init_info_file_result_t
   bool found_min;
 };
 
-struct get_pre_init_info_worker_t : worker_t
+struct get_pre_init_info_worker_t : vio::worker_t
 {
   get_pre_init_info_worker_t(const tree_config_t &tree_config, input_data_id_t input_id, const input_name_ref_t &file_name, converter_file_convert_callbacks_t &convert_callbacks,
-                             event_pipe_t<pre_init_info_file_result_t> &pre_init_for_file, event_pipe_t<file_error_t> &file_errors);
+                             vio::event_pipe_t<pre_init_info_file_result_t> &pre_init_for_file, vio::event_pipe_t<file_error_t> &file_errors);
   void work() override;
   void after_work(completion_t completion) override;
 
@@ -51,8 +52,8 @@ struct get_pre_init_info_worker_t : worker_t
   input_data_id_t input_id;
   input_name_ref_t file_name;
   converter_file_convert_callbacks_t &converter_callbacks;
-  event_pipe_t<pre_init_info_file_result_t> &pre_init_info_file_result;
-  event_pipe_t<file_error_t> &file_errors;
+  vio::event_pipe_t<pre_init_info_file_result_t> &pre_init_info_file_result;
+  vio::event_pipe_t<file_error_t> &file_errors;
 
   std::unique_ptr<error_t> _error;
   file_error_t _file_error;

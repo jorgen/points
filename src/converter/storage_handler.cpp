@@ -17,8 +17,6 @@
 ************************************************************************/
 #include "storage_handler.hpp"
 
-#include "event_pipe.hpp"
-
 #include <uv.h>
 
 #include <fmt/printf.h>
@@ -127,7 +125,8 @@ void storage_handler_request_t::do_write(const std::shared_ptr<uint8_t[]> &data,
 
 read_request_t::read_request_t(storage_handler_t &storage, std::function<void(const storage_handler_request_t &)> done)
   : storage_handler_request_t(storage,
-                              [this, done_moved = std::move(done)](const storage_handler_request_t &request) {
+                              [this, done_moved = std::move(done)](const storage_handler_request_t &request)
+                              {
                                 (void)request;
                                 std::unique_lock<std::mutex> lock(this->_mutex);
                                 this->_done = true;
@@ -168,7 +167,7 @@ struct close_file_on_error_t
   error_t &error;
 };
 
-static std::unique_ptr<uint8_t[]> read_into_buffer(event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, error_t &error)
+static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, error_t &error)
 {
   assert(error.code == 0);
   auto buffer = std::make_unique<uint8_t[]>(location.size);
@@ -185,10 +184,10 @@ static std::unique_ptr<uint8_t[]> read_into_buffer(event_loop_t &event_loop, uv_
   return buffer;
 }
 
-storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, event_pipe_t<void> &index_written, event_pipe_t<error_t> &storage_error_pipe,
-                                     error_t &error)
+storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t & /*thread_pool*/, attributes_configs_t &attributes_configs, vio::event_pipe_t<void> &index_written,
+                                     vio::event_pipe_t<error_t> &storage_error_pipe, error_t &error)
   : _file_name(url)
-  , _event_loop_thread(thread_pool)
+  , _event_loop_thread()
   , _event_loop(_event_loop_thread.event_loop())
   , _file_handle(0)
   , _file_opened(false)
@@ -198,11 +197,11 @@ storage_handler_t::storage_handler_t(const std::string &url, thread_pool_t &thre
   , _serialized_index_size(128)
   , _index_written(index_written)
   , _storage_error(storage_error_pipe)
-  , _write_event_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_events))
-  , _write_trees_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_trees))
-  , _write_tree_registry_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_tree_registry))
-  , _write_blob_locations_and_update_header_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
-  , _read_request_pipe(_event_loop, event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
+  , _write_event_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_events))
+  , _write_trees_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_trees))
+  , _write_tree_registry_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_tree_registry))
+  , _write_blob_locations_and_update_header_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
+  , _read_request_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
 {
   uv_fs_t request = {};
   auto result = uv_fs_stat(_event_loop.loop(), &request, _file_name.c_str(), NULL);
@@ -408,7 +407,8 @@ void storage_handler_t::handle_write_events(
     location.offset = this->_blob_manager.register_blob(size).data;
 
     auto write_requests_prt = write_requests.get();
-    auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request) {
+    auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request)
+    {
       if (request.error.code != 0 && write_requests_prt->error.code == 0)
       {
         write_requests_prt->error = request.error;
@@ -446,7 +446,8 @@ void storage_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>, st
     free_blob_manager_t::blob_size_t size = {location.size};
     location.offset = this->_blob_manager.register_blob(size).data;
     auto write_requests_prt = write_requests.get();
-    auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request) {
+    auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request)
+    {
       if (request.error.code != 0 && write_requests_prt->error.code == 0)
       {
         write_requests_prt->error = request.error;
@@ -477,7 +478,8 @@ void storage_handler_t::handle_write_tree_registry(serialized_tree_registry_t &&
   free_blob_manager_t::blob_size_t size = {location.size};
   location.offset = this->_blob_manager.register_blob(size).data;
   auto write_requests_prt = write_requests.get();
-  auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request) {
+  auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request)
+  {
     if (request.error.code != 0 && write_requests_prt->error.code == 0)
     {
       write_requests_prt->error = request.error;
@@ -551,7 +553,8 @@ void storage_handler_t::handle_write_blob_locations_and_update_header(storage_lo
   serialized_meta->new_blob_manager = std::move(new_blob_manager);
   serialized_meta->done = std::move(done);
 
-  auto request_handler = [this, new_tree_registry_location, serialized_meta](const storage_handler_request_t &request) mutable {
+  auto request_handler = [this, new_tree_registry_location, serialized_meta](const storage_handler_request_t &request) mutable
+  {
     error_t error;
     serialized_meta->serialized_count++;
     if (request.error.code != 0)
@@ -577,7 +580,8 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
                                            std::function<void(error_t &&error)> &&done)
 {
   auto serialized_index = serialize_index(_serialized_index_size, free_blobs, attribute_configs, tree_registry);
-  auto done_callback = [this, new_blob_manager_moved = std::move(new_blob_manager), free_blobs, attribute_configs, done_moved = std::move(done)](const storage_handler_request_t &request) mutable {
+  auto done_callback = [this, new_blob_manager_moved = std::move(new_blob_manager), free_blobs, attribute_configs, done_moved = std::move(done)](const storage_handler_request_t &request) mutable
+  {
     error_t error;
     fmt::print(stderr, "Write index done {}\n", request.error.code);
     if (request.error.code != 0)

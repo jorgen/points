@@ -25,15 +25,16 @@
 
 #include <points/converter/converter.h>
 
+#include <vio/event_loop.h>
+#include <vio/event_pipe.h>
+#include <vio/thread_pool.h>
+
 #include "attributes_configs.hpp"
 #include "conversion_types.hpp"
-#include "event_pipe.hpp"
 #include "input_data_source_registry.hpp"
 #include "pre_init_file_retriever.hpp"
 #include "reader.hpp"
 #include "storage_handler.hpp"
-#include "thread_pool.hpp"
-#include "threaded_event_loop.hpp"
 #include "tree_handler.hpp"
 
 namespace points::converter
@@ -53,7 +54,7 @@ enum class file_existence_requirement_t
 };
 
 class frustum_tree_walker_t;
-class processor_t : public about_to_block_t
+class processor_t : public vio::about_to_block_t
 {
 public:
   processor_t(std::string url, file_existence_requirement_t existence_requirement, error_t &error);
@@ -82,13 +83,13 @@ public:
 
 private:
   std::string _url;
-  thread_pool_t _thread_pool;
+  vio::thread_pool_t _thread_pool;
   converter_runtime_callbacks_t _runtime_callbacks;
   void *_runtime_callback_user_ptr;
   converter_file_convert_callbacks_t _convert_callbacks;
 
-  thread_with_event_loop_t _thread_with_event_loop;
-  event_loop_t &_event_loop;
+  vio::thread_with_event_loop_t _thread_with_event_loop;
+  vio::event_loop_t &_event_loop;
 
   bool _generating_lod;
 
@@ -102,24 +103,24 @@ private:
   attributes_configs_t _attributes_configs;
   tree_handler_t _tree_handler;
 
-  event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
+  vio::event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
 
-  event_pipe_t<pre_init_info_file_result_t> _pre_init_info_file_result;
-  event_pipe_t<file_error_t> _pre_init_file_errors;
+  vio::event_pipe_t<pre_init_info_file_result_t> _pre_init_info_file_result;
+  vio::event_pipe_t<file_error_t> _pre_init_file_errors;
   std::vector<std::unique_ptr<get_pre_init_info_worker_t>> _pre_init_info_workers;
 
-  event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> _input_init;
-  event_pipe_t<input_data_id_t> _sub_added;
-  event_pipe_t<std::pair<points_t, error_t>> _sorted_points;
-  event_pipe_t<file_error_t> _point_reader_file_errors;
-  event_pipe_t<input_data_id_t> _point_reader_done_with_file;
+  vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> _input_init;
+  vio::event_pipe_t<input_data_id_t> _sub_added;
+  vio::event_pipe_t<std::pair<points_t, error_t>> _sorted_points;
+  vio::event_pipe_t<file_error_t> _point_reader_file_errors;
+  vio::event_pipe_t<input_data_id_t> _point_reader_done_with_file;
 
-  event_pipe_t<void> _storage_index_write_done;
-  event_pipe_t<error_t> _storage_handler_error;
-  event_pipe_t<input_data_id_t> _tree_done_with_input;
+  vio::event_pipe_t<void> _storage_index_write_done;
+  vio::event_pipe_t<error_t> _storage_handler_error;
+  vio::event_pipe_t<input_data_id_t> _tree_done_with_input;
 
-  thread_with_event_loop_t _input_event_loop_thread;
-  event_loop_t &_input_event_loop;
+  vio::thread_with_event_loop_t _input_event_loop_thread;
+  vio::event_loop_t &_input_event_loop;
   point_reader_t _point_reader;
 
   int64_t _read_sort_budget;

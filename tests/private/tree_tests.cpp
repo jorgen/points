@@ -2,17 +2,19 @@
 #include <fmt/printf.h>
 #include <utility>
 
+#include <vio/event_loop.h>
+#include <vio/event_pipe.h>
+#include <vio/thread_pool.h>
+
 #include "conversion_types.hpp"
 #include "storage_handler.hpp"
 #include <attributes_configs.hpp>
-#include <event_pipe.hpp>
 #include <input_header.hpp>
 #include <morton.hpp>
 #include <morton_tree_coordinate_transform.hpp>
 #include <points/common/format.h>
 #include <points/converter/converter.h>
 #include <points/converter/default_attribute_names.h>
-#include <threaded_event_loop.hpp>
 #include <tree.hpp>
 
 namespace
@@ -37,11 +39,11 @@ struct write_done_event_t
   std::vector<points::converter::storage_location_t> locations;
 };
 
-struct tree_test_infrastructure : points::converter::about_to_block_t
+struct tree_test_infrastructure : vio::about_to_block_t
 {
   tree_test_infrastructure(uint32_t node_limit = 1000)
     : worker_thread_pool(4)
-    , event_loop_thread(worker_thread_pool)
+    , event_loop_thread()
     , event_loop(event_loop_thread.event_loop())
     , node_limit(node_limit)
     , tree_config(create_tree_config(0.001, 0.0))
@@ -93,15 +95,15 @@ struct tree_test_infrastructure : points::converter::about_to_block_t
   }
 
   points::error_t error;
-  points::converter::thread_pool_t worker_thread_pool;
-  points::converter::thread_with_event_loop_t event_loop_thread;
-  points::converter::event_loop_t &event_loop;
+  vio::thread_pool_t worker_thread_pool;
+  vio::thread_with_event_loop_t event_loop_thread;
+  vio::event_loop_t &event_loop;
   uint32_t node_limit;
   points::converter::tree_config_t tree_config;
   points::converter::tree_registry_t tree_registry;
   points::converter::attributes_configs_t attributes_config;
-  points::converter::event_pipe_t<void> index_written;
-  points::converter::event_pipe_t<points::error_t> cache_file_error;
+  vio::event_pipe_t<void> index_written;
+  vio::event_pipe_t<points::error_t> cache_file_error;
   points::converter::storage_handler_t cache_file_handler;
 
   bool write_done_state = false;

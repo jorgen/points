@@ -16,15 +16,13 @@ add_executable(private_interface_unit_tests
         private/converter_tests.cpp
         private/deque_map_test.cpp
         private/blob_manager_test.cpp
-        private/libuv_coroutine_test.cpp
-        private/libuv_coroutine_take_2.cpp
-        private/basic_coroutine_test.cpp
         $<TARGET_OBJECTS:points_common_objects>
         $<TARGET_OBJECTS:points_converter_objects>
         $<TARGET_OBJECTS:points_render_objects>
         private/frustum.cpp
 )
-BuildExternalTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm unordered_dense libuv::libuv laszip::api)
+target_link_libraries(private_interface_unit_tests PRIVATE vio)
+BuildExternalTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm unordered_dense laszip::api)
 target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
     #target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)
