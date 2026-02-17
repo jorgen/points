@@ -1,6 +1,3 @@
-include(BuildExternal)
-include(GetPackageInstallDir)
-
 macro(Build3rdParty)
     #list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/SDL2)
     #GetPackageInstallDir(SDL2_INSTALL_DIR sdl_build ${sdl_VERSION})
@@ -16,14 +13,8 @@ macro(Build3rdParty)
 
     add_subdirectory(${vio_SOURCE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vio_build")
 
-    if (WIN32)
-        list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/CURL)
-        GetPackageInstallDir(CURL_INSTALL_DIR curl_build ${curl_VERSION})
-        Find_Package(CURL REQUIRED)
-        BuildExternalCMake(curl_build ${curl_VERSION} ${curl_SOURCE_DIR} "-DBUILD_CURL_EXE=OFF;-DHTTP_ONLY=ON" "CURL::libcurl")
-    endif ()
     list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/laszip)
-    GetPackageInstallDir(LASZIP_INSTALL_DIR laszip_build ${laszip_VERSION})
+    CmDepGetPackageInstallDir(LASZIP_INSTALL_DIR laszip_build ${laszip_VERSION})
     Find_Package(laszip REQUIRED)
     # Patch laszip 3.5.0: it uses add_compile_options(-std=c++17) which wrongly
     # applies C++ flags to C files. Remove those lines since CMAKE_CXX_STANDARD 17
@@ -49,7 +40,7 @@ macro(Build3rdParty)
         # laszip_load_dll (which lack the LASZIP_API decorator) are visible.
         list(APPEND LASZIP_CMAKE_OPTIONS "-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON")
     endif ()
-    BuildExternalCMake(laszip_build ${laszip_VERSION} ${laszip_SOURCE_DIR} "${LASZIP_CMAKE_OPTIONS}" "laszip::api;laszip::impl")
+    CmDepBuildExternalCMake(laszip_build ${laszip_VERSION} ${laszip_SOURCE_DIR} "${LASZIP_CMAKE_OPTIONS}" "laszip::api;laszip::impl")
 
     set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)
