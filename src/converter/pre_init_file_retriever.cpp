@@ -35,6 +35,7 @@ get_pre_init_info_worker_t::get_pre_init_info_worker_t(const tree_config_t &tree
 
 void get_pre_init_info_worker_t::work()
 {
+
   error_t *local_error = nullptr;
   auto pre_init_info = converter_callbacks.pre_init(file_name.name, file_name.name_length, &local_error);
   if (local_error)

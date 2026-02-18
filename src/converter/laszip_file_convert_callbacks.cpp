@@ -29,18 +29,6 @@
 namespace points::converter
 {
 
-struct load_dll_t
-{
-  load_dll_t()
-  {
-#ifndef WIN32
-    laszip_load_dll();
-#endif
-  }
-};
-
-load_dll_t load_dll;
-
 struct laszip_handle_t
 {
   std::string filename;
@@ -339,9 +327,9 @@ template <size_t FORMAT>
 static void copy_point_for_format(buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert(false);
-  (void) buffers;
-  (void) i;
-  (void) point;
+  (void)buffers;
+  (void)i;
+  (void)point;
   // default should never be instansiated
 }
 
@@ -549,4 +537,3 @@ struct converter_file_convert_callbacks_t laszip_callbacks()
   return ret;
 }
 } // namespace points::converter
-
