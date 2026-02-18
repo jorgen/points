@@ -159,7 +159,7 @@ int main(int, char **)
   // input_files.push_back(make_str_buffer("D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-63.laz"));
   // input_files.push_back(make_str_buffer("/Users/jlind/Downloads/Palac_Moszna.laz"));
 
-  const char cache_file[] = "/Users/jlind/test.jlp";
+  const char cache_file[] = "C:/Users/jorge/out1.jlp";
   // auto converter = create_unique_ptr(flat_points::converter::converter_create(cache_file, sizeof(cache_file)), &flat_points::converter::converter_destroy);
   // flat_points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
 
@@ -205,7 +205,8 @@ int main(int, char **)
 
     aabb_callback_state_t state;
     std::unique_lock<std::mutex> lock(state.wait);
-    auto callback = [](double aabb_min[3], double aabb_max[3], void *user_ptr) {
+    auto callback = [](double aabb_min[3], double aabb_max[3], void *user_ptr)
+    {
       auto state = (aabb_callback_state_t *)user_ptr;
       memcpy(state->aabb_min, aabb_min, sizeof(state->aabb_min));
       memcpy(state->aabb_max, aabb_max, sizeof(state->aabb_max));

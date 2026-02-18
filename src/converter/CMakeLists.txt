@@ -51,7 +51,7 @@ set(sources
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
 target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio)
-CmDepBuildExternalTargetLinkLibrary(points_converter_objects PRIVATE laszip::api)
+CmDepBuildExternalTargetLinkLibrary(points_converter_objects PRIVATE laszip::impl)
 target_include_directories(points_converter_objects
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
