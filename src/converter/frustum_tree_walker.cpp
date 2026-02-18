@@ -24,12 +24,26 @@
 
 namespace points::converter
 {
-frustum_tree_walker_t::frustum_tree_walker_t(const glm::dmat4 view_perspective, int depth, std::vector<std::string> attribute_names)
+frustum_tree_walker_t::frustum_tree_walker_t(const glm::dmat4 view_perspective, lod_params_t lod_params, std::vector<std::string> attribute_names)
   : m_view_perspective(view_perspective)
-  , m_depth(depth)
+  , m_lod_params(lod_params)
   , m_attribute_names(std::move(attribute_names))
   , m_done(false)
 {
+}
+
+bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb)
+{
+  glm::dvec3 center = (aabb.min + aabb.max) * 0.5;
+  glm::dvec3 extent = aabb.max - aabb.min;
+  double node_size = glm::length(extent) * 0.5;
+
+  double distance = glm::length(center - params.camera_position);
+  if (distance < node_size)
+    distance = node_size;
+
+  double projected_size = params.projection[1][1] * params.screen_height * 0.5 * node_size / distance;
+  return projected_size > params.pixel_error_threshold;
 }
 
 bool frustum_tree_walker_t::done()
@@ -82,7 +96,7 @@ static node_aabb_t make_aabb_from_child_index(const node_aabb_t &parent, int chi
   return aabb;
 }
 
-static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, tree_id_t tree_id, int depth_left, frustum_tree_walker_t &walker)
+static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, tree_id_t tree_id, frustum_tree_walker_t &walker)
 {
   (void)attribute_index_map;
   (void)walker;
@@ -114,15 +128,17 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
   render::frustum_t frustum;
   frustum.update(walker.m_view_perspective);
   int lod = tree->magnitude * 5 + 5;
-  for (int depth = 0; depth < depth_left; depth++, current_buffer_index = !current_buffer_index, lod--)
+  constexpr int max_depth = 40;
+  for (int depth = 0; depth < max_depth; depth++, current_buffer_index = !current_buffer_index, lod--)
   {
+    if (alternating_possible_nodes[current_buffer_index].empty())
+      break;
     int current_depth_in_tree = depth % 5;
     alternating_possible_nodes[!current_buffer_index].clear();
     for (auto &possible_nodes : alternating_possible_nodes[current_buffer_index])
     {
       auto hit_test = possible_nodes.is_completely_inside_frustum ? render::frustum_intersection_t::inside : frustum.test_aabb(possible_nodes.aabbs.min, possible_nodes.aabbs.max);
-      if (hit_test == render::frustum_intersection_t::outside)
-        continue;
+      bool visible = (hit_test != render::frustum_intersection_t::outside);
       auto current_tree = possible_nodes.tree;
       auto node_name = current_tree->node_ids[current_depth_in_tree][possible_nodes.skip];
       node_id_t node_id = {current_tree->id, uint16_t(current_depth_in_tree), node_name};
@@ -152,6 +168,7 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
         to_add.lod = lod;
         to_add.node = node_id;
         to_add.aabb = possible_nodes.aabbs;
+        to_add.frustum_visible = visible;
         to_add.offset_in_subset = points.offset;
         to_add.point_count = points.count;
         to_add.input_id = points.input_id;
@@ -163,6 +180,9 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
           to_add.format[i] = attrib_index.format;
         }
       }
+
+      if (!visible || !should_subdivide(walker.m_lod_params, possible_nodes.aabbs))
+        continue;
 
       auto children = current_tree->nodes[current_depth_in_tree][possible_nodes.skip];
       int child_count = 0;
@@ -199,7 +219,7 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
 void tree_walk_in_handler_thread(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker)
 {
   auto root = tree_registry.root;
-  walk_tree(tree_handler, tree_registry, attribute_index_map, root, walker.m_depth, walker);
+  walk_tree(tree_handler, tree_registry, attribute_index_map, root, walker);
 
   std::unique_lock<std::mutex> lock(walker.m_mutex);
   walker.m_done = true;

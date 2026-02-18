@@ -52,6 +52,7 @@ struct converter_data_source_t
   converter_data_source_t(const std::string &url, render::callback_manager_t &callback_manager);
 
   void add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render);
+  void destroy_gpu_buffer(dyn_points_draw_buffer_t &buf);
 
   const std::string url;
   error_t error;
@@ -62,6 +63,13 @@ struct converter_data_source_t
   std::mutex mutex;
   std::string current_attribute_name;
   std::string next_attribute_name;
+
+  int viewport_width = 1920;
+  int viewport_height = 1080;
+  double pixel_error_threshold = 2.0;
+  size_t gpu_memory_budget = 512 * 1024 * 1024;
+  size_t gpu_memory_used = 0;
+  double effective_pixel_error_threshold = 2.0;
 
   std::shared_ptr<frustum_tree_walker_t> back_buffer;
 

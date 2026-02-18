@@ -64,6 +64,7 @@ struct tree_walker_data_t
   input_data_id_t input_id;
   point_format_t format[4];
   storage_location_t locations[4];
+  bool frustum_visible = true;
 };
 
 struct tree_walker_nodes_t
@@ -126,15 +127,23 @@ private:
   ankerl::unordered_dense::map<attributes_id_t, std::vector<attribute_index_t>, hash> m_map;
 };
 
+struct lod_params_t
+{
+  glm::dvec3 camera_position;
+  glm::dmat4 projection;
+  double screen_height;
+  double pixel_error_threshold;
+};
+
 class frustum_tree_walker_t
 {
 public:
-  frustum_tree_walker_t(glm::dmat4 view_perspective, int depth, std::vector<std::string> attribute_names);
+  frustum_tree_walker_t(glm::dmat4 view_perspective, lod_params_t lod_params, std::vector<std::string> attribute_names);
   bool done();
   void wait_done();
 
   glm::dmat4 m_view_perspective;
-  int m_depth;
+  lod_params_t m_lod_params;
   std::vector<std::string> m_attribute_names;
   std::mutex m_mutex;
   std::condition_variable m_wait;
@@ -142,6 +151,8 @@ public:
   double m_tree_offset[3];
   bool m_done;
 };
+
+bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb);
 
 void tree_walk_in_handler_thread(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker);
 

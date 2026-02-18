@@ -73,7 +73,8 @@ public:
   {
     std::unique_lock<std::mutex> lock(mutex);
     if (callbacks.destroy_buffer)
-      callbacks.destroy_buffer(renderer, user_ptr, &buffer.user_ptr);
+      callbacks.destroy_buffer(renderer, user_ptr, buffer.user_ptr);
+    buffer.user_ptr = nullptr;
   }
 
   void do_create_texture(buffer_t &buffer, enum texture_type_t buffer_texture_type)

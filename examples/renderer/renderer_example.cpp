@@ -219,6 +219,7 @@ int main(int, char **)
   }
 
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+  points::converter::converter_data_source_set_viewport(converter_points.get(), width, height);
 
   std::vector<uint32_t> storage_ids;
   std::vector<uint32_t> storage_subs;
@@ -247,6 +248,9 @@ int main(int, char **)
   aabb2.max[1] = 0.0;
   aabb2.max[2] = 0.0;
   // int aabb2_id =  -1; //flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+
+  float pixel_error_threshold = 2.0f;
+  int gpu_memory_budget_mb = 512;
 
   bool loop = true;
   bool left_pressed = false;
@@ -360,6 +364,8 @@ int main(int, char **)
           SDL_GetWindowSizeInPixels(window, &width, &height);
           glViewport(0, 0, width, height);
           points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
+          if (converter_points)
+            points::converter::converter_data_source_set_viewport(converter_points.get(), width, height);
           break;
         }
         default:
@@ -443,6 +449,18 @@ int main(int, char **)
         }
       }
       ImGui::EndCombo();
+    }
+    if (ImGui::SliderFloat("Pixel Error Threshold", &pixel_error_threshold, 1.0f, 500.0f, "%.1f", ImGuiSliderFlags_Logarithmic))
+    {
+      points::converter::converter_data_source_set_pixel_error_threshold(converter_points.get(), double(pixel_error_threshold));
+    }
+    {
+      float eff_threshold = float(points::converter::converter_data_source_get_effective_pixel_error_threshold(converter_points.get()));
+      ImGui::Text("Effective Threshold: %.1f", eff_threshold);
+    }
+    if (ImGui::SliderInt("GPU Memory Budget (MB)", &gpu_memory_budget_mb, 64, 4096))
+    {
+      points::converter::converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
     }
     ImGui::EndGroup();
     ImGui::SetItemDefaultFocus();
