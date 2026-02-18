@@ -14,7 +14,7 @@ macro(Build3rdParty)
     add_subdirectory(${vio_SOURCE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vio_build")
 
     list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/laszip)
-    CmDepGetPackageInstallDir(LASZIP_INSTALL_DIR laszip_build ${laszip_VERSION})
+    CmDepInstallDir(LASZIP_INSTALL_DIR laszip_build ${laszip_VERSION})
     Find_Package(laszip REQUIRED)
     # Patch laszip 3.5.0: it uses add_compile_options(-std=c++17) which wrongly
     # applies C++ flags to C files. Remove those lines since CMAKE_CXX_STANDARD 17
@@ -40,7 +40,7 @@ macro(Build3rdParty)
         # laszip_load_dll (which lack the LASZIP_API decorator) are visible.
         list(APPEND LASZIP_CMAKE_OPTIONS "-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON")
     endif ()
-    CmDepBuildExternalCMake(laszip_build ${laszip_VERSION} ${laszip_SOURCE_DIR} "${LASZIP_CMAKE_OPTIONS}" "laszip::api;laszip::impl")
+    CmDepBuildExternal(laszip_build ${laszip_VERSION} ${laszip_SOURCE_DIR} "${LASZIP_CMAKE_OPTIONS}" "laszip::api;laszip::impl")
 
     set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)

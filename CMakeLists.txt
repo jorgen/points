@@ -11,7 +11,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 include(FetchContent)
 FetchContent_Declare(cmake-dep
     GIT_REPOSITORY https://github.com/jorgen/cmake-dep.git
-    GIT_TAG 2667e3f
+    GIT_TAG f61ffba
 )
 FetchContent_MakeAvailable(cmake-dep)
 list(APPEND CMAKE_MODULE_PATH "${cmake-dep_SOURCE_DIR}/cmake")
@@ -63,8 +63,8 @@ find_package(Threads)
 
 include(CMake/SetWarnings.cmake)
 
-set(CMDEP_3RD_PARTY_PACKAGES_FILE "${CMAKE_CURRENT_SOURCE_DIR}/CMake/3rdPartyPackages.cmake")
-CmDepFetch3rdParty()
+set(CMDEP_PACKAGES_FILE "${CMAKE_CURRENT_SOURCE_DIR}/CMake/3rdPartyPackages.cmake")
+CmDepFetch()
 
 include(CMake/Build3rdParty.cmake)
 Build3rdParty()
