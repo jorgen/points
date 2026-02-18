@@ -62,7 +62,7 @@ struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* came
   copy_to_array(frame_camera.projection, camera->projection);
   auto view_projection = camera->projection * camera->view;
   copy_to_array(frame_camera.view_projection, view_projection);
-  copy_to_array(frame_camera.inverse_view, glm::inverse(view_projection));
+  copy_to_array(frame_camera.inverse_view, glm::inverse(camera->view));
   copy_to_array(frame_camera.inverse_projection, glm::inverse(camera->projection));
   copy_to_array(frame_camera.inverse_view_projection, glm::inverse(view_projection));
   renderer->to_render.clear();

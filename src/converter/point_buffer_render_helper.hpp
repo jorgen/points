@@ -126,6 +126,7 @@ struct dyn_points_draw_buffer_t
   std::array<double, 3> scale;
   glm::mat4 camera_view;
   std::shared_ptr<dyn_points_data_handler_t> data_handler;
+  size_t gpu_memory_size = 0;
   bool rendered = false;
 };
 
