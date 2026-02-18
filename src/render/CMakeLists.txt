@@ -31,7 +31,7 @@ set(sources
 add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources})
 target_link_libraries(points_render_objects PRIVATE fmt glm)
 target_link_libraries(points_render_objects PUBLIC points_common)
-CmDepBuildExternalTargetLinkLibrary(points_render_objects PRIVATE laszip::impl)
+CmDepTargetLinkLibrary(points_render_objects PRIVATE laszip::impl)
 target_include_directories(points_render_objects
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -46,4 +46,4 @@ if (BUILD_SHARED_LIBS)
 endif ()
 
 add_library(points_render empty_dylib_function.cpp $<TARGET_OBJECTS:points_render_objects>)
-CmDepBuildExternalTargetLinkLibrary(points_render PUBLIC points_render_objects)
+CmDepTargetLinkLibrary(points_render PUBLIC points_render_objects)

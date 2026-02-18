@@ -14,7 +14,7 @@ set(sources
 
 add_library(points_common_objects OBJECT ${public_headers} ${private_headers} ${sources})
 add_library(points_common empty_dylib_function.cpp $<TARGET_OBJECTS:points_common_objects>)
-CmDepBuildExternalTargetLinkLibrary(points_common PUBLIC points_common_objects)
+CmDepTargetLinkLibrary(points_common PUBLIC points_common_objects)
 if (BUILD_SHARED_LIBS)
     target_compile_definitions(points_common_objects PRIVATE POINTS_COMMON_EXPORTS)
 endif ()

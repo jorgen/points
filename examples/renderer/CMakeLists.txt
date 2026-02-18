@@ -56,7 +56,7 @@ set(_renderer_example_deps points_render points_converter fmt glm renderer_examp
 if(TARGET SDL3::SDL3main)
     list(APPEND _renderer_example_deps SDL3::SDL3main)
 endif()
-CmDepBuildExternalTargetLinkLibrary(renderer_example PRIVATE ${_renderer_example_deps})
+CmDepTargetLinkLibrary(renderer_example PRIVATE ${_renderer_example_deps})
 copy_dll_for_target(renderer_example points_render points_converter points_common SDL3::SDL3)
 setWarningFlagsForTarget(renderer_example)
 if(NOT MSVC)
