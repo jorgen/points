@@ -48,6 +48,7 @@ namespace points::render
   POINTS_RENDER_EXPORT void arcball_reset(struct arcball_t *arcball);
   POINTS_RENDER_EXPORT void arcball_detect_upside_down(struct arcball_t *arcball);
   POINTS_RENDER_EXPORT void arcball_rotate(struct arcball_t *arcball, float normalized_dx, float normalized_dy, float normalized_dz);
+  POINTS_RENDER_EXPORT void arcball_pan(struct arcball_t *arcball, float normalized_dx, float normalized_dy);
   POINTS_RENDER_EXPORT void arcball_zoom(struct arcball_t *arcball, float normalized_zoom);
 
   struct fps_t;

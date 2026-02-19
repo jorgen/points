@@ -255,6 +255,7 @@ int main(int, char **)
   bool loop = true;
   bool left_pressed = false;
   bool right_pressed = false;
+  bool middle_pressed = false;
   bool ctrl_modifier = false;
 
   double arcball_center[3];
@@ -264,7 +265,6 @@ int main(int, char **)
 
   while (loop)
   {
-    SDL_WaitEvent(nullptr);
     SDL_Event event;
     while (SDL_PollEvent(&event))
     {
@@ -314,13 +314,24 @@ int main(int, char **)
             // else
             //   flat_points::render::camera_manipulator::fps_reset(fps.get());
           }
+          else if (event.button.button == SDL_BUTTON_MIDDLE)
+          {
+            middle_pressed = true;
+          }
           else if (event.button.button == SDL_BUTTON_RIGHT)
           {
             right_pressed = true;
           }
           break;
         case SDL_EVENT_MOUSE_MOTION:
-          if ((right_pressed && !left_pressed) || (left_pressed && ctrl_modifier))
+          if (middle_pressed)
+          {
+            float dx = (float(event.motion.xrel) / float(width));
+            float dy = (float(event.motion.yrel) / float(height));
+            if (arcball)
+              points::render::camera_manipulator::arcball_pan(arcball.get(), dx, dy);
+          }
+          else if ((right_pressed && !left_pressed) || (left_pressed && ctrl_modifier))
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = (float(event.motion.yrel) / float(height));
@@ -344,6 +355,10 @@ int main(int, char **)
           if (event.button.button == SDL_BUTTON_LEFT)
           {
             left_pressed = false;
+          }
+          else if (event.button.button == SDL_BUTTON_MIDDLE)
+          {
+            middle_pressed = false;
           }
           else if (event.button.button == SDL_BUTTON_RIGHT)
           {

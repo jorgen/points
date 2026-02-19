@@ -144,46 +144,41 @@ static double normalize_angle(double angle)
 
 void arcball_rotate(struct arcball_t *arcball, float normalized_dx, float normalized_dy, float normalized_dz)
 {
-  auto view_inverse = arcball->inverse_view;
-
-  if (normalized_dx)
-  {
-    arcball->yaw += (-normalized_dx * arcball->inverse_yaw) * M_PI;
-    arcball->yaw = normalize_angle(arcball->yaw);
-  }
-
-  if (normalized_dy)
-  {
-    arcball->pitch +=  -normalized_dy * M_PI;
-    arcball->pitch = normalize_angle(arcball->pitch);
-  }
-
-  if (normalized_dz)
-  {
-    arcball->roll += normalized_dz * M_PI;
-    arcball->roll = normalize_angle(arcball->roll);
-  }
+  auto view_inverse = glm::inverse(arcball->camera->view);
 
   auto qrot = glm::dquat(1.0, 0.0, 0.0, 0.0);
-  if (arcball->yaw)
-    qrot = glm::rotate(glm::dquat(1.0, 0.0, 0.0, 0.0), arcball->yaw, glm::dvec3(view_inverse[1])) * qrot;
-  if (arcball->pitch)
-    qrot = glm::rotate(qrot, arcball->pitch, glm::dvec3(view_inverse[0]));
-  if (arcball->roll)
-    qrot = glm::rotate(qrot, arcball->roll, glm::dvec3(view_inverse[2]));
+  if (normalized_dx)
+    qrot = glm::rotate(qrot, double(-normalized_dx * arcball->inverse_yaw) * M_PI,
+                        glm::dvec3(view_inverse[1]));
+  if (normalized_dy)
+    qrot = glm::rotate(qrot, double(-normalized_dy) * M_PI,
+                        glm::dvec3(view_inverse[0]));
+  if (normalized_dz)
+    qrot = glm::rotate(qrot, double(normalized_dz) * M_PI,
+                        glm::dvec3(view_inverse[2]));
 
-  auto arcball_rot = arcball->initial_rot * glm::mat4_cast(qrot);
-
-  arcball_rot = glm::translate(arcball_rot, -arcball->center);
-
-  glm::dvec3 translate = glm::dvec3(view_inverse[3]);
-  view_inverse = glm::translate(view_inverse, -glm::dvec3(translate));
-  view_inverse = arcball_rot * view_inverse;
-  view_inverse = glm::translate(view_inverse, glm::dvec3(translate));
+  auto orbit = glm::translate(glm::dmat4(1), arcball->center)
+             * glm::mat4_cast(qrot)
+             * glm::translate(glm::dmat4(1), -arcball->center);
+  view_inverse = orbit * view_inverse;
 
   arcball->camera->view = glm::inverse(view_inverse);
 }
   
+void arcball_pan(struct arcball_t *arcball, float normalized_dx, float normalized_dy)
+{
+  auto view_inverse = glm::inverse(arcball->camera->view);
+  auto distance = glm::length(glm::dvec3(view_inverse[3]) - arcball->center);
+
+  auto offset = glm::dvec3(view_inverse[0]) * double(-normalized_dx) * distance
+              + glm::dvec3(view_inverse[1]) * double(normalized_dy) * distance;
+
+  view_inverse[3] += glm::dvec4(offset, 0.0);
+  arcball->center += offset;
+
+  arcball->camera->view = glm::inverse(view_inverse);
+}
+
 void arcball_zoom(struct arcball_t *arcball, float normalized_zoom)
 {
   auto view_inverse = glm::inverse(arcball->camera->view);
