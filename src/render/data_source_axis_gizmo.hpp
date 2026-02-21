@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2022  Jørgen Lind
+** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -15,49 +15,39 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef DRAW_GROUP_H
-#define DRAW_GROUP_H
+#pragma once
 
-#include <points/render/export.h>
+#include "buffer.hpp"
+#include "data_source.hpp"
+#include "glm_include.hpp"
+#include "renderer_callbacks.hpp"
+#include <points/render/renderer.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-namespace points
-{
-namespace render
+namespace points::render
 {
 
-struct draw_buffer_t
+struct axis_gizmo_data_source_t : public data_source_cpp_t
 {
-  int buffer_mapping;
-  void *user_ptr;
+  axis_gizmo_data_source_t(callback_manager_t &callbacks, const glm::dvec3 &center, double axis_length);
+
+  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
+  void rebuild_vertices();
+
+  callback_manager_t &callbacks;
+
+  glm::dvec3 center;
+  double axis_length;
+
+  buffer_t camera_buffer;
+  glm::mat4 camera_matrix;
+
+  buffer_t vertex_buffer;
+  std::vector<glm::vec3> vertices;
+
+  buffer_t color_buffer;
+  std::vector<glm::u8vec3> colors;
+
+  draw_buffer_t render_list[3];
 };
 
-enum draw_type_t
-{
-  aabb_triangle_mesh,
-  skybox_triangle,
-  flat_points,
-  dyn_points_1,
-  dyn_points_3,
-  axis_gizmo_lines,
-};
-
-struct draw_group_t
-{
-  draw_type_t draw_type;
-  struct draw_buffer_t *buffers;
-  int buffers_size;
-  int draw_size;
-  int lod_level;
-};
-
-} // namespace render
-} // namespace points
-
-#ifdef __cplusplus
-}
-#endif
-#endif // DRAW_GROUP_H
+} // namespace points::render

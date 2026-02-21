@@ -80,6 +80,13 @@ enum dyn_points_buffer_mapping_t
   dyn_points_bm_camera
 };
 
+enum axis_gizmo_buffer_mapping_t
+{
+  axis_gizmo_bm_camera,
+  axis_gizmo_bm_color,
+  axis_gizmo_bm_position
+};
+
 struct frame_t
 {
   struct draw_group_t* to_render;

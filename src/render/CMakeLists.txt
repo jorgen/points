@@ -5,7 +5,8 @@ set(public_headers
         points/render/renderer.h
         points/render/aabb.h
         points/render/aabb_data_source.h
-        points/render/flat_points_data_source.h)
+        points/render/flat_points_data_source.h
+        points/render/axis_gizmo_data_source.h)
 
 set(private_headers
         camera.hpp
@@ -16,7 +17,8 @@ set(private_headers
         data_source.hpp
         buffer.hpp
         image_decoder.hpp
-        data_source_flat_points.hpp)
+        data_source_flat_points.hpp
+        data_source_axis_gizmo.hpp)
 
 set(sources
         renderer.cpp
@@ -27,6 +29,7 @@ set(sources
         buffer.cpp
         image_decoder.cpp
         data_source_flat_points.cpp
+        data_source_axis_gizmo.cpp
 )
 add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources})
 target_link_libraries(points_render_objects PRIVATE fmt glm)
