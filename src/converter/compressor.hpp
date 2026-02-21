@@ -23,6 +23,8 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace points::converter
 {
@@ -30,8 +32,14 @@ namespace points::converter
 enum class compression_method_t : uint8_t
 {
   none = 0,
-  blosc2 = 1
+  blosc2 = 1,
+  zstd = 2,
+  huff0 = 3,
+  constant = 4
 };
+
+static constexpr uint8_t compression_flag_delta_encoded  = 1 << 0;
+static constexpr uint8_t compression_flag_constant_bands = 1 << 1;
 
 struct compression_header_t
 {
@@ -39,7 +47,7 @@ struct compression_header_t
   compression_method_t method;
   uint8_t type_size;          // element type size (for future decompressors)
   uint8_t component_count;    // components per element
-  uint8_t reserved;
+  uint8_t flags;              // preprocessing flags (was reserved, 0 = backward compat)
   uint32_t uncompressed_size;
   uint32_t compressed_size;   // size of compressed payload (after this header)
 };
@@ -48,7 +56,7 @@ static_assert(sizeof(compression_header_t) == 16, "compression_header_t must be 
 struct compression_result_t
 {
   std::shared_ptr<uint8_t[]> data;
-  uint32_t size;
+  uint32_t size = 0;
   error_t error;
 };
 
@@ -69,6 +77,29 @@ inline bool has_compression_magic(const void *data, uint32_t size)
   return bytes[0] == 'P' && bytes[1] == 'C' && bytes[2] == 'M' && bytes[3] == 1;
 }
 
+struct attribute_compression_stats_t
+{
+  std::string name;
+  point_format_t format;
+  uint64_t buffer_count = 0;
+  uint64_t uncompressed_bytes = 0;
+  uint64_t compressed_bytes = 0;
+};
+
+struct compression_stats_t
+{
+  uint32_t input_file_count = 0;
+  uint32_t total_buffer_count = 0;
+  compression_method_t method = compression_method_t::none;
+  std::vector<attribute_compression_stats_t> per_attribute;
+
+  void accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed);
+  std::shared_ptr<uint8_t[]> serialize(uint32_t &out_size) const;
+  static compression_stats_t deserialize(const uint8_t *data, uint32_t size);
+};
+
 std::unique_ptr<compressor_t> create_compressor(compression_method_t method);
+compression_result_t try_compress_constant(const void *data, uint32_t size, const point_format_t &format);
+compression_result_t decompress_any(const void *data, uint32_t size);
 
 } // namespace points::converter

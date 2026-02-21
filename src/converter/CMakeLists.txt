@@ -30,6 +30,10 @@ set(private_headers
         native_node_data_loader.hpp
         compressor.hpp
         compressor_blosc2.hpp
+        byte_shuffle.hpp
+        compressor_zstd.hpp
+        compressor_fse.hpp
+        compression_preprocess.hpp
 )
 
 set(sources
@@ -52,6 +56,11 @@ set(sources
         input_data_source_registry.cpp
         input_storage_map.cpp
         compressor_blosc2.cpp
+        compressor.cpp
+        byte_shuffle.cpp
+        compressor_zstd.cpp
+        compressor_fse.cpp
+        compression_preprocess.cpp
 )
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
@@ -66,6 +75,8 @@ target_include_directories(points_converter_objects
 target_include_directories(points_converter_objects
         PRIVATE
         ${libmorton_SOURCE_DIR}/include
+        ${blosc2_SOURCE_DIR}/internal-complibs/zstd-1.5.7
+        ${blosc2_SOURCE_DIR}/internal-complibs/zstd-1.5.7/common
 )
 setWarningflagsForTarget(points_converter_objects)
 

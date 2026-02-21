@@ -54,7 +54,7 @@ compression_result_t compressor_blosc2_t::compress(const void *data, uint32_t si
   (void)point_count;
   compression_result_t result;
 
-  int typesize = size_for_format(format.type) * static_cast<int>(format.components);
+  int typesize = size_for_format(format.type);
   if (typesize <= 0)
     typesize = 1;
 
@@ -64,8 +64,9 @@ compression_result_t compressor_blosc2_t::compress(const void *data, uint32_t si
 
   blosc2_cparams cparams = BLOSC2_CPARAMS_DEFAULTS;
   cparams.compcode = BLOSC_ZSTD;
-  cparams.clevel = 5;
+  cparams.clevel = 7;
   cparams.typesize = typesize;
+  cparams.filters[BLOSC2_MAX_FILTERS - 1] = BLOSC_BITSHUFFLE;
   cparams.nthreads = 1;
 
   blosc2_context *cctx = blosc2_create_cctx(cparams);
@@ -95,7 +96,7 @@ compression_result_t compressor_blosc2_t::compress(const void *data, uint32_t si
   header.magic[3] = 1;
   header.type_size = static_cast<uint8_t>(size_for_format(format.type));
   header.component_count = static_cast<uint8_t>(format.components);
-  header.reserved = 0;
+  header.flags = 0;
   header.uncompressed_size = size;
 
   if (static_cast<uint32_t>(compressed_size) >= size)
@@ -177,18 +178,6 @@ compression_result_t compressor_blosc2_t::decompress(const void *data, uint32_t 
   result.data = std::move(output);
   result.size = header.uncompressed_size;
   return result;
-}
-
-std::unique_ptr<compressor_t> create_compressor(compression_method_t method)
-{
-  switch (method)
-  {
-  case compression_method_t::blosc2:
-    return std::make_unique<compressor_blosc2_t>();
-  case compression_method_t::none:
-    return nullptr;
-  }
-  return nullptr;
 }
 
 } // namespace points::converter
