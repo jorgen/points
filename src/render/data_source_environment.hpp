@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2022  Jørgen Lind
+** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -15,51 +15,38 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef DRAW_GROUP_H
-#define DRAW_GROUP_H
+#pragma once
 
-#include <points/render/export.h>
+#include "buffer.hpp"
+#include "data_source.hpp"
+#include "glm_include.hpp"
+#include "renderer_callbacks.hpp"
+#include <points/render/renderer.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-namespace points
-{
-namespace render
+namespace points::render
 {
 
-struct draw_buffer_t
+struct environment_data_source_t : public data_source_cpp_t
 {
-  int buffer_mapping;
-  void *user_ptr;
+  environment_data_source_t(callback_manager_t &callbacks, double ground_z, double grid_size);
+
+  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
+
+  callback_manager_t &callbacks;
+
+  buffer_t inverse_vp_buffer;
+  glm::mat4 inverse_vp;
+
+  buffer_t camera_pos_buffer;
+  glm::vec3 camera_pos;
+
+  buffer_t params_buffer;
+  glm::vec4 params; // x=ground_z, y=grid_size
+
+  buffer_t vertex_buffer;
+  std::vector<glm::vec2> vertices;
+
+  draw_buffer_t draw_buffers[4];
 };
 
-enum draw_type_t
-{
-  aabb_triangle_mesh,
-  skybox_triangle,
-  flat_points,
-  dyn_points_1,
-  dyn_points_3,
-  axis_gizmo_lines,
-  origin_anchor_mesh,
-  environment_bg,
-};
-
-struct draw_group_t
-{
-  draw_type_t draw_type;
-  struct draw_buffer_t *buffers;
-  int buffers_size;
-  int draw_size;
-  int lod_level;
-};
-
-} // namespace render
-} // namespace points
-
-#ifdef __cplusplus
-}
-#endif
-#endif // DRAW_GROUP_H
+} // namespace points::render

@@ -87,6 +87,22 @@ enum axis_gizmo_buffer_mapping_t
   axis_gizmo_bm_position
 };
 
+enum origin_anchor_buffer_mapping_t
+{
+  origin_anchor_bm_camera,
+  origin_anchor_bm_color,
+  origin_anchor_bm_position,
+  origin_anchor_bm_index
+};
+
+enum environment_buffer_mapping_t
+{
+  environment_bm_inverse_view_projection,
+  environment_bm_camera_pos,
+  environment_bm_vertex,
+  environment_bm_params
+};
+
 struct frame_t
 {
   struct draw_group_t* to_render;

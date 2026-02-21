@@ -67,7 +67,14 @@ void axis_gizmo_data_source_t::rebuild_vertices()
 
 void axis_gizmo_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
 {
-  camera_matrix = camera.projection * glm::translate(camera.view, center);
+  // Extract rotation only (strip translation/scale from view)
+  glm::dmat4 rotation_only = glm::dmat4(glm::dmat3(camera.view));
+
+  // Fixed orthographic projection sized to fit the axis lines
+  float margin = float(axis_length) * 1.5f;
+  glm::mat4 ortho = glm::ortho(-margin, margin, -margin, margin, -margin, margin);
+
+  camera_matrix = ortho * glm::mat4(rotation_only);
   callbacks.do_modify_buffer(camera_buffer, 0, sizeof(camera_matrix), &camera_matrix);
 
   render_list[0].buffer_mapping = axis_gizmo_bm_position;

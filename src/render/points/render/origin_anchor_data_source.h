@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2022  Jørgen Lind
+** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -15,51 +15,27 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef DRAW_GROUP_H
-#define DRAW_GROUP_H
+#ifndef POINTS_ORIGIN_ANCHOR_DATA_SOURCE_H
+#define POINTS_ORIGIN_ANCHOR_DATA_SOURCE_H
 
 #include <points/render/export.h>
+#include <points/render/data_source.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-namespace points
+namespace points::render
 {
-namespace render
-{
-
-struct draw_buffer_t
-{
-  int buffer_mapping;
-  void *user_ptr;
-};
-
-enum draw_type_t
-{
-  aabb_triangle_mesh,
-  skybox_triangle,
-  flat_points,
-  dyn_points_1,
-  dyn_points_3,
-  axis_gizmo_lines,
-  origin_anchor_mesh,
-  environment_bg,
-};
-
-struct draw_group_t
-{
-  draw_type_t draw_type;
-  struct draw_buffer_t *buffers;
-  int buffers_size;
-  int draw_size;
-  int lod_level;
-};
-
-} // namespace render
-} // namespace points
+struct origin_anchor_data_source_t;
+POINTS_RENDER_EXPORT struct origin_anchor_data_source_t *origin_anchor_data_source_create(struct renderer_t *renderer, const double center[3], double arrow_size);
+POINTS_RENDER_EXPORT void origin_anchor_data_source_destroy(struct origin_anchor_data_source_t *anchor);
+POINTS_RENDER_EXPORT struct data_source_t origin_anchor_data_source_get(struct origin_anchor_data_source_t *anchor);
+POINTS_RENDER_EXPORT void origin_anchor_data_source_set_center(struct origin_anchor_data_source_t *anchor, const double center[3]);
+POINTS_RENDER_EXPORT void origin_anchor_data_source_set_arrow_size(struct origin_anchor_data_source_t *anchor, double arrow_size);
+}
 
 #ifdef __cplusplus
 }
 #endif
-#endif // DRAW_GROUP_H
+#endif //POINTS_ORIGIN_ANCHOR_DATA_SOURCE_H
