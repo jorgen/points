@@ -152,7 +152,7 @@ void flat_points_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, t
 {
   project_view = camera.projection * glm::translate(camera.view, glm::dvec3(offset[0], offset[1], offset[2]));
   callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view);
-  draw_group_t draw_group;
+  draw_group_t draw_group = {};
   draw_group.buffers = render_list;
   draw_group.buffers_size = sizeof(render_list) / sizeof(*render_list);
   draw_group.draw_type = flat_points;

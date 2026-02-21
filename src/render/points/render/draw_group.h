@@ -50,6 +50,7 @@ struct draw_group_t
   struct draw_buffer_t *buffers;
   int buffers_size;
   int draw_size;
+  int lod_level;
 };
 
 } // namespace render

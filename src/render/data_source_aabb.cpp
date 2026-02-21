@@ -114,7 +114,7 @@ void aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_rende
     aabb_buffer->render_list[2].user_ptr = color_buffer.user_ptr;
     aabb_buffer->render_list[3].buffer_mapping = aabb_bm_camera;
     aabb_buffer->render_list[3].user_ptr= project_view_buffer.user_ptr;
-    draw_group_t draw_group;
+    draw_group_t draw_group = {};
     draw_group.buffers = aabb_buffer->render_list;
     draw_group.buffers_size = array_size(aabb_buffer->render_list);
     draw_group.draw_type = draw_type_t::aabb_triangle_mesh;

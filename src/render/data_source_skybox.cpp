@@ -70,7 +70,7 @@ void skybox_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_ren
   draw_buffers[2].user_ptr = vertex_buffer.user_ptr;
   draw_buffers[3].buffer_mapping = skybox_bm_camera_pos;
   draw_buffers[3].user_ptr = camera_pos_buffer.user_ptr;
-  draw_group_t draw_group;
+  draw_group_t draw_group = {};
   draw_group.buffers = draw_buffers;
   draw_group.buffers_size = sizeof(draw_buffers) / sizeof(*draw_buffers);
   draw_group.draw_type = skybox_triangle;
