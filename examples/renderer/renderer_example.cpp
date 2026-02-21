@@ -2,6 +2,7 @@
 
 #include "include/glad/glad.h"
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_dialog.h>
 #include <fmt/printf.h>
 #include <stdio.h>
 
@@ -13,34 +14,26 @@
 #include <points/render/aabb.h>
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
-#include <points/render/skybox_data_source.h>
+#include <points/render/environment_data_source.h>
 #include <points/render/axis_gizmo_data_source.h>
+#include <points/render/origin_anchor_data_source.h>
 
 #include <points/converter/converter.h>
 #include <points/converter/converter_data_source.h>
 
 #include <cmath>
+#include <string>
 #include <vector>
 
 #define CMRC_NO_EXCEPTIONS 1
 #include <cmrc/cmrc.hpp>
 
 CMRC_DECLARE(fonts);
-CMRC_DECLARE(textures);
 
 template <typename T, typename Deleter>
 std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
 {
   return std::unique_ptr<T, Deleter>(t, d);
-}
-
-template <size_t N>
-static void get_texture_data_size(const char (&name)[N], void *&data, int &size)
-{
-  auto texturefs = cmrc::textures::get_filesystem();
-  auto tex = texturefs.open(name);
-  data = (void *)tex.begin();
-  size = (int)tex.size();
 }
 
 static double halfway(const points::render::aabb_t &aabb, int dimension)
@@ -61,7 +54,7 @@ points::converter::str_buffer make_str_buffer(const char (&data)[N])
   return {data, N};
 }
 
-int main(int, char **)
+int main(int argc, char **argv)
 {
   if (!SDL_Init(SDL_INIT_VIDEO))
   {
@@ -143,38 +136,48 @@ int main(int, char **)
   auto camera = create_unique_ptr(points::render::camera_create(), &points::render::camera_destroy);
   gl_renderer points_gl_renderer(renderer.get(), camera.get());
 
-  points::render::skybox_data_t skybox_data;
-  get_texture_data_size("textures/right.jpg", skybox_data.positive_x, skybox_data.positive_x_size);
-  get_texture_data_size("textures/left.jpg", skybox_data.negative_x, skybox_data.negative_x_size);
-  get_texture_data_size("textures/top.jpg", skybox_data.positive_y, skybox_data.positive_y_size);
-  get_texture_data_size("textures/bottom.jpg", skybox_data.negative_y, skybox_data.negative_y_size);
-  get_texture_data_size("textures/front.jpg", skybox_data.positive_z, skybox_data.positive_z_size);
-  get_texture_data_size("textures/back.jpg", skybox_data.negative_z, skybox_data.negative_z_size);
-  auto skybox = create_unique_ptr(points::render::skybox_data_source_create(renderer.get(), skybox_data), &points::render::skybox_data_source_destroy);
-  // flat_points::render::renderer_add_data_source(renderer.get(), flat_points::render::skybox_data_source_get(skybox.get()));
+  std::string cache_path;
+  if (argc > 1)
+  {
+    cache_path = argv[1];
+  }
+  else
+  {
+    struct dialog_state
+    {
+      std::string result;
+      bool done = false;
+    };
+    dialog_state state;
+    SDL_DialogFileFilter filters[] = {{"Points files", "jlp"}};
+    SDL_ShowOpenFileDialog(
+      [](void *ud, const char *const *files, int) {
+        auto *s = static_cast<dialog_state *>(ud);
+        if (files && *files)
+          s->result = *files;
+        s->done = true;
+      },
+      &state, window, filters, 1, nullptr, false);
+    while (!state.done)
+    {
+      SDL_Event ev;
+      while (SDL_PollEvent(&ev))
+      {
+        if (ev.type == SDL_EVENT_QUIT)
+          return 0;
+      }
+      SDL_Delay(10);
+    }
+    if (state.result.empty())
+      return 0;
+    cache_path = state.result;
+  }
 
-  std::vector<points::converter::str_buffer> input_files;
-  // input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
-  // input_files.push_back(make_str_buffer("D:/LazData/Kosciol_Libusza/K_Libusza_ext_18.laz"));
-  // input_files.push_back(make_str_buffer("D:/LazData/Palac_Moszna/Palac_Moszna.laz"));
-  input_files.push_back(make_str_buffer("D:/LazData/G_Sw_Anny/G_Sw_Anny.laz"));
-  // input_files.push_back(make_str_buffer("D:/data/baerum_hoyde_laz/eksport_396769_20210126/124/data/32-1-512-133-63.laz"));
-  // input_files.push_back(make_str_buffer("/Users/jlind/Downloads/Palac_Moszna.laz"));
-
-  const char cache_file[] = "c:/Users/jorge/dev/points/cmake-build-msvc-release/examples/converter/out1.jlp";
-  //const char cache_file[] = "C:/Users/jorge/out1.jlp";
-  // auto converter = create_unique_ptr(flat_points::converter::converter_create(cache_file, sizeof(cache_file)), &flat_points::converter::converter_destroy);
-  // flat_points::converter::converter_add_data_file(converter.get(), input_files.data(), int(input_files.size()));
-
-  // bool render_flat_points = true;
-  // auto flat_points = create_unique_ptr(points::render::flat_points_data_source_create(renderer.get(), input_files[0].data, input_files[0].size), &points::render::flat_points_data_source_destroy);
-  // points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(flat_points.get()));
   points::render::aabb_t aabb;
-  // flat_points::render::flat_points_get_aabb(flat_points.get(), aabb.min, aabb.max);
 
   auto error = create_unique_ptr(points::error_create(), &points::error_destroy);
   bool render_converter_points = true;
-  auto converter_points = create_unique_ptr(points::converter::converter_data_source_create(cache_file, uint32_t(sizeof(cache_file) - 1), error.get(), renderer.get()), &points::converter::converter_data_source_destroy);
+  auto converter_points = create_unique_ptr(points::converter::converter_data_source_create(cache_path.c_str(), uint32_t(cache_path.size()), error.get(), renderer.get()), &points::converter::converter_data_source_destroy);
   if (!converter_points)
   {
     int code;
@@ -220,6 +223,13 @@ int main(int, char **)
     memcpy(aabb.min, state.aabb_min, sizeof(state.aabb_min));
     memcpy(aabb.max, state.aabb_max, sizeof(state.aabb_max));
   }
+
+  double ground_z = aabb.min[2];
+  double grid_size = std::max({aabb.max[0] - aabb.min[0], aabb.max[1] - aabb.min[1]}) / 10.0;
+  auto environment = create_unique_ptr(
+    points::render::environment_data_source_create(renderer.get(), ground_z, grid_size),
+    &points::render::environment_data_source_destroy);
+  points::render::renderer_add_data_source(renderer.get(), points::render::environment_data_source_get(environment.get()));
 
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
   points::converter::converter_data_source_set_viewport(converter_points.get(), width, height);
@@ -271,6 +281,9 @@ int main(int, char **)
   double gizmo_length = std::sqrt(dx_aabb * dx_aabb + dy_aabb * dy_aabb + dz_aabb * dz_aabb) * 0.05;
   auto axis_gizmo = create_unique_ptr(points::render::axis_gizmo_data_source_create(renderer.get(), arcball_center, gizmo_length), &points::render::axis_gizmo_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::axis_gizmo_data_source_get(axis_gizmo.get()));
+
+  auto origin_anchor = create_unique_ptr(points::render::origin_anchor_data_source_create(renderer.get(), arcball_center, 1.0), &points::render::origin_anchor_data_source_destroy);
+  points::render::renderer_add_data_source(renderer.get(), points::render::origin_anchor_data_source_get(origin_anchor.get()));
 
   while (loop)
   {
@@ -398,11 +411,14 @@ int main(int, char **)
       }
     }
 
-    if (arcball && axis_gizmo)
+    if (arcball)
     {
       double gizmo_center[3];
       points::render::camera_manipulator::arcball_get_center(arcball.get(), gizmo_center);
-      points::render::axis_gizmo_data_source_set_center(axis_gizmo.get(), gizmo_center);
+      if (axis_gizmo)
+        points::render::axis_gizmo_data_source_set_center(axis_gizmo.get(), gizmo_center);
+      if (origin_anchor)
+        points::render::origin_anchor_data_source_set_center(origin_anchor.get(), gizmo_center);
     }
 
     clear clear_mask = clear(int(clear::color) | int(clear::depth));
@@ -423,8 +439,7 @@ int main(int, char **)
     ImGui::NewFrame();
 
     ImGui::Begin("Input", 0, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
-
-    ImGui::BeginGroup();
+    ImGui::PushItemWidth(200);
     if (ImGui::RadioButton("ArcBall", arcball.get()))
     {
       if (!arcball)
@@ -528,7 +543,7 @@ int main(int, char **)
       ImGui::Text("Draw Emission:  %.2f ms", draw);
       ImGui::Text("Eviction:       %.2f ms", eviction);
     }
-    ImGui::EndGroup();
+    ImGui::PopItemWidth();
     ImGui::End();
 
     // ImGui::ShowDemoWindow();

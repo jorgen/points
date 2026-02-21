@@ -491,6 +491,86 @@ void gl_skybox_handler::draw(points::render::draw_group_t &group)
   glBindVertexArray(0);
 }
 
+gl_environment_handler::gl_environment_handler()
+  : is_initialized(false)
+{
+}
+
+gl_environment_handler::~gl_environment_handler()
+{
+  if (program)
+    glDeleteProgram(program);
+  if (vao)
+    glDeleteVertexArrays(1, &vao);
+}
+
+void gl_environment_handler::initialize()
+{
+  is_initialized = true;
+  auto shaderfs = cmrc::shaders::get_filesystem();
+  auto vertex_shader = shaderfs.open("shaders/environment.vert");
+  auto fragment_shader = shaderfs.open("shaders/environment.frag");
+
+  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), fragment_shader.end() - fragment_shader.begin());
+  glUseProgram(program);
+  attrib_vertex = glGetAttribLocation(program, "vertex");
+  uniform_inverse_vp = glGetUniformLocation(program, "inverse_vp");
+  uniform_camera_pos = glGetUniformLocation(program, "camera_pos");
+  uniform_params = glGetUniformLocation(program, "params");
+
+  glGenVertexArrays(1, &vao);
+  glBindVertexArray(vao);
+
+  GLuint tmp_buffer;
+  glGenBuffers(1, &tmp_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, tmp_buffer);
+  glEnableVertexAttribArray(attrib_vertex);
+  glBindVertexArray(0);
+  glDeleteBuffers(1, &tmp_buffer);
+  glBindVertexArray(0);
+}
+
+void gl_environment_handler::draw(points::render::draw_group_t &group)
+{
+  if (!is_initialized)
+    initialize();
+  glUseProgram(program);
+  glBindVertexArray(vao);
+  for (int i = 0; i < group.buffers_size; i++)
+  {
+    auto &buffer = group.buffers[i];
+    auto buffer_mapping = points::render::environment_buffer_mapping_t(buffer.buffer_mapping);
+    switch (buffer_mapping)
+    {
+    case points::render::environment_bm_vertex: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+      glVertexAttribPointer(attrib_vertex, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
+      break;
+    }
+    case points::render::environment_bm_inverse_view_projection: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glUniformMatrix4fv(uniform_inverse_vp, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
+      break;
+    }
+    case points::render::environment_bm_camera_pos: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glUniform3fv(uniform_camera_pos, 1, (const GLfloat *)gl_buffer->data);
+      break;
+    }
+    case points::render::environment_bm_params: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glUniform4fv(uniform_params, 1, (const GLfloat *)gl_buffer->data);
+      break;
+    }
+    }
+  }
+  glDisable(GL_DEPTH_TEST);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+  glEnable(GL_DEPTH_TEST);
+  glBindVertexArray(0);
+}
+
 gl_axis_gizmo_handler::gl_axis_gizmo_handler()
   : is_initialized(false)
 {
@@ -530,14 +610,24 @@ void gl_axis_gizmo_handler::initialize()
   glBindVertexArray(0);
 }
 
-void gl_axis_gizmo_handler::draw(points::render::draw_group_t &group)
+void gl_axis_gizmo_handler::draw(points::render::draw_group_t &group, int viewport_width, int viewport_height)
 {
+  (void)viewport_width;
+  (void)viewport_height;
   if (!is_initialized)
     initialize();
-  glUseProgram(program);
 
-  glBindVertexArray(vao);
+  int gizmo_size = 120;
+  int margin = 10;
+
+  GLint prev_viewport[4];
+  glGetIntegerv(GL_VIEWPORT, prev_viewport);
+
+  glViewport(margin, margin, gizmo_size, gizmo_size);
+  glDisable(GL_DEPTH_TEST);
+
   glUseProgram(program);
+  glBindVertexArray(vao);
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
@@ -568,6 +658,97 @@ void gl_axis_gizmo_handler::draw(points::render::draw_group_t &group)
   glDrawArrays(GL_LINES, 0, group.draw_size);
   glLineWidth(1.0f);
   glBindVertexArray(0);
+
+  glEnable(GL_DEPTH_TEST);
+  glViewport(prev_viewport[0], prev_viewport[1], prev_viewport[2], prev_viewport[3]);
+}
+
+gl_origin_anchor_handler::gl_origin_anchor_handler()
+  : is_initialized(false)
+{
+}
+
+gl_origin_anchor_handler::~gl_origin_anchor_handler()
+{
+  if (program)
+    glDeleteProgram(program);
+  if (vao)
+    glDeleteVertexArrays(1, &vao);
+}
+
+void gl_origin_anchor_handler::initialize()
+{
+  is_initialized = true;
+  auto shaderfs = cmrc::shaders::get_filesystem();
+  auto vertex_shader = shaderfs.open("shaders/origin_anchor.vert");
+  auto fragment_shader = shaderfs.open("shaders/origin_anchor.frag");
+
+  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), fragment_shader.end() - fragment_shader.begin());
+  glUseProgram(program);
+  attrib_position = glGetAttribLocation(program, "position");
+  attrib_color = glGetAttribLocation(program, "color");
+  uniform_pv = glGetUniformLocation(program, "pv");
+
+  glGenVertexArrays(1, &vao);
+  glBindVertexArray(vao);
+
+  GLuint tmp_buffer;
+  glGenBuffers(1, &tmp_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, tmp_buffer);
+  glEnableVertexAttribArray(attrib_position);
+  glEnableVertexAttribArray(attrib_color);
+  glBindVertexArray(0);
+  glDeleteBuffers(1, &tmp_buffer);
+  glBindVertexArray(0);
+}
+
+void gl_origin_anchor_handler::draw(points::render::draw_group_t &group)
+{
+  if (!is_initialized)
+    initialize();
+
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  glUseProgram(program);
+  glBindVertexArray(vao);
+  int index_buffer_type = GL_UNSIGNED_INT;
+  for (int i = 0; i < group.buffers_size; i++)
+  {
+    auto &buffer = group.buffers[i];
+    auto buffer_mapping = points::render::origin_anchor_buffer_mapping_t(buffer.buffer_mapping);
+    switch (buffer_mapping)
+    {
+    case points::render::origin_anchor_bm_color: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+      glVertexAttribPointer(attrib_color, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
+      break;
+    }
+    case points::render::origin_anchor_bm_position: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+      glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
+      break;
+    }
+    case points::render::origin_anchor_bm_camera: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glUniformMatrix4fv(uniform_pv, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
+      break;
+    }
+    case points::render::origin_anchor_bm_index: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl_buffer->id);
+      index_buffer_type = type_to_glformat(gl_buffer->type);
+      break;
+    }
+    }
+  }
+
+  glDrawElements(GL_TRIANGLES, group.draw_size, index_buffer_type, 0);
+  glBindVertexArray(0);
+
+  glDisable(GL_BLEND);
 }
 
 gl_renderer::gl_renderer(points::render::renderer_t *renderer, points::render::camera_t *camera)
@@ -748,7 +929,13 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
       break;
     }
     case points::render::axis_gizmo_lines:
-      axis_gizmo_handler.draw(to_render);
+      axis_gizmo_handler.draw(to_render, viewport_width, viewport_height);
+      break;
+    case points::render::origin_anchor_mesh:
+      origin_anchor_handler.draw(to_render);
+      break;
+    case points::render::environment_bg:
+      environment_handler.draw(to_render);
       break;
     default:
       fmt::print(stderr, "Missing gl handler!.");

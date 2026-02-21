@@ -121,6 +121,39 @@ public:
   gl_axis_gizmo_handler();
   ~gl_axis_gizmo_handler();
   void initialize() override;
+  void draw(points::render::draw_group_t &group, int viewport_width, int viewport_height);
+
+  GLuint vao;
+  GLuint program;
+  GLint attrib_position;
+  GLint attrib_color;
+  GLint uniform_pv;
+  bool is_initialized;
+};
+
+class gl_environment_handler : public gl_frame_handler
+{
+public:
+  gl_environment_handler();
+  ~gl_environment_handler();
+  void initialize() override;
+  void draw(points::render::draw_group_t &group);
+
+  GLuint vao;
+  GLuint program;
+  GLint attrib_vertex;
+  GLint uniform_inverse_vp;
+  GLint uniform_camera_pos;
+  GLint uniform_params;
+  bool is_initialized;
+};
+
+class gl_origin_anchor_handler : public gl_frame_handler
+{
+public:
+  gl_origin_anchor_handler();
+  ~gl_origin_anchor_handler();
+  void initialize() override;
   void draw(points::render::draw_group_t &group);
 
   GLuint vao;
@@ -185,6 +218,8 @@ private:
   gl_flat_points_handler points_handler;
   gl_dyn_points_handler dynpoints_handler;
   gl_axis_gizmo_handler axis_gizmo_handler;
+  gl_origin_anchor_handler origin_anchor_handler;
+  gl_environment_handler environment_handler;
 };
 
 #endif // FRUSTUM_GL_RENDERER_H
