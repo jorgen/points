@@ -39,6 +39,8 @@ namespace points::render
   POINTS_RENDER_EXPORT void camera_set_perspective(struct camera_t *camera, double fov, double width, double height, double near, double far);
   POINTS_RENDER_EXPORT void camera_perspective_properties(struct camera_t *camera, double *fov, double *aspect,
                                                           double *near, double *far);
+  POINTS_RENDER_EXPORT void camera_get_eye(struct camera_t *camera, double eye[3]);
+  POINTS_RENDER_EXPORT void camera_get_forward(struct camera_t *camera, double forward[3]);
 
   namespace camera_manipulator
   {
@@ -49,7 +51,11 @@ namespace points::render
   POINTS_RENDER_EXPORT void arcball_detect_upside_down(struct arcball_t *arcball);
   POINTS_RENDER_EXPORT void arcball_rotate(struct arcball_t *arcball, float normalized_dx, float normalized_dy, float normalized_dz);
   POINTS_RENDER_EXPORT void arcball_pan(struct arcball_t *arcball, float normalized_dx, float normalized_dy);
+  POINTS_RENDER_EXPORT void arcball_dolly(struct arcball_t *arcball, float normalized_dz);
   POINTS_RENDER_EXPORT void arcball_zoom(struct arcball_t *arcball, float normalized_zoom);
+  POINTS_RENDER_EXPORT void arcball_set_up_axis(struct arcball_t *arcball, const double up[3]);
+  POINTS_RENDER_EXPORT void arcball_get_up_axis(struct arcball_t *arcball, double up[3]);
+  POINTS_RENDER_EXPORT void arcball_get_center(struct arcball_t *arcball, double center[3]);
 
   struct fps_t;
   POINTS_RENDER_EXPORT struct fps_t *fps_create(struct camera_t *camera);

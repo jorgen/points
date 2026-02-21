@@ -102,13 +102,74 @@ void camera_perspective_properties(struct camera_t *camera, double *fov, double 
 
 namespace camera_manipulator
 {
+
+static glm::dvec3 arcball_forward_dir(double yaw, double pitch, const glm::dvec3 &up)
+{
+  double cp = cos(pitch);
+  double sp = sin(pitch);
+  double sy = sin(yaw);
+  double cy = cos(yaw);
+
+  double ax = fabs(up.x), ay = fabs(up.y), az = fabs(up.z);
+  double sign = (up.x + up.y + up.z) < 0.0 ? -1.0 : 1.0;
+
+  if (ay >= ax && ay >= az)
+    return glm::dvec3(cp * sy, sign * sp, cp * cy);
+  if (az >= ax && az >= ay)
+    return glm::dvec3(cp * sy, cp * cy, sign * sp);
+  return glm::dvec3(sign * sp, cp * sy, cp * cy);
+}
+
+static void arcball_update_view(arcball_t *arcball)
+{
+  glm::dvec3 forward = arcball_forward_dir(arcball->yaw, arcball->pitch, arcball->up);
+  glm::dvec3 eye = arcball->center - forward * arcball->distance;
+  arcball->camera->view = glm::lookAt(eye, arcball->center, arcball->up);
+}
+
+static void arcball_extract_angles(arcball_t *arcball)
+{
+  glm::dvec3 eye = glm::dvec3(glm::inverse(arcball->camera->view)[3]);
+  glm::dvec3 diff = arcball->center - eye;
+  arcball->distance = glm::length(diff);
+  if (arcball->distance > 0.0)
+  {
+    glm::dvec3 f = diff / arcball->distance;
+    double ax = fabs(arcball->up.x), ay = fabs(arcball->up.y), az = fabs(arcball->up.z);
+    double sign = (arcball->up.x + arcball->up.y + arcball->up.z) < 0.0 ? -1.0 : 1.0;
+
+    if (ay >= ax && ay >= az)
+    {
+      arcball->pitch = asin(glm::clamp(sign * f.y, -1.0, 1.0));
+      arcball->yaw = atan2(f.x, f.z);
+    }
+    else if (az >= ax && az >= ay)
+    {
+      arcball->pitch = asin(glm::clamp(sign * f.z, -1.0, 1.0));
+      arcball->yaw = atan2(f.x, f.y);
+    }
+    else
+    {
+      arcball->pitch = asin(glm::clamp(sign * f.x, -1.0, 1.0));
+      arcball->yaw = atan2(f.y, f.z);
+    }
+  }
+  else
+  {
+    arcball->distance = 0.01;
+    arcball->pitch = 0.0;
+    arcball->yaw = 0.0;
+  }
+}
+
 struct arcball_t *arcball_create(struct camera_t *camera, const double center[3])
 {
   auto ret = new arcball_t;
   ret->camera = camera;
   ret->center = glm::make_vec3(center);
-
-  arcball_reset(ret);
+  ret->up = glm::dvec3(0, 1, 0);
+  arcball_extract_angles(ret);
+  arcball_update_view(ret);
   return ret;
 }
 
@@ -119,21 +180,13 @@ void arcball_destroy(struct arcball_t *arcball)
 
 void arcball_reset(struct arcball_t *arcball)
 {
-  arcball->inverse_view = glm::inverse(arcball->camera->view);
-  arcball->initial_rot = glm::translate(glm::dmat4(1), arcball->center);
-  arcball->pitch = 0.0;
-  arcball->yaw = 0.0;
-  arcball->roll = 0.0;
-  arcball_detect_upside_down(arcball);
+  arcball_extract_angles(arcball);
+  arcball_update_view(arcball);
 }
 
 void arcball_detect_upside_down(struct arcball_t *arcball)
 {
-  glm::vec3 up(0.0, 1.0, 0.0);
-  glm::vec3 camup = glm::vec3(glm::inverse(arcball->camera->view)[1]);
-  auto up_dot = glm::dot(camup, up);
-  auto angle = up_dot / (glm::length(up) * glm::length(camup));
-  arcball->inverse_yaw = angle < 0.0 ? -1.0 : 1.0;
+  (void)arcball;
 }
 
 static double normalize_angle(double angle)
@@ -144,54 +197,36 @@ static double normalize_angle(double angle)
 
 void arcball_rotate(struct arcball_t *arcball, float normalized_dx, float normalized_dy, float normalized_dz)
 {
-  auto view_inverse = glm::inverse(arcball->camera->view);
-
-  auto qrot = glm::dquat(1.0, 0.0, 0.0, 0.0);
-  if (normalized_dx)
-    qrot = glm::rotate(qrot, double(-normalized_dx * arcball->inverse_yaw) * M_PI,
-                        glm::dvec3(view_inverse[1]));
-  if (normalized_dy)
-    qrot = glm::rotate(qrot, double(-normalized_dy) * M_PI,
-                        glm::dvec3(view_inverse[0]));
-  if (normalized_dz)
-    qrot = glm::rotate(qrot, double(normalized_dz) * M_PI,
-                        glm::dvec3(view_inverse[2]));
-
-  auto orbit = glm::translate(glm::dmat4(1), arcball->center)
-             * glm::mat4_cast(qrot)
-             * glm::translate(glm::dmat4(1), -arcball->center);
-  view_inverse = orbit * view_inverse;
-
-  arcball->camera->view = glm::inverse(view_inverse);
+  (void)normalized_dz;
+  arcball->yaw += normalized_dx * M_PI;
+  arcball->pitch += normalized_dy * M_PI;
+  constexpr double max_pitch = 89.0 * M_PI / 180.0;
+  arcball->pitch = glm::clamp(arcball->pitch, -max_pitch, max_pitch);
+  arcball_update_view(arcball);
 }
-  
+
 void arcball_pan(struct arcball_t *arcball, float normalized_dx, float normalized_dy)
 {
-  auto view_inverse = glm::inverse(arcball->camera->view);
-  auto distance = glm::length(glm::dvec3(view_inverse[3]) - arcball->center);
+  glm::dvec3 forward = arcball_forward_dir(arcball->yaw, arcball->pitch, arcball->up);
+  glm::dvec3 right = glm::normalize(glm::cross(forward, arcball->up));
+  glm::dvec3 cam_up = glm::cross(right, forward);
+  arcball->center += right * (double(-normalized_dx) * arcball->distance)
+                   + cam_up * (double(-normalized_dy) * arcball->distance);
+  arcball_update_view(arcball);
+}
 
-  auto offset = glm::dvec3(view_inverse[0]) * double(-normalized_dx) * distance
-              + glm::dvec3(view_inverse[1]) * double(normalized_dy) * distance;
-
-  view_inverse[3] += glm::dvec4(offset, 0.0);
-  arcball->center += offset;
-
-  arcball->camera->view = glm::inverse(view_inverse);
+void arcball_dolly(struct arcball_t *arcball, float normalized_dz)
+{
+  glm::dvec3 forward = arcball_forward_dir(arcball->yaw, arcball->pitch, arcball->up);
+  arcball->center += forward * (double(-normalized_dz) * arcball->distance);
+  arcball_update_view(arcball);
 }
 
 void arcball_zoom(struct arcball_t *arcball, float normalized_zoom)
 {
-  auto view_inverse = glm::inverse(arcball->camera->view);
-
-  auto distance = glm::dvec3(view_inverse[3]) - arcball->center;
-  auto move_distance = glm::length(distance) * normalized_zoom;
-  auto translate = glm::dvec3(view_inverse[2]) * move_distance;
-  view_inverse[3] += glm::dvec4(translate, 0.0);
-  arcball->camera->view = glm::inverse(view_inverse);
-  arcball->inverse_view = view_inverse;
-  arcball->pitch = 0.0;
-  arcball->yaw = 0.0;
-  arcball->roll = 0.0;
+  arcball->distance *= (1.0 + normalized_zoom);
+  arcball->distance = glm::max(arcball->distance, 0.01);
+  arcball_update_view(arcball);
 }
 
 struct fps_t *fps_create(struct camera_t *camera)
@@ -272,6 +307,38 @@ void fps_move(struct fps_t *fps, float dx, float dy, float dz)
   fps->roll = 0.0;
 }
 
+void arcball_set_up_axis(struct arcball_t *arcball, const double up[3])
+{
+  arcball->up = glm::make_vec3(up);
+  arcball_extract_angles(arcball);
+  arcball_update_view(arcball);
+}
+
+void arcball_get_up_axis(struct arcball_t *arcball, double up[3])
+{
+  memcpy(up, glm::value_ptr(arcball->up), 3 * sizeof(double));
+}
+
+void arcball_get_center(struct arcball_t *arcball, double center[3])
+{
+  memcpy(center, glm::value_ptr(arcball->center), 3 * sizeof(double));
+}
+
 } // namespace camera_manipulator
+
+void camera_get_eye(struct camera_t *camera, double eye[3])
+{
+  glm::dvec3 e = glm::dvec3(glm::inverse(camera->view)[3]);
+  memcpy(eye, glm::value_ptr(e), 3 * sizeof(double));
+}
+
+void camera_get_forward(struct camera_t *camera, double forward[3])
+{
+  glm::dmat4 inv = glm::inverse(camera->view);
+  glm::dvec3 f = -glm::dvec3(inv[2]);
+  f = glm::normalize(f);
+  memcpy(forward, glm::value_ptr(f), 3 * sizeof(double));
+}
+
 } // namespace points::render
 

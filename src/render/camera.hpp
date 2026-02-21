@@ -49,13 +49,11 @@ namespace camera_manipulator
 struct arcball_t
 {
   camera_t *camera;
-  glm::dvec3 center;
-  glm::dmat4 inverse_view;
-  glm::dmat4 initial_rot;
-  double inverse_yaw;
-  double yaw;
-  double pitch;
-  double roll;
+  glm::dvec3 center;  // orbit point (world space)
+  glm::dvec3 up;      // world up axis (default Y-up)
+  double distance;     // eye-to-center distance
+  double yaw;          // horizontal orbit angle (radians, around up axis)
+  double pitch;        // vertical orbit angle (radians, clamped ±89°)
 };
 
 struct fps_t
