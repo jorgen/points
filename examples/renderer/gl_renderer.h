@@ -83,7 +83,7 @@ public:
   gl_dyn_points_handler();
   ~gl_dyn_points_handler();
   void initialize() override;
-  void draw(points::render::draw_group_t &group, color_components_t color_components);
+  void draw(points::render::draw_group_t &group, color_components_t color_components, float point_scale);
 
   bool is_initialized;
 
@@ -94,6 +94,7 @@ public:
     GLint vertex_position = 0;
     GLint rgb_position = 0;
     GLint uniform_camera = 0;
+    GLint uniform_point_scale = 0;
   } gl_handles[2];
 };
 
@@ -114,6 +115,22 @@ public:
   bool is_initialized;
 };
 
+class gl_axis_gizmo_handler : public gl_frame_handler
+{
+public:
+  gl_axis_gizmo_handler();
+  ~gl_axis_gizmo_handler();
+  void initialize() override;
+  void draw(points::render::draw_group_t &group);
+
+  GLuint vao;
+  GLuint program;
+  GLint attrib_position;
+  GLint attrib_color;
+  GLint uniform_pv;
+  bool is_initialized;
+};
+
 enum class clear
 {
   none = 0,
@@ -128,6 +145,9 @@ public:
   gl_renderer(points::render::renderer_t *renderer, points::render::camera_t *camera);
 
   void draw(clear clear, int viewport_width, int viewport_height);
+
+  float point_world_size = 0.05f;
+  float lod_scale_base = 1.1f;
 
 private:
   static void static_dirty_callback(struct points::render::renderer_t *renderer, void *renderer_user_ptr);
@@ -164,6 +184,7 @@ private:
   gl_skybox_handler skybox_handler;
   gl_flat_points_handler points_handler;
   gl_dyn_points_handler dynpoints_handler;
+  gl_axis_gizmo_handler axis_gizmo_handler;
 };
 
 #endif // FRUSTUM_GL_RENDERER_H
