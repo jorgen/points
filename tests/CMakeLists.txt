@@ -20,8 +20,12 @@ add_executable(private_interface_unit_tests
         $<TARGET_OBJECTS:points_converter_objects>
         $<TARGET_OBJECTS:points_render_objects>
         private/frustum.cpp
+        private/byte_shuffle_tests.cpp
+        private/compression_preprocess_tests.cpp
+        private/compressor_tests.cpp
+        private/camera_arcball_tests.cpp
 )
-target_link_libraries(private_interface_unit_tests PRIVATE vio)
+target_link_libraries(private_interface_unit_tests PRIVATE vio blosc2_static)
 CmDepTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm unordered_dense laszip::api)
 target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
