@@ -27,6 +27,7 @@ set(private_headers
         frustum_tree_walker.hpp
         input_data_source_registry.hpp
         input_storage_map.hpp
+        native_node_data_loader.hpp
         compressor.hpp
         compressor_blosc2.hpp
 )
@@ -46,6 +47,7 @@ set(sources
         attributes_configs.cpp
         data_source_converter.cpp
         frustum_tree_walker.cpp
+        native_node_data_loader.cpp
         blob_manager.cpp
         input_data_source_registry.cpp
         input_storage_map.cpp

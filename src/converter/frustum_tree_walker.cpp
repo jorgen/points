@@ -143,6 +143,10 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
       auto node_name = current_tree->node_ids[current_depth_in_tree][possible_nodes.skip];
       node_id_t node_id = {current_tree->id, uint16_t(current_depth_in_tree), node_name};
       auto &points_collection = current_tree->data[current_depth_in_tree][possible_nodes.skip];
+      double tight_min[3], tight_max[3];
+      convert_morton_to_pos(tree_registry.tree_config.scale, tree_registry.tree_config.offset, points_collection.min, tight_min);
+      convert_morton_to_pos(tree_registry.tree_config.scale, tree_registry.tree_config.offset, points_collection.max, tight_max);
+      node_aabb_t tight_aabb = {glm::dvec3(tight_min[0], tight_min[1], tight_min[2]), glm::dvec3(tight_max[0], tight_max[1], tight_max[2])};
       for (auto &points : points_collection.data)
       {
         auto attr_id = current_tree->storage_map.attribute_id(points.input_id);
@@ -168,6 +172,7 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
         to_add.lod = lod;
         to_add.node = node_id;
         to_add.aabb = possible_nodes.aabbs;
+        to_add.tight_aabb = tight_aabb;
         to_add.frustum_visible = visible;
         to_add.offset_in_subset = points.offset;
         to_add.point_count = points.count;

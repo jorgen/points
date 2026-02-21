@@ -18,7 +18,8 @@ set(private_headers
         buffer.hpp
         image_decoder.hpp
         data_source_flat_points.hpp
-        data_source_axis_gizmo.hpp)
+        data_source_axis_gizmo.hpp
+        node_data_loader.hpp)
 
 set(sources
         renderer.cpp
