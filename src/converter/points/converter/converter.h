@@ -143,6 +143,33 @@ enum converter_open_file_semantics_t
   open_file_semantics_truncate
 };
 
+enum converter_compression_t
+{
+  converter_compression_none = 0,
+  converter_compression_blosc2 = 1,
+  converter_compression_zstd = 2,
+  converter_compression_huff0 = 3
+};
+
+struct converter_attribute_stats_t
+{
+  char name[64];
+  enum type_t type;
+  enum components_t components;
+  uint64_t buffer_count;
+  uint64_t uncompressed_bytes;
+  uint64_t compressed_bytes;
+};
+
+struct converter_stats_t
+{
+  uint32_t input_file_count;
+  uint32_t total_buffer_count;
+  uint32_t compression_method;
+  uint32_t attribute_count;
+  struct converter_attribute_stats_t attributes[32];
+};
+
 struct converter_t;
 POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size, enum converter_open_file_semantics_t open_file_semantics, struct error_t **error);
 
@@ -152,11 +179,17 @@ POINTS_CONVERTER_EXPORT void converter_set_file_converter_callbacks(converter_t 
 
 POINTS_CONVERTER_EXPORT void converter_set_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks, void *user_ptr);
 
+POINTS_CONVERTER_EXPORT void converter_set_compression(converter_t *converter, enum converter_compression_t compression);
+
 POINTS_CONVERTER_EXPORT void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count);
 
 POINTS_CONVERTER_EXPORT void converter_wait_idle(converter_t *converter);
 
 POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter_t *converter);
+
+POINTS_CONVERTER_EXPORT void converter_get_compression_stats(struct converter_t *converter, struct converter_stats_t *stats);
+
+POINTS_CONVERTER_EXPORT int converter_read_file_stats(const char *filename, uint64_t filename_size, struct converter_stats_t *stats);
 } // namespace converter
 } // namespace points
 #ifdef __cplusplus

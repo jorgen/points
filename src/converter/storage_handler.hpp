@@ -30,6 +30,7 @@
 #include <ankerl/unordered_dense.h>
 
 #include <memory>
+#include <set>
 
 #include <cstdint>
 #include <deque>
@@ -75,6 +76,9 @@ struct compressed_write_data_t
   int buffer_index;
   std::shared_ptr<uint8_t[]> data;
   uint32_t size;
+  std::string attribute_name;
+  point_format_t format;
+  uint32_t uncompressed_size;
 };
 
 struct storage_handler_request_t
@@ -131,6 +135,8 @@ public:
 
   void set_compressor(compression_method_t method);
 
+  const compression_stats_t &get_compression_stats() const { return _compression_stats; }
+
   void add_request(std::shared_ptr<storage_handler_request_t> request);
   void remove_request(storage_handler_request_t *request);
 
@@ -142,7 +148,7 @@ private:
   void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, error_t &&error)> &&done);
   void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done);
   void handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                          std::function<void(error_t &&error)> &&done);
+                          const storage_location_t &compression_stats, std::function<void(error_t &&error)> &&done);
   void handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location);
   void remove_write_requests(write_requests_t *write_requests);
   void remove_write_tree_requests(write_trees_request_t *write_requests);
@@ -165,6 +171,10 @@ private:
 
   storage_location_t attributes_location;
   storage_location_t blobs_location;
+  storage_location_t stats_location;
+
+  compression_stats_t _compression_stats;
+  std::set<uint32_t> _seen_input_files;
 
   vio::event_pipe_t<void> &_index_written;
   vio::event_pipe_t<error_t> &_storage_error;

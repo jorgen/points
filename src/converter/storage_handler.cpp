@@ -34,7 +34,8 @@
 namespace points::converter
 {
 
-static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry)
+static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
+                                                   const storage_location_t &compression_stats)
 {
   auto serialized_index = std::make_shared<uint8_t[]>(index_size);
   auto *data = serialized_index.get();
@@ -51,10 +52,14 @@ static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   data += sizeof(attribute_configs);
 
   memcpy(data, &tree_registry, sizeof(tree_registry));
+  data += sizeof(tree_registry);
+
+  memcpy(data, &compression_stats, sizeof(compression_stats));
 
   return serialized_index;
 }
-[[nodiscard]] static error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry)
+[[nodiscard]] static error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry,
+                                               storage_location_t &compression_stats)
 {
   (void)buffer_size; // buffer size is validated by the caller
   uint8_t magic[] = {'J', 'L', 'P', 0};
@@ -73,6 +78,9 @@ static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   ptr += sizeof(attribute_configs);
 
   memcpy(&tree_registry, ptr, sizeof(tree_registry));
+  ptr += sizeof(tree_registry);
+
+  memcpy(&compression_stats, ptr, sizeof(compression_stats));
   return {};
 }
 
@@ -129,9 +137,9 @@ read_request_t::read_request_t(storage_handler_t &storage, compressor_t *compres
                               [this, done_moved = std::move(done)](const storage_handler_request_t &request)
                               {
                                 (void)request;
-                                if (this->_compressor && this->buffer && has_compression_magic(this->buffer.get(), this->buffer_info.size))
+                                if (this->buffer && has_compression_magic(this->buffer.get(), this->buffer_info.size))
                                 {
-                                  auto decompressed = this->_compressor->decompress(this->buffer.get(), this->buffer_info.size);
+                                  auto decompressed = decompress_any(this->buffer.get(), this->buffer_info.size);
                                   if (decompressed.error.code == 0)
                                   {
                                     this->buffer = std::move(decompressed.data);
@@ -279,7 +287,8 @@ error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buf
   storage_location_t free_blobs;
   storage_location_t attribute_configs;
   storage_location_t tree_registry;
-  error = deserialize_index(index_buffer.get(), _serialized_index_size, free_blobs, attribute_configs, tree_registry);
+  storage_location_t compression_stats;
+  error = deserialize_index(index_buffer.get(), _serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats);
   if (error.code != 0)
   {
     return error;
@@ -407,9 +416,13 @@ void storage_handler_t::handle_write_events(
   write_requests->attributes_id = attributes_id;
   write_requests->done_callback = std::move(done);
 
+  _seen_input_files.insert(storage_header.input_id.data);
+
+  auto formats = _attributes_configs.get_format_components(attributes_id);
+  auto &attributes = _attributes_configs.get(attributes_id);
+
   if (_compressor)
   {
-    auto formats = _attributes_configs.get_format_components(attributes_id);
     auto write_requests_ptr = write_requests.get();
 
     for (int i = 0; i < int(attribute_buffers.buffers.size()); i++)
@@ -440,6 +453,12 @@ void storage_handler_t::handle_write_events(
         format = {type_u8, components_1};
       }
 
+      std::string attr_name;
+      if (i < int(attributes.attributes.size()))
+        attr_name = std::string(attributes.attributes[i].name, attributes.attributes[i].name_size);
+      else
+        attr_name = "unknown";
+
       auto compressor = _compressor.get();
       uint32_t point_count = storage_header.point_count;
       auto captured_data = data_owner;
@@ -447,9 +466,11 @@ void storage_handler_t::handle_write_events(
       auto captured_raw = static_cast<uint8_t *>(buffer_data.data);
       auto *pipe = &_compressed_write_pipe;
 
-      _thread_pool.enqueue([compressor, captured_raw, captured_size, captured_data, format, point_count, write_requests_ptr, i, pipe]()
+      _thread_pool.enqueue([compressor, captured_raw, captured_size, captured_data, format, point_count, write_requests_ptr, i, pipe, attr_name]()
       {
-        auto compressed = compressor->compress(captured_raw, captured_size, format, point_count);
+        auto compressed = try_compress_constant(captured_raw, captured_size, format);
+        if (!compressed.data)
+          compressed = compressor->compress(captured_raw, captured_size, format, point_count);
         if (compressed.error.code != 0)
         {
           compressed_write_data_t wd;
@@ -457,6 +478,9 @@ void storage_handler_t::handle_write_events(
           wd.buffer_index = i;
           wd.data = captured_data;
           wd.size = captured_size;
+          wd.attribute_name = attr_name;
+          wd.format = format;
+          wd.uncompressed_size = captured_size;
           pipe->post_event(std::move(wd));
           return;
         }
@@ -465,6 +489,9 @@ void storage_handler_t::handle_write_events(
         wd.buffer_index = i;
         wd.data = std::move(compressed.data);
         wd.size = compressed.size;
+        wd.attribute_name = attr_name;
+        wd.format = format;
+        wd.uncompressed_size = captured_size;
         pipe->post_event(std::move(wd));
       });
     }
@@ -484,6 +511,21 @@ void storage_handler_t::handle_write_events(
         serialize_data = attribute_buffers.buffers[i];
         data_owner = std::move(attribute_buffers.data[i]);
       }
+
+      std::string attr_name;
+      point_format_t format;
+      if (i < int(attributes.attributes.size()))
+      {
+        attr_name = std::string(attributes.attributes[i].name, attributes.attributes[i].name_size);
+        format = {attributes.attributes[i].type, attributes.attributes[i].components};
+      }
+      else
+      {
+        attr_name = "unknown";
+        format = {type_u8, components_1};
+      }
+      _compression_stats.accumulate(attr_name, format, serialize_data.size, serialize_data.size);
+
       auto &location = locations[i];
       location.file_id = 0;
       location.size = serialize_data.size;
@@ -584,7 +626,10 @@ struct serialize_meta_t
   serialized_free_blob_manager_t serialized_blob;
   serialized_attributes_t serialized_attributes_configs;
   storage_location_t serialized_attributes_configs_location;
+  std::shared_ptr<uint8_t[]> serialized_stats_data;
+  storage_location_t serialized_stats_location;
   int serialized_count = 0;
+  int serialized_target = 0;
   std::function<void(error_t &&error)> done;
 };
 
@@ -629,10 +674,35 @@ void storage_handler_t::handle_write_blob_locations_and_update_header(storage_lo
     }
   }
 
+  if (stats_location.offset > 0)
+  {
+    auto removed = new_blob_manager.unregister_blob({stats_location.offset}, {stats_location.size});
+    if (!removed)
+    {
+      error_t error;
+      error.code = -1;
+      error.msg = "Failed to remove stats location";
+      done(std::move(error));
+      return;
+    }
+  }
+
   auto serialized_meta = std::make_shared<serialize_meta_t>();
   serialized_meta->serialized_attributes_configs = _attributes_configs.serialize();
   serialized_meta->serialized_attributes_configs_location.offset = new_blob_manager.register_blob({serialized_meta->serialized_attributes_configs.size}).data;
   serialized_meta->serialized_attributes_configs_location.size = serialized_meta->serialized_attributes_configs.size;
+
+  // Serialize compression stats
+  _compression_stats.input_file_count = static_cast<uint32_t>(_seen_input_files.size());
+  if (_compressor)
+    _compression_stats.method = _compressor->method();
+
+  uint32_t stats_size = 0;
+  serialized_meta->serialized_stats_data = _compression_stats.serialize(stats_size);
+  serialized_meta->serialized_stats_location.offset = new_blob_manager.register_blob({stats_size}).data;
+  serialized_meta->serialized_stats_location.size = stats_size;
+  serialized_meta->serialized_target = 3;
+
   serialized_meta->serialized_blob = new_blob_manager.serialize();
 
   serialized_meta->new_blob_manager = std::move(new_blob_manager);
@@ -649,23 +719,26 @@ void storage_handler_t::handle_write_blob_locations_and_update_header(storage_lo
       return;
     }
 
-    if (serialized_meta->serialized_count == 2)
+    if (serialized_meta->serialized_count == serialized_meta->serialized_target)
     {
       storage_location_t serialized_blob_location = {0, serialized_meta->serialized_blob.size, serialized_meta->serialized_blob.offset};
-      handle_write_index(std::move(serialized_meta->new_blob_manager), serialized_blob_location, serialized_meta->serialized_attributes_configs_location, new_tree_registry_location, std::move(serialized_meta->done));
+      handle_write_index(std::move(serialized_meta->new_blob_manager), serialized_blob_location, serialized_meta->serialized_attributes_configs_location, new_tree_registry_location,
+                         serialized_meta->serialized_stats_location, std::move(serialized_meta->done));
     }
   };
 
   handle_write(serialized_meta->serialized_blob.data, {0, serialized_meta->serialized_blob.size, serialized_meta->serialized_blob.offset}, request_handler);
 
   handle_write(serialized_meta->serialized_attributes_configs.data, {0, serialized_meta->serialized_attributes_configs_location.size, serialized_meta->serialized_attributes_configs_location.offset}, request_handler);
+
+  handle_write(serialized_meta->serialized_stats_data, {0, serialized_meta->serialized_stats_location.size, serialized_meta->serialized_stats_location.offset}, request_handler);
 }
 
 void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                                           std::function<void(error_t &&error)> &&done)
+                                           const storage_location_t &compression_stats, std::function<void(error_t &&error)> &&done)
 {
-  auto serialized_index = serialize_index(_serialized_index_size, free_blobs, attribute_configs, tree_registry);
-  auto done_callback = [this, new_blob_manager_moved = std::move(new_blob_manager), free_blobs, attribute_configs, done_moved = std::move(done)](const storage_handler_request_t &request) mutable
+  auto serialized_index = serialize_index(_serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats);
+  auto done_callback = [this, new_blob_manager_moved = std::move(new_blob_manager), free_blobs, attribute_configs, compression_stats, done_moved = std::move(done)](const storage_handler_request_t &request) mutable
   {
     error_t error;
     fmt::print(stderr, "Write index done {}\n", request.error.code);
@@ -677,6 +750,7 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
     this->_blob_manager = std::move(new_blob_manager_moved);
     this->blobs_location = free_blobs;
     this->attributes_location = attribute_configs;
+    this->stats_location = compression_stats;
     uv_fs_t req = {};
     uv_fs_fsync(_event_loop.loop(), &req, _file_handle, NULL);
     this->_index_written.post_event();
@@ -694,6 +768,8 @@ void storage_handler_t::set_compressor(compression_method_t method)
 
 void storage_handler_t::handle_compressed_write(compressed_write_data_t &&event)
 {
+  _compression_stats.accumulate(event.attribute_name, event.format, event.uncompressed_size, event.size);
+
   auto &location = event.write_req->locations[event.buffer_index];
   location.file_id = 0;
   location.size = event.size;
