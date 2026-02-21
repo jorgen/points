@@ -31,10 +31,6 @@
 namespace points::converter
 {
 
-static const void *buffer_end(const buffer_t &buffer)
-{
-  return ((const uint8_t *)buffer.data) + buffer.size;
-}
 struct children_subset_t
 {
   std::vector<points_subset_t> data;
@@ -451,10 +447,16 @@ static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, 
   return ret;
 }
 
+#ifndef NDEBUG
+static const void *buffer_end(const buffer_t &buffer)
+{
+  return ((const uint8_t *)buffer.data) + buffer.size;
+}
 static bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
 {
   return super.data <= sub.data && buffer_end(sub) <= buffer_end(super);
 }
+#endif
 
 template <typename T, size_t S>
 struct structured_data_t
@@ -821,7 +823,8 @@ void lod_worker_t::work()
   destination_header.point_format = {lod_format, components_1};
   destination_header.lod_span = data.lod;
   cache.write(destination_header, lod_attrib_mapping.destination_id, std::move(buffers),
-              [this](const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error) {
+              [this](const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)
+              {
                 (void)storageheader;
                 (void)error;
                 this->data.generated_attributes_id = attrib_id;
@@ -924,7 +927,8 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
   }
 }
 
-tree_lod_generator_t::tree_lod_generator_t(vio::event_loop_t &loop, vio::thread_pool_t &thread_pool, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, vio::event_pipe_t<void> &lod_done)
+tree_lod_generator_t::tree_lod_generator_t(vio::event_loop_t &loop, vio::thread_pool_t &thread_pool, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs,
+                                           vio::event_pipe_t<void> &lod_done)
   : _loop(loop)
   , _thread_pool(thread_pool)
   , _tree_cache(tree_cache)

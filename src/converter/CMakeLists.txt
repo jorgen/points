@@ -27,6 +27,8 @@ set(private_headers
         frustum_tree_walker.hpp
         input_data_source_registry.hpp
         input_storage_map.hpp
+        compressor.hpp
+        compressor_blosc2.hpp
 )
 
 set(sources
@@ -47,10 +49,11 @@ set(sources
         blob_manager.cpp
         input_data_source_registry.cpp
         input_storage_map.cpp
+        compressor_blosc2.cpp
 )
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio)
+target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio blosc2_static)
 CmDepTargetLinkLibrary(points_converter_objects PRIVATE laszip::impl)
 target_include_directories(points_converter_objects
         PUBLIC

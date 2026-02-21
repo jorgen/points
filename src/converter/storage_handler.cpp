@@ -16,6 +16,7 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "storage_handler.hpp"
+#include "input_header.hpp"
 
 #include <uv.h>
 
@@ -123,17 +124,32 @@ void storage_handler_request_t::do_write(const std::shared_ptr<uint8_t[]> &data,
   uv_fs_write(storage_handler._event_loop.loop(), &uv_request, storage_handler._file_handle, &uv_buffer, 1, int64_t(offset), request_done_callback);
 }
 
-read_request_t::read_request_t(storage_handler_t &storage, std::function<void(const storage_handler_request_t &)> done)
+read_request_t::read_request_t(storage_handler_t &storage, compressor_t *compressor, std::function<void(const storage_handler_request_t &)> done)
   : storage_handler_request_t(storage,
                               [this, done_moved = std::move(done)](const storage_handler_request_t &request)
                               {
                                 (void)request;
+                                if (this->_compressor && this->buffer && has_compression_magic(this->buffer.get(), this->buffer_info.size))
+                                {
+                                  auto decompressed = this->_compressor->decompress(this->buffer.get(), this->buffer_info.size);
+                                  if (decompressed.error.code == 0)
+                                  {
+                                    this->buffer = std::move(decompressed.data);
+                                    this->buffer_info.data = this->buffer.get();
+                                    this->buffer_info.size = decompressed.size;
+                                  }
+                                  else
+                                  {
+                                    this->error = std::move(decompressed.error);
+                                  }
+                                }
                                 std::unique_lock<std::mutex> lock(this->_mutex);
                                 this->_done = true;
                                 this->_block_for_read.notify_all();
                                 if (done_moved)
                                   done_moved(*this);
                               })
+  , _compressor(compressor)
   , _done(false)
 {
 }
@@ -184,9 +200,10 @@ static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop
   return buffer;
 }
 
-storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t & /*thread_pool*/, attributes_configs_t &attributes_configs, vio::event_pipe_t<void> &index_written,
+storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, vio::event_pipe_t<void> &index_written,
                                      vio::event_pipe_t<error_t> &storage_error_pipe, error_t &error)
   : _file_name(url)
+  , _thread_pool(thread_pool)
   , _event_loop_thread()
   , _event_loop(_event_loop_thread.event_loop())
   , _file_handle(0)
@@ -202,7 +219,9 @@ storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t 
   , _write_tree_registry_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_tree_registry))
   , _write_blob_locations_and_update_header_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
   , _read_request_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
+  , _compressed_write_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_compressed_write))
 {
+  set_compressor(compression_method_t::blosc2);
   uv_fs_t request = {};
   auto result = uv_fs_stat(_event_loop.loop(), &request, _file_name.c_str(), NULL);
   if (result != 0)
@@ -387,43 +406,109 @@ void storage_handler_t::handle_write_events(
   write_requests->header = storage_header;
   write_requests->attributes_id = attributes_id;
   write_requests->done_callback = std::move(done);
-  for (int i = 0; i < int(attribute_buffers.buffers.size()); i++)
-  {
-    buffer_t serialize_data;
-    std::shared_ptr<uint8_t[]> data_owner;
-    if (i == 0)
-    {
-      serialize_points(storage_header, attribute_buffers.buffers[i], serialize_data, data_owner);
-    }
-    else
-    {
-      serialize_data = attribute_buffers.buffers[i];
-      data_owner = std::move(attribute_buffers.data[i]);
-    }
-    auto &location = locations[i];
-    location.file_id = 0;
-    location.size = serialize_data.size;
-    free_blob_manager_t::blob_size_t size = {location.size};
-    location.offset = this->_blob_manager.register_blob(size).data;
 
-    auto write_requests_prt = write_requests.get();
-    auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request)
+  if (_compressor)
+  {
+    auto formats = _attributes_configs.get_format_components(attributes_id);
+    auto write_requests_ptr = write_requests.get();
+
+    for (int i = 0; i < int(attribute_buffers.buffers.size()); i++)
     {
-      if (request.error.code != 0 && write_requests_prt->error.code == 0)
+      buffer_t buffer_data;
+      std::shared_ptr<uint8_t[]> data_owner;
+      if (i == 0)
       {
-        write_requests_prt->error = request.error;
+        serialize_points(storage_header, attribute_buffers.buffers[i], buffer_data, data_owner);
       }
-      write_requests_prt->done++;
-      if (write_requests_prt->done == write_requests_prt->target_count)
+      else
       {
-        if (write_requests_prt->done_callback)
+        buffer_data = attribute_buffers.buffers[i];
+        data_owner = std::move(attribute_buffers.data[i]);
+      }
+
+      point_format_t format;
+      if (i == 0)
+      {
+        format = storage_header.point_format;
+      }
+      else if (i < int(formats.size()))
+      {
+        format = formats[i];
+      }
+      else
+      {
+        format = {type_u8, components_1};
+      }
+
+      auto compressor = _compressor.get();
+      uint32_t point_count = storage_header.point_count;
+      auto captured_data = data_owner;
+      auto captured_size = buffer_data.size;
+      auto captured_raw = static_cast<uint8_t *>(buffer_data.data);
+      auto *pipe = &_compressed_write_pipe;
+
+      _thread_pool.enqueue([compressor, captured_raw, captured_size, captured_data, format, point_count, write_requests_ptr, i, pipe]()
+      {
+        auto compressed = compressor->compress(captured_raw, captured_size, format, point_count);
+        if (compressed.error.code != 0)
         {
-          write_requests_prt->done_callback(write_requests_prt->header, write_requests_prt->attributes_id, std::move(write_requests_prt->locations), write_requests_prt->error);
+          compressed_write_data_t wd;
+          wd.write_req = write_requests_ptr;
+          wd.buffer_index = i;
+          wd.data = captured_data;
+          wd.size = captured_size;
+          pipe->post_event(std::move(wd));
+          return;
         }
-        remove_write_requests(write_requests_prt);
+        compressed_write_data_t wd;
+        wd.write_req = write_requests_ptr;
+        wd.buffer_index = i;
+        wd.data = std::move(compressed.data);
+        wd.size = compressed.size;
+        pipe->post_event(std::move(wd));
+      });
+    }
+  }
+  else
+  {
+    for (int i = 0; i < int(attribute_buffers.buffers.size()); i++)
+    {
+      buffer_t serialize_data;
+      std::shared_ptr<uint8_t[]> data_owner;
+      if (i == 0)
+      {
+        serialize_points(storage_header, attribute_buffers.buffers[i], serialize_data, data_owner);
       }
-    };
-    handle_write(data_owner, location, std::move(done_callback));
+      else
+      {
+        serialize_data = attribute_buffers.buffers[i];
+        data_owner = std::move(attribute_buffers.data[i]);
+      }
+      auto &location = locations[i];
+      location.file_id = 0;
+      location.size = serialize_data.size;
+      free_blob_manager_t::blob_size_t size = {location.size};
+      location.offset = this->_blob_manager.register_blob(size).data;
+
+      auto write_requests_prt = write_requests.get();
+      auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request)
+      {
+        if (request.error.code != 0 && write_requests_prt->error.code == 0)
+        {
+          write_requests_prt->error = request.error;
+        }
+        write_requests_prt->done++;
+        if (write_requests_prt->done == write_requests_prt->target_count)
+        {
+          if (write_requests_prt->done_callback)
+          {
+            write_requests_prt->done_callback(write_requests_prt->header, write_requests_prt->attributes_id, std::move(write_requests_prt->locations), write_requests_prt->error);
+          }
+          remove_write_requests(write_requests_prt);
+        }
+      };
+      handle_write(data_owner, location, std::move(done_callback));
+    }
   }
 }
 
@@ -602,6 +687,39 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
   handle_write(serialized_index, {0, _serialized_index_size, 0}, std::move(done_callback));
 }
 
+void storage_handler_t::set_compressor(compression_method_t method)
+{
+  _compressor = create_compressor(method);
+}
+
+void storage_handler_t::handle_compressed_write(compressed_write_data_t &&event)
+{
+  auto &location = event.write_req->locations[event.buffer_index];
+  location.file_id = 0;
+  location.size = event.size;
+  free_blob_manager_t::blob_size_t blob_size = {location.size};
+  location.offset = _blob_manager.register_blob(blob_size).data;
+
+  auto write_requests_prt = event.write_req;
+  auto done_callback = [this, write_requests_prt](const storage_handler_request_t &request)
+  {
+    if (request.error.code != 0 && write_requests_prt->error.code == 0)
+    {
+      write_requests_prt->error = request.error;
+    }
+    write_requests_prt->done++;
+    if (write_requests_prt->done == write_requests_prt->target_count)
+    {
+      if (write_requests_prt->done_callback)
+      {
+        write_requests_prt->done_callback(write_requests_prt->header, write_requests_prt->attributes_id, std::move(write_requests_prt->locations), write_requests_prt->error);
+      }
+      remove_write_requests(write_requests_prt);
+    }
+  };
+  handle_write(event.data, location, std::move(done_callback));
+}
+
 void storage_handler_t::remove_write_requests(write_requests_t *write_requests)
 {
   std::unique_lock<std::mutex> lock(_mutex);
@@ -627,7 +745,7 @@ void storage_handler_t::remove_write_tree_registry_requests(write_tree_registry_
 }
 std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t location, std::function<void(const storage_handler_request_t &)> done_callback)
 {
-  auto ret = std::make_shared<read_request_t>(*this, std::move(done_callback));
+  auto ret = std::make_shared<read_request_t>(*this, _compressor.get(), std::move(done_callback));
   auto copy = ret;
   _read_request_pipe.post_event(std::move(copy), std::move(location));
   return ret;

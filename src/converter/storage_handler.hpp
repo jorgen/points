@@ -23,6 +23,7 @@
 
 #include "attributes_configs.hpp"
 #include "blob_manager.hpp"
+#include "compressor.hpp"
 #include "conversion_types.hpp"
 #include "error.hpp"
 #include "tree.hpp"
@@ -68,6 +69,14 @@ struct write_requests_t
 
 class storage_handler_t;
 
+struct compressed_write_data_t
+{
+  write_requests_t *write_req;
+  int buffer_index;
+  std::shared_ptr<uint8_t[]> data;
+  uint32_t size;
+};
+
 struct storage_handler_request_t
 {
   storage_handler_request_t(storage_handler_t &storage_handler, std::function<void(const storage_handler_request_t &)> done_callback);
@@ -88,10 +97,11 @@ struct storage_handler_request_t
 
 struct read_request_t : storage_handler_request_t
 {
-  read_request_t(storage_handler_t &storage_handler, std::function<void(const storage_handler_request_t &)> done_callback);
+  read_request_t(storage_handler_t &storage_handler, compressor_t *compressor, std::function<void(const storage_handler_request_t &)> done_callback);
 
   void wait_for_read();
 
+  compressor_t *_compressor;
   bool _done;
   std::mutex _mutex;
   std::condition_variable _block_for_read;
@@ -119,10 +129,13 @@ public:
 
   std::shared_ptr<read_request_t> read(storage_location_t location, std::function<void(const storage_handler_request_t &)> done_callback);
 
+  void set_compressor(compression_method_t method);
+
   void add_request(std::shared_ptr<storage_handler_request_t> request);
   void remove_request(storage_handler_request_t *request);
 
 private:
+  void handle_compressed_write(compressed_write_data_t &&event);
   void handle_write_events(
     std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event);
   void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)>> &&event);
@@ -137,6 +150,8 @@ private:
   std::shared_ptr<storage_handler_request_t> handle_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location, std::function<void(const storage_handler_request_t &)> done_callback);
 
   std::string _file_name;
+  vio::thread_pool_t &_thread_pool;
+  std::unique_ptr<compressor_t> _compressor;
   vio::thread_with_event_loop_t _event_loop_thread;
   vio::event_loop_t &_event_loop;
   uv_file _file_handle;
@@ -158,6 +173,7 @@ private:
   vio::event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, error_t &&error)>> _write_tree_registry_pipe;
   vio::event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(error_t &&error)>> _write_blob_locations_and_update_header_pipe;
   vio::event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;
+  vio::event_pipe_t<compressed_write_data_t> _compressed_write_pipe;
 
   std::mutex _mutex;
 
