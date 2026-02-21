@@ -54,8 +54,8 @@ if (WIN32)
     endif ()
 endif ()
 
-option(BUILD_TESTS "Build tests" ON)
-option(BUILD_EXAMPLES "Build examples" ON)
+option(POINTS_BUILD_TESTS "Build tests" ON)
+option(POINTS_BUILD_EXAMPLES "Build examples" ON)
 option(BUILD_SHARED_LIBS "Build shared libs" ON)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -73,12 +73,12 @@ include(CMake/CopyDllForTarget.cmake)
 
 add_subdirectory(src)
 
-if (BUILD_TESTS)
+if (POINTS_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif ()
 
-if (BUILD_EXAMPLES)
+if (POINTS_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif ()
 
