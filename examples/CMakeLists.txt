@@ -8,3 +8,4 @@ endfunction()
 
 add_subdirectory(renderer)
 add_subdirectory(converter)
+add_subdirectory(jlp_info)
