@@ -204,6 +204,9 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
             next_skip = 0;
           }
           alternating_possible_nodes[!current_buffer_index].emplace_back(next_tree, node_id, next_skip, child_aabb, is_completely_inside_frustum);
+          int child_depth = (current_depth_in_tree == 4) ? 0 : current_depth_in_tree + 1;
+          node_id_t child_node_id = {next_tree->id, uint16_t(child_depth), next_tree->node_ids[child_depth][next_skip]};
+          walker.m_new_nodes.parent_child_edges.emplace_back(node_id, child_node_id);
           child_count++;
         }
       }

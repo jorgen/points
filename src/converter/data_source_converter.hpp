@@ -17,11 +17,13 @@
 ************************************************************************/
 #pragma once
 
-#include "buffer.hpp"
 #include "compressor.hpp"
 #include "converter.hpp"
-#include "frustum_tree_walker.hpp"
-#include "node_data_loader.hpp"
+#include "draw_emitter.hpp"
+#include "frame_node_registry.hpp"
+#include "gpu_buffer_manager.hpp"
+#include "gpu_node_buffer.hpp"
+#include "node_selector.hpp"
 #include "renderer_callbacks.hpp"
 #include <points/render/data_source.h>
 
@@ -32,50 +34,11 @@
 namespace points::converter
 {
 
-struct frame_timings_t
-{
-  double tree_walk_ms = 0;
-  double buffer_reconciliation_ms = 0;
-  double gpu_upload_ms = 0;
-  double refine_strategy_ms = 0;
-  double frontier_scheduling_ms = 0;
-  double draw_emission_ms = 0;
-  double eviction_ms = 0;
-  double total_ms = 0;
-};
-
-struct tree_walker_with_buffer_t
-{
-  tree_walker_with_buffer_t() = default;
-  explicit tree_walker_with_buffer_t(tree_walker_nodes_t &&node_data)
-    : node_data(std::move(node_data))
-  {
-  }
-  tree_walker_with_buffer_t(tree_walker_with_buffer_t &&) = default;
-  ~tree_walker_with_buffer_t() = default;
-  tree_walker_nodes_t node_data;
-};
-
-struct gpu_node_buffer_t
-{
-  tree_walker_data_t node_info;
-  render::draw_type_t draw_type = render::dyn_points_1;
-  render::draw_buffer_t render_list[4] = {};
-  render::buffer_t render_buffers[3] = {};
-  uint32_t point_count = 0;
-  std::array<double, 3> offset = {};
-  glm::mat4 camera_view = {};
-  render::load_handle_t load_handle = render::invalid_load_handle;
-  size_t gpu_memory_size = 0;
-  bool rendered = false;
-};
-
 struct converter_data_source_t
 {
   converter_data_source_t(const std::string &url, render::callback_manager_t &callback_manager);
 
   void add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render);
-  void destroy_gpu_buffer(gpu_node_buffer_t &buf);
 
   const std::string url;
   error_t error;
@@ -94,6 +57,7 @@ struct converter_data_source_t
   size_t gpu_memory_budget = 512 * 1024 * 1024;
   size_t gpu_memory_used = 0;
   double effective_pixel_error_threshold = 2.0;
+  uint64_t point_budget = 10'000'000;
 
   render::buffer_t index_buffer;
   std::vector<tree_walker_with_buffer_t> current_tree_nodes[2];
@@ -108,5 +72,11 @@ struct converter_data_source_t
   compression_stats_t attribute_stats;
   double current_attr_min = 0.0;
   double current_attr_max = 1.0;
+
+  // Refactored components
+  frame_node_registry_t node_registry;
+  node_selector_t node_selector;
+  gpu_buffer_manager_t buffer_manager;
+  draw_emitter_t draw_emitter;
 };
 } // namespace points::converter

@@ -26,83 +26,24 @@
 #include <chrono>
 #include <cstring>
 #include <fmt/printf.h>
-#include <limits>
-#include <unordered_map>
-#include <unordered_set>
 
 #include "renderer.hpp"
 
 namespace points::converter
 {
-bool has_rendered = false;
 
-static std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data, uint32_t data_size, type_t type, components_t components,
-                                                                uint32_t point_count, double global_min, double global_max,
-                                                                uint32_t &out_size)
+static bool less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs)
 {
-  double range = global_max - global_min;
-  if (range <= 0.0)
-    range = 1.0;
-  double inv_range = 1.0 / range;
-
-  uint32_t comp_count = static_cast<uint32_t>(components);
-  out_size = point_count * comp_count * sizeof(float);
-  auto result = std::make_shared<uint8_t[]>(out_size);
-  auto *dst = reinterpret_cast<float *>(result.get());
-  auto *src = static_cast<const uint8_t *>(data);
-
-  int type_size = 0;
-  switch (type)
+  if (lhs.lod == rhs.lod)
   {
-  case type_u8: case type_i8: type_size = 1; break;
-  case type_u16: case type_i16: type_size = 2; break;
-  case type_u32: case type_i32: case type_r32: type_size = 4; break;
-  case type_u64: case type_i64: case type_r64: type_size = 8; break;
-  default: type_size = 1; break;
-  }
-
-  uint32_t elem_size = static_cast<uint32_t>(type_size) * comp_count;
-  uint32_t actual_count = std::min(point_count, data_size / elem_size);
-
-  for (uint32_t i = 0; i < actual_count; i++)
-  {
-    for (uint32_t c = 0; c < comp_count; c++)
+    auto node_equals = lhs.node <=> rhs.node;
+    if (node_equals == std::strong_ordering::equal)
     {
-      const uint8_t *elem = src + i * elem_size + c * type_size;
-      double val = 0.0;
-      switch (type)
-      {
-      case type_u8:  { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-      case type_i8:  { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-      case type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-      case type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-      case type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-      case type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-      case type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
-      case type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-      case type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-      case type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
-      default: break;
-      }
-      float normalized = static_cast<float>((val - global_min) * inv_range);
-      if (normalized < 0.0f) normalized = 0.0f;
-      if (normalized > 1.0f) normalized = 1.0f;
-      dst[i * comp_count + c] = normalized;
+      return lhs.input_id < rhs.input_id;
     }
+    return node_equals == std::strong_ordering::less;
   }
-
-  return result;
-}
-
-template <typename buffer_data_t>
-void initialize_buffer(render::callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, render::buffer_type_t buffer_type, type_t type, components_t components, render::buffer_t &buffer)
-{
-  (void)callbacks;
-  (void)buffer_type;
-  (void)type;
-  (void)components;
-  (void)buffer;
-  assert(data_vector.size());
+  return lhs.lod < rhs.lod;
 }
 
 converter_data_source_t::converter_data_source_t(const std::string &url, render::callback_manager_t &callbacks)
@@ -134,50 +75,18 @@ converter_data_source_t::converter_data_source_t(const std::string &url, render:
   }
 }
 
-bool less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs)
-{
-  if (lhs.lod == rhs.lod)
-  {
-    auto node_equals = lhs.node <=> rhs.node;
-    if (node_equals == std::strong_ordering::equal)
-    {
-      return lhs.input_id < rhs.input_id;
-    }
-    return node_equals == std::strong_ordering::less;
-  }
-  return lhs.lod < rhs.lod;
-}
-
-void converter_data_source_t::destroy_gpu_buffer(gpu_node_buffer_t &buf)
-{
-  if (buf.load_handle != render::invalid_load_handle)
-  {
-    node_loader->cancel(buf.load_handle);
-    buf.load_handle = render::invalid_load_handle;
-  }
-  if (buf.rendered)
-  {
-    for (auto &rb : buf.render_buffers)
-      callbacks.do_destroy_buffer(rb);
-    if (buf.gpu_memory_size > 0)
-      gpu_memory_used -= buf.gpu_memory_size;
-    buf.rendered = false;
-    buf.gpu_memory_size = 0;
-  }
-}
-
 void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, render::to_render_t *to_render)
 {
   using clock = std::chrono::high_resolution_clock;
   auto t_start = clock::now();
 
-  (void)to_render;
   const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
   bool new_attribute = false;
   int vp_height;
   double pix_threshold;
   double eff_threshold;
   size_t mem_budget;
+  uint64_t pt_budget;
   {
     std::unique_lock<std::mutex> lock(mutex);
     new_attribute = current_attribute_name != next_attribute_name;
@@ -186,15 +95,14 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
     pix_threshold = pixel_error_threshold;
     eff_threshold = effective_pixel_error_threshold;
     mem_budget = gpu_memory_budget;
+    pt_budget = point_budget;
   }
+
+  // Handle attribute change
   if (new_attribute)
   {
-    for (auto &rb : render_buffers)
-      destroy_gpu_buffer(*rb);
-    render_buffers.clear();
-    gpu_memory_used = 0;
+    buffer_manager.handle_attribute_change(render_buffers, callbacks, node_loader, gpu_memory_used);
 
-    // Look up global min/max for the new attribute
     current_attr_min = 0.0;
     current_attr_max = 1.0;
     for (auto &attr : attribute_stats.per_attribute)
@@ -208,6 +116,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
     }
   }
 
+  // Phase 1: Tree walk
   glm::dvec3 camera_position = glm::dvec3(camera.inverse_view[3]);
   lod_params_t lod_params;
   lod_params.camera_position = camera_position;
@@ -217,452 +126,47 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
 
   frustum_tree_walker_t walker(camera.view_projection, lod_params, std::vector<std::string>({std::string("xyz"), current_attribute_name}));
   processor.walk_tree(walker);
-  auto &buffer = walker.m_new_nodes.point_subsets;
-  std::sort(buffer.begin(), buffer.end(), less_than);
+  auto &walker_subsets = walker.m_new_nodes.point_subsets;
+  std::sort(walker_subsets.begin(), walker_subsets.end(), less_than);
   auto t_after_tree_walk = clock::now();
 
-  std::vector<std::unique_ptr<gpu_node_buffer_t>> new_render_buffers;
-  new_render_buffers.reserve(buffer.size());
-
-  auto render_buffers_it = render_buffers.begin();
-  int i;
-  for (i = 0; i < int(buffer.size()) && render_buffers_it != render_buffers.end(); i++)
-  {
-    auto &node = buffer[i];
-    while (render_buffers_it != render_buffers.end() && less_than(render_buffers_it->get()->node_info, node))
-    {
-      destroy_gpu_buffer(*render_buffers_it->get());
-      render_buffers_it++;
-    }
-    if (render_buffers_it == render_buffers.end())
-    {
-      break;
-    }
-    if (less_than(node, render_buffers_it->get()->node_info))
-    {
-      auto &new_buffer = new_render_buffers.emplace_back(new gpu_node_buffer_t());
-      new_buffer->node_info = node;
-    }
-    else
-    {
-      (*render_buffers_it)->node_info.frustum_visible = node.frustum_visible;
-      new_render_buffers.emplace_back(std::move(*render_buffers_it));
-      render_buffers_it++;
-    }
-  }
-  while (render_buffers_it != render_buffers.end())
-  {
-    destroy_gpu_buffer(*render_buffers_it->get());
-    render_buffers_it++;
-  }
-  for (; i < int(buffer.size()); i++)
-  {
-    auto &node = buffer[i];
-    auto &new_buffer = new_render_buffers.emplace_back(new gpu_node_buffer_t());
-    new_buffer->node_info = node;
-  }
-
-  render_buffers = std::move(new_render_buffers);
+  // Phase 2: Buffer reconciliation
+  buffer_manager.reconcile(render_buffers, walker_subsets, callbacks, node_loader, gpu_memory_used);
   auto t_after_reconciliation = clock::now();
 
-  // Initialize GPU data for buffers that have finished loading (LOD-prioritized, limited per frame)
+  // Phase 3: GPU upload
   auto tree_config = processor.tree_config();
-
-  struct upload_candidate_t
-  {
-    int index;
-    int lod;
-  };
-  std::vector<upload_candidate_t> upload_candidates;
-  for (int idx = 0; idx < int(render_buffers.size()); idx++)
-  {
-    auto &rb = *render_buffers[idx];
-    if (rb.load_handle != render::invalid_load_handle && node_loader->is_ready(rb.load_handle))
-      upload_candidates.push_back({idx, rb.node_info.lod});
-  }
-
-  std::sort(upload_candidates.begin(), upload_candidates.end(), [](const auto &a, const auto &b) { return a.lod > b.lod; });
-
-  size_t upload_limit = mem_budget + mem_budget / 5; // 120% of budget: headroom for prefetch
-  constexpr int max_uploads_per_frame = 4;
-  int uploads_done = 0;
-  for (auto &candidate : upload_candidates)
-  {
-    if (uploads_done >= max_uploads_per_frame)
-      break;
-    if (gpu_memory_used >= upload_limit)
-      break;
-    auto &render_buffer = *render_buffers[candidate.index];
-
-    auto loaded = node_loader->get_data(render_buffer.load_handle);
-    render_buffer.load_handle = render::invalid_load_handle;
-    render_buffer.point_count = loaded.point_count;
-    render_buffer.offset = loaded.offset;
-    render_buffer.draw_type = loaded.draw_type;
-
-    callbacks.do_create_buffer(render_buffer.render_buffers[0], points::render::buffer_type_vertex);
-    callbacks.do_initialize_buffer(render_buffer.render_buffers[0], loaded.vertex_type, loaded.vertex_components, int(loaded.vertex_data_size), loaded.vertex_data);
-
-    callbacks.do_create_buffer(render_buffer.render_buffers[1], points::render::buffer_type_vertex);
-
-    // Normalize attribute data to float32 [0,1] using global stats for proper rendering
-    bool should_normalize = (current_attr_min < current_attr_max) &&
-                           !(loaded.attribute_type == type_u16 && loaded.attribute_components == components_3); // skip RGB
-    std::shared_ptr<uint8_t[]> normalized_data;
-    if (should_normalize)
-    {
-      uint32_t normalized_size = 0;
-      normalized_data = normalize_attribute_to_float(loaded.attribute_data, loaded.attribute_data_size,
-                                                      loaded.attribute_type, loaded.attribute_components,
-                                                      loaded.point_count, current_attr_min, current_attr_max,
-                                                      normalized_size);
-      callbacks.do_initialize_buffer(render_buffer.render_buffers[1], type_r32, loaded.attribute_components, int(normalized_size), normalized_data.get());
-    }
-    else
-    {
-      callbacks.do_initialize_buffer(render_buffer.render_buffers[1], loaded.attribute_type, loaded.attribute_components, int(loaded.attribute_data_size), loaded.attribute_data);
-    }
-
-    render_buffer.camera_view = camera.projection * glm::translate(camera.view, to_glm(render_buffer.offset));
-
-    callbacks.do_create_buffer(render_buffer.render_buffers[2], points::render::buffer_type_uniform);
-    callbacks.do_initialize_buffer(render_buffer.render_buffers[2], type_r32, points::components_4x4, sizeof(render_buffer.camera_view), &render_buffer.camera_view);
-
-    render_buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;
-    render_buffer.render_list[0].user_ptr = render_buffer.render_buffers[0].user_ptr;
-    render_buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;
-    render_buffer.render_list[1].user_ptr = render_buffer.render_buffers[1].user_ptr;
-    render_buffer.render_list[2].buffer_mapping = render::dyn_points_bm_camera;
-    render_buffer.render_list[2].user_ptr = render_buffer.render_buffers[2].user_ptr;
-
-    size_t buf_mem = loaded.vertex_data_size + loaded.attribute_data_size + sizeof(render_buffer.camera_view);
-    render_buffer.gpu_memory_size = buf_mem;
-    gpu_memory_used += buf_mem;
-
-    render_buffer.rendered = true;
-    loaded.release();
-    uploads_done++;
-  }
+  size_t upload_limit = mem_budget + mem_budget / 5;
+  buffer_manager.upload_ready(render_buffers, callbacks, node_loader, gpu_memory_used,
+                              upload_limit, 4, camera, current_attribute_name,
+                              current_attr_min, current_attr_max);
   auto t_after_upload = clock::now();
 
-  // ===== Refine Strategy: Coarsest-to-finest with distance-based budget =====
+  // Phase 4: Update registry from walker
+  node_registry.update_from_walker(walker_subsets, walker.m_new_nodes.parent_child_edges, render_buffers);
 
-  struct node_id_hash
-  {
-    size_t operator()(const node_id_t &id) const
-    {
-      uint64_t v;
-      memcpy(&v, &id, sizeof(v));
-      return std::hash<uint64_t>()(v);
-    }
-  };
-  struct node_id_equal
-  {
-    bool operator()(const node_id_t &a, const node_id_t &b) const
-    {
-      return (a <=> b) == std::strong_ordering::equal;
-    }
-  };
-
-  // Phase 1: Group render buffers by node_id
-  struct node_group_t
-  {
-    node_id_t parent_id;
-    node_aabb_t aabb;
-    node_aabb_t tight_aabb;
-    bool frustum_visible;
-    std::vector<int> buffer_indices;
-    bool all_rendered;
-    size_t total_gpu_memory;
-  };
-
-  std::unordered_map<node_id_t, node_group_t, node_id_hash, node_id_equal> node_map;
-  for (int idx = 0; idx < int(render_buffers.size()); idx++)
-  {
-    auto &rb = *render_buffers[idx];
-    auto &group = node_map[rb.node_info.node];
-    if (group.buffer_indices.empty())
-    {
-      group.parent_id = rb.node_info.parent;
-      group.aabb = rb.node_info.aabb;
-      group.tight_aabb = rb.node_info.tight_aabb;
-      group.frustum_visible = rb.node_info.frustum_visible;
-      group.all_rendered = true;
-      group.total_gpu_memory = 0;
-    }
-    group.buffer_indices.push_back(idx);
-    if (!rb.rendered)
-      group.all_rendered = false;
-    group.total_gpu_memory += rb.gpu_memory_size;
-  }
-
-  // Build children map: parent_id -> child_node_ids (only where parent exists in node_map)
-  std::unordered_map<node_id_t, std::vector<node_id_t>, node_id_hash, node_id_equal> children_map;
-  for (auto &[node_id, group] : node_map)
-  {
-    if (node_map.count(group.parent_id))
-      children_map[group.parent_id].push_back(node_id);
-  }
-
-  // Phase 2: Iterative coarsest-to-finest refine
-  // Start with root-level nodes: those whose parent is not in node_map
-  std::unordered_set<node_id_t, node_id_hash, node_id_equal> active_set;
-  size_t active_memory = 0;
-  for (auto &[node_id, group] : node_map)
-  {
-    if (!node_map.count(group.parent_id))
-    {
-      active_set.insert(node_id);
-      if (group.all_rendered)
-        active_memory += group.total_gpu_memory;
-    }
-  }
-
-  // Iteratively expand active nodes into children, prioritized by distance to camera.
-  // Children don't need all siblings loaded — rendered children are added alongside the
-  // parent (parent covers gaps). When all children are ready, the parent is removed.
-  bool changed = true;
-  while (changed)
-  {
-    changed = false;
-
-    // Sort active nodes by distance to camera — closest expand first within budget
-    struct expansion_t
-    {
-      node_id_t node_id;
-      double distance;
-    };
-    std::vector<expansion_t> candidates;
-    for (auto &node_id : active_set)
-    {
-      auto children_it = children_map.find(node_id);
-      if (children_it == children_map.end())
-        continue;
-      auto &group = node_map[node_id];
-      glm::dvec3 center = (group.tight_aabb.min + group.tight_aabb.max) * 0.5;
-      double dist = glm::length(center - camera_position);
-      candidates.push_back({node_id, dist});
-    }
-    std::sort(candidates.begin(), candidates.end(), [](const expansion_t &a, const expansion_t &b) { return a.distance < b.distance; });
-
-    std::vector<node_id_t> to_remove;
-    std::vector<node_id_t> to_add;
-    for (auto &candidate : candidates)
-    {
-      auto &children = children_map[candidate.node_id];
-      bool all_children_ready = true;
-      size_t all_children_memory = 0;
-      std::vector<node_id_t> rendered_children;
-      for (auto &child_id : children)
-      {
-        auto &child_group = node_map[child_id];
-        if (child_group.all_rendered)
-        {
-          rendered_children.push_back(child_id);
-          all_children_memory += child_group.total_gpu_memory;
-        }
-        else
-        {
-          all_children_ready = false;
-        }
-      }
-      if (rendered_children.empty())
-        continue;
-
-      if (all_children_ready)
-      {
-        // Clean swap: remove parent, add all children
-        size_t parent_memory = node_map[candidate.node_id].total_gpu_memory;
-        size_t new_active_memory = active_memory - parent_memory + all_children_memory;
-        if (new_active_memory > mem_budget)
-          continue;
-        to_remove.push_back(candidate.node_id);
-        for (auto &child_id : rendered_children)
-          to_add.push_back(child_id);
-        active_memory = new_active_memory;
-        changed = true;
-      }
-      else
-      {
-        // Partial: keep parent as fallback, add rendered children alongside it
-        size_t new_children_memory = 0;
-        std::vector<node_id_t> new_children;
-        for (auto &child_id : rendered_children)
-        {
-          if (!active_set.count(child_id))
-          {
-            new_children.push_back(child_id);
-            new_children_memory += node_map[child_id].total_gpu_memory;
-          }
-        }
-        if (new_children.empty())
-          continue;
-        if (active_memory + new_children_memory > mem_budget)
-          continue;
-        for (auto &child_id : new_children)
-          to_add.push_back(child_id);
-        active_memory += new_children_memory;
-        changed = true;
-      }
-    }
-    for (auto &id : to_remove)
-      active_set.erase(id);
-    for (auto &id : to_add)
-      active_set.insert(id);
-  }
+  // Phase 5: Node selection (refine strategy + point budget)
+  selection_params_t sel_params;
+  sel_params.camera_position = camera_position;
+  sel_params.memory_budget = mem_budget;
+  sel_params.point_budget = pt_budget;
+  auto selection = node_selector.select(node_registry, sel_params);
   auto t_after_refine = clock::now();
 
-  // Start I/O for frontier nodes only (active nodes + one-level lookahead)
-  {
-    struct frontier_candidate_t
-    {
-      int index;
-      int lod;
-    };
-    std::vector<frontier_candidate_t> frontier;
-
-    for (auto &node_id : active_set)
-    {
-      auto &group = node_map[node_id];
-      for (int idx : group.buffer_indices)
-      {
-        auto &rb = *render_buffers[idx];
-        if (rb.load_handle == render::invalid_load_handle && !rb.rendered)
-          frontier.push_back({idx, rb.node_info.lod});
-      }
-      // One-level lookahead: children of active nodes
-      auto children_it = children_map.find(node_id);
-      if (children_it != children_map.end())
-      {
-        for (auto &child_id : children_it->second)
-        {
-          auto child_group_it = node_map.find(child_id);
-          if (child_group_it == node_map.end())
-            continue;
-          for (int idx : child_group_it->second.buffer_indices)
-          {
-            auto &rb = *render_buffers[idx];
-            if (rb.load_handle == render::invalid_load_handle && !rb.rendered)
-              frontier.push_back({idx, rb.node_info.lod});
-          }
-        }
-      }
-    }
-
-    std::sort(frontier.begin(), frontier.end(), [](const auto &a, const auto &b) { return a.lod > b.lod; });
-
-    std::unordered_set<int> started;
-    constexpr int max_requests_per_frame = 20;
-    int requests_started = 0;
-    for (auto &fc : frontier)
-    {
-      if (requests_started >= max_requests_per_frame)
-        break;
-      if (!started.insert(fc.index).second)
-        continue;
-      auto &rb = *render_buffers[fc.index];
-      native_load_request_t req;
-      memcpy(req.format, rb.node_info.format, sizeof(req.format));
-      memcpy(req.locations, rb.node_info.locations, sizeof(req.locations));
-      req.tree_config = tree_config;
-      rb.load_handle = node_loader->request_load(&req, sizeof(req));
-      requests_started++;
-    }
-  }
+  // Phase 6: Frontier I/O scheduling
+  buffer_manager.schedule_io(render_buffers, node_registry, selection, tree_config, node_loader, 20);
   auto t_after_frontier = clock::now();
 
-  // Phase 3: Distance sort
-  struct active_node_info_t
-  {
-    node_id_t node_id;
-    double distance;
-    size_t gpu_memory;
-    bool frustum_visible;
-  };
-  std::vector<active_node_info_t> sorted_active;
-  sorted_active.reserve(active_set.size());
-  for (auto &node_id : active_set)
-  {
-    auto &group = node_map[node_id];
-    glm::dvec3 center = (group.tight_aabb.min + group.tight_aabb.max) * 0.5;
-    double dist = glm::length(center - camera_position);
-    sorted_active.push_back({node_id, dist, group.total_gpu_memory, group.frustum_visible});
-  }
-  std::sort(sorted_active.begin(), sorted_active.end(), [](const active_node_info_t &a, const active_node_info_t &b) { return a.distance < b.distance; });
-
-  // Phase 4: Emit draw commands for ALL active nodes that are rendered and frustum-visible
-  uint64_t frame_point_count = 0;
-  for (auto &info : sorted_active)
-  {
-    if (!info.frustum_visible)
-      continue;
-    auto &group = node_map[info.node_id];
-    for (int idx : group.buffer_indices)
-    {
-      auto &render_buffer = *render_buffers[idx];
-      if (!render_buffer.rendered)
-        continue;
-      auto offset = to_glm(tree_config.offset) + to_glm(render_buffer.offset);
-      render_buffer.camera_view = camera.projection * glm::translate(camera.view, offset);
-      callbacks.do_modify_buffer(render_buffer.render_buffers[2], 0, sizeof(render_buffer.camera_view), &render_buffer.camera_view);
-      render::draw_group_t draw_group = {render_buffer.draw_type, render_buffer.render_list, 3, int(render_buffer.point_count), render_buffer.node_info.lod};
-      to_render_add_render_group(to_render, draw_group);
-      frame_point_count += render_buffer.point_count;
-    }
-  }
-  points_rendered_last_frame = frame_point_count;
+  // Phase 7: Draw emission
+  auto draw_result = draw_emitter.emit(render_buffers, node_registry, selection, callbacks, camera, tree_config, to_render);
+  points_rendered_last_frame = draw_result.points_rendered;
   auto t_after_draw = clock::now();
 
-  // Phase 5: Distance-based eviction with parent preservation
-  // Build non-evictable set: active nodes + ancestors (children are prefetched and evictable)
-  std::unordered_set<node_id_t, node_id_hash, node_id_equal> non_evictable;
-  for (auto &node_id : active_set)
-  {
-    non_evictable.insert(node_id);
-    // Mark ancestors as non-evictable (needed as fallback)
-    node_id_t current = node_id;
-    while (true)
-    {
-      auto it = node_map.find(current);
-      if (it == node_map.end())
-        break;
-      auto parent = it->second.parent_id;
-      if (!node_map.count(parent))
-        break;
-      if (!non_evictable.insert(parent).second)
-        break;
-      current = parent;
-    }
-  }
+  // Phase 8: Eviction
+  buffer_manager.evict(render_buffers, node_registry, selection, camera_position,
+                       gpu_memory_used, upload_limit, callbacks, node_loader);
 
-  struct evictable_node_t
-  {
-    node_id_t node_id;
-    double distance;
-  };
-  std::vector<evictable_node_t> evictable;
-  for (auto &[node_id, group] : node_map)
-  {
-    if (non_evictable.count(node_id))
-      continue;
-    if (!group.all_rendered)
-      continue;
-    glm::dvec3 center = (group.tight_aabb.min + group.tight_aabb.max) * 0.5;
-    double dist = glm::length(center - camera_position);
-    evictable.push_back({node_id, dist});
-  }
-  std::sort(evictable.begin(), evictable.end(), [](const evictable_node_t &a, const evictable_node_t &b) { return a.distance > b.distance; });
-
-  for (auto &ev : evictable)
-  {
-    if (gpu_memory_used <= upload_limit)
-      break;
-    auto &group = node_map[ev.node_id];
-    for (int idx : group.buffer_indices)
-      destroy_gpu_buffer(*render_buffers[idx]);
-  }
-
-  // Phase 6: Dynamic pixel error threshold adjustment
+  // Phase 9: Adaptive threshold
   {
     std::unique_lock<std::mutex> lock(mutex);
     if (auto_adjust_threshold)

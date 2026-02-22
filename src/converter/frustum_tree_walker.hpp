@@ -71,6 +71,7 @@ struct tree_walker_data_t
 struct tree_walker_nodes_t
 {
   std::vector<tree_walker_data_t> point_subsets;
+  std::vector<std::pair<node_id_t, node_id_t>> parent_child_edges;
 };
 
 class attribute_index_map_t

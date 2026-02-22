@@ -24,7 +24,12 @@ set(private_headers
         tree_lod_generator.hpp
         attributes_configs.hpp
         data_source_converter.hpp
+        draw_emitter.hpp
+        frame_node_registry.hpp
         frustum_tree_walker.hpp
+        gpu_buffer_manager.hpp
+        gpu_node_buffer.hpp
+        node_selector.hpp
         input_data_source_registry.hpp
         input_storage_map.hpp
         native_node_data_loader.hpp
@@ -33,6 +38,7 @@ set(private_headers
         byte_shuffle.hpp
         compressor_zstd.hpp
         compressor_fse.hpp
+        compressor_ans.hpp
         compression_preprocess.hpp
 )
 
@@ -50,7 +56,11 @@ set(sources
         tree_lod_generator.cpp
         attributes_configs.cpp
         data_source_converter.cpp
+        draw_emitter.cpp
+        frame_node_registry.cpp
         frustum_tree_walker.cpp
+        gpu_buffer_manager.cpp
+        node_selector.cpp
         native_node_data_loader.cpp
         blob_manager.cpp
         input_data_source_registry.cpp
@@ -60,6 +70,7 @@ set(sources
         byte_shuffle.cpp
         compressor_zstd.cpp
         compressor_fse.cpp
+        compressor_ans.cpp
         compression_preprocess.cpp
 )
 

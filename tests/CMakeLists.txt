@@ -24,6 +24,8 @@ add_executable(private_interface_unit_tests
         private/compression_preprocess_tests.cpp
         private/compressor_tests.cpp
         private/camera_arcball_tests.cpp
+        private/frame_node_registry_tests.cpp
+        private/node_selector_tests.cpp
 )
 target_link_libraries(private_interface_unit_tests PRIVATE vio blosc2_static)
 CmDepTargetLinkLibrary(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm unordered_dense laszip::api)
