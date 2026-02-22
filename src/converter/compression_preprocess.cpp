@@ -17,7 +17,9 @@
 ************************************************************************/
 #include "compression_preprocess.hpp"
 
+#include <algorithm>
 #include <cstring>
+#include <numeric>
 
 namespace points::converter
 {
@@ -365,6 +367,80 @@ void restore_constant_bands(const uint8_t *compacted, uint32_t compacted_size, u
   }
 
   (void)compacted_size;
+}
+
+double offset_subtract_f64(uint8_t *data, uint32_t size)
+{
+  uint32_t count = size / 8;
+  if (count == 0)
+    return 0.0;
+
+  double min_val;
+  memcpy(&min_val, data, 8);
+  for (uint32_t i = 1; i < count; i++)
+  {
+    double val;
+    memcpy(&val, data + i * 8, 8);
+    if (val < min_val)
+      min_val = val;
+  }
+
+  for (uint32_t i = 0; i < count; i++)
+  {
+    double val;
+    memcpy(&val, data + i * 8, 8);
+    val -= min_val;
+    memcpy(data + i * 8, &val, 8);
+  }
+
+  return min_val;
+}
+
+void offset_restore_f64(uint8_t *data, uint32_t size, double min_value)
+{
+  uint32_t count = size / 8;
+  for (uint32_t i = 0; i < count; i++)
+  {
+    double val;
+    memcpy(&val, data + i * 8, 8);
+    val += min_value;
+    memcpy(data + i * 8, &val, 8);
+  }
+}
+
+bool sort_with_permutation_f64(uint8_t *data, uint32_t size, uint16_t *perm_out)
+{
+  uint32_t count = size / 8;
+  if (count == 0 || count > 65535)
+    return false;
+
+  // Initialize permutation as identity
+  std::iota(perm_out, perm_out + count, uint16_t(0));
+
+  // Sort permutation by the f64 values (treated as uint64_t — works for non-negative doubles)
+  auto *values = reinterpret_cast<uint64_t *>(data);
+  std::sort(perm_out, perm_out + count, [values](uint16_t a, uint16_t b) { return values[a] < values[b]; });
+
+  // Apply permutation to data in-place using the sorted order
+  std::vector<uint64_t> sorted(count);
+  for (uint32_t i = 0; i < count; i++)
+    sorted[i] = values[perm_out[i]];
+  memcpy(data, sorted.data(), count * 8);
+
+  return true;
+}
+
+void unsort_with_permutation_f64(uint8_t *data, uint32_t size, const uint16_t *perm)
+{
+  uint32_t count = size / 8;
+  if (count == 0)
+    return;
+
+  auto *values = reinterpret_cast<uint64_t *>(data);
+  std::vector<uint64_t> restored(count);
+  for (uint32_t i = 0; i < count; i++)
+    restored[perm[i]] = values[i];
+  memcpy(data, restored.data(), count * 8);
 }
 
 } // namespace points::converter

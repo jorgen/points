@@ -113,41 +113,37 @@ compression_method_t compressor_huff0_t::method() const
   return compression_method_t::huff0;
 }
 
-compression_result_t compressor_huff0_t::compress(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count)
+static void huf_compress_standard(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count, uint8_t flags_in,
+                                  std::vector<uint8_t> &working, compression_result_t &result)
 {
-  compression_result_t result;
-
   int typesize = size_for_format(format.type);
   if (typesize <= 0)
     typesize = 1;
 
   uint8_t element_stride = static_cast<uint8_t>(typesize * static_cast<int>(format.components));
-  uint8_t flags = 0;
+  uint8_t flags = flags_in;
 
-  // Compute data offset — buffer 0 has a storage_header_t prepended before the point data
   uint32_t data_bytes = static_cast<uint32_t>(point_count) * static_cast<uint32_t>(element_stride);
   uint32_t data_offset = (data_bytes > 0 && data_bytes <= size) ? (size - data_bytes) : 0;
 
-  // Delta encode morton codes (in-place on a copy), skipping the prefix
-  std::vector<uint8_t> working(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+  if (working.empty())
+    working.assign(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+
   if (data_bytes > 0 && delta_encode_morton(working.data() + data_offset, data_bytes, element_stride))
     flags |= compression_flag_delta_encoded;
 
-  // Byte shuffle the entire buffer
   std::vector<uint8_t> shuffled(size);
   byte_shuffle(working.data(), shuffled.data(), size, static_cast<uint32_t>(typesize), static_cast<uint32_t>(format.components));
 
   uint32_t delta_meta_size = (flags & compression_flag_delta_encoded) ? sizeof(uint32_t) : 0;
 
-  // Compress full shuffled data (baseline)
   auto compressed_full = huf_compress_chunked(shuffled.data(), size);
   if (compressed_full.error.code != 0)
   {
     result.error = compressed_full.error;
-    return result;
+    return;
   }
 
-  // Try constant band removal — only use if it beats the baseline
   auto band_result = detect_constant_bands(shuffled.data(), size, static_cast<uint8_t>(typesize), static_cast<uint8_t>(format.components));
 
   bool use_bands = false;
@@ -172,7 +168,6 @@ compression_result_t compressor_huff0_t::compress(const void *data, uint32_t siz
     }
   }
 
-  // Pick the winning payload
   uint32_t payload_size;
   if (use_bands)
   {
@@ -236,7 +231,55 @@ compression_result_t compressor_huff0_t::compress(const void *data, uint32_t siz
     result.data = std::move(output);
     result.size = total;
   }
+}
 
+compression_result_t compressor_huff0_t::compress(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count)
+{
+  compression_result_t result;
+
+  bool is_r64 = (format.type == type_r64 && format.components == components_1);
+
+  if (is_r64 && size >= 8)
+  {
+    // Path A: offset subtraction only
+    std::vector<uint8_t> working_a(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+    double min_value = offset_subtract_f64(working_a.data(), size);
+
+    compression_result_t result_a;
+    huf_compress_standard(data, size, format, point_count, compression_flag_offset_subtracted, working_a, result_a);
+    if (result_a.data && result_a.error.code == 0)
+    {
+      compression_header_t hdr_a;
+      memcpy(&hdr_a, result_a.data.get(), sizeof(hdr_a));
+      if (hdr_a.method != compression_method_t::none)
+      {
+        uint32_t old_payload = hdr_a.compressed_size;
+        uint32_t new_payload = 8 + old_payload;
+        hdr_a.compressed_size = new_payload;
+        hdr_a.flags |= compression_flag_offset_subtracted;
+        uint32_t total = static_cast<uint32_t>(sizeof(hdr_a)) + new_payload;
+        auto output = std::make_shared<uint8_t[]>(total);
+        memcpy(output.get(), &hdr_a, sizeof(hdr_a));
+        memcpy(output.get() + sizeof(hdr_a), &min_value, 8);
+        memcpy(output.get() + sizeof(hdr_a) + 8, result_a.data.get() + sizeof(hdr_a), old_payload);
+        result_a.data = std::move(output);
+        result_a.size = total;
+      }
+    }
+
+    // Also try the baseline
+    std::vector<uint8_t> working_base;
+    compression_result_t result_base;
+    huf_compress_standard(data, size, format, point_count, 0, working_base, result_base);
+
+    result = std::move(result_base);
+    if (result_a.data && result_a.size < result.size)
+      result = std::move(result_a);
+    return result;
+  }
+
+  std::vector<uint8_t> working;
+  huf_compress_standard(data, size, format, point_count, 0, working, result);
   return result;
 }
 
@@ -265,20 +308,25 @@ compression_result_t compressor_huff0_t::decompress(const void *data, uint32_t s
     return result;
   }
 
+  // Read offset metadata if present
+  double offset_min_value = 0.0;
+  if (header.flags & compression_flag_offset_subtracted)
+  {
+    memcpy(&offset_min_value, src, 8);
+    src += 8;
+  }
+
   // Read delta metadata if present
   uint32_t data_offset = 0;
-  uint32_t delta_meta_size = 0;
   if (header.flags & compression_flag_delta_encoded)
   {
     memcpy(&data_offset, src, sizeof(uint32_t));
     src += sizeof(uint32_t);
-    delta_meta_size = sizeof(uint32_t);
   }
 
   // Read band metadata if present
   uint32_t band_mask = 0;
   std::vector<uint8_t> constant_values;
-  uint32_t band_meta_size = 0;
 
   if (header.flags & compression_flag_constant_bands)
   {
@@ -287,7 +335,6 @@ compression_result_t compressor_huff0_t::decompress(const void *data, uint32_t s
     uint32_t num_constants = popcount32(band_mask);
     constant_values.assign(src, src + num_constants);
     src += num_constants;
-    band_meta_size = sizeof(uint32_t) + num_constants;
   }
 
   // Read chunk count
@@ -325,12 +372,10 @@ compression_result_t compressor_huff0_t::decompress(const void *data, uint32_t s
 
     if (compressed_chunk_size == uncompressed_chunk_size)
     {
-      // Stored raw
       memcpy(decompressed_compacted.data() + decompressed_offset, chunk_ptr, uncompressed_chunk_size);
     }
     else if (compressed_chunk_size == 1 && uncompressed_chunk_size > 1)
     {
-      // RLE: HUF_compress returned 1-byte encoding for single-symbol input
       memset(decompressed_compacted.data() + decompressed_offset, chunk_ptr[0], uncompressed_chunk_size);
     }
     else
@@ -375,6 +420,12 @@ compression_result_t compressor_huff0_t::decompress(const void *data, uint32_t s
     uint8_t element_stride = static_cast<uint8_t>(stride);
     uint32_t data_bytes = header.uncompressed_size - data_offset;
     delta_decode_morton(output.get() + data_offset, data_bytes, element_stride);
+  }
+
+  // Restore offset
+  if (header.flags & compression_flag_offset_subtracted)
+  {
+    offset_restore_f64(output.get(), header.uncompressed_size, offset_min_value);
   }
 
   result.data = std::move(output);

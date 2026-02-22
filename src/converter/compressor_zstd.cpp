@@ -33,33 +33,30 @@ compression_method_t compressor_zstd_t::method() const
   return compression_method_t::zstd;
 }
 
-compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count)
+static void zstd_compress_standard(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count, uint8_t flags_in,
+                                   std::vector<uint8_t> &working, compression_result_t &result)
 {
-  compression_result_t result;
-
   int typesize = size_for_format(format.type);
   if (typesize <= 0)
     typesize = 1;
 
   uint8_t element_stride = static_cast<uint8_t>(typesize * static_cast<int>(format.components));
-  uint8_t flags = 0;
+  uint8_t flags = flags_in;
 
-  // Compute data offset — buffer 0 has a storage_header_t prepended before the point data
   uint32_t data_bytes = static_cast<uint32_t>(point_count) * static_cast<uint32_t>(element_stride);
   uint32_t data_offset = (data_bytes > 0 && data_bytes <= size) ? (size - data_bytes) : 0;
 
-  // Delta encode morton codes (in-place on a copy), skipping the prefix
-  std::vector<uint8_t> working(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+  if (working.empty())
+    working.assign(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+
   if (data_bytes > 0 && delta_encode_morton(working.data() + data_offset, data_bytes, element_stride))
     flags |= compression_flag_delta_encoded;
 
-  // Byte shuffle the entire buffer
   std::vector<uint8_t> shuffled(size);
   byte_shuffle(working.data(), shuffled.data(), size, static_cast<uint32_t>(typesize), static_cast<uint32_t>(format.components));
 
   uint32_t delta_meta_size = (flags & compression_flag_delta_encoded) ? sizeof(uint32_t) : 0;
 
-  // Compress full shuffled data (baseline)
   size_t max_compressed = ZSTD_compressBound(size);
   std::vector<uint8_t> compressed_full(max_compressed);
   size_t compressed_full_size = ZSTD_compress(compressed_full.data(), max_compressed, shuffled.data(), size, 3);
@@ -68,10 +65,9 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
   {
     result.error.code = -1;
     result.error.msg = std::string("ZSTD_compress failed: ") + ZSTD_getErrorName(compressed_full_size);
-    return result;
+    return;
   }
 
-  // Try constant band removal — only use if it beats the baseline
   auto band_result = detect_constant_bands(shuffled.data(), size, static_cast<uint8_t>(typesize), static_cast<uint8_t>(format.components));
 
   bool use_bands = false;
@@ -99,7 +95,6 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
     }
   }
 
-  // Pick the winning payload
   uint32_t payload_size;
   if (use_bands)
   {
@@ -163,7 +158,116 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
     result.data = std::move(output);
     result.size = total;
   }
+}
 
+compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count)
+{
+  compression_result_t result;
+
+  bool is_r64 = (format.type == type_r64 && format.components == components_1);
+
+  if (is_r64 && size >= 8)
+  {
+    // Path A: offset subtraction only
+    std::vector<uint8_t> working_a(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+    double min_value = offset_subtract_f64(working_a.data(), size);
+
+    compression_result_t result_a;
+    zstd_compress_standard(data, size, format, point_count, compression_flag_offset_subtracted, working_a, result_a);
+    // Embed min_value metadata: prepend 8 bytes before existing payload
+    if (result_a.data && result_a.error.code == 0)
+    {
+      compression_header_t hdr_a;
+      memcpy(&hdr_a, result_a.data.get(), sizeof(hdr_a));
+      if (hdr_a.method != compression_method_t::none)
+      {
+        uint32_t old_payload = hdr_a.compressed_size;
+        uint32_t new_payload = 8 + old_payload;
+        hdr_a.compressed_size = new_payload;
+        hdr_a.flags |= compression_flag_offset_subtracted;
+        uint32_t total = static_cast<uint32_t>(sizeof(hdr_a)) + new_payload;
+        auto output = std::make_shared<uint8_t[]>(total);
+        memcpy(output.get(), &hdr_a, sizeof(hdr_a));
+        memcpy(output.get() + sizeof(hdr_a), &min_value, 8);
+        memcpy(output.get() + sizeof(hdr_a) + 8, result_a.data.get() + sizeof(hdr_a), old_payload);
+        result_a.data = std::move(output);
+        result_a.size = total;
+      }
+    }
+
+    // Path B: offset + sort + delta
+    uint32_t f64_count = size / 8;
+    compression_result_t result_b;
+    if (f64_count > 1 && f64_count <= 65535)
+    {
+      std::vector<uint8_t> working_b(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+      double min_value_b = offset_subtract_f64(working_b.data(), size);
+
+      std::vector<uint16_t> perm(f64_count);
+      sort_with_permutation_f64(working_b.data(), size, perm.data());
+
+      // Delta encode the sorted u64 data
+      delta_encode_morton(working_b.data(), size, 8);
+
+      // Compress the sorted+delta data via standard path (no additional delta in standard)
+      zstd_compress_standard(working_b.data(), size, format, 0, compression_flag_offset_subtracted | compression_flag_sort_permutation, working_b, result_b);
+
+      if (result_b.data && result_b.error.code == 0)
+      {
+        compression_header_t hdr_b;
+        memcpy(&hdr_b, result_b.data.get(), sizeof(hdr_b));
+        if (hdr_b.method != compression_method_t::none)
+        {
+          // Compress the permutation
+          uint32_t perm_bytes = f64_count * 2;
+          size_t perm_bound = ZSTD_compressBound(perm_bytes);
+          std::vector<uint8_t> perm_compressed(perm_bound);
+          size_t perm_compressed_size = ZSTD_compress(perm_compressed.data(), perm_bound, perm.data(), perm_bytes, 3);
+
+          if (!ZSTD_isError(perm_compressed_size))
+          {
+            uint32_t old_payload = hdr_b.compressed_size;
+            // Layout: [min_value:8] [perm_compressed_size:4] [perm_compressed] [old_payload]
+            uint32_t new_payload = 8 + 4 + static_cast<uint32_t>(perm_compressed_size) + old_payload;
+            hdr_b.compressed_size = new_payload;
+            hdr_b.flags |= compression_flag_offset_subtracted | compression_flag_sort_permutation;
+            uint32_t total = static_cast<uint32_t>(sizeof(hdr_b)) + new_payload;
+            auto output = std::make_shared<uint8_t[]>(total);
+            uint8_t *ptr = output.get();
+            memcpy(ptr, &hdr_b, sizeof(hdr_b)); ptr += sizeof(hdr_b);
+            memcpy(ptr, &min_value_b, 8); ptr += 8;
+            uint32_t pcs = static_cast<uint32_t>(perm_compressed_size);
+            memcpy(ptr, &pcs, 4); ptr += 4;
+            memcpy(ptr, perm_compressed.data(), perm_compressed_size); ptr += perm_compressed_size;
+            memcpy(ptr, result_b.data.get() + sizeof(hdr_b), old_payload);
+            result_b.data = std::move(output);
+            result_b.size = total;
+          }
+          else
+          {
+            result_b.data = nullptr;
+          }
+        }
+      }
+    }
+
+    // Also try the baseline (no offset)
+    std::vector<uint8_t> working_base;
+    compression_result_t result_base;
+    zstd_compress_standard(data, size, format, point_count, 0, working_base, result_base);
+
+    // Pick the smallest
+    result = std::move(result_base);
+    if (result_a.data && result_a.size < result.size)
+      result = std::move(result_a);
+    if (result_b.data && result_b.size < result.size)
+      result = std::move(result_b);
+    return result;
+  }
+
+  // Non-r64 path: standard compression
+  std::vector<uint8_t> working;
+  zstd_compress_standard(data, size, format, point_count, 0, working, result);
   return result;
 }
 
@@ -192,6 +296,39 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
     return result;
   }
 
+  // Read offset metadata if present
+  double offset_min_value = 0.0;
+  uint32_t offset_meta_size = 0;
+  if (header.flags & compression_flag_offset_subtracted)
+  {
+    memcpy(&offset_min_value, src, 8);
+    src += 8;
+    offset_meta_size = 8;
+  }
+
+  // Read permutation if present
+  std::vector<uint16_t> permutation;
+  uint32_t perm_meta_size = 0;
+  if (header.flags & compression_flag_sort_permutation)
+  {
+    uint32_t perm_compressed_size;
+    memcpy(&perm_compressed_size, src, 4);
+    src += 4;
+    perm_meta_size = 4 + perm_compressed_size;
+
+    uint32_t f64_count = header.uncompressed_size / 8;
+    uint32_t perm_bytes = f64_count * 2;
+    permutation.resize(f64_count);
+    size_t perm_decompressed = ZSTD_decompress(permutation.data(), perm_bytes, src, perm_compressed_size);
+    if (ZSTD_isError(perm_decompressed))
+    {
+      result.error.code = -1;
+      result.error.msg = std::string("ZSTD permutation decompress failed: ") + ZSTD_getErrorName(perm_decompressed);
+      return result;
+    }
+    src += perm_compressed_size;
+  }
+
   // Read delta metadata if present
   uint32_t data_offset = 0;
   uint32_t delta_meta_size = 0;
@@ -217,7 +354,7 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
     band_meta_size = sizeof(uint32_t) + num_constants;
   }
 
-  uint32_t compressed_payload_size = header.compressed_size - delta_meta_size - band_meta_size;
+  uint32_t compressed_payload_size = header.compressed_size - offset_meta_size - perm_meta_size - delta_meta_size - band_meta_size;
 
   // Compute compacted size
   uint32_t stride = static_cast<uint32_t>(header.type_size) * static_cast<uint32_t>(header.component_count);
@@ -260,12 +397,32 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
   auto output = std::make_shared<uint8_t[]>(header.uncompressed_size);
   byte_unshuffle(shuffled.data(), output.get(), header.uncompressed_size, header.type_size, header.component_count);
 
-  // Delta decode only the point data portion
+  // Delta decode
   if (header.flags & compression_flag_delta_encoded)
   {
-    uint8_t element_stride = static_cast<uint8_t>(stride);
-    uint32_t data_bytes = header.uncompressed_size - data_offset;
-    delta_decode_morton(output.get() + data_offset, data_bytes, element_stride);
+    if (header.flags & compression_flag_sort_permutation)
+    {
+      // Sort/permutation path: delta decode the entire buffer (no data_offset prefix)
+      delta_decode_morton(output.get(), header.uncompressed_size, 8);
+    }
+    else
+    {
+      uint8_t element_stride = static_cast<uint8_t>(stride);
+      uint32_t data_bytes = header.uncompressed_size - data_offset;
+      delta_decode_morton(output.get() + data_offset, data_bytes, element_stride);
+    }
+  }
+
+  // Unsort with permutation
+  if (header.flags & compression_flag_sort_permutation)
+  {
+    unsort_with_permutation_f64(output.get(), header.uncompressed_size, permutation.data());
+  }
+
+  // Restore offset
+  if (header.flags & compression_flag_offset_subtracted)
+  {
+    offset_restore_f64(output.get(), header.uncompressed_size, offset_min_value);
   }
 
   result.data = std::move(output);

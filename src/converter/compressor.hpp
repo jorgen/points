@@ -38,8 +38,10 @@ enum class compression_method_t : uint8_t
   constant = 4
 };
 
-static constexpr uint8_t compression_flag_delta_encoded  = 1 << 0;
-static constexpr uint8_t compression_flag_constant_bands = 1 << 1;
+static constexpr uint8_t compression_flag_delta_encoded      = 1 << 0;
+static constexpr uint8_t compression_flag_constant_bands     = 1 << 1;
+static constexpr uint8_t compression_flag_offset_subtracted  = 1 << 2;
+static constexpr uint8_t compression_flag_sort_permutation   = 1 << 3;
 
 struct compression_header_t
 {

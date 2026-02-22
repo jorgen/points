@@ -45,6 +45,21 @@ band_compact_result_t detect_constant_bands(const uint8_t *shuffled, uint32_t si
 // Restore constant bands from compacted data back to full byte-shuffled layout.
 void restore_constant_bands(const uint8_t *compacted, uint32_t compacted_size, uint8_t *shuffled, uint32_t shuffled_size, uint32_t band_mask, const uint8_t *constant_values, uint8_t type_size, uint8_t component_count);
 
+// Offset subtraction for f64 values: subtract the minimum from all values.
+// Returns the minimum value that was subtracted.
+double offset_subtract_f64(uint8_t *data, uint32_t size);
+
+// Offset restoration for f64 values: add min_value back to all values.
+void offset_restore_f64(uint8_t *data, uint32_t size, double min_value);
+
+// Sort f64 data (treated as uint64_t for positive-double ordering) and output a u16 permutation.
+// Returns true if sorting was applied. perm_out must be pre-allocated with size/8 entries.
+// Only works when element count fits in u16 (<=65535).
+bool sort_with_permutation_f64(uint8_t *data, uint32_t size, uint16_t *perm_out);
+
+// Restore original order of f64 data using the stored permutation.
+void unsort_with_permutation_f64(uint8_t *data, uint32_t size, const uint16_t *perm);
+
 // Portable popcount.
 inline uint32_t popcount32(uint32_t x)
 {
