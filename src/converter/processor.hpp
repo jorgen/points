@@ -64,7 +64,7 @@ public:
   void set_runtime_callbacks(const converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr);
   void set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks);
   void add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files);
-  void walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event);
+  void walk_tree(frustum_tree_walker_t &walker);
   tree_config_t tree_config();
   void request_aabb(std::function<void(double[3], double[3])> callback);
   uint32_t attrib_name_registry_count();

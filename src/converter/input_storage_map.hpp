@@ -29,7 +29,7 @@ public:
   void add_storage(input_data_id_t id, attributes_id_t attributes_id, std::vector<storage_location_t> &&storage);
   std::pair<attributes_id_t, std::vector<storage_location_t>> dereference(input_data_id_t id);
   std::pair<attributes_id_t, std::vector<storage_location_t>> info(input_data_id_t id) const;
-  attributes_id_t attribute_id(input_data_id_t id);
+  attributes_id_t attribute_id(input_data_id_t id) const;
   [[nodiscard]] storage_location_t location(input_data_id_t id, int attribute_index) const;
   void add_ref(input_data_id_t id);
 

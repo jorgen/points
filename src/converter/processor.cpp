@@ -19,6 +19,7 @@
 
 #include "conversion_types.hpp"
 #include "converter.hpp"
+#include "frustum_tree_walker.hpp"
 
 #include "morton_tree_coordinate_transform.hpp"
 
@@ -113,9 +114,11 @@ void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint3
   _files_added.post_event(std::move(input_files));
 }
 
-void processor_t::walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event)
+void processor_t::walk_tree(frustum_tree_walker_t &walker)
 {
-  _tree_handler.walk_tree(std::move(event));
+  attribute_index_map_t attribute_index_map(_tree_handler.attributes_configs(), walker.m_attribute_names);
+  walk_tree_direct(_tree_handler.tree_registry(), attribute_index_map, walker);
+  _tree_handler.request_trees_async(std::move(walker.m_trees_to_load));
 }
 
 tree_config_t processor_t::tree_config()

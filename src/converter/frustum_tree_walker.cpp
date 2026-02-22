@@ -20,6 +20,7 @@
 #include "attributes_configs.hpp"
 #include "frustum.hpp"
 #include "morton_tree_coordinate_transform.hpp"
+#include <atomic>
 #include <fmt/printf.h>
 
 namespace points::converter
@@ -28,7 +29,6 @@ frustum_tree_walker_t::frustum_tree_walker_t(const glm::dmat4 view_perspective, 
   : m_view_perspective(view_perspective)
   , m_lod_params(lod_params)
   , m_attribute_names(std::move(attribute_names))
-  , m_done(false)
 {
 }
 
@@ -46,18 +46,6 @@ bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb)
   return projected_size > params.pixel_error_threshold;
 }
 
-bool frustum_tree_walker_t::done()
-{
-  std::unique_lock<std::mutex> lock(m_mutex);
-  return m_done;
-}
-
-void frustum_tree_walker_t::wait_done()
-{
-  std::unique_lock<std::mutex> lock(m_mutex);
-  m_wait.wait(lock, [this] { return m_done; });
-}
-
 // static node_id_t create_node_id(tree_id_t tree_id, int level, int index)
 //{
 //   return {tree_id, uint16_t(level), uint16_t(index)};
@@ -66,7 +54,7 @@ void frustum_tree_walker_t::wait_done()
 struct tree_walker_possible_nodes_t
 {
   tree_walker_possible_nodes_t() = default;
-  tree_walker_possible_nodes_t(tree_t *tree, node_id_t parent, uint16_t skip, node_aabb_t aabbs, bool is_completely_inside_frustum)
+  tree_walker_possible_nodes_t(const tree_t *tree, node_id_t parent, uint16_t skip, node_aabb_t aabbs, bool is_completely_inside_frustum)
     : tree(tree)
     , parent(parent)
     , skip(skip)
@@ -74,7 +62,7 @@ struct tree_walker_possible_nodes_t
     , is_completely_inside_frustum(is_completely_inside_frustum)
   {
   }
-  tree_t *tree;
+  const tree_t *tree;
   node_id_t parent;
   uint16_t skip;
   node_aabb_t aabbs;
@@ -96,15 +84,16 @@ static node_aabb_t make_aabb_from_child_index(const node_aabb_t &parent, int chi
   return aabb;
 }
 
-static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, tree_id_t tree_id, frustum_tree_walker_t &walker)
+static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, tree_id_t tree_id, frustum_tree_walker_t &walker)
 {
   (void)attribute_index_map;
   (void)walker;
-  if (!tree_handler.tree_initialized(tree_id))
+  if (!tree_registry.tree_id_initialized[tree_id.data])
   {
-    tree_handler.request_tree(tree_id);
+    walker.m_trees_to_load.push_back(tree_id);
     return;
   }
+  std::atomic_thread_fence(std::memory_order_acquire);
   auto tree = tree_registry.get(tree_id);
   if (tree->data[0].empty() && tree->data[0][0].data.empty())
     return;
@@ -204,11 +193,12 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
             auto next_sub_tree_skip = current_tree->skips[4][possible_nodes.skip] + child_count;
             auto next_tree_id = current_tree->sub_trees[next_sub_tree_skip];
 
-            if (!tree_handler.tree_initialized(next_tree_id))
+            if (!tree_registry.tree_id_initialized[next_tree_id.data])
             {
-              tree_handler.request_tree(next_tree_id);
+              walker.m_trees_to_load.push_back(next_tree_id);
               continue;
             }
+            std::atomic_thread_fence(std::memory_order_acquire);
 
             next_tree = tree_registry.get(next_tree_id);
             next_skip = 0;
@@ -221,14 +211,10 @@ static void walk_tree(tree_handler_t &tree_handler, tree_registry_t &tree_regist
   }
 }
 
-void tree_walk_in_handler_thread(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker)
+void walk_tree_direct(const tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker)
 {
   auto root = tree_registry.root;
-  walk_tree(tree_handler, tree_registry, attribute_index_map, root, walker);
-
-  std::unique_lock<std::mutex> lock(walker.m_mutex);
-  walker.m_done = true;
-  walker.m_wait.notify_all();
+  walk_tree(tree_registry, attribute_index_map, root, walker);
 }
 
 } // namespace points::converter

@@ -32,8 +32,6 @@ struct waiting_for_root_t
   std::condition_variable *cv;
 };
 
-class frustum_tree_walker_t;
-
 class tree_handler_t : public vio::about_to_block_t
 {
 public:
@@ -46,17 +44,19 @@ public:
   void generate_lod(const morton::morton192_t &max);
   tree_config_t tree_config();
   void request_aabb(std::function<void(double *, double *)> function);
-  void request_tree(tree_id_t tree_id);
-  bool tree_initialized(tree_id_t tree_id);
+  void request_trees_async(std::vector<tree_id_t> tree_ids);
+
+  const tree_registry_t &tree_registry() const { return _tree_registry; }
+  const attributes_configs_t &attributes_configs() const { return _attributes_configs; }
 
 private:
   void handle_add_points(storage_header_t &&header, attributes_id_t &&attributes_id, std::vector<storage_location_t> &&storage);
-  void handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&events);
   void handle_serialize_trees();
   void handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, std::vector<storage_location_t> &&storage, error_t &&error);
   void handle_deserialize_tree(tree_id_t &&tree_id, serialized_tree_t &&data);
   void handle_request_aabb(std::function<void(double *, double *)> &&function);
   void handle_request_root();
+  void handle_request_trees_batch(std::vector<tree_id_t> &&tree_ids);
 
   void seal_configuration()
   {
@@ -85,7 +85,7 @@ private:
   attributes_configs_t &_attributes_configs;
 
   tree_registry_t _tree_registry;
-  std::vector<bool> _tree_id_requested;
+  std::vector<uint8_t> _tree_id_requested;
 
   tree_lod_generator_t _tree_lod_generator;
 
@@ -93,13 +93,13 @@ private:
 
 public:
   vio::event_pipe_t<storage_header_t, attributes_id_t, std::vector<storage_location_t>> add_points;
-  vio::event_pipe_t<std::shared_ptr<frustum_tree_walker_t>> walk_tree;
   vio::event_pipe_t<void> _serialize_trees;
   vio::event_pipe_t<std::vector<tree_id_t>, std::vector<storage_location_t>, error_t> _serialize_trees_done;
   vio::event_pipe_t<tree_id_t, serialized_tree_t> _deserialize_tree;
   vio::event_pipe_t<input_data_id_t> &_done_with_input;
   vio::event_pipe_t<std::function<void(double *, double *)>> _request_aabb;
   vio::event_pipe_t<void> _request_root;
+  vio::event_pipe_t<std::vector<tree_id_t>> _request_trees_batch;
 
 private:
 };

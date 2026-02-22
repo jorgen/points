@@ -66,11 +66,11 @@ void input_storage_map_t::add_ref(input_data_id_t id)
   auto &value = _map[id];
   value.ref_count++;
 }
-attributes_id_t input_storage_map_t::attribute_id(input_data_id_t id)
+attributes_id_t input_storage_map_t::attribute_id(input_data_id_t id) const
 {
-  assert(_map.contains(id));
-  auto &value = _map[id];
-  return value.attributes_id;
+  auto it = _map.find(id);
+  assert(it != _map.end());
+  return it->second.attributes_id;
 }
 uint32_t input_storage_map_t::serialized_size() const
 {

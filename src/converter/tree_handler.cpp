@@ -17,11 +17,11 @@
 ************************************************************************/
 #include "tree_handler.hpp"
 
-#include "frustum_tree_walker.hpp"
 #include "tree_lod_generator.hpp"
 
 #include "morton_tree_coordinate_transform.hpp"
 #include "storage_handler.hpp"
+#include <atomic>
 
 namespace points::converter
 {
@@ -38,13 +38,13 @@ tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_
   , _attributes_configs(attributes_configs)
   , _tree_lod_generator(_event_loop, _thread_pool, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
   , add_points(_event_loop, bind(&tree_handler_t::handle_add_points))
-  , walk_tree(_event_loop, bind(&tree_handler_t::handle_walk_tree))
   , _serialize_trees(_event_loop, bind(&tree_handler_t::handle_serialize_trees))
   , _serialize_trees_done(_event_loop, bind(&tree_handler_t::handle_trees_serialized))
   , _deserialize_tree(_event_loop, bind(&tree_handler_t::handle_deserialize_tree))
   , _done_with_input(done_with_input)
   , _request_aabb(_event_loop, bind(&tree_handler_t::handle_request_aabb))
   , _request_root(_event_loop, bind(&tree_handler_t::handle_request_root))
+  , _request_trees_batch(_event_loop, bind(&tree_handler_t::handle_request_trees_batch))
 {
   _event_loop.add_about_to_block_listener(this);
 }
@@ -105,16 +105,6 @@ void tree_handler_t::handle_add_points(storage_header_t &&header, attributes_id_
   _done_with_input.post_event(std::move(to_send));
 }
 
-void tree_handler_t::handle_walk_tree(std::shared_ptr<frustum_tree_walker_t> &&event)
-{
-  attribute_index_map_t attribute_index_map(_attributes_configs, event->m_attribute_names);
-  for (auto &list : event->m_new_nodes.point_subsets)
-  {
-    (void)list;
-  }
-  tree_walk_in_handler_thread(*this, _tree_registry, attribute_index_map, *event);
-}
-
 void tree_handler_t::generate_lod(const morton::morton192_t &max)
 {
   _tree_lod_generator.generate_lods(_tree_registry.root, max);
@@ -132,34 +122,34 @@ void tree_handler_t::request_aabb(std::function<void(double *, double *)> functi
   _request_aabb.post_event(std::move(function));
 }
 
-void tree_handler_t::request_tree(tree_id_t tree_id)
+void tree_handler_t::request_trees_async(std::vector<tree_id_t> tree_ids)
 {
-  assert(std::this_thread::get_id() == _event_loop_thread.thread_id());
-
-  _tree_id_requested.resize(_tree_registry.data.size());
-  if (_tree_id_requested[tree_id.data])
-  {
+  if (tree_ids.empty())
     return;
-  }
-  _tree_id_requested[tree_id.data] = true;
-  auto location = _tree_registry.locations[tree_id.data];
-  _file_cache.read(location, [this, tree_id](const storage_handler_request_t &request) {
-    if (request.error.code != 0)
-    {
-      fmt::print("Error reading tree\n");
-      return;
-    }
-    serialized_tree_t data;
-    data.size = int(request.buffer_info.size);
-    data.data = request.buffer;
-    this->_deserialize_tree.post_event(tree_id_t(tree_id.data), std::move(data));
-  });
+  _request_trees_batch.post_event(std::move(tree_ids));
 }
 
-bool tree_handler_t::tree_initialized(tree_id_t tree_id)
+void tree_handler_t::handle_request_trees_batch(std::vector<tree_id_t> &&tree_ids)
 {
-  assert(std::this_thread::get_id() == _event_loop_thread.thread_id());
-  return _tree_registry.tree_id_initialized[tree_id.data];
+  _tree_id_requested.resize(_tree_registry.data.size());
+  for (auto &tree_id : tree_ids)
+  {
+    if (_tree_id_requested[tree_id.data])
+      continue;
+    _tree_id_requested[tree_id.data] = 1;
+    auto location = _tree_registry.locations[tree_id.data];
+    _file_cache.read(location, [this, tree_id](const storage_handler_request_t &request) {
+      if (request.error.code != 0)
+      {
+        fmt::print("Error reading tree\n");
+        return;
+      }
+      serialized_tree_t data;
+      data.size = int(request.buffer_info.size);
+      data.data = request.buffer;
+      this->_deserialize_tree.post_event(tree_id_t(tree_id.data), std::move(data));
+    });
+  }
 }
 
 void tree_handler_t::handle_serialize_trees()
@@ -224,7 +214,8 @@ void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tre
     return;
   }
   _tree_registry.tree_id_initialized.resize(_tree_registry.data.size());
-  _tree_registry.tree_id_initialized[tree_id.data] = true;
+  std::atomic_thread_fence(std::memory_order_release);
+  _tree_registry.tree_id_initialized[tree_id.data] = 1;
   if (tree_id.data == _tree_registry.root.data)
   {
     std::unique_lock<std::mutex> lock(_root_mutex);
@@ -261,6 +252,6 @@ void tree_handler_t::handle_request_aabb(std::function<void(double *, double *)>
 
 void tree_handler_t::handle_request_root()
 {
-  request_tree(_tree_registry.root);
+  handle_request_trees_batch(std::vector<tree_id_t>{_tree_registry.root});
 }
 } // namespace points::converter

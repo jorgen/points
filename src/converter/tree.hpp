@@ -129,7 +129,7 @@ struct tree_registry_t
   {
     data.reserve(node_limit);
     locations.reserve(node_limit);
-    tree_id_initialized.resize(node_limit, false);
+    tree_id_initialized.resize(node_limit, 0);
   }
   uint32_t node_limit = 0;
   uint32_t current_id = 0;
@@ -138,9 +138,14 @@ struct tree_registry_t
   uint64_t current_lod_node_id = uint64_t(1) << 63;
   std::vector<std::unique_ptr<tree_t>> data;
   std::vector<storage_location_t> locations;
-  std::vector<bool> tree_id_initialized;
+  std::vector<uint8_t> tree_id_initialized;
 
   tree_t *get(tree_id_t id)
+  {
+    return data[id.data].get();
+  }
+
+  const tree_t *get(tree_id_t id) const
   {
     return data[id.data].get();
   }

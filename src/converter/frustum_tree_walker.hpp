@@ -19,7 +19,7 @@
 
 #include <attributes_configs.hpp>
 #include <glm_include.hpp>
-#include <tree_handler.hpp>
+#include "tree.hpp"
 
 
 namespace points::converter
@@ -140,22 +140,18 @@ class frustum_tree_walker_t
 {
 public:
   frustum_tree_walker_t(glm::dmat4 view_perspective, lod_params_t lod_params, std::vector<std::string> attribute_names);
-  bool done();
-  void wait_done();
 
   glm::dmat4 m_view_perspective;
   lod_params_t m_lod_params;
   std::vector<std::string> m_attribute_names;
-  std::mutex m_mutex;
-  std::condition_variable m_wait;
   tree_walker_nodes_t m_new_nodes;
   double m_tree_offset[3];
-  bool m_done;
+  std::vector<tree_id_t> m_trees_to_load;
 };
 
 bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb);
 
-void tree_walk_in_handler_thread(tree_handler_t &tree_handler, tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker);
+void walk_tree_direct(const tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker);
 
 } // namespace points::converter
 

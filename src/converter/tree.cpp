@@ -26,7 +26,7 @@ tree_t &tree_cache_create_root_tree(tree_registry_t &tree_cache)
 {
   tree_cache.data.emplace_back(new tree_t());
   tree_cache.locations.emplace_back();
-  tree_cache.tree_id_initialized.emplace_back(true);
+  tree_cache.tree_id_initialized.push_back(1);
   tree_cache.data.back()->id.data = tree_cache.current_id++;
   return *tree_cache.data.back();
 }
@@ -36,7 +36,7 @@ tree_t &tree_cache_add_tree(tree_registry_t &tree_cache, tree_t *(&parent))
   auto id = parent->id;
   tree_cache.data.emplace_back(new tree_t());
   tree_cache.locations.emplace_back();
-  tree_cache.tree_id_initialized.emplace_back(true);
+  tree_cache.tree_id_initialized.push_back(1);
   tree_cache.data.back()->id.data = tree_cache.current_id++;
   parent = tree_cache.data[id.data].get();
   return *tree_cache.data.back();
