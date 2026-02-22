@@ -265,7 +265,27 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
     return result;
   }
 
-  // Non-r64 path: standard compression
+  bool is_u16x3 = (format.type == type_u16 && format.components == components_3);
+  if (is_u16x3 && size >= 6)
+  {
+    // Path A: standard (no decorrelation)
+    std::vector<uint8_t> working_a;
+    compression_result_t result_a;
+    zstd_compress_standard(data, size, format, point_count, 0, working_a, result_a);
+
+    // Path B: decorrelate then compress
+    std::vector<uint8_t> working_b(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+    decorrelate_u16x3(working_b.data(), size);
+    compression_result_t result_b;
+    zstd_compress_standard(working_b.data(), size, format, point_count, compression_flag_decorrelated, working_b, result_b);
+
+    result = std::move(result_a);
+    if (result_b.data && result_b.size < result.size)
+      result = std::move(result_b);
+    return result;
+  }
+
+  // Non-r64, non-u16x3 path: standard compression
   std::vector<uint8_t> working;
   zstd_compress_standard(data, size, format, point_count, 0, working, result);
   return result;
@@ -396,6 +416,10 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
   // Byte unshuffle
   auto output = std::make_shared<uint8_t[]>(header.uncompressed_size);
   byte_unshuffle(shuffled.data(), output.get(), header.uncompressed_size, header.type_size, header.component_count);
+
+  // Reverse decorrelation
+  if (header.flags & compression_flag_decorrelated)
+    correlate_u16x3(output.get(), header.uncompressed_size);
 
   // Delta decode
   if (header.flags & compression_flag_delta_encoded)

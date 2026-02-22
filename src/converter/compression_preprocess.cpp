@@ -443,4 +443,40 @@ void unsort_with_permutation_f64(uint8_t *data, uint32_t size, const uint16_t *p
   memcpy(data, restored.data(), count * 8);
 }
 
+void decorrelate_u16x3(uint8_t *data, uint32_t size)
+{
+  uint32_t count = size / 6;
+  for (uint32_t i = 0; i < count; i++)
+  {
+    uint8_t *elem = data + i * 6;
+    uint16_t r, g, b;
+    memcpy(&r, elem + 0, 2);
+    memcpy(&g, elem + 2, 2);
+    memcpy(&b, elem + 4, 2);
+    uint16_t dr = static_cast<uint16_t>(r - g);
+    uint16_t db = static_cast<uint16_t>(b - g);
+    memcpy(elem + 0, &g, 2);
+    memcpy(elem + 2, &dr, 2);
+    memcpy(elem + 4, &db, 2);
+  }
+}
+
+void correlate_u16x3(uint8_t *data, uint32_t size)
+{
+  uint32_t count = size / 6;
+  for (uint32_t i = 0; i < count; i++)
+  {
+    uint8_t *elem = data + i * 6;
+    uint16_t g, dr, db;
+    memcpy(&g, elem + 0, 2);
+    memcpy(&dr, elem + 2, 2);
+    memcpy(&db, elem + 4, 2);
+    uint16_t r = static_cast<uint16_t>(dr + g);
+    uint16_t b = static_cast<uint16_t>(db + g);
+    memcpy(elem + 0, &r, 2);
+    memcpy(elem + 2, &g, 2);
+    memcpy(elem + 4, &b, 2);
+  }
+}
+
 } // namespace points::converter

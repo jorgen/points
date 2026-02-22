@@ -60,6 +60,14 @@ bool sort_with_permutation_f64(uint8_t *data, uint32_t size, uint16_t *perm_out)
 // Restore original order of f64 data using the stored permutation.
 void unsort_with_permutation_f64(uint8_t *data, uint32_t size, const uint16_t *perm);
 
+// RGB decorrelation: transform interleaved (R,G,B) u16 triples to (G, R-G, B-G).
+// Operates in-place on raw interleaved data before byte_shuffle.
+void decorrelate_u16x3(uint8_t *data, uint32_t size);
+
+// RGB correlation: reverse decorrelation, transform (G, dR, dB) to (dR+G, G, dB+G).
+// Operates in-place on raw interleaved data after byte_unshuffle.
+void correlate_u16x3(uint8_t *data, uint32_t size);
+
 // Portable popcount.
 inline uint32_t popcount32(uint32_t x)
 {
