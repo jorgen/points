@@ -3,10 +3,13 @@
 #include <compressor_blosc2.hpp>
 #include <compressor_zstd.hpp>
 #include <compressor_fse.hpp>
+#include <compression_preprocess.hpp>
 #include <input_header.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <numeric>
 #include <random>
 #include <vector>
@@ -545,4 +548,353 @@ TEST_CASE("compression_stats deserialize wrong version", "[converter]")
   auto result = compression_stats_t::deserialize(data, sizeof(data));
   REQUIRE(result.per_attribute.empty());
   REQUIRE(result.total_buffer_count == 0);
+}
+
+// --- offset_subtract_f64 / offset_restore_f64 ---
+
+TEST_CASE("offset_subtract_f64 round trip", "[converter]")
+{
+  double values[] = {100.5, 100.7, 100.6, 100.9, 100.1};
+  uint32_t size = sizeof(values);
+
+  std::vector<double> original(std::begin(values), std::end(values));
+  double min_val = offset_subtract_f64(reinterpret_cast<uint8_t *>(values), size);
+
+  REQUIRE(min_val == Approx(100.1));
+  // All values should be >= 0 after subtraction
+  for (auto &v : values)
+    REQUIRE(v >= 0.0);
+
+  offset_restore_f64(reinterpret_cast<uint8_t *>(values), size, min_val);
+  for (size_t i = 0; i < original.size(); i++)
+    REQUIRE(values[i] == Approx(original[i]));
+}
+
+TEST_CASE("offset_subtract_f64 single element", "[converter]")
+{
+  double values[] = {42.0};
+  double min_val = offset_subtract_f64(reinterpret_cast<uint8_t *>(values), sizeof(values));
+  REQUIRE(min_val == Approx(42.0));
+  REQUIRE(values[0] == Approx(0.0));
+  offset_restore_f64(reinterpret_cast<uint8_t *>(values), sizeof(values), min_val);
+  REQUIRE(values[0] == Approx(42.0));
+}
+
+// --- sort_with_permutation_f64 / unsort_with_permutation_f64 ---
+
+TEST_CASE("sort_with_permutation_f64 round trip", "[converter]")
+{
+  double values[] = {5.0, 1.0, 3.0, 2.0, 4.0};
+  uint32_t count = 5;
+  uint32_t size = count * 8;
+
+  std::vector<double> original(std::begin(values), std::end(values));
+  std::vector<uint16_t> perm(count);
+
+  bool sorted = sort_with_permutation_f64(reinterpret_cast<uint8_t *>(values), size, perm.data());
+  REQUIRE(sorted == true);
+
+  // Verify sorted order
+  for (uint32_t i = 1; i < count; i++)
+    REQUIRE(values[i] >= values[i - 1]);
+
+  unsort_with_permutation_f64(reinterpret_cast<uint8_t *>(values), size, perm.data());
+  for (size_t i = 0; i < original.size(); i++)
+    REQUIRE(values[i] == Approx(original[i]));
+}
+
+TEST_CASE("sort_with_permutation_f64 too many elements", "[converter]")
+{
+  std::vector<uint8_t> data(65536 * 8, 0);
+  std::vector<uint16_t> perm(65536);
+  bool sorted = sort_with_permutation_f64(data.data(), uint32_t(data.size()), perm.data());
+  REQUIRE(sorted == false);
+}
+
+// --- zstd r64 compression round trip ---
+
+TEST_CASE("zstd r64 offset compression round trip", "[converter]")
+{
+  compressor_zstd_t compressor;
+
+  // Simulate GPS time data: narrow range of doubles
+  uint32_t count = 1000;
+  std::vector<double> values(count);
+  std::mt19937 gen(123);
+  std::uniform_real_distribution<double> dist(1.0e9, 1.0e9 + 100.0);
+  for (auto &v : values)
+    v = dist(gen);
+
+  auto *data = reinterpret_cast<uint8_t *>(values.data());
+  uint32_t size = count * 8;
+  point_format_t fmt{type_r64, components_1};
+
+  auto compressed = compressor.compress(data, size, fmt, 0);
+  REQUIRE(compressed.error.code == 0);
+  REQUIRE(compressed.data != nullptr);
+
+  auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+  REQUIRE(decompressed.error.code == 0);
+  REQUIRE(decompressed.size == size);
+
+  auto *result = reinterpret_cast<double *>(decompressed.data.get());
+  for (uint32_t i = 0; i < count; i++)
+    REQUIRE(result[i] == Approx(values[i]));
+}
+
+TEST_CASE("zstd r64 small buffer round trip", "[converter]")
+{
+  compressor_zstd_t compressor;
+
+  double values[] = {1.0e9 + 0.5, 1.0e9 + 1.5, 1.0e9 + 0.1};
+  uint32_t size = sizeof(values);
+  point_format_t fmt{type_r64, components_1};
+
+  auto compressed = compressor.compress(reinterpret_cast<uint8_t *>(values), size, fmt, 0);
+  REQUIRE(compressed.error.code == 0);
+
+  auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+  REQUIRE(decompressed.error.code == 0);
+  REQUIRE(decompressed.size == size);
+
+  auto *result = reinterpret_cast<double *>(decompressed.data.get());
+  for (int i = 0; i < 3; i++)
+    REQUIRE(result[i] == Approx(values[i]));
+}
+
+TEST_CASE("huff0 r64 offset compression round trip", "[converter]")
+{
+  compressor_huff0_t compressor;
+
+  uint32_t count = 500;
+  std::vector<double> values(count);
+  std::mt19937 gen(456);
+  std::uniform_real_distribution<double> dist(1.0e9, 1.0e9 + 50.0);
+  for (auto &v : values)
+    v = dist(gen);
+
+  auto *data = reinterpret_cast<uint8_t *>(values.data());
+  uint32_t size = count * 8;
+  point_format_t fmt{type_r64, components_1};
+
+  auto compressed = compressor.compress(data, size, fmt, 0);
+  REQUIRE(compressed.error.code == 0);
+
+  auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+  REQUIRE(decompressed.error.code == 0);
+  REQUIRE(decompressed.size == size);
+
+  auto *result = reinterpret_cast<double *>(decompressed.data.get());
+  for (uint32_t i = 0; i < count; i++)
+    REQUIRE(result[i] == Approx(values[i]));
+}
+
+// --- compression_stats with min/max ---
+
+TEST_CASE("compression_stats accumulate with min/max", "[converter]")
+{
+  compression_stats_t stats;
+  point_format_t fmt{type_r64, components_1};
+
+  stats.accumulate("gps_time", fmt, 8000, 2000, 1.0e9, 1.0e9 + 50.0);
+  REQUIRE(stats.per_attribute.size() == 1);
+  REQUIRE(stats.per_attribute[0].min_value == Approx(1.0e9));
+  REQUIRE(stats.per_attribute[0].max_value == Approx(1.0e9 + 50.0));
+
+  stats.accumulate("gps_time", fmt, 8000, 2000, 1.0e9 - 10.0, 1.0e9 + 100.0);
+  REQUIRE(stats.per_attribute[0].min_value == Approx(1.0e9 - 10.0));
+  REQUIRE(stats.per_attribute[0].max_value == Approx(1.0e9 + 100.0));
+}
+
+TEST_CASE("compression_stats match by name and format", "[converter]")
+{
+  compression_stats_t stats;
+  point_format_t fmt_m64{type_m64, components_1};
+  point_format_t fmt_m128{type_m128, components_1};
+
+  stats.accumulate("xyz", fmt_m64, 1000, 500);
+  stats.accumulate("xyz", fmt_m128, 2000, 800);
+  REQUIRE(stats.per_attribute.size() == 2);
+  REQUIRE(stats.per_attribute[0].format.type == type_m64);
+  REQUIRE(stats.per_attribute[1].format.type == type_m128);
+}
+
+TEST_CASE("compression_stats v2 serialize/deserialize with min/max", "[converter]")
+{
+  compression_stats_t stats;
+  stats.input_file_count = 10;
+  stats.method = compression_method_t::zstd;
+  point_format_t fmt{type_r64, components_1};
+  stats.accumulate("gps_time", fmt, 8000, 2000, 1.0e9, 1.0e9 + 100.0);
+
+  uint32_t serialized_size = 0;
+  auto serialized = stats.serialize(serialized_size);
+  REQUIRE(serialized_size > 0);
+
+  auto deserialized = compression_stats_t::deserialize(serialized.get(), serialized_size);
+  REQUIRE(deserialized.per_attribute.size() == 1);
+  REQUIRE(deserialized.per_attribute[0].min_value == Approx(1.0e9));
+  REQUIRE(deserialized.per_attribute[0].max_value == Approx(1.0e9 + 100.0));
+}
+
+// --- decorrelate_u16x3 / correlate_u16x3 ---
+
+static std::vector<uint8_t> make_correlated_u16x3_buffer(uint32_t count, uint32_t seed)
+{
+  std::mt19937 gen(seed);
+  std::uniform_int_distribution<int> base_dist(20, 200);
+  std::uniform_int_distribution<int> diff_dist(-10, 10);
+  std::vector<uint8_t> buf(count * 6);
+  for (uint32_t i = 0; i < count; i++)
+  {
+    int base = base_dist(gen);
+    uint16_t r = static_cast<uint16_t>(std::clamp(base + diff_dist(gen), 0, 255) << 8);
+    uint16_t g = static_cast<uint16_t>(std::clamp(base + diff_dist(gen), 0, 255) << 8);
+    uint16_t b = static_cast<uint16_t>(std::clamp(base + diff_dist(gen), 0, 255) << 8);
+    memcpy(buf.data() + i * 6 + 0, &r, 2);
+    memcpy(buf.data() + i * 6 + 2, &g, 2);
+    memcpy(buf.data() + i * 6 + 4, &b, 2);
+  }
+  return buf;
+}
+
+TEST_CASE("decorrelate_u16x3 round trip", "[converter]")
+{
+  SECTION("correlated data")
+  {
+    auto data = make_correlated_u16x3_buffer(500, 42);
+    auto original = data;
+    decorrelate_u16x3(data.data(), uint32_t(data.size()));
+    REQUIRE(data != original);
+    correlate_u16x3(data.data(), uint32_t(data.size()));
+    REQUIRE(data == original);
+  }
+
+  SECTION("random data")
+  {
+    auto data = make_random_buffer(600, 99);
+    auto original = data;
+    decorrelate_u16x3(data.data(), uint32_t(data.size()));
+    correlate_u16x3(data.data(), uint32_t(data.size()));
+    REQUIRE(data == original);
+  }
+
+  SECTION("all zeros")
+  {
+    std::vector<uint8_t> data(600, 0);
+    auto original = data;
+    decorrelate_u16x3(data.data(), uint32_t(data.size()));
+    correlate_u16x3(data.data(), uint32_t(data.size()));
+    REQUIRE(data == original);
+  }
+
+  SECTION("single element")
+  {
+    uint16_t r = 0xFF00, g = 0x8000, b = 0x4000;
+    uint8_t data[6];
+    memcpy(data + 0, &r, 2);
+    memcpy(data + 2, &g, 2);
+    memcpy(data + 4, &b, 2);
+    uint8_t original[6];
+    memcpy(original, data, 6);
+    decorrelate_u16x3(data, 6);
+    correlate_u16x3(data, 6);
+    REQUIRE(memcmp(data, original, 6) == 0);
+  }
+}
+
+TEST_CASE("decorrelate_u16x3 preserves zero lower bytes", "[converter]")
+{
+  auto data = make_correlated_u16x3_buffer(200, 77);
+  decorrelate_u16x3(data.data(), uint32_t(data.size()));
+  // Each u16 component should still have 0x00 in the low byte
+  // because shifted 8-bit values differ by at most 255, and (a<<8)-(b<<8) = (a-b)<<8
+  for (uint32_t i = 0; i < data.size(); i += 2)
+  {
+    uint16_t val;
+    memcpy(&val, data.data() + i, 2);
+    REQUIRE((val & 0xFF) == 0);
+  }
+}
+
+TEST_CASE("zstd u16x3 decorrelated compression round trip", "[converter]")
+{
+  compressor_zstd_t compressor;
+
+  SECTION("correlated data")
+  {
+    auto data = make_correlated_u16x3_buffer(1000, 42);
+    point_format_t fmt{type_u16, components_3};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+
+  SECTION("random data")
+  {
+    auto data = make_random_buffer(6 * 500, 99);
+    point_format_t fmt{type_u16, components_3};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+
+  SECTION("small buffer")
+  {
+    auto data = make_correlated_u16x3_buffer(3, 11);
+    point_format_t fmt{type_u16, components_3};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+}
+
+TEST_CASE("huff0 u16x3 decorrelated compression round trip", "[converter]")
+{
+  compressor_huff0_t compressor;
+
+  SECTION("correlated data")
+  {
+    auto data = make_correlated_u16x3_buffer(1000, 42);
+    point_format_t fmt{type_u16, components_3};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+
+  SECTION("random data")
+  {
+    auto data = make_random_buffer(6 * 500, 99);
+    point_format_t fmt{type_u16, components_3};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+
+  SECTION("small buffer")
+  {
+    auto data = make_correlated_u16x3_buffer(3, 11);
+    point_format_t fmt{type_u16, components_3};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
 }
