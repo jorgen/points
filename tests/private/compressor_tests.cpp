@@ -1,10 +1,13 @@
 #include <catch2/catch.hpp>
+#include <attributes_configs.hpp>
 #include <compressor.hpp>
 #include <compressor_blosc2.hpp>
 #include <compressor_zstd.hpp>
 #include <compressor_fse.hpp>
+#include <compressor_ans.hpp>
 #include <compression_preprocess.hpp>
 #include <input_header.hpp>
+#include <points/converter/default_attribute_names.h>
 
 #include <algorithm>
 #include <cmath>
@@ -1045,6 +1048,162 @@ TEST_CASE("compression_stats v4 serialize/deserialize with LOD fields", "[conver
   REQUIRE(deserialized.per_attribute[1].lod_compressed_bytes == 2000);
 }
 
+// --- delta_encode_single / delta_decode_single ---
+
+TEST_CASE("delta_encode_single round trip u8", "[converter]")
+{
+  std::vector<uint8_t> data = {10, 12, 15, 14, 20, 20, 25};
+  auto original = data;
+  delta_encode_single(data.data(), uint32_t(data.size()), 1);
+  REQUIRE(data != original);
+  delta_decode_single(data.data(), uint32_t(data.size()), 1);
+  REQUIRE(data == original);
+}
+
+TEST_CASE("delta_encode_single round trip u16", "[converter]")
+{
+  uint32_t count = 200;
+  std::vector<uint8_t> data(count * 2);
+  for (uint32_t i = 0; i < count; i++)
+  {
+    uint16_t val = static_cast<uint16_t>(1000 + i * 3);
+    memcpy(data.data() + i * 2, &val, 2);
+  }
+  auto original = data;
+  delta_encode_single(data.data(), uint32_t(data.size()), 2);
+  REQUIRE(data != original);
+  delta_decode_single(data.data(), uint32_t(data.size()), 2);
+  REQUIRE(data == original);
+}
+
+TEST_CASE("delta_encode_single round trip u32", "[converter]")
+{
+  uint32_t count = 100;
+  std::vector<uint8_t> data(count * 4);
+  for (uint32_t i = 0; i < count; i++)
+  {
+    uint32_t val = 50000 + i * 7;
+    memcpy(data.data() + i * 4, &val, 4);
+  }
+  auto original = data;
+  delta_encode_single(data.data(), uint32_t(data.size()), 4);
+  REQUIRE(data != original);
+  delta_decode_single(data.data(), uint32_t(data.size()), 4);
+  REQUIRE(data == original);
+}
+
+TEST_CASE("delta_encode_single round trip random data", "[converter]")
+{
+  auto data = make_random_buffer(512, 77);
+  auto original = data;
+  delta_encode_single(data.data(), uint32_t(data.size()), 2);
+  delta_decode_single(data.data(), uint32_t(data.size()), 2);
+  REQUIRE(data == original);
+}
+
+TEST_CASE("delta_encode_single single element", "[converter]")
+{
+  uint16_t val = 0x1234;
+  uint8_t data[2];
+  memcpy(data, &val, 2);
+  uint8_t original[2];
+  memcpy(original, data, 2);
+  delta_encode_single(data, 2, 2);
+  REQUIRE(memcmp(data, original, 2) == 0); // no change for single element
+}
+
+TEST_CASE("zstd element delta round trip gradually changing u16x1", "[converter]")
+{
+  compressor_zstd_t compressor;
+  uint32_t count = 1000;
+  std::vector<uint8_t> data(count * 2);
+  std::mt19937 gen(42);
+  std::uniform_int_distribution<int> diff(-5, 5);
+  uint16_t val = 30000;
+  for (uint32_t i = 0; i < count; i++)
+  {
+    val = static_cast<uint16_t>(val + diff(gen));
+    memcpy(data.data() + i * 2, &val, 2);
+  }
+  point_format_t fmt{type_u16, components_1};
+  auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+  REQUIRE(compressed.error.code == 0);
+  auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+  REQUIRE(decompressed.error.code == 0);
+  REQUIRE(decompressed.size == data.size());
+  REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+}
+
+TEST_CASE("zstd element delta round trip random u16x1", "[converter]")
+{
+  compressor_zstd_t compressor;
+  auto data = make_random_buffer(2000, 99);
+  point_format_t fmt{type_u16, components_1};
+  auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+  REQUIRE(compressed.error.code == 0);
+  auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+  REQUIRE(decompressed.error.code == 0);
+  REQUIRE(decompressed.size == data.size());
+  REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+}
+
+TEST_CASE("huff0 element delta round trip gradually changing u16x1", "[converter]")
+{
+  compressor_huff0_t compressor;
+  uint32_t count = 1000;
+  std::vector<uint8_t> data(count * 2);
+  std::mt19937 gen(42);
+  std::uniform_int_distribution<int> diff(-5, 5);
+  uint16_t val = 30000;
+  for (uint32_t i = 0; i < count; i++)
+  {
+    val = static_cast<uint16_t>(val + diff(gen));
+    memcpy(data.data() + i * 2, &val, 2);
+  }
+  point_format_t fmt{type_u16, components_1};
+  auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+  REQUIRE(compressed.error.code == 0);
+  auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+  REQUIRE(decompressed.error.code == 0);
+  REQUIRE(decompressed.size == data.size());
+  REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+}
+
+TEST_CASE("zstd element delta round trip u8x1", "[converter]")
+{
+  compressor_zstd_t compressor;
+  uint32_t count = 500;
+  std::vector<uint8_t> data(count);
+  for (uint32_t i = 0; i < count; i++)
+    data[i] = static_cast<uint8_t>(100 + (i % 5));
+  point_format_t fmt{type_u8, components_1};
+  auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+  REQUIRE(compressed.error.code == 0);
+  auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+  REQUIRE(decompressed.error.code == 0);
+  REQUIRE(decompressed.size == data.size());
+  REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+}
+
+TEST_CASE("zstd element delta round trip u32x1", "[converter]")
+{
+  compressor_zstd_t compressor;
+  uint32_t count = 300;
+  std::vector<uint8_t> data(count * 4);
+  for (uint32_t i = 0; i < count; i++)
+  {
+    uint32_t val = 100000 + i * 10;
+    memcpy(data.data() + i * 4, &val, 4);
+  }
+  point_format_t fmt{type_u32, components_1};
+  auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+  REQUIRE(compressed.error.code == 0);
+  auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+  REQUIRE(decompressed.error.code == 0);
+  REQUIRE(decompressed.size == data.size());
+  REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+}
+
 TEST_CASE("compression_stats v3 backward compat deserialize has zero LOD", "[converter]")
 {
   // Build a v3 blob manually: serialize with old code layout
@@ -1108,3 +1267,204 @@ TEST_CASE("compression_stats v3 backward compat deserialize has zero LOD", "[con
   REQUIRE(result.per_attribute[0].lod_uncompressed_bytes == 0);
   REQUIRE(result.per_attribute[0].lod_compressed_bytes == 0);
 }
+
+// --- ANS (FSE) round trip ---
+
+TEST_CASE("ans round trip", "[converter]")
+{
+  compressor_ans_t compressor;
+
+  SECTION("random u8x1")
+  {
+    auto data = make_random_buffer(1024);
+    point_format_t fmt{type_u8, components_1};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+
+  SECTION("random u32x3")
+  {
+    auto data = make_random_buffer(4 * 3 * 100);
+    point_format_t fmt{type_u32, components_3};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+
+  SECTION("sorted m192")
+  {
+    uint8_t data[24 * 5];
+    memset(data, 0, sizeof(data));
+    for (int i = 0; i < 5; i++)
+    {
+      uint64_t val = static_cast<uint64_t>(i * 100);
+      memcpy(data + i * 24, &val, 8);
+    }
+    point_format_t fmt{type_m192, components_1};
+    auto compressed = compressor.compress(data, sizeof(data), fmt, 5);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == sizeof(data));
+    REQUIRE(memcmp(decompressed.data.get(), data, sizeof(data)) == 0);
+  }
+
+  SECTION("constant buffer")
+  {
+    auto data = make_constant_buffer(1024, 0x42);
+    point_format_t fmt{type_u8, components_1};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+
+  SECTION("u16x3 correlated")
+  {
+    auto data = make_correlated_u16x3_buffer(1000, 42);
+    point_format_t fmt{type_u16, components_3};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+
+  SECTION("gradually changing u16x1")
+  {
+    uint32_t count = 1000;
+    std::vector<uint8_t> data(count * 2);
+    std::mt19937 gen(42);
+    std::uniform_int_distribution<int> diff(-5, 5);
+    uint16_t val = 30000;
+    for (uint32_t i = 0; i < count; i++)
+    {
+      val = static_cast<uint16_t>(val + diff(gen));
+      memcpy(data.data() + i * 2, &val, 2);
+    }
+    point_format_t fmt{type_u16, components_1};
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+
+  SECTION("r64 offset")
+  {
+    uint32_t count = 500;
+    std::vector<double> values(count);
+    std::mt19937 gen(456);
+    std::uniform_real_distribution<double> dist(1.0e9, 1.0e9 + 50.0);
+    for (auto &v : values)
+      v = dist(gen);
+
+    auto *data = reinterpret_cast<uint8_t *>(values.data());
+    uint32_t size = count * 8;
+    point_format_t fmt{type_r64, components_1};
+
+    auto compressed = compressor.compress(data, size, fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == size);
+
+    auto *result = reinterpret_cast<double *>(decompressed.data.get());
+    for (uint32_t i = 0; i < count; i++)
+      REQUIRE(result[i] == Approx(values[i]));
+  }
+}
+
+TEST_CASE("decompress_any dispatches ans", "[converter]")
+{
+  auto data = make_random_buffer(1024);
+  point_format_t fmt{type_u8, components_1};
+  compressor_ans_t compressor;
+  auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+  REQUIRE(compressed.error.code == 0);
+
+  auto decompressed = decompress_any(compressed.data.get(), compressed.size);
+  REQUIRE(decompressed.error.code == 0);
+  REQUIRE(decompressed.size == data.size());
+  REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+}
+
+TEST_CASE("create_compressor returns ans", "[converter]")
+{
+  auto ans = create_compressor(compression_method_t::ans);
+  REQUIRE(ans != nullptr);
+  REQUIRE(ans->method() == compression_method_t::ans);
+}
+
+// --- LOD attribute format excludes original_order ---
+
+static attributes_t make_test_attributes(std::initializer_list<std::tuple<const char *, type_t, components_t>> specs)
+{
+  attributes_t attrs;
+  for (auto &[name, type, comp] : specs)
+  {
+    auto len = uint32_t(strlen(name));
+    auto buf = std::make_unique<char[]>(len + 1);
+    memcpy(buf.get(), name, len + 1);
+    attrs.attributes.emplace_back(buf.get(), len, type, comp);
+    attrs.attribute_names.push_back(std::move(buf));
+  }
+  return attrs;
+}
+
+TEST_CASE("LOD attribute format excludes original_order", "[converter]")
+{
+  attributes_configs_t configs;
+  auto attrs = make_test_attributes({
+    {POINTS_ATTRIBUTE_XYZ, type_m64, components_1},
+    {POINTS_ATTRIBUTE_RGB, type_u8, components_3},
+    {POINTS_ATTRIBUTE_ORIGINAL_ORDER, type_u32, components_1},
+  });
+  REQUIRE(attrs.attributes.size() == 3);
+  REQUIRE(attrs.attribute_names.size() == 3);
+
+  auto source_id = configs.get_attribute_config_index(std::move(attrs));
+  auto mapping = configs.get_lod_attribute_mapping(1, &source_id, &source_id + 1);
+
+  auto &lod_attrs = configs.get(mapping.destination_id);
+  REQUIRE(lod_attrs.attributes.size() == 2);
+  for (auto &attr : lod_attrs.attributes)
+  {
+    bool is_original_order = attr.name_size == strlen(POINTS_ATTRIBUTE_ORIGINAL_ORDER) &&
+                             memcmp(attr.name, POINTS_ATTRIBUTE_ORIGINAL_ORDER, attr.name_size) == 0;
+    REQUIRE_FALSE(is_original_order);
+  }
+  REQUIRE(memcmp(lod_attrs.attributes[0].name, POINTS_ATTRIBUTE_XYZ, strlen(POINTS_ATTRIBUTE_XYZ)) == 0);
+  REQUIRE(memcmp(lod_attrs.attributes[1].name, POINTS_ATTRIBUTE_RGB, strlen(POINTS_ATTRIBUTE_RGB)) == 0);
+}
+
+TEST_CASE("LOD attribute format without original_order is unchanged", "[converter]")
+{
+  attributes_configs_t configs;
+  auto attrs = make_test_attributes({
+    {POINTS_ATTRIBUTE_XYZ, type_m64, components_1},
+    {POINTS_ATTRIBUTE_RGB, type_u8, components_3},
+    {POINTS_ATTRIBUTE_INTENSITY, type_u16, components_1},
+  });
+  auto source_id = configs.get_attribute_config_index(std::move(attrs));
+  auto mapping = configs.get_lod_attribute_mapping(1, &source_id, &source_id + 1);
+
+  auto &lod_attrs = configs.get(mapping.destination_id);
+  REQUIRE(lod_attrs.attributes.size() == 3);
+  REQUIRE(memcmp(lod_attrs.attributes[0].name, POINTS_ATTRIBUTE_XYZ, strlen(POINTS_ATTRIBUTE_XYZ)) == 0);
+  REQUIRE(memcmp(lod_attrs.attributes[1].name, POINTS_ATTRIBUTE_RGB, strlen(POINTS_ATTRIBUTE_RGB)) == 0);
+  REQUIRE(memcmp(lod_attrs.attributes[2].name, POINTS_ATTRIBUTE_INTENSITY, strlen(POINTS_ATTRIBUTE_INTENSITY)) == 0);
+}
+

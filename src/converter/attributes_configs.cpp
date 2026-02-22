@@ -18,6 +18,7 @@
 #include "attributes_configs.hpp"
 
 #include "input_header.hpp"
+#include "points/converter/default_attribute_names.h"
 
 #include "fixed_size_vector.hpp"
 #include "morton_tree_coordinate_transform.hpp"
@@ -137,6 +138,20 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
     while (++it != attrib_end)
     {
       add_missing_attributes(_attributes_configs[it->data].attributes, target);
+    }
+    // Remove original_order — meaningless for LOD buffers
+    {
+      auto &attrs = target.attributes;
+      for (int oi = 1; oi < int(attrs.size()); ++oi)
+      {
+        if (attrs[oi].name_size == strlen(POINTS_ATTRIBUTE_ORIGINAL_ORDER) &&
+            memcmp(attrs[oi].name, POINTS_ATTRIBUTE_ORIGINAL_ORDER, attrs[oi].name_size) == 0)
+        {
+          attrs.erase(attrs.begin() + oi);
+          target.attribute_names.erase(target.attribute_names.begin() + oi);
+          break;
+        }
+      }
     }
     target.attributes.front().type = lod_type;
     target.attributes.front().components = components_1;
