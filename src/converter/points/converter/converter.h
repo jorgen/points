@@ -160,12 +160,17 @@ struct converter_attribute_stats_t
   uint64_t uncompressed_bytes;
   uint64_t compressed_bytes;
   double min_value;  double max_value;
+  uint64_t path_counts[4]; // [0]=raw, [1]=decorrelated, [2]=component_delta, [3]=decorrelated+component_delta
+  uint64_t lod_buffer_count;
+  uint64_t lod_uncompressed_bytes;
+  uint64_t lod_compressed_bytes;
 };
 
 struct converter_stats_t
 {
   uint32_t input_file_count;
   uint32_t total_buffer_count;
+  uint32_t lod_buffer_count;
   uint32_t compression_method;
   uint32_t attribute_count;
   struct converter_attribute_stats_t attributes[32];

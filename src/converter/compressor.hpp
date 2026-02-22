@@ -44,6 +44,7 @@ static constexpr uint8_t compression_flag_constant_bands     = 1 << 1;
 static constexpr uint8_t compression_flag_offset_subtracted  = 1 << 2;
 static constexpr uint8_t compression_flag_sort_permutation   = 1 << 3;
 static constexpr uint8_t compression_flag_decorrelated       = 1 << 4;
+static constexpr uint8_t compression_flag_component_delta    = 1 << 5;
 
 struct compression_header_t
 {
@@ -90,16 +91,21 @@ struct attribute_compression_stats_t
   uint64_t compressed_bytes = 0;
   double min_value = std::numeric_limits<double>::max();
   double max_value = std::numeric_limits<double>::lowest();
+  uint64_t path_counts[4] = {}; // [0]=raw, [1]=decorrelated, [2]=component_delta, [3]=decorrelated+component_delta
+  uint64_t lod_buffer_count = 0;
+  uint64_t lod_uncompressed_bytes = 0;
+  uint64_t lod_compressed_bytes = 0;
 };
 
 struct compression_stats_t
 {
   uint32_t input_file_count = 0;
   uint32_t total_buffer_count = 0;
+  uint32_t lod_buffer_count = 0;
   compression_method_t method = compression_method_t::none;
   std::vector<attribute_compression_stats_t> per_attribute;
 
-  void accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed, double min_val = std::numeric_limits<double>::max(), double max_val = std::numeric_limits<double>::lowest());
+  void accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed, double min_val = std::numeric_limits<double>::max(), double max_val = std::numeric_limits<double>::lowest(), uint8_t flags = 0, bool is_lod = false);
   std::shared_ptr<uint8_t[]> serialize(uint32_t &out_size) const;
   static compression_stats_t deserialize(const uint8_t *data, uint32_t size);
 };

@@ -157,9 +157,18 @@ compression_result_t decompress_any(const void *data, uint32_t size)
   return result;
 }
 
-void compression_stats_t::accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed, double min_val, double max_val)
+void compression_stats_t::accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed, double min_val, double max_val, uint8_t flags, bool is_lod)
 {
   total_buffer_count++;
+  if (is_lod)
+    lod_buffer_count++;
+
+  uint32_t path_idx = 0;
+  if (flags & compression_flag_decorrelated)
+    path_idx |= 1;
+  if (flags & compression_flag_component_delta)
+    path_idx |= 2;
+
   for (auto &attr : per_attribute)
   {
     if (attr.name == name && attr.format.type == format.type && attr.format.components == format.components)
@@ -171,6 +180,13 @@ void compression_stats_t::accumulate(const std::string &name, const point_format
         attr.min_value = min_val;
       if (max_val > attr.max_value)
         attr.max_value = max_val;
+      attr.path_counts[path_idx]++;
+      if (is_lod)
+      {
+        attr.lod_buffer_count++;
+        attr.lod_uncompressed_bytes += uncompressed;
+        attr.lod_compressed_bytes += compressed;
+      }
       return;
     }
   }
@@ -182,12 +198,19 @@ void compression_stats_t::accumulate(const std::string &name, const point_format
   attr.compressed_bytes = compressed;
   attr.min_value = min_val;
   attr.max_value = max_val;
+  attr.path_counts[path_idx] = 1;
+  if (is_lod)
+  {
+    attr.lod_buffer_count = 1;
+    attr.lod_uncompressed_bytes = uncompressed;
+    attr.lod_compressed_bytes = compressed;
+  }
 }
 
 std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) const
 {
   // compute total size
-  uint32_t size = 4 + 4 + 4 + 1 + 3 + 4; // version, input_file_count, total_buffer_count, method, padding, attribute_count
+  uint32_t size = 4 + 4 + 4 + 4 + 1 + 3 + 4; // version, input_file_count, total_buffer_count, lod_buffer_count, method, padding, attribute_count
   for (auto &attr : per_attribute)
   {
     size += 4;                                  // name_size
@@ -195,16 +218,19 @@ std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) co
     size += 1 + 1 + 2;                          // type, components, padding
     size += 8 + 8 + 8;                          // buffer_count, uncompressed, compressed
     size += 8 + 8;                              // min_value, max_value
+    size += 4 * 8;                              // path_counts[4]
+    size += 8 + 8 + 8;                          // lod_buffer_count, lod_uncompressed, lod_compressed
   }
 
   auto data = std::make_shared<uint8_t[]>(size);
   auto *ptr = data.get();
   memset(ptr, 0, size);
 
-  uint32_t version = 2;
+  uint32_t version = 4;
   memcpy(ptr, &version, 4); ptr += 4;
   memcpy(ptr, &input_file_count, 4); ptr += 4;
   memcpy(ptr, &total_buffer_count, 4); ptr += 4;
+  memcpy(ptr, &lod_buffer_count, 4); ptr += 4;
   auto m = static_cast<uint8_t>(method);
   memcpy(ptr, &m, 1); ptr += 1;
   ptr += 3; // padding
@@ -226,6 +252,10 @@ std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) co
     memcpy(ptr, &attr.compressed_bytes, 8); ptr += 8;
     memcpy(ptr, &attr.min_value, 8); ptr += 8;
     memcpy(ptr, &attr.max_value, 8); ptr += 8;
+    memcpy(ptr, attr.path_counts, 4 * 8); ptr += 4 * 8;
+    memcpy(ptr, &attr.lod_buffer_count, 8); ptr += 8;
+    memcpy(ptr, &attr.lod_uncompressed_bytes, 8); ptr += 8;
+    memcpy(ptr, &attr.lod_compressed_bytes, 8); ptr += 8;
   }
 
   out_size = size;
@@ -241,11 +271,15 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
   auto *ptr = data;
   uint32_t version;
   memcpy(&version, ptr, 4); ptr += 4;
-  if (version != 1 && version != 2)
+  if (version < 1 || version > 4)
     return stats;
 
   memcpy(&stats.input_file_count, ptr, 4); ptr += 4;
   memcpy(&stats.total_buffer_count, ptr, 4); ptr += 4;
+  if (version >= 4)
+  {
+    memcpy(&stats.lod_buffer_count, ptr, 4); ptr += 4;
+  }
   uint8_t m;
   memcpy(&m, ptr, 1); ptr += 1;
   stats.method = static_cast<compression_method_t>(m);
@@ -253,7 +287,13 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
 
   uint32_t attr_count;
   memcpy(&attr_count, ptr, 4); ptr += 4;
-  uint32_t per_attr_fixed_size = (version >= 2) ? 44 : 28; // v2 adds 16 bytes for min/max
+  uint32_t per_attr_fixed_size = 28; // v1 base
+  if (version >= 2)
+    per_attr_fixed_size += 16; // min/max
+  if (version >= 3)
+    per_attr_fixed_size += 32; // path_counts[4]
+  if (version >= 4)
+    per_attr_fixed_size += 24; // lod_buffer_count, lod_uncompressed, lod_compressed
 
   auto remaining = static_cast<uint32_t>(size - static_cast<uint32_t>(ptr - data));
   for (uint32_t i = 0; i < attr_count && remaining >= 4; i++)
@@ -289,6 +329,18 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
       memcpy(&attr.min_value, ptr, 8); ptr += 8;
       memcpy(&attr.max_value, ptr, 8); ptr += 8;
       remaining -= 16;
+    }
+    if (version >= 3)
+    {
+      memcpy(attr.path_counts, ptr, 4 * 8); ptr += 4 * 8;
+      remaining -= 32;
+    }
+    if (version >= 4)
+    {
+      memcpy(&attr.lod_buffer_count, ptr, 8); ptr += 8;
+      memcpy(&attr.lod_uncompressed_bytes, ptr, 8); ptr += 8;
+      memcpy(&attr.lod_compressed_bytes, ptr, 8); ptr += 8;
+      remaining -= 24;
     }
   }
 

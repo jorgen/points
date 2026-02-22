@@ -82,6 +82,7 @@ struct compressed_write_data_t
   uint32_t uncompressed_size;
   double min_value = std::numeric_limits<double>::max();
   double max_value = std::numeric_limits<double>::lowest();
+  bool is_lod = false;
 };
 
 struct storage_handler_request_t

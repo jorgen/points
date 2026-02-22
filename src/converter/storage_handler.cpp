@@ -418,7 +418,8 @@ void storage_handler_t::handle_write_events(
   write_requests->attributes_id = attributes_id;
   write_requests->done_callback = std::move(done);
 
-  _seen_input_files.insert(storage_header.input_id.data);
+  if (input_data_id_is_leaf(storage_header.input_id))
+    _seen_input_files.insert(storage_header.input_id.data);
 
   auto formats = _attributes_configs.get_format_components(attributes_id);
   auto &attributes = _attributes_configs.get(attributes_id);
@@ -467,10 +468,17 @@ void storage_handler_t::handle_write_events(
       auto captured_size = buffer_data.size;
       auto captured_raw = static_cast<uint8_t *>(buffer_data.data);
       auto *pipe = &_compressed_write_pipe;
+      bool is_lod = !input_data_id_is_leaf(storage_header.input_id);
 
-      _thread_pool.enqueue([compressor, captured_raw, captured_size, captured_data, format, point_count, write_requests_ptr, i, pipe, attr_name]()
+      _thread_pool.enqueue([compressor, captured_raw, captured_size, captured_data, format, point_count, write_requests_ptr, i, pipe, attr_name, is_lod]()
       {
-        // Compute min/max from the raw attribute data (skip header for buffer 0)        double attr_min = std::numeric_limits<double>::max();        double attr_max = std::numeric_limits<double>::lowest();        if (i > 0)        {          compute_attribute_min_max(captured_raw, captured_size, format, attr_min, attr_max);        }
+        // Compute min/max from the raw attribute data (skip header for buffer 0)
+        double attr_min = std::numeric_limits<double>::max();
+        double attr_max = std::numeric_limits<double>::lowest();
+        if (i > 0)
+        {
+          compute_attribute_min_max(captured_raw, captured_size, format, attr_min, attr_max);
+        }
         auto compressed = try_compress_constant(captured_raw, captured_size, format);
         if (!compressed.data)
           compressed = compressor->compress(captured_raw, captured_size, format, point_count);
@@ -486,6 +494,7 @@ void storage_handler_t::handle_write_events(
           wd.uncompressed_size = captured_size;
           wd.min_value = attr_min;
           wd.max_value = attr_max;
+          wd.is_lod = is_lod;
           pipe->post_event(std::move(wd));
           return;
         }
@@ -499,6 +508,7 @@ void storage_handler_t::handle_write_events(
         wd.uncompressed_size = captured_size;
         wd.min_value = attr_min;
         wd.max_value = attr_max;
+        wd.is_lod = is_lod;
         pipe->post_event(std::move(wd));
       });
     }
@@ -531,7 +541,8 @@ void storage_handler_t::handle_write_events(
         attr_name = "unknown";
         format = {type_u8, components_1};
       }
-      _compression_stats.accumulate(attr_name, format, serialize_data.size, serialize_data.size);
+      bool is_lod = !input_data_id_is_leaf(storage_header.input_id);
+      _compression_stats.accumulate(attr_name, format, serialize_data.size, serialize_data.size, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, is_lod);
 
       auto &location = locations[i];
       location.file_id = 0;
@@ -775,7 +786,14 @@ void storage_handler_t::set_compressor(compression_method_t method)
 
 void storage_handler_t::handle_compressed_write(compressed_write_data_t &&event)
 {
-  _compression_stats.accumulate(event.attribute_name, event.format, event.uncompressed_size, event.size, event.min_value, event.max_value);
+  uint8_t compression_flags = 0;
+  if (event.data && event.size >= sizeof(compression_header_t) && has_compression_magic(event.data.get(), event.size))
+  {
+    compression_header_t hdr;
+    memcpy(&hdr, event.data.get(), sizeof(hdr));
+    compression_flags = hdr.flags;
+  }
+  _compression_stats.accumulate(event.attribute_name, event.format, event.uncompressed_size, event.size, event.min_value, event.max_value, compression_flags, event.is_lod);
 
   auto &location = event.write_req->locations[event.buffer_index];
   location.file_id = 0;

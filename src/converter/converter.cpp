@@ -98,6 +98,7 @@ static void fill_converter_stats(const compression_stats_t &src, converter_stats
   memset(dst, 0, sizeof(*dst));
   dst->input_file_count = src.input_file_count;
   dst->total_buffer_count = src.total_buffer_count;
+  dst->lod_buffer_count = src.lod_buffer_count;
   dst->compression_method = static_cast<uint32_t>(src.method);
   dst->attribute_count = static_cast<uint32_t>(std::min(src.per_attribute.size(), size_t(32)));
   for (uint32_t i = 0; i < dst->attribute_count; i++)
@@ -113,6 +114,10 @@ static void fill_converter_stats(const compression_stats_t &src, converter_stats
     d.uncompressed_bytes = s.uncompressed_bytes;
     d.compressed_bytes = s.compressed_bytes;
     d.min_value = s.min_value;    d.max_value = s.max_value;
+    memcpy(d.path_counts, s.path_counts, sizeof(d.path_counts));
+    d.lod_buffer_count = s.lod_buffer_count;
+    d.lod_uncompressed_bytes = s.lod_uncompressed_bytes;
+    d.lod_compressed_bytes = s.lod_compressed_bytes;
   }
 }
 

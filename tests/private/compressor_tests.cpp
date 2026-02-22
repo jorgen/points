@@ -898,3 +898,213 @@ TEST_CASE("huff0 u16x3 decorrelated compression round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 }
+
+// --- delta_encode_u16x3 / delta_decode_u16x3 ---
+
+TEST_CASE("delta_encode_u16x3 round trip", "[converter]")
+{
+  SECTION("correlated data")
+  {
+    auto data = make_correlated_u16x3_buffer(500, 42);
+    auto original = data;
+    delta_encode_u16x3(data.data(), uint32_t(data.size()));
+    REQUIRE(data != original);
+    delta_decode_u16x3(data.data(), uint32_t(data.size()));
+    REQUIRE(data == original);
+  }
+
+  SECTION("random data")
+  {
+    auto data = make_random_buffer(600, 99);
+    auto original = data;
+    delta_encode_u16x3(data.data(), uint32_t(data.size()));
+    delta_decode_u16x3(data.data(), uint32_t(data.size()));
+    REQUIRE(data == original);
+  }
+
+  SECTION("all zeros")
+  {
+    std::vector<uint8_t> data(600, 0);
+    auto original = data;
+    delta_encode_u16x3(data.data(), uint32_t(data.size()));
+    delta_decode_u16x3(data.data(), uint32_t(data.size()));
+    REQUIRE(data == original);
+  }
+
+  SECTION("single element")
+  {
+    uint16_t r = 0xFF00, g = 0x8000, b = 0x4000;
+    uint8_t data[6];
+    memcpy(data + 0, &r, 2);
+    memcpy(data + 2, &g, 2);
+    memcpy(data + 4, &b, 2);
+    uint8_t original[6];
+    memcpy(original, data, 6);
+    delta_encode_u16x3(data, 6);
+    delta_decode_u16x3(data, 6);
+    REQUIRE(memcmp(data, original, 6) == 0);
+  }
+}
+
+TEST_CASE("delta_encode_u16x3 preserves zero lower bytes", "[converter]")
+{
+  auto data = make_correlated_u16x3_buffer(200, 77);
+  delta_encode_u16x3(data.data(), uint32_t(data.size()));
+  for (uint32_t i = 0; i < data.size(); i += 2)
+  {
+    uint16_t val;
+    memcpy(&val, data.data() + i, 2);
+    REQUIRE((val & 0xFF) == 0);
+  }
+}
+
+TEST_CASE("decorrelate + delta round trip", "[converter]")
+{
+  auto data = make_correlated_u16x3_buffer(1000, 55);
+  auto original = data;
+  decorrelate_u16x3(data.data(), uint32_t(data.size()));
+  delta_encode_u16x3(data.data(), uint32_t(data.size()));
+  delta_decode_u16x3(data.data(), uint32_t(data.size()));
+  correlate_u16x3(data.data(), uint32_t(data.size()));
+  REQUIRE(data == original);
+}
+
+// --- LOD stats ---
+
+TEST_CASE("compression_stats accumulate with is_lod", "[converter]")
+{
+  compression_stats_t stats;
+  point_format_t fmt{type_u32, components_3};
+
+  // Source buffer
+  stats.accumulate("position", fmt, 1000, 500, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, false);
+  REQUIRE(stats.total_buffer_count == 1);
+  REQUIRE(stats.lod_buffer_count == 0);
+  REQUIRE(stats.per_attribute[0].buffer_count == 1);
+  REQUIRE(stats.per_attribute[0].lod_buffer_count == 0);
+  REQUIRE(stats.per_attribute[0].lod_uncompressed_bytes == 0);
+  REQUIRE(stats.per_attribute[0].lod_compressed_bytes == 0);
+
+  // LOD buffer
+  stats.accumulate("position", fmt, 2000, 800, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, true);
+  REQUIRE(stats.total_buffer_count == 2);
+  REQUIRE(stats.lod_buffer_count == 1);
+  REQUIRE(stats.per_attribute[0].buffer_count == 2);
+  REQUIRE(stats.per_attribute[0].uncompressed_bytes == 3000);
+  REQUIRE(stats.per_attribute[0].compressed_bytes == 1300);
+  REQUIRE(stats.per_attribute[0].lod_buffer_count == 1);
+  REQUIRE(stats.per_attribute[0].lod_uncompressed_bytes == 2000);
+  REQUIRE(stats.per_attribute[0].lod_compressed_bytes == 800);
+
+  // Another LOD buffer for a new attribute
+  point_format_t color_fmt{type_u8, components_4};
+  stats.accumulate("color", color_fmt, 500, 200, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, true);
+  REQUIRE(stats.total_buffer_count == 3);
+  REQUIRE(stats.lod_buffer_count == 2);
+  REQUIRE(stats.per_attribute[1].lod_buffer_count == 1);
+  REQUIRE(stats.per_attribute[1].lod_uncompressed_bytes == 500);
+  REQUIRE(stats.per_attribute[1].lod_compressed_bytes == 200);
+}
+
+TEST_CASE("compression_stats v4 serialize/deserialize with LOD fields", "[converter]")
+{
+  compression_stats_t stats;
+  stats.input_file_count = 3;
+  stats.method = compression_method_t::zstd;
+  point_format_t fmt1{type_u32, components_3};
+  point_format_t fmt2{type_u8, components_4};
+
+  // Mix of source and LOD
+  stats.accumulate("position", fmt1, 10000, 5000, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, false);
+  stats.accumulate("position", fmt1, 20000, 8000, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, true);
+  stats.accumulate("color", fmt2, 5000, 2000, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, true);
+
+  uint32_t serialized_size = 0;
+  auto serialized = stats.serialize(serialized_size);
+  REQUIRE(serialized_size > 0);
+
+  auto deserialized = compression_stats_t::deserialize(serialized.get(), serialized_size);
+  REQUIRE(deserialized.input_file_count == 3);
+  REQUIRE(deserialized.total_buffer_count == 3);
+  REQUIRE(deserialized.lod_buffer_count == 2);
+  REQUIRE(deserialized.method == compression_method_t::zstd);
+  REQUIRE(deserialized.per_attribute.size() == 2);
+
+  // position
+  REQUIRE(deserialized.per_attribute[0].buffer_count == 2);
+  REQUIRE(deserialized.per_attribute[0].uncompressed_bytes == 30000);
+  REQUIRE(deserialized.per_attribute[0].compressed_bytes == 13000);
+  REQUIRE(deserialized.per_attribute[0].lod_buffer_count == 1);
+  REQUIRE(deserialized.per_attribute[0].lod_uncompressed_bytes == 20000);
+  REQUIRE(deserialized.per_attribute[0].lod_compressed_bytes == 8000);
+
+  // color
+  REQUIRE(deserialized.per_attribute[1].buffer_count == 1);
+  REQUIRE(deserialized.per_attribute[1].lod_buffer_count == 1);
+  REQUIRE(deserialized.per_attribute[1].lod_uncompressed_bytes == 5000);
+  REQUIRE(deserialized.per_attribute[1].lod_compressed_bytes == 2000);
+}
+
+TEST_CASE("compression_stats v3 backward compat deserialize has zero LOD", "[converter]")
+{
+  // Build a v3 blob manually: serialize with old code layout
+  compression_stats_t stats;
+  stats.input_file_count = 5;
+  stats.method = compression_method_t::zstd;
+  point_format_t fmt{type_u32, components_3};
+  stats.accumulate("position", fmt, 10000, 5000);
+
+  // Manually build v3 serialized blob
+  uint32_t name_size = 8; // "position"
+  uint32_t v3_header = 4 + 4 + 4 + 1 + 3 + 4; // 20 bytes
+  uint32_t v3_per_attr = 4 + name_size + 1 + 1 + 2 + 8 + 8 + 8 + 8 + 8 + 32; // 88 bytes
+  uint32_t total_v3 = v3_header + v3_per_attr;
+  std::vector<uint8_t> v3_data(total_v3, 0);
+  auto *ptr = v3_data.data();
+
+  uint32_t version = 3;
+  memcpy(ptr, &version, 4); ptr += 4;
+  uint32_t ifc = 5;
+  memcpy(ptr, &ifc, 4); ptr += 4;
+  uint32_t tbc = 1;
+  memcpy(ptr, &tbc, 4); ptr += 4;
+  uint8_t m = 2; // zstd
+  memcpy(ptr, &m, 1); ptr += 1;
+  ptr += 3; // padding
+  uint32_t ac = 1;
+  memcpy(ptr, &ac, 4); ptr += 4;
+
+  // attribute
+  uint32_t ns = 8;
+  memcpy(ptr, &ns, 4); ptr += 4;
+  memcpy(ptr, "position", 8); ptr += 8;
+  uint8_t type_val = static_cast<uint8_t>(type_u32);
+  uint8_t comp_val = static_cast<uint8_t>(components_3);
+  memcpy(ptr, &type_val, 1); ptr += 1;
+  memcpy(ptr, &comp_val, 1); ptr += 1;
+  ptr += 2; // padding
+  uint64_t bc = 1;
+  memcpy(ptr, &bc, 8); ptr += 8;
+  uint64_t ub = 10000;
+  memcpy(ptr, &ub, 8); ptr += 8;
+  uint64_t cb = 5000;
+  memcpy(ptr, &cb, 8); ptr += 8;
+  double minv = std::numeric_limits<double>::max();
+  double maxv = std::numeric_limits<double>::lowest();
+  memcpy(ptr, &minv, 8); ptr += 8;
+  memcpy(ptr, &maxv, 8); ptr += 8;
+  uint64_t path_counts[4] = {};
+  path_counts[0] = 1;
+  memcpy(ptr, path_counts, 32); ptr += 32;
+
+  auto result = compression_stats_t::deserialize(v3_data.data(), total_v3);
+  REQUIRE(result.input_file_count == 5);
+  REQUIRE(result.total_buffer_count == 1);
+  REQUIRE(result.lod_buffer_count == 0);
+  REQUIRE(result.per_attribute.size() == 1);
+  REQUIRE(result.per_attribute[0].name == "position");
+  REQUIRE(result.per_attribute[0].buffer_count == 1);
+  REQUIRE(result.per_attribute[0].lod_buffer_count == 0);
+  REQUIRE(result.per_attribute[0].lod_uncompressed_bytes == 0);
+  REQUIRE(result.per_attribute[0].lod_compressed_bytes == 0);
+}
