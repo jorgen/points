@@ -34,14 +34,17 @@ struct environment_data_source_t : public data_source_cpp_t
 
   callback_manager_t &callbacks;
 
+  double ground_z_d;
+  double grid_size_d;
+
   buffer_t inverse_vp_buffer;
   glm::mat4 inverse_vp;
 
   buffer_t camera_pos_buffer;
-  glm::vec3 camera_pos;
+  glm::vec3 camera_pos; // xy = camera_pos mod grid_size, z = height above ground
 
   buffer_t params_buffer;
-  glm::vec4 params; // x=ground_z, y=grid_size
+  glm::vec4 params; // x=grid_size
 
   buffer_t vertex_buffer;
   std::vector<glm::vec2> vertices;

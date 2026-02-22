@@ -25,9 +25,11 @@ namespace points::render
 
 environment_data_source_t::environment_data_source_t(callback_manager_t &callbacks, double ground_z, double grid_size)
   : callbacks(callbacks)
+  , ground_z_d(ground_z)
+  , grid_size_d(grid_size)
   , inverse_vp(1)
   , camera_pos(0)
-  , params(float(ground_z), float(grid_size), 0.0f, 0.0f)
+  , params(float(grid_size), 0.0f, 0.0f, 0.0f)
 {
   callbacks.do_create_buffer(inverse_vp_buffer, buffer_type_uniform);
   callbacks.do_initialize_buffer(inverse_vp_buffer, type_r32, components_4x4, int(sizeof(inverse_vp)), &inverse_vp);
@@ -49,10 +51,16 @@ environment_data_source_t::environment_data_source_t(callback_manager_t &callbac
 
 void environment_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
 {
-  inverse_vp = glm::mat4(camera.inverse_view_projection);
+  // Camera-relative inverse VP: removes translation so shader never sees large world coords.
+  // direction = (inv_vp_rel * clip_pos).xyz / w  — gives ray direction directly.
+  glm::dmat4 view_no_trans = camera.view;
+  view_no_trans[3] = glm::dvec4(0, 0, 0, 1);
+  inverse_vp = glm::mat4(glm::inverse(camera.projection * view_no_trans));
   callbacks.do_modify_buffer(inverse_vp_buffer, 0, int(sizeof(inverse_vp)), &inverse_vp);
 
-  camera_pos = glm::vec3(camera.inverse_view[3]);
+  // Camera pos: xy = position mod grid_size (small, precise in float32), z = height above ground
+  glm::dvec3 eye = glm::dvec3(camera.inverse_view[3]);
+  camera_pos = glm::vec3(float(fmod(eye.x, grid_size_d)), float(fmod(eye.y, grid_size_d)), float(eye.z - ground_z_d));
   callbacks.do_modify_buffer(camera_pos_buffer, 0, sizeof(camera_pos), &camera_pos);
 
   callbacks.do_modify_buffer(params_buffer, 0, sizeof(params), &params);
