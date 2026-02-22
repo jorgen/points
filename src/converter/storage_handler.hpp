@@ -29,6 +29,7 @@
 #include "tree.hpp"
 #include <ankerl/unordered_dense.h>
 
+#include <limits>
 #include <memory>
 #include <set>
 
@@ -79,6 +80,8 @@ struct compressed_write_data_t
   std::string attribute_name;
   point_format_t format;
   uint32_t uncompressed_size;
+  double min_value = std::numeric_limits<double>::max();
+  double max_value = std::numeric_limits<double>::lowest();
 };
 
 struct storage_handler_request_t

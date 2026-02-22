@@ -159,6 +159,7 @@ struct converter_attribute_stats_t
   uint64_t buffer_count;
   uint64_t uncompressed_bytes;
   uint64_t compressed_bytes;
+  double min_value;  double max_value;
 };
 
 struct converter_stats_t

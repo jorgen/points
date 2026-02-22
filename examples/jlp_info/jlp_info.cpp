@@ -105,9 +105,9 @@ int main(int argc, char **argv)
     fmt::print("Total buffers: {}\n", format_number(stats.total_buffer_count));
     fmt::print("Compression:   {}\n\n", method_name(stats.compression_method));
 
-    fmt::print("{:<20s} {:<10s} {:>8s} {:>14s} {:>14s} {:>7s}\n",
-               "Attribute", "Format", "Buffers", "Uncompressed", "Compressed", "Ratio");
-    fmt::print("{:-<75s}\n", "");
+    fmt::print("{:<20s} {:<10s} {:>8s} {:>14s} {:>14s} {:>7s}  {}\n",
+               "Attribute", "Format", "Buffers", "Uncompressed", "Compressed", "Ratio", "Range");
+    fmt::print("{:-<100s}\n", "");
 
     uint64_t total_uncompressed = 0;
     uint64_t total_compressed = 0;
@@ -119,19 +119,23 @@ int main(int argc, char **argv)
       double ratio = a.compressed_bytes > 0
         ? double(a.uncompressed_bytes) / double(a.compressed_bytes)
         : 0.0;
-      fmt::print("{:<20s} {:<10s} {:>8s} {:>14s} {:>14s} {:>6.2f}x\n",
+      std::string range_str;
+      if (a.min_value <= a.max_value)
+        range_str = fmt::format("[{:.6g}, {:.6g}]", a.min_value, a.max_value);
+      fmt::print("{:<20s} {:<10s} {:>8s} {:>14s} {:>14s} {:>6.2f}x  {}\n",
                  a.name,
                  fmt::format("{}x{}", type_name(a.type), int(a.components)),
                  format_number(a.buffer_count),
                  format_bytes(a.uncompressed_bytes),
                  format_bytes(a.compressed_bytes),
-                 ratio);
+                 ratio,
+                 range_str);
       total_uncompressed += a.uncompressed_bytes;
       total_compressed += a.compressed_bytes;
       total_buffers += a.buffer_count;
     }
 
-    fmt::print("{:-<75s}\n", "");
+    fmt::print("{:-<100s}\n", "");
     double total_ratio = total_compressed > 0
       ? double(total_uncompressed) / double(total_compressed)
       : 0.0;

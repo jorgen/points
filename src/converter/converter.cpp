@@ -112,6 +112,7 @@ static void fill_converter_stats(const compression_stats_t &src, converter_stats
     d.buffer_count = s.buffer_count;
     d.uncompressed_bytes = s.uncompressed_bytes;
     d.compressed_bytes = s.compressed_bytes;
+    d.min_value = s.min_value;    d.max_value = s.max_value;
   }
 }
 

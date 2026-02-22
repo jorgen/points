@@ -22,6 +22,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -86,6 +87,8 @@ struct attribute_compression_stats_t
   uint64_t buffer_count = 0;
   uint64_t uncompressed_bytes = 0;
   uint64_t compressed_bytes = 0;
+  double min_value = std::numeric_limits<double>::max();
+  double max_value = std::numeric_limits<double>::lowest();
 };
 
 struct compression_stats_t
@@ -95,7 +98,7 @@ struct compression_stats_t
   compression_method_t method = compression_method_t::none;
   std::vector<attribute_compression_stats_t> per_attribute;
 
-  void accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed);
+  void accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed, double min_val = std::numeric_limits<double>::max(), double max_val = std::numeric_limits<double>::lowest());
   std::shared_ptr<uint8_t[]> serialize(uint32_t &out_size) const;
   static compression_stats_t deserialize(const uint8_t *data, uint32_t size);
 };

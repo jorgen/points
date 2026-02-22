@@ -27,6 +27,7 @@
 #include <fcntl.h>
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 #include <fmt/format.h>
@@ -392,6 +393,7 @@ void storage_handler_t::write_blob_locations_and_update_header(storage_location_
   _write_blob_locations_and_update_header_pipe.post_event(std::move(location), std::move(old_locations), std::move(done));
 }
 
+static void compute_attribute_min_max(const uint8_t *data, uint32_t size, const point_format_t &format, double &out_min, double &out_max){  out_min = std::numeric_limits<double>::max();  out_max = std::numeric_limits<double>::lowest();  int elem_size = size_for_format(format.type) * static_cast<int>(format.components);  if (elem_size <= 0 || size == 0)    return;  uint32_t count = size / static_cast<uint32_t>(elem_size);  if (count == 0)    return;  for (uint32_t i = 0; i < count; i++)  {    const uint8_t *elem = data + i * elem_size;    double val = 0.0;    switch (format.type)    {    case type_u8: { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }    case type_i8: { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }    case type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }    case type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }    case type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }    case type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }    case type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }    case type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }    case type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }    case type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }    default: continue;    }    if (val < out_min) out_min = val;    if (val > out_max) out_max = val;  }}
 static bool serialize_points(const storage_header_t &header, const buffer_t &points, buffer_t &serialize_data, std::shared_ptr<uint8_t[]> &data_owner)
 {
   serialize_data.size = sizeof(header) + points.size;
@@ -468,6 +470,7 @@ void storage_handler_t::handle_write_events(
 
       _thread_pool.enqueue([compressor, captured_raw, captured_size, captured_data, format, point_count, write_requests_ptr, i, pipe, attr_name]()
       {
+        // Compute min/max from the raw attribute data (skip header for buffer 0)        double attr_min = std::numeric_limits<double>::max();        double attr_max = std::numeric_limits<double>::lowest();        if (i > 0)        {          compute_attribute_min_max(captured_raw, captured_size, format, attr_min, attr_max);        }
         auto compressed = try_compress_constant(captured_raw, captured_size, format);
         if (!compressed.data)
           compressed = compressor->compress(captured_raw, captured_size, format, point_count);
@@ -481,6 +484,8 @@ void storage_handler_t::handle_write_events(
           wd.attribute_name = attr_name;
           wd.format = format;
           wd.uncompressed_size = captured_size;
+          wd.min_value = attr_min;
+          wd.max_value = attr_max;
           pipe->post_event(std::move(wd));
           return;
         }
@@ -492,6 +497,8 @@ void storage_handler_t::handle_write_events(
         wd.attribute_name = attr_name;
         wd.format = format;
         wd.uncompressed_size = captured_size;
+        wd.min_value = attr_min;
+        wd.max_value = attr_max;
         pipe->post_event(std::move(wd));
       });
     }
@@ -768,7 +775,7 @@ void storage_handler_t::set_compressor(compression_method_t method)
 
 void storage_handler_t::handle_compressed_write(compressed_write_data_t &&event)
 {
-  _compression_stats.accumulate(event.attribute_name, event.format, event.uncompressed_size, event.size);
+  _compression_stats.accumulate(event.attribute_name, event.format, event.uncompressed_size, event.size, event.min_value, event.max_value);
 
   auto &location = event.write_req->locations[event.buffer_index];
   location.file_id = 0;

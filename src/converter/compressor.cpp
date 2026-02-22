@@ -157,16 +157,20 @@ compression_result_t decompress_any(const void *data, uint32_t size)
   return result;
 }
 
-void compression_stats_t::accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed)
+void compression_stats_t::accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed, double min_val, double max_val)
 {
   total_buffer_count++;
   for (auto &attr : per_attribute)
   {
-    if (attr.name == name)
+    if (attr.name == name && attr.format.type == format.type && attr.format.components == format.components)
     {
       attr.buffer_count++;
       attr.uncompressed_bytes += uncompressed;
       attr.compressed_bytes += compressed;
+      if (min_val < attr.min_value)
+        attr.min_value = min_val;
+      if (max_val > attr.max_value)
+        attr.max_value = max_val;
       return;
     }
   }
@@ -176,6 +180,8 @@ void compression_stats_t::accumulate(const std::string &name, const point_format
   attr.buffer_count = 1;
   attr.uncompressed_bytes = uncompressed;
   attr.compressed_bytes = compressed;
+  attr.min_value = min_val;
+  attr.max_value = max_val;
 }
 
 std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) const
@@ -188,13 +194,14 @@ std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) co
     size += static_cast<uint32_t>(attr.name.size()); // name
     size += 1 + 1 + 2;                          // type, components, padding
     size += 8 + 8 + 8;                          // buffer_count, uncompressed, compressed
+    size += 8 + 8;                              // min_value, max_value
   }
 
   auto data = std::make_shared<uint8_t[]>(size);
   auto *ptr = data.get();
   memset(ptr, 0, size);
 
-  uint32_t version = 1;
+  uint32_t version = 2;
   memcpy(ptr, &version, 4); ptr += 4;
   memcpy(ptr, &input_file_count, 4); ptr += 4;
   memcpy(ptr, &total_buffer_count, 4); ptr += 4;
@@ -217,6 +224,8 @@ std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) co
     memcpy(ptr, &attr.buffer_count, 8); ptr += 8;
     memcpy(ptr, &attr.uncompressed_bytes, 8); ptr += 8;
     memcpy(ptr, &attr.compressed_bytes, 8); ptr += 8;
+    memcpy(ptr, &attr.min_value, 8); ptr += 8;
+    memcpy(ptr, &attr.max_value, 8); ptr += 8;
   }
 
   out_size = size;
@@ -232,7 +241,7 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
   auto *ptr = data;
   uint32_t version;
   memcpy(&version, ptr, 4); ptr += 4;
-  if (version != 1)
+  if (version != 1 && version != 2)
     return stats;
 
   memcpy(&stats.input_file_count, ptr, 4); ptr += 4;
@@ -244,6 +253,7 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
 
   uint32_t attr_count;
   memcpy(&attr_count, ptr, 4); ptr += 4;
+  uint32_t per_attr_fixed_size = (version >= 2) ? 44 : 28; // v2 adds 16 bytes for min/max
 
   auto remaining = static_cast<uint32_t>(size - static_cast<uint32_t>(ptr - data));
   for (uint32_t i = 0; i < attr_count && remaining >= 4; i++)
@@ -260,7 +270,7 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
     ptr += name_size;
     remaining -= name_size;
 
-    if (remaining < 28) // type(1) + comp(1) + pad(2) + 3*uint64(24)
+    if (remaining < per_attr_fixed_size)
       break;
 
     uint8_t type_val, comp_val;
@@ -274,6 +284,12 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
     memcpy(&attr.uncompressed_bytes, ptr, 8); ptr += 8;
     memcpy(&attr.compressed_bytes, ptr, 8); ptr += 8;
     remaining -= 28;
+    if (version >= 2)
+    {
+      memcpy(&attr.min_value, ptr, 8); ptr += 8;
+      memcpy(&attr.max_value, ptr, 8); ptr += 8;
+      remaining -= 16;
+    }
   }
 
   return stats;
