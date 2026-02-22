@@ -215,6 +215,15 @@ void arcball_pan(struct arcball_t *arcball, float normalized_dx, float normalize
   arcball_update_view(arcball);
 }
 
+void arcball_pan_ground(struct arcball_t *arcball, float normalized_dx, float normalized_dy)
+{
+  glm::dvec3 forward = arcball_forward_dir(arcball->yaw, 0.0, arcball->up);
+  glm::dvec3 right = glm::normalize(glm::cross(forward, arcball->up));
+  arcball->center += right * (double(-normalized_dx) * arcball->distance)
+                   + forward * (double(-normalized_dy) * arcball->distance);
+  arcball_update_view(arcball);
+}
+
 void arcball_dolly(struct arcball_t *arcball, float normalized_dz)
 {
   glm::dvec3 forward = arcball_forward_dir(arcball->yaw, arcball->pitch, arcball->up);

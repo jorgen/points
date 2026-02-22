@@ -17,13 +17,16 @@
 ************************************************************************/
 #include "data_source_converter.hpp"
 #include "data_source.hpp"
+#include "input_header.hpp"
 #include "native_node_data_loader.hpp"
 #include <points/common/format.h>
 #include <points/converter/converter_data_source.h>
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <fmt/printf.h>
+#include <limits>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -32,6 +35,64 @@
 namespace points::converter
 {
 bool has_rendered = false;
+
+static std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data, uint32_t data_size, type_t type, components_t components,
+                                                                uint32_t point_count, double global_min, double global_max,
+                                                                uint32_t &out_size)
+{
+  double range = global_max - global_min;
+  if (range <= 0.0)
+    range = 1.0;
+  double inv_range = 1.0 / range;
+
+  uint32_t comp_count = static_cast<uint32_t>(components);
+  out_size = point_count * comp_count * sizeof(float);
+  auto result = std::make_shared<uint8_t[]>(out_size);
+  auto *dst = reinterpret_cast<float *>(result.get());
+  auto *src = static_cast<const uint8_t *>(data);
+
+  int type_size = 0;
+  switch (type)
+  {
+  case type_u8: case type_i8: type_size = 1; break;
+  case type_u16: case type_i16: type_size = 2; break;
+  case type_u32: case type_i32: case type_r32: type_size = 4; break;
+  case type_u64: case type_i64: case type_r64: type_size = 8; break;
+  default: type_size = 1; break;
+  }
+
+  uint32_t elem_size = static_cast<uint32_t>(type_size) * comp_count;
+  uint32_t actual_count = std::min(point_count, data_size / elem_size);
+
+  for (uint32_t i = 0; i < actual_count; i++)
+  {
+    for (uint32_t c = 0; c < comp_count; c++)
+    {
+      const uint8_t *elem = src + i * elem_size + c * type_size;
+      double val = 0.0;
+      switch (type)
+      {
+      case type_u8:  { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+      case type_i8:  { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+      case type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+      case type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+      case type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+      case type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+      case type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
+      case type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+      case type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+      case type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
+      default: break;
+      }
+      float normalized = static_cast<float>((val - global_min) * inv_range);
+      if (normalized < 0.0f) normalized = 0.0f;
+      if (normalized > 1.0f) normalized = 1.0f;
+      dst[i * comp_count + c] = normalized;
+    }
+  }
+
+  return result;
+}
 
 template <typename buffer_data_t>
 void initialize_buffer(render::callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, render::buffer_type_t buffer_type, type_t type, components_t components, render::buffer_t &buffer)
@@ -61,6 +122,9 @@ converter_data_source_t::converter_data_source_t(const std::string &url, render:
   };
 
   node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler());
+
+  // Read compression stats for attribute normalization
+  attribute_stats = processor.storage_handler().get_compression_stats();
 
   if (processor.attrib_name_registry_count() > 2)
   {
@@ -129,6 +193,19 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
       destroy_gpu_buffer(*rb);
     render_buffers.clear();
     gpu_memory_used = 0;
+
+    // Look up global min/max for the new attribute
+    current_attr_min = 0.0;
+    current_attr_max = 1.0;
+    for (auto &attr : attribute_stats.per_attribute)
+    {
+      if (attr.name == current_attribute_name && attr.min_value <= attr.max_value)
+      {
+        current_attr_min = attr.min_value;
+        current_attr_max = attr.max_value;
+        break;
+      }
+    }
   }
 
   glm::dvec3 camera_position = glm::dvec3(camera.inverse_view[3]);
@@ -138,11 +215,9 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   lod_params.screen_height = double(vp_height);
   lod_params.pixel_error_threshold = eff_threshold;
 
-  back_buffer = std::make_shared<frustum_tree_walker_t>(camera.view_projection, lod_params, std::vector<std::string>({std::string("xyz"), current_attribute_name}));
-  auto copy_back_buffer_ptr = back_buffer;
-  processor.walk_tree(std::move(copy_back_buffer_ptr));
-  back_buffer->wait_done();
-  auto &buffer = back_buffer->m_new_nodes.point_subsets;
+  frustum_tree_walker_t walker(camera.view_projection, lod_params, std::vector<std::string>({std::string("xyz"), current_attribute_name}));
+  processor.walk_tree(walker);
+  auto &buffer = walker.m_new_nodes.point_subsets;
   std::sort(buffer.begin(), buffer.end(), less_than);
   auto t_after_tree_walk = clock::now();
 
@@ -229,7 +304,24 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
     callbacks.do_initialize_buffer(render_buffer.render_buffers[0], loaded.vertex_type, loaded.vertex_components, int(loaded.vertex_data_size), loaded.vertex_data);
 
     callbacks.do_create_buffer(render_buffer.render_buffers[1], points::render::buffer_type_vertex);
-    callbacks.do_initialize_buffer(render_buffer.render_buffers[1], loaded.attribute_type, loaded.attribute_components, int(loaded.attribute_data_size), loaded.attribute_data);
+
+    // Normalize attribute data to float32 [0,1] using global stats for proper rendering
+    bool should_normalize = (current_attr_min < current_attr_max) &&
+                           !(loaded.attribute_type == type_u16 && loaded.attribute_components == components_3); // skip RGB
+    std::shared_ptr<uint8_t[]> normalized_data;
+    if (should_normalize)
+    {
+      uint32_t normalized_size = 0;
+      normalized_data = normalize_attribute_to_float(loaded.attribute_data, loaded.attribute_data_size,
+                                                      loaded.attribute_type, loaded.attribute_components,
+                                                      loaded.point_count, current_attr_min, current_attr_max,
+                                                      normalized_size);
+      callbacks.do_initialize_buffer(render_buffer.render_buffers[1], type_r32, loaded.attribute_components, int(normalized_size), normalized_data.get());
+    }
+    else
+    {
+      callbacks.do_initialize_buffer(render_buffer.render_buffers[1], loaded.attribute_type, loaded.attribute_components, int(loaded.attribute_data_size), loaded.attribute_data);
+    }
 
     render_buffer.camera_view = camera.projection * glm::translate(camera.view, to_glm(render_buffer.offset));
 

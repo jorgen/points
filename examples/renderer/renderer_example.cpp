@@ -350,6 +350,13 @@ int main(int argc, char **argv)
             if (arcball)
               points::render::camera_manipulator::arcball_dolly(arcball.get(), dy);
           }
+          else if (right_pressed && !left_pressed && ctrl_modifier)
+          {
+            float dx = (float(event.motion.xrel) / float(width));
+            float dy = (float(event.motion.yrel) / float(height));
+            if (arcball)
+              points::render::camera_manipulator::arcball_pan_ground(arcball.get(), dx, dy);
+          }
           else if (middle_pressed || (right_pressed && !left_pressed))
           {
             float dx = (float(event.motion.xrel) / float(width));

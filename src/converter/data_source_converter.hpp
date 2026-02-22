@@ -18,6 +18,7 @@
 #pragma once
 
 #include "buffer.hpp"
+#include "compressor.hpp"
 #include "converter.hpp"
 #include "frustum_tree_walker.hpp"
 #include "node_data_loader.hpp"
@@ -25,6 +26,7 @@
 #include <points/render/data_source.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace points::converter
@@ -93,8 +95,6 @@ struct converter_data_source_t
   size_t gpu_memory_used = 0;
   double effective_pixel_error_threshold = 2.0;
 
-  std::shared_ptr<frustum_tree_walker_t> back_buffer;
-
   render::buffer_t index_buffer;
   std::vector<tree_walker_with_buffer_t> current_tree_nodes[2];
   bool current_tree_nodes_index = false;
@@ -104,5 +104,9 @@ struct converter_data_source_t
 
   uint64_t points_rendered_last_frame = 0;
   frame_timings_t frame_timings;
+
+  compression_stats_t attribute_stats;
+  double current_attr_min = 0.0;
+  double current_attr_max = 1.0;
 };
 } // namespace points::converter
