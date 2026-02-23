@@ -42,6 +42,7 @@ enum draw_type_t
   flat_points,
   dyn_points_1,
   dyn_points_3,
+  dyn_points_crossfade,
   axis_gizmo_lines,
   origin_anchor_mesh,
   environment_bg,

@@ -244,11 +244,13 @@ gl_dyn_points_handler::~gl_dyn_points_handler()
   {
     if (gl_handle.program)
       glDeleteProgram(gl_handle.program);
-    if (gl_handle.program)
-      glDeleteProgram(gl_handle.program);
     if (gl_handle.vao)
       glDeleteVertexArrays(1, &gl_handle.vao);
   }
+  if (crossfade_handle.program)
+    glDeleteProgram(crossfade_handle.program);
+  if (crossfade_handle.vao)
+    glDeleteVertexArrays(1, &crossfade_handle.vao);
 }
 
 void gl_dyn_points_handler::initialize()
@@ -276,6 +278,36 @@ void gl_dyn_points_handler::initialize()
     glBindBuffer(GL_ARRAY_BUFFER, tmp_buffer);
     glEnableVertexAttribArray(gl_handle.vertex_position);
     glEnableVertexAttribArray(gl_handle.rgb_position);
+    glBindVertexArray(0);
+    glDeleteBuffers(1, &tmp_buffer);
+    glBindVertexArray(0);
+  }
+
+  // Initialize crossfade shader
+  {
+    auto shaderfs = cmrc::shaders::get_filesystem();
+    auto vertex_shader = shaderfs.open("shaders/dynpoints_crossfade.vert");
+    auto fragment_shader = shaderfs.open("shaders/dynpoints.frag");
+
+    crossfade_handle.program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), fragment_shader.end() - fragment_shader.begin());
+    glUseProgram(crossfade_handle.program);
+    crossfade_handle.vertex_position = glGetAttribLocation(crossfade_handle.program, "position");
+    crossfade_handle.rgb_position = glGetAttribLocation(crossfade_handle.program, "rgb");
+    crossfade_handle.old_rgb_position = glGetAttribLocation(crossfade_handle.program, "old_rgb");
+    crossfade_handle.uniform_camera = glGetUniformLocation(crossfade_handle.program, "camera");
+    crossfade_handle.uniform_point_scale = glGetUniformLocation(crossfade_handle.program, "point_scale");
+    crossfade_handle.uniform_params = glGetUniformLocation(crossfade_handle.program, "params");
+
+    glGenVertexArrays(1, &crossfade_handle.vao);
+    glBindVertexArray(crossfade_handle.vao);
+
+    GLuint tmp_buffer;
+    glGenBuffers(1, &tmp_buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, tmp_buffer);
+    glEnableVertexAttribArray(crossfade_handle.vertex_position);
+    glEnableVertexAttribArray(crossfade_handle.rgb_position);
+    if (crossfade_handle.old_rgb_position >= 0)
+      glEnableVertexAttribArray(crossfade_handle.old_rgb_position);
     glBindVertexArray(0);
     glDeleteBuffers(1, &tmp_buffer);
     glBindVertexArray(0);
@@ -322,6 +354,66 @@ void gl_dyn_points_handler::draw(points::render::draw_group_t &group, color_comp
 
   glDrawArrays(GL_POINTS, 0, group.draw_size);
   glBindVertexArray(0);
+}
+
+void gl_dyn_points_handler::draw_crossfade(points::render::draw_group_t &group, float point_scale)
+{
+  if (!is_initialized)
+    initialize();
+
+  glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glDepthMask(GL_FALSE);
+
+  glBindVertexArray(crossfade_handle.vao);
+  glUseProgram(crossfade_handle.program);
+  glUniform1f(crossfade_handle.uniform_point_scale, point_scale);
+  for (int i = 0; i < group.buffers_size; i++)
+  {
+    auto &buffer = group.buffers[i];
+    auto buffer_mapping = points::render::dyn_points_buffer_mapping_t(buffer.buffer_mapping);
+    switch (buffer_mapping)
+    {
+    case points::render::dyn_points_bm_vertex: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+      glVertexAttribPointer(crossfade_handle.vertex_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
+      break;
+    }
+    case points::render::dyn_points_bm_color: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+      glVertexAttribPointer(crossfade_handle.rgb_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
+      break;
+    }
+    case points::render::dyn_points_bm_camera: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glUniformMatrix4fv(crossfade_handle.uniform_camera, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
+      break;
+    }
+    case points::render::dyn_points_bm_old_color: {
+      if (crossfade_handle.old_rgb_position >= 0)
+      {
+        gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+        glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+        glVertexAttribPointer(crossfade_handle.old_rgb_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
+      }
+      break;
+    }
+    case points::render::dyn_points_bm_params: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glUniform4fv(crossfade_handle.uniform_params, 1, (const GLfloat *)gl_buffer->data);
+      break;
+    }
+    }
+  }
+
+  glDrawArrays(GL_POINTS, 0, group.draw_size);
+  glBindVertexArray(0);
+
+  glDepthMask(GL_TRUE);
+  glDisable(GL_BLEND);
 }
 
 gl_flat_points_handler::gl_flat_points_handler()
@@ -926,6 +1018,12 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
       float point_scale = base_point_scale * lod_scale;
       auto color = to_render.draw_type == points::render::dyn_points_1 ? gl_dyn_points_handler::color_1 : gl_dyn_points_handler::color_3;
       dynpoints_handler.draw(to_render, color, point_scale);
+      break;
+    }
+    case points::render::dyn_points_crossfade: {
+      float lod_scale = std::pow(lod_scale_base, float(to_render.lod_level));
+      float point_scale = base_point_scale * lod_scale;
+      dynpoints_handler.draw_crossfade(to_render, point_scale);
       break;
     }
     case points::render::axis_gizmo_lines:

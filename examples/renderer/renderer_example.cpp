@@ -231,8 +231,13 @@ int main(int argc, char **argv)
     &points::render::environment_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::environment_data_source_get(environment.get()));
 
+  float pixel_error_threshold = 2.0f;
+  bool auto_adjust_threshold = true;
+  int gpu_memory_budget_mb = 64;
+
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
   points::converter::converter_data_source_set_viewport(converter_points.get(), width, height);
+  points::converter::converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
 
   std::vector<uint32_t> storage_ids;
   std::vector<uint32_t> storage_subs;
@@ -259,10 +264,6 @@ int main(int argc, char **argv)
   aabb2.max[1] = 0.0;
   aabb2.max[2] = 0.0;
   // int aabb2_id =  -1; //flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
-
-  float pixel_error_threshold = 2.0f;
-  bool auto_adjust_threshold = true;
-  int gpu_memory_budget_mb = 64;
 
   bool loop = true;
   bool left_pressed = false;
@@ -346,28 +347,28 @@ int main(int argc, char **argv)
         case SDL_EVENT_MOUSE_MOTION:
           if (right_pressed && !left_pressed && shift_modifier)
           {
-            float dy = (float(event.motion.yrel) / float(height));
+            float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
               points::render::camera_manipulator::arcball_dolly(arcball.get(), dy);
           }
           else if (right_pressed && !left_pressed && ctrl_modifier)
           {
             float dx = (float(event.motion.xrel) / float(width));
-            float dy = (float(event.motion.yrel) / float(height));
+            float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
               points::render::camera_manipulator::arcball_pan_ground(arcball.get(), dx, dy);
           }
           else if (middle_pressed || (right_pressed && !left_pressed))
           {
             float dx = (float(event.motion.xrel) / float(width));
-            float dy = (float(event.motion.yrel) / float(height));
+            float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
               points::render::camera_manipulator::arcball_pan(arcball.get(), dx, dy);
           }
           else if (left_pressed && ctrl_modifier)
           {
             float dx = (float(event.motion.xrel) / float(width));
-            float dy = (float(event.motion.yrel) / float(height));
+            float dy = -(float(event.motion.yrel) / float(height));
             float avg = (dx + dy) / 2;
             if (arcball)
               points::render::camera_manipulator::arcball_rotate(arcball.get(), 0.0f, 0.0f, avg);
@@ -377,7 +378,7 @@ int main(int argc, char **argv)
           else if (left_pressed)
           {
             float dx = (float(event.motion.xrel) / float(width));
-            float dy = (float(event.motion.yrel) / float(height));
+            float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
               points::render::camera_manipulator::arcball_rotate(arcball.get(), dx, dy, 0.0f);
             else

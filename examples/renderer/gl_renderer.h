@@ -84,6 +84,7 @@ public:
   ~gl_dyn_points_handler();
   void initialize() override;
   void draw(points::render::draw_group_t &group, color_components_t color_components, float point_scale);
+  void draw_crossfade(points::render::draw_group_t &group, float point_scale);
 
   bool is_initialized;
 
@@ -96,6 +97,18 @@ public:
     GLint uniform_camera = 0;
     GLint uniform_point_scale = 0;
   } gl_handles[2];
+
+  struct
+  {
+    GLuint vao = 0;
+    GLuint program = 0;
+    GLint vertex_position = 0;
+    GLint rgb_position = 0;
+    GLint old_rgb_position = 0;
+    GLint uniform_camera = 0;
+    GLint uniform_point_scale = 0;
+    GLint uniform_params = 0;
+  } crossfade_handle;
 };
 
 class gl_skybox_handler : public gl_frame_handler

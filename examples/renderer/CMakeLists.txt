@@ -33,6 +33,7 @@ cmrc_add_resource_library(renderer_example_shaders ALIAS renderer_example::shade
         shaders/dynpoints.frag
         shaders/dynpoints_1.vert
         shaders/dynpoints_3.vert
+        shaders/dynpoints_crossfade.vert
         shaders/axis_gizmo.vert
         shaders/axis_gizmo.frag
         shaders/origin_anchor.vert
