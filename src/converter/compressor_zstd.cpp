@@ -28,6 +28,8 @@
 namespace points::converter
 {
 
+static constexpr int zstd_compression_level = 9;
+
 compression_method_t compressor_zstd_t::method() const
 {
   return compression_method_t::zstd;
@@ -59,7 +61,7 @@ static void zstd_compress_standard(const void *data, uint32_t size, const point_
 
   size_t max_compressed = ZSTD_compressBound(size);
   std::vector<uint8_t> compressed_full(max_compressed);
-  size_t compressed_full_size = ZSTD_compress(compressed_full.data(), max_compressed, shuffled.data(), size, 3);
+  size_t compressed_full_size = ZSTD_compress(compressed_full.data(), max_compressed, shuffled.data(), size, zstd_compression_level);
 
   if (ZSTD_isError(compressed_full_size))
   {
@@ -81,7 +83,7 @@ static void zstd_compress_standard(const void *data, uint32_t size, const point_
 
     size_t max_compacted_compressed = ZSTD_compressBound(compacted_size);
     compressed_compacted.resize(max_compacted_compressed);
-    size_t compressed_compacted_size = ZSTD_compress(compressed_compacted.data(), max_compacted_compressed, band_result.compacted_data.data(), compacted_size, 3);
+    size_t compressed_compacted_size = ZSTD_compress(compressed_compacted.data(), max_compacted_compressed, band_result.compacted_data.data(), compacted_size, zstd_compression_level);
 
     if (!ZSTD_isError(compressed_compacted_size))
     {
@@ -222,7 +224,7 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
           uint32_t perm_bytes = f64_count * 2;
           size_t perm_bound = ZSTD_compressBound(perm_bytes);
           std::vector<uint8_t> perm_compressed(perm_bound);
-          size_t perm_compressed_size = ZSTD_compress(perm_compressed.data(), perm_bound, perm.data(), perm_bytes, 3);
+          size_t perm_compressed_size = ZSTD_compress(perm_compressed.data(), perm_bound, perm.data(), perm_bytes, zstd_compression_level);
 
           if (!ZSTD_isError(perm_compressed_size))
           {
@@ -268,16 +270,56 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
   bool is_u16x3 = (format.type == type_u16 && format.components == components_3);
   if (is_u16x3 && size >= 6)
   {
-    // Path A: standard (no decorrelation)
+    // Path A: raw (no preprocessing)
     std::vector<uint8_t> working_a;
     compression_result_t result_a;
     zstd_compress_standard(data, size, format, point_count, 0, working_a, result_a);
 
-    // Path B: decorrelate then compress
+    // Path B: decorrelate only
     std::vector<uint8_t> working_b(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
     decorrelate_u16x3(working_b.data(), size);
     compression_result_t result_b;
     zstd_compress_standard(working_b.data(), size, format, point_count, compression_flag_decorrelated, working_b, result_b);
+
+    // Path C: component delta only
+    std::vector<uint8_t> working_c(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+    delta_encode_u16x3(working_c.data(), size);
+    compression_result_t result_c;
+    zstd_compress_standard(working_c.data(), size, format, point_count, compression_flag_component_delta, working_c, result_c);
+
+    // Path D: decorrelate + component delta
+    std::vector<uint8_t> working_d(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+    decorrelate_u16x3(working_d.data(), size);
+    delta_encode_u16x3(working_d.data(), size);
+    compression_result_t result_d;
+    zstd_compress_standard(working_d.data(), size, format, point_count, compression_flag_decorrelated | compression_flag_component_delta, working_d, result_d);
+
+    // Pick smallest
+    result = std::move(result_a);
+    if (result_b.data && result_b.size < result.size)
+      result = std::move(result_b);
+    if (result_c.data && result_c.size < result.size)
+      result = std::move(result_c);
+    if (result_d.data && result_d.size < result.size)
+      result = std::move(result_d);
+    return result;
+  }
+
+  // Single-component integer path: try element delta
+  bool is_morton = (format.type == type_m32 || format.type == type_m64 || format.type == type_m128 || format.type == type_m192);
+  int elem_size = size_for_format(format.type);
+  if (format.components == components_1 && !is_morton && !is_r64 && (elem_size == 1 || elem_size == 2 || elem_size == 4 || elem_size == 8))
+  {
+    // Path A: standard (no delta)
+    std::vector<uint8_t> working_a;
+    compression_result_t result_a;
+    zstd_compress_standard(data, size, format, point_count, 0, working_a, result_a);
+
+    // Path B: element delta
+    std::vector<uint8_t> working_b(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
+    delta_encode_single(working_b.data(), size, elem_size);
+    compression_result_t result_b;
+    zstd_compress_standard(working_b.data(), size, format, point_count, compression_flag_element_delta, working_b, result_b);
 
     result = std::move(result_a);
     if (result_b.data && result_b.size < result.size)
@@ -285,7 +327,7 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
     return result;
   }
 
-  // Non-r64, non-u16x3 path: standard compression
+  // Fallthrough: standard compression
   std::vector<uint8_t> working;
   zstd_compress_standard(data, size, format, point_count, 0, working, result);
   return result;
@@ -416,6 +458,14 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
   // Byte unshuffle
   auto output = std::make_shared<uint8_t[]>(header.uncompressed_size);
   byte_unshuffle(shuffled.data(), output.get(), header.uncompressed_size, header.type_size, header.component_count);
+
+  // Reverse element delta (single-component integer delta)
+  if (header.flags & compression_flag_element_delta)
+    delta_decode_single(output.get(), header.uncompressed_size, header.type_size);
+
+  // Reverse component delta (applied after decorrelation during compression, so undo first)
+  if (header.flags & compression_flag_component_delta)
+    delta_decode_u16x3(output.get(), header.uncompressed_size);
 
   // Reverse decorrelation
   if (header.flags & compression_flag_decorrelated)

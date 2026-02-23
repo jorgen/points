@@ -68,6 +68,22 @@ void decorrelate_u16x3(uint8_t *data, uint32_t size);
 // Operates in-place on raw interleaved data after byte_unshuffle.
 void correlate_u16x3(uint8_t *data, uint32_t size);
 
+// Per-component delta encoding for u16x3: each component[i] -= component[i-1].
+// Operates in-place on raw interleaved data. Wrapping unsigned arithmetic.
+void delta_encode_u16x3(uint8_t *data, uint32_t size);
+
+// Per-component delta decoding (prefix sum) for u16x3: each component[i] += component[i-1].
+// Operates in-place on raw interleaved data. Wrapping unsigned arithmetic.
+void delta_decode_u16x3(uint8_t *data, uint32_t size);
+
+// Generic element-wise wrapping delta for single-component integers.
+// Encodes in-place: elem[i] -= elem[i-1] (back-to-front). element_size must be 1, 2, 4, or 8.
+void delta_encode_single(uint8_t *data, uint32_t size, int element_size);
+
+// Generic element-wise prefix sum (reverse of delta_encode_single).
+// Decodes in-place: elem[i] += elem[i-1] (front-to-back).
+void delta_decode_single(uint8_t *data, uint32_t size, int element_size);
+
 // Portable popcount.
 inline uint32_t popcount32(uint32_t x)
 {

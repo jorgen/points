@@ -33,6 +33,13 @@ public:
   [[nodiscard]] storage_location_t location(input_data_id_t id, int attribute_index) const;
   void add_ref(input_data_id_t id);
 
+  template <typename Fn>
+  void for_each(Fn &&fn) const
+  {
+    for (auto &[id, value] : _map)
+      fn(id, value.attributes_id, value.storage);
+  }
+
   uint32_t serialized_size() const;
   std::pair<bool, uint8_t *> serialize(uint8_t *buffer, const uint8_t *end) const;
   std::pair<bool, const uint8_t *> deserialize(const uint8_t *buffer, const uint8_t *end);

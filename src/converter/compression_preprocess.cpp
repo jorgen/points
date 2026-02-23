@@ -479,4 +479,142 @@ void correlate_u16x3(uint8_t *data, uint32_t size)
   }
 }
 
+void delta_encode_u16x3(uint8_t *data, uint32_t size)
+{
+  uint32_t count = size / 6;
+  if (count <= 1)
+    return;
+
+  // Back-to-front to avoid clobbering
+  for (uint32_t i = count - 1; i > 0; i--)
+  {
+    uint8_t *curr = data + i * 6;
+    const uint8_t *prev = data + (i - 1) * 6;
+    for (int c = 0; c < 3; c++)
+    {
+      uint16_t vc, vp;
+      memcpy(&vc, curr + c * 2, 2);
+      memcpy(&vp, prev + c * 2, 2);
+      uint16_t d = static_cast<uint16_t>(vc - vp);
+      memcpy(curr + c * 2, &d, 2);
+    }
+  }
+}
+
+void delta_decode_u16x3(uint8_t *data, uint32_t size)
+{
+  uint32_t count = size / 6;
+  if (count <= 1)
+    return;
+
+  // Front-to-back prefix sum
+  for (uint32_t i = 1; i < count; i++)
+  {
+    uint8_t *curr = data + i * 6;
+    const uint8_t *prev = data + (i - 1) * 6;
+    for (int c = 0; c < 3; c++)
+    {
+      uint16_t vc, vp;
+      memcpy(&vc, curr + c * 2, 2);
+      memcpy(&vp, prev + c * 2, 2);
+      uint16_t s = static_cast<uint16_t>(vc + vp);
+      memcpy(curr + c * 2, &s, 2);
+    }
+  }
+}
+
+void delta_encode_single(uint8_t *data, uint32_t size, int element_size)
+{
+  uint32_t count = size / static_cast<uint32_t>(element_size);
+  if (count <= 1)
+    return;
+
+  switch (element_size)
+  {
+  case 1:
+    for (uint32_t i = count - 1; i > 0; i--)
+      data[i] = static_cast<uint8_t>(data[i] - data[i - 1]);
+    break;
+  case 2:
+    for (uint32_t i = count - 1; i > 0; i--)
+    {
+      uint16_t curr, prev;
+      memcpy(&curr, data + i * 2, 2);
+      memcpy(&prev, data + (i - 1) * 2, 2);
+      uint16_t d = static_cast<uint16_t>(curr - prev);
+      memcpy(data + i * 2, &d, 2);
+    }
+    break;
+  case 4:
+    for (uint32_t i = count - 1; i > 0; i--)
+    {
+      uint32_t curr, prev;
+      memcpy(&curr, data + i * 4, 4);
+      memcpy(&prev, data + (i - 1) * 4, 4);
+      uint32_t d = curr - prev;
+      memcpy(data + i * 4, &d, 4);
+    }
+    break;
+  case 8:
+    for (uint32_t i = count - 1; i > 0; i--)
+    {
+      uint64_t curr, prev;
+      memcpy(&curr, data + i * 8, 8);
+      memcpy(&prev, data + (i - 1) * 8, 8);
+      uint64_t d = curr - prev;
+      memcpy(data + i * 8, &d, 8);
+    }
+    break;
+  default:
+    break;
+  }
+}
+
+void delta_decode_single(uint8_t *data, uint32_t size, int element_size)
+{
+  uint32_t count = size / static_cast<uint32_t>(element_size);
+  if (count <= 1)
+    return;
+
+  switch (element_size)
+  {
+  case 1:
+    for (uint32_t i = 1; i < count; i++)
+      data[i] = static_cast<uint8_t>(data[i] + data[i - 1]);
+    break;
+  case 2:
+    for (uint32_t i = 1; i < count; i++)
+    {
+      uint16_t curr, prev;
+      memcpy(&curr, data + i * 2, 2);
+      memcpy(&prev, data + (i - 1) * 2, 2);
+      uint16_t s = static_cast<uint16_t>(curr + prev);
+      memcpy(data + i * 2, &s, 2);
+    }
+    break;
+  case 4:
+    for (uint32_t i = 1; i < count; i++)
+    {
+      uint32_t curr, prev;
+      memcpy(&curr, data + i * 4, 4);
+      memcpy(&prev, data + (i - 1) * 4, 4);
+      uint32_t s = curr + prev;
+      memcpy(data + i * 4, &s, 4);
+    }
+    break;
+  case 8:
+    for (uint32_t i = 1; i < count; i++)
+    {
+      uint64_t curr, prev;
+      memcpy(&curr, data + i * 8, 8);
+      memcpy(&prev, data + (i - 1) * 8, 8);
+      uint64_t s = curr + prev;
+      memcpy(data + i * 8, &s, 8);
+    }
+    break;
+  default:
+    break;
+  }
+}
+
 } // namespace points::converter

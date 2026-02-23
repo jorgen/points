@@ -19,6 +19,7 @@
 #include "compressor_blosc2.hpp"
 #include "compressor_zstd.hpp"
 #include "compressor_fse.hpp"
+#include "compressor_ans.hpp"
 #include "input_header.hpp"
 
 #include <cstring>
@@ -36,6 +37,8 @@ std::unique_ptr<compressor_t> create_compressor(compression_method_t method)
     return std::make_unique<compressor_zstd_t>();
   case compression_method_t::huff0:
     return std::make_unique<compressor_huff0_t>();
+  case compression_method_t::ans:
+    return std::make_unique<compressor_ans_t>();
   case compression_method_t::none:
   case compression_method_t::constant:
     return nullptr;
@@ -128,6 +131,11 @@ compression_result_t decompress_any(const void *data, uint32_t size)
   case compression_method_t::huff0:
   {
     compressor_huff0_t decompressor;
+    return decompressor.decompress(data, size);
+  }
+  case compression_method_t::ans:
+  {
+    compressor_ans_t decompressor;
     return decompressor.decompress(data, size);
   }
   case compression_method_t::constant:
