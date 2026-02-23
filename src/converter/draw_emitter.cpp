@@ -56,11 +56,16 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
   }
   std::sort(sorted_active.begin(), sorted_active.end(), [](const active_node_info_t &a, const active_node_info_t &b) { return a.distance < b.distance; });
 
-  // Build set of node_ids still in any color transition (for top-down crossfade ordering)
+  // Build set of node_ids still in any color transition (for top-down crossfade ordering).
+  // Only consider active nodes — a parent swapped out by the selector is not being rendered
+  // and must not block its children's crossfade.
   frame_node_registry_t::node_set_t transitioning_nodes;
-  for (auto &[node_id, node] : registry.nodes())
+  for (auto &node_id : selection.active_set)
   {
-    for (int idx : node.buffer_indices)
+    auto *node = registry.get_node(node_id);
+    if (!node)
+      continue;
+    for (int idx : node->buffer_indices)
     {
       auto &rb = *render_buffers[idx];
       if (rb.old_color_valid || rb.awaiting_new_color)

@@ -116,7 +116,7 @@ registry_diff_t frame_node_registry_t::update_from_walker(const std::vector<tree
     node.lod = rb.node_info.lod;
     if (!rb.rendered)
       node.all_rendered = false;
-    if (!rb.rendered || rb.fade_frame < gpu_node_buffer_t::FADE_FRAMES || rb.old_color_valid || rb.awaiting_new_color)
+    if (!rb.rendered || rb.fade_frame < gpu_node_buffer_t::FADE_FRAMES)
       node.all_fade_complete = false;
     node.gpu_memory_size += rb.gpu_memory_size;
   }
