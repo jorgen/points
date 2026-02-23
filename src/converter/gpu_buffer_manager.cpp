@@ -193,12 +193,6 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
 {
   (void)current_attribute_name;
 
-  // Build set of node_ids that still need new color data (for top-down ordering)
-  std::unordered_set<node_id_t, node_id_hash, node_id_equal> nodes_awaiting_color;
-  for (auto &rb : render_buffers)
-    if (rb->awaiting_new_color)
-      nodes_awaiting_color.insert(rb->node_info.node);
-
   struct upload_candidate_t
   {
     int index;
@@ -211,10 +205,7 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
     auto &rb = *render_buffers[idx];
     if (rb.load_handle != render::invalid_load_handle && node_loader->is_ready(rb.load_handle))
     {
-      bool is_awaiting = rb.awaiting_new_color;
-      if (is_awaiting && nodes_awaiting_color.count(rb.node_info.parent))
-        continue;
-      upload_candidates.push_back({idx, rb.node_info.lod, is_awaiting});
+      upload_candidates.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
     }
   }
 
@@ -334,6 +325,7 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
   {
     int index;
     int lod;
+    bool awaiting;
   };
   std::vector<frontier_candidate_t> frontier;
 
@@ -351,7 +343,7 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
     {
       auto &rb = *render_buffers[idx];
       if (needs_load(rb))
-        frontier.push_back({idx, rb.node_info.lod});
+        frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
     }
     // One-level lookahead: children of active nodes
     for (auto &child_id : node->children)
@@ -363,12 +355,28 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
       {
         auto &rb = *render_buffers[idx];
         if (needs_load(rb))
-          frontier.push_back({idx, rb.node_info.lod});
+          frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
       }
     }
   }
 
-  std::sort(frontier.begin(), frontier.end(), [](const auto &a, const auto &b) { return a.lod > b.lod; });
+  // Second pass: ensure all awaiting_new_color nodes get IO scheduled,
+  // even if they are not in the active set
+  for (int idx = 0; idx < int(render_buffers.size()); idx++)
+  {
+    auto &rb = *render_buffers[idx];
+    if (rb.awaiting_new_color && needs_load(rb))
+      frontier.push_back({idx, rb.node_info.lod, true});
+  }
+
+  // Awaiting nodes first (root-to-leaf), then normal frontier nodes (deepest-first)
+  std::sort(frontier.begin(), frontier.end(), [](const auto &a, const auto &b) {
+    if (a.awaiting != b.awaiting)
+      return a.awaiting > b.awaiting;
+    if (a.awaiting)
+      return a.lod < b.lod;
+    return a.lod > b.lod;
+  });
 
   std::unordered_set<int> started;
   int requests_started = 0;
@@ -462,14 +470,22 @@ void gpu_buffer_manager_t::handle_attribute_change(std::vector<std::unique_ptr<g
     }
     if (buf.rendered)
     {
-      if (buf.old_color_valid)
-        callbacks.do_destroy_buffer(buf.old_color_buffer);
-      buf.old_color_buffer = buf.render_buffers[1];
-      buf.render_buffers[1] = {};
-      buf.old_color_valid = true;
-      buf.old_color_is_mono = (buf.draw_type == render::dyn_points_1);
-      buf.awaiting_new_color = true;
-      buf.crossfade_frame = 0;
+      if (buf.awaiting_new_color)
+      {
+        // Already awaiting — render_buffers[1] is empty.
+        // Keep old_color_buffer as-is (it still has the last visible color).
+      }
+      else
+      {
+        if (buf.old_color_valid)
+          callbacks.do_destroy_buffer(buf.old_color_buffer);
+        buf.old_color_buffer = buf.render_buffers[1];
+        buf.render_buffers[1] = {};
+        buf.old_color_valid = true;
+        buf.old_color_is_mono = (buf.draw_type == render::dyn_points_1);
+        buf.awaiting_new_color = true;
+        buf.crossfade_frame = 0;
+      }
     }
     else
     {

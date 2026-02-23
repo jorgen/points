@@ -193,6 +193,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   frame_timings.draw_emission_ms = to_ms(t_after_draw - t_after_frontier);
   frame_timings.eviction_ms = to_ms(t_end - t_after_draw);
   frame_timings.total_ms = to_ms(t_end - t_start);
+
 }
 
 struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, error_t *error, struct render::renderer_t *renderer)
