@@ -82,6 +82,8 @@ if (POINTS_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif ()
 
+add_subdirectory(tools)
+
 if (NOT DEFINED CPACK_GENERATOR)
     if (UNIX)
         set(CPACK_GENERATOR "TGZ")

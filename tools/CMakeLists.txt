@@ -1,4 +1,4 @@
-function(set_example_properties target)
+function(set_tool_properties target)
     if (APPLE)
         set_target_properties(${target} PROPERTIES
                 BUILD_RPATH "@executable_path/../lib"
@@ -6,5 +6,5 @@ function(set_example_properties target)
     endif ()
 endfunction()
 
-add_subdirectory(renderer)
-add_subdirectory(converter)
+add_subdirectory(jlp_info)
+add_subdirectory(jlp_extract)
