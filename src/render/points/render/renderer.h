@@ -105,6 +105,13 @@ enum environment_buffer_mapping_t
   environment_bm_params
 };
 
+enum node_bbox_buffer_mapping_t
+{
+  node_bbox_bm_camera,
+  node_bbox_bm_position,
+  node_bbox_bm_color
+};
+
 struct frame_t
 {
   struct draw_group_t* to_render;

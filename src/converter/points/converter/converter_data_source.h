@@ -56,6 +56,9 @@ POINTS_CONVERTER_EXPORT void converter_data_source_get_frame_timings(struct conv
   double *refine_strategy_ms, double *frontier_scheduling_ms,
   double *draw_emission_ms, double *eviction_ms, double *total_ms);
 
+POINTS_CONVERTER_EXPORT void converter_data_source_set_show_bounding_boxes(struct converter_data_source_t *cds, bool enabled);
+POINTS_CONVERTER_EXPORT struct render::data_source_t converter_data_source_get_bbox_data_source(struct converter_data_source_t *cds);
+
 } // namespace converter
 } // namespace points
 

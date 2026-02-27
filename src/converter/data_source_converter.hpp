@@ -19,6 +19,7 @@
 
 #include "compressor.hpp"
 #include "converter.hpp"
+#include "data_source_node_bbox.hpp"
 #include "draw_emitter.hpp"
 #include "frame_node_registry.hpp"
 #include "gpu_buffer_manager.hpp"
@@ -80,5 +81,8 @@ struct converter_data_source_t
   node_selector_t node_selector;
   gpu_buffer_manager_t buffer_manager;
   draw_emitter_t draw_emitter;
+
+  std::unique_ptr<node_bbox_data_source_t> bbox_data_source;
+  bool show_bounding_boxes = false;
 };
 } // namespace points::converter

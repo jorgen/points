@@ -161,6 +161,22 @@ public:
   bool is_initialized;
 };
 
+class gl_node_bbox_handler : public gl_frame_handler
+{
+public:
+  gl_node_bbox_handler();
+  ~gl_node_bbox_handler();
+  void initialize() override;
+  void draw(points::render::draw_group_t &group);
+
+  GLuint vao = 0;
+  GLuint program = 0;
+  GLint attrib_position = 0;
+  GLint attrib_color = 0;
+  GLint uniform_pv = 0;
+  bool is_initialized = false;
+};
+
 class gl_origin_anchor_handler : public gl_frame_handler
 {
 public:
@@ -231,6 +247,7 @@ private:
   gl_flat_points_handler points_handler;
   gl_dyn_points_handler dynpoints_handler;
   gl_axis_gizmo_handler axis_gizmo_handler;
+  gl_node_bbox_handler node_bbox_handler;
   gl_origin_anchor_handler origin_anchor_handler;
   gl_environment_handler environment_handler;
 };

@@ -755,6 +755,82 @@ void gl_axis_gizmo_handler::draw(points::render::draw_group_t &group, int viewpo
   glViewport(prev_viewport[0], prev_viewport[1], prev_viewport[2], prev_viewport[3]);
 }
 
+gl_node_bbox_handler::gl_node_bbox_handler()
+{
+}
+
+gl_node_bbox_handler::~gl_node_bbox_handler()
+{
+  if (program)
+    glDeleteProgram(program);
+  if (vao)
+    glDeleteVertexArrays(1, &vao);
+}
+
+void gl_node_bbox_handler::initialize()
+{
+  is_initialized = true;
+  auto shaderfs = cmrc::shaders::get_filesystem();
+  auto vertex_shader = shaderfs.open("shaders/node_bbox.vert");
+  auto fragment_shader = shaderfs.open("shaders/node_bbox.frag");
+
+  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), fragment_shader.end() - fragment_shader.begin());
+  glUseProgram(program);
+  attrib_position = glGetAttribLocation(program, "position");
+  attrib_color = glGetAttribLocation(program, "color");
+  uniform_pv = glGetUniformLocation(program, "pv");
+
+  glGenVertexArrays(1, &vao);
+  glBindVertexArray(vao);
+
+  GLuint tmp_buffer;
+  glGenBuffers(1, &tmp_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, tmp_buffer);
+  glEnableVertexAttribArray(attrib_position);
+  glEnableVertexAttribArray(attrib_color);
+  glBindVertexArray(0);
+  glDeleteBuffers(1, &tmp_buffer);
+  glBindVertexArray(0);
+}
+
+void gl_node_bbox_handler::draw(points::render::draw_group_t &group)
+{
+  if (!is_initialized)
+    initialize();
+
+  glUseProgram(program);
+  glBindVertexArray(vao);
+  for (int i = 0; i < group.buffers_size; i++)
+  {
+    auto &buffer = group.buffers[i];
+    auto buffer_mapping = points::render::node_bbox_buffer_mapping_t(buffer.buffer_mapping);
+    switch (buffer_mapping)
+    {
+    case points::render::node_bbox_bm_color: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+      glVertexAttribPointer(attrib_color, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
+      break;
+    }
+    case points::render::node_bbox_bm_position: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+      glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
+      break;
+    }
+    case points::render::node_bbox_bm_camera: {
+      gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+      glUniformMatrix4fv(uniform_pv, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
+      break;
+    }
+    }
+  }
+
+  glLineWidth(1.0f);
+  glDrawArrays(GL_LINES, 0, group.draw_size);
+  glBindVertexArray(0);
+}
+
 gl_origin_anchor_handler::gl_origin_anchor_handler()
   : is_initialized(false)
 {
@@ -1034,6 +1110,9 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
       break;
     case points::render::environment_bg:
       environment_handler.draw(to_render);
+      break;
+    case points::render::node_bbox_lines:
+      node_bbox_handler.draw(to_render);
       break;
     default:
       fmt::print(stderr, "Missing gl handler!.");

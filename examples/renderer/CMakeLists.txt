@@ -40,6 +40,8 @@ cmrc_add_resource_library(renderer_example_shaders ALIAS renderer_example::shade
         shaders/origin_anchor.frag
         shaders/environment.vert
         shaders/environment.frag
+        shaders/node_bbox.vert
+        shaders/node_bbox.frag
 )
 cmrc_add_resource_library(renderer_example_fonts ALIAS renderer_example::fonts NAMESPACE fonts
         fonts/Cousine-Regular.ttf

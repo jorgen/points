@@ -46,6 +46,7 @@ enum draw_type_t
   axis_gizmo_lines,
   origin_anchor_mesh,
   environment_bg,
+  node_bbox_lines,
 };
 
 struct draw_group_t

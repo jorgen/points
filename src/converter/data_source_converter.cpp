@@ -62,6 +62,8 @@ converter_data_source_t::converter_data_source_t(const std::string &url, render:
     thiz->add_to_frame(camera, to_render);
   };
 
+  bbox_data_source = std::make_unique<node_bbox_data_source_t>(callbacks);
+
   node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler());
 
   // Read compression stats for attribute normalization
@@ -152,6 +154,22 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   sel_params.point_budget = pt_budget;
   auto selection = node_selector.select(node_registry, sel_params);
   auto t_after_refine = clock::now();
+
+  // Collect bounding boxes for active nodes
+  if (show_bounding_boxes)
+  {
+    std::vector<node_bbox_t> loose_boxes;
+    std::vector<node_bbox_t> tight_boxes;
+    for (auto &node_id : selection.active_set)
+    {
+      auto *node = node_registry.get_node(node_id);
+      if (!node)
+        continue;
+      loose_boxes.push_back({node->aabb.min, node->aabb.max});
+      tight_boxes.push_back({node->tight_aabb.min, node->tight_aabb.max});
+    }
+    bbox_data_source->update_boxes(loose_boxes, tight_boxes);
+  }
 
   // Phase 6: Frontier I/O scheduling
   buffer_manager.schedule_io(render_buffers, node_registry, selection, tree_config, node_loader, 20);
@@ -263,6 +281,17 @@ void converter_data_source_get_frame_timings(struct converter_data_source_t *cds
   *draw_emission_ms = t.draw_emission_ms;
   *eviction_ms = t.eviction_ms;
   *total_ms = t.total_ms;
+}
+
+void converter_data_source_set_show_bounding_boxes(struct converter_data_source_t *cds, bool enabled)
+{
+  cds->show_bounding_boxes = enabled;
+  cds->bbox_data_source->enabled = enabled;
+}
+
+struct render::data_source_t converter_data_source_get_bbox_data_source(struct converter_data_source_t *cds)
+{
+  return cds->bbox_data_source->data_source;
 }
 
 } // namespace points::converter

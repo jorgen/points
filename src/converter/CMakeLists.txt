@@ -24,6 +24,7 @@ set(private_headers
         tree_lod_generator.hpp
         attributes_configs.hpp
         data_source_converter.hpp
+        data_source_node_bbox.hpp
         draw_emitter.hpp
         frame_node_registry.hpp
         frustum_tree_walker.hpp
@@ -56,6 +57,7 @@ set(sources
         tree_lod_generator.cpp
         attributes_configs.cpp
         data_source_converter.cpp
+        data_source_node_bbox.cpp
         draw_emitter.cpp
         frame_node_registry.cpp
         frustum_tree_walker.cpp

@@ -233,8 +233,10 @@ int main(int argc, char **argv)
 
   float screen_fraction_threshold = 0.5f;
   int gpu_memory_budget_mb = 64;
+  bool show_bounding_boxes = false;
 
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+  points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get_bbox_data_source(converter_points.get()));
   points::converter::converter_data_source_set_viewport(converter_points.get(), width, height);
   points::converter::converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
 
