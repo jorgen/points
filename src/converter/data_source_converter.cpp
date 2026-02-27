@@ -119,7 +119,12 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   lod_params.projection = camera.projection;
   lod_params.screen_fraction_threshold = frac_threshold;
 
-  frustum_tree_walker_t walker(camera.view_projection, lod_params, std::vector<std::string>({std::string("xyz"), current_attribute_name}));
+  if (cached_walker_attribute_source != current_attribute_name)
+  {
+    cached_walker_attribute_names = {std::string("xyz"), current_attribute_name};
+    cached_walker_attribute_source = current_attribute_name;
+  }
+  frustum_tree_walker_t walker(camera.view_projection, lod_params, cached_walker_attribute_names);
   processor.walk_tree(walker);
   auto &walker_subsets = walker.m_new_nodes.point_subsets;
   std::sort(walker_subsets.begin(), walker_subsets.end(), less_than);

@@ -31,6 +31,7 @@
 
 #include "attributes_configs.hpp"
 #include "conversion_types.hpp"
+#include "frustum_tree_walker.hpp"
 #include "input_data_source_registry.hpp"
 #include "pre_init_file_retriever.hpp"
 #include "reader.hpp"
@@ -131,6 +132,9 @@ private:
 
   int64_t _read_sort_budget;
   int64_t _read_sort_active_approximate_size;
+
+  std::unique_ptr<attribute_index_map_t> _attribute_index_map;
+  std::vector<std::string> _cached_attribute_names;
 
   void handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files);
   void handle_pre_init_info_for_files(pre_init_info_file_result_t &&pre_init_info_for_files);

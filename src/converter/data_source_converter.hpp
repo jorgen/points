@@ -71,6 +71,10 @@ struct converter_data_source_t
   double current_attr_min = 0.0;
   double current_attr_max = 1.0;
 
+  // Cached walker attribute names (rebuilt only on attribute change)
+  std::vector<std::string> cached_walker_attribute_names;
+  std::string cached_walker_attribute_source;
+
   // Refactored components
   frame_node_registry_t node_registry;
   node_selector_t node_selector;

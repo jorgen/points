@@ -116,8 +116,12 @@ void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint3
 
 void processor_t::walk_tree(frustum_tree_walker_t &walker)
 {
-  attribute_index_map_t attribute_index_map(_tree_handler.attributes_configs(), walker.m_attribute_names);
-  walk_tree_direct(_tree_handler.tree_registry(), attribute_index_map, walker);
+  if (!_attribute_index_map || _cached_attribute_names != walker.m_attribute_names)
+  {
+    _attribute_index_map = std::make_unique<attribute_index_map_t>(_tree_handler.attributes_configs(), walker.m_attribute_names);
+    _cached_attribute_names = walker.m_attribute_names;
+  }
+  walk_tree_direct(_tree_handler.tree_registry(), *_attribute_index_map, walker);
   _tree_handler.request_trees_async(std::move(walker.m_trees_to_load));
 }
 
