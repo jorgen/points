@@ -47,10 +47,7 @@ POINTS_CONVERTER_EXPORT void converter_data_set_rendered_attribute(struct conver
 
 POINTS_CONVERTER_EXPORT void converter_data_source_set_viewport(struct converter_data_source_t *converter_data_source, int width, int height);
 POINTS_CONVERTER_EXPORT void converter_data_source_set_pixel_error_threshold(struct converter_data_source_t *converter_data_source, double threshold);
-POINTS_CONVERTER_EXPORT void converter_data_source_set_auto_adjust_threshold(struct converter_data_source_t *converter_data_source, bool enabled);
 POINTS_CONVERTER_EXPORT void converter_data_source_set_gpu_memory_budget(struct converter_data_source_t *converter_data_source, size_t budget_bytes);
-
-POINTS_CONVERTER_EXPORT double converter_data_source_get_effective_pixel_error_threshold(struct converter_data_source_t *converter_data_source);
 
 POINTS_CONVERTER_EXPORT uint64_t converter_data_source_get_points_rendered(struct converter_data_source_t *converter_data_source);
 

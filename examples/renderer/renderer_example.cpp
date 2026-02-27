@@ -231,8 +231,7 @@ int main(int argc, char **argv)
     &points::render::environment_data_source_destroy);
   points::render::renderer_add_data_source(renderer.get(), points::render::environment_data_source_get(environment.get()));
 
-  float pixel_error_threshold = 2.0f;
-  bool auto_adjust_threshold = true;
+  float screen_fraction_threshold = 0.5f;
   int gpu_memory_budget_mb = 64;
 
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
@@ -511,21 +510,17 @@ int main(int argc, char **argv)
       }
       ImGui::EndCombo();
     }
-    if (ImGui::SliderFloat("Pixel Error Threshold", &pixel_error_threshold, 1.0f, 500.0f, "%.1f", ImGuiSliderFlags_Logarithmic))
+    if (ImGui::SliderFloat("Screen Fraction Threshold", &screen_fraction_threshold, 0.01f, 1.0f, "%.2f", ImGuiSliderFlags_Logarithmic))
     {
-      points::converter::converter_data_source_set_pixel_error_threshold(converter_points.get(), double(pixel_error_threshold));
-    }
-    if (ImGui::Checkbox("Auto Adjust Threshold", &auto_adjust_threshold))
-    {
-      points::converter::converter_data_source_set_auto_adjust_threshold(converter_points.get(), auto_adjust_threshold);
-    }
-    {
-      float eff_threshold = float(points::converter::converter_data_source_get_effective_pixel_error_threshold(converter_points.get()));
-      ImGui::Text("Effective Threshold: %.1f", eff_threshold);
+      points::converter::converter_data_source_set_pixel_error_threshold(converter_points.get(), double(screen_fraction_threshold));
     }
     if (ImGui::SliderInt("GPU Memory Budget (MB)", &gpu_memory_budget_mb, 64, 4096))
     {
       points::converter::converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
+    }
+    if (ImGui::Checkbox("Show Bounding Boxes", &show_bounding_boxes))
+    {
+      points::converter::converter_data_source_set_show_bounding_boxes(converter_points.get(), show_bounding_boxes);
     }
     ImGui::SliderFloat("Point World Size", &points_gl_renderer.point_world_size, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("LOD Scale Base", &points_gl_renderer.lod_scale_base, 1.0f, 5.0f, "%.1f");

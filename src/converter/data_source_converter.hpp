@@ -52,11 +52,9 @@ struct converter_data_source_t
 
   int viewport_width = 1920;
   int viewport_height = 1080;
-  double pixel_error_threshold = 2.0;
-  bool auto_adjust_threshold = true;
+  double screen_fraction_threshold = 0.5;
   size_t gpu_memory_budget = 512 * 1024 * 1024;
   size_t gpu_memory_used = 0;
-  double effective_pixel_error_threshold = 2.0;
   uint64_t point_budget = 10'000'000;
 
   render::buffer_t index_buffer;

@@ -40,10 +40,11 @@ bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb)
 
   double distance = glm::length(center - params.camera_position);
   if (distance < node_size)
-    distance = node_size;
+    return true;
 
-  double projected_size = params.projection[1][1] * params.screen_height * 0.5 * node_size / distance;
-  return projected_size > params.pixel_error_threshold;
+  // projected_fraction: fraction of screen height covered by this node (0..1+)
+  double projected_fraction = params.projection[1][1] * 0.5 * node_size / distance;
+  return projected_fraction > params.screen_fraction_threshold;
 }
 
 // static node_id_t create_node_id(tree_id_t tree_id, int level, int index)

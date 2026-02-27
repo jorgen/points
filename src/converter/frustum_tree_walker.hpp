@@ -133,8 +133,7 @@ struct lod_params_t
 {
   glm::dvec3 camera_position;
   glm::dmat4 projection;
-  double screen_height;
-  double pixel_error_threshold;
+  double screen_fraction_threshold;
 };
 
 class frustum_tree_walker_t

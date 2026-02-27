@@ -82,18 +82,14 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
 
   const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
   bool new_attribute = false;
-  int vp_height;
-  double pix_threshold;
-  double eff_threshold;
+  double frac_threshold;
   size_t mem_budget;
   uint64_t pt_budget;
   {
     std::unique_lock<std::mutex> lock(mutex);
     new_attribute = current_attribute_name != next_attribute_name;
     current_attribute_name = next_attribute_name;
-    vp_height = viewport_height;
-    pix_threshold = pixel_error_threshold;
-    eff_threshold = effective_pixel_error_threshold;
+    frac_threshold = screen_fraction_threshold;
     mem_budget = gpu_memory_budget;
     pt_budget = point_budget;
   }
@@ -121,8 +117,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   lod_params_t lod_params;
   lod_params.camera_position = camera_position;
   lod_params.projection = camera.projection;
-  lod_params.screen_height = double(vp_height);
-  lod_params.pixel_error_threshold = eff_threshold;
+  lod_params.screen_fraction_threshold = frac_threshold;
 
   frustum_tree_walker_t walker(camera.view_projection, lod_params, std::vector<std::string>({std::string("xyz"), current_attribute_name}));
   processor.walk_tree(walker);
@@ -166,22 +161,6 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   buffer_manager.evict(render_buffers, node_registry, selection, camera_position,
                        gpu_memory_used, upload_limit, callbacks, node_loader);
 
-  // Phase 9: Adaptive threshold
-  {
-    std::unique_lock<std::mutex> lock(mutex);
-    if (auto_adjust_threshold)
-    {
-      if (gpu_memory_used > mem_budget * 9 / 10)
-        effective_pixel_error_threshold *= 1.1;
-      else if (gpu_memory_used < mem_budget / 2 && effective_pixel_error_threshold > pix_threshold)
-        effective_pixel_error_threshold = std::max(pix_threshold, effective_pixel_error_threshold * 0.9);
-      effective_pixel_error_threshold = std::clamp(effective_pixel_error_threshold, 1.0, 1000.0);
-    }
-    else
-    {
-      effective_pixel_error_threshold = pix_threshold;
-    }
-  }
   auto t_end = clock::now();
 
   auto to_ms = [](auto duration) { return std::chrono::duration<double, std::milli>(duration).count(); };
@@ -252,26 +231,13 @@ void converter_data_source_set_viewport(struct converter_data_source_t *converte
 void converter_data_source_set_pixel_error_threshold(struct converter_data_source_t *converter_data_source, double threshold)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
-  converter_data_source->pixel_error_threshold = threshold;
-  converter_data_source->effective_pixel_error_threshold = std::max(converter_data_source->effective_pixel_error_threshold, threshold);
-}
-
-void converter_data_source_set_auto_adjust_threshold(struct converter_data_source_t *converter_data_source, bool enabled)
-{
-  std::unique_lock<std::mutex> lock(converter_data_source->mutex);
-  converter_data_source->auto_adjust_threshold = enabled;
+  converter_data_source->screen_fraction_threshold = threshold;
 }
 
 void converter_data_source_set_gpu_memory_budget(struct converter_data_source_t *converter_data_source, size_t budget_bytes)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->gpu_memory_budget = budget_bytes;
-}
-
-double converter_data_source_get_effective_pixel_error_threshold(struct converter_data_source_t *converter_data_source)
-{
-  std::unique_lock<std::mutex> lock(converter_data_source->mutex);
-  return converter_data_source->effective_pixel_error_threshold;
 }
 
 uint64_t converter_data_source_get_points_rendered(struct converter_data_source_t *converter_data_source)
