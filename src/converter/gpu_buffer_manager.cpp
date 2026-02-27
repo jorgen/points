@@ -62,6 +62,7 @@ static void destroy_gpu_buffer(gpu_node_buffer_t &buf, render::callback_manager_
   {
     callbacks.do_destroy_buffer(buf.old_color_buffer);
     buf.old_color_valid = false;
+    buf.old_color_memory = 0;
   }
   if (buf.params_buffer.user_ptr)
   {
@@ -213,7 +214,7 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
     if (a.awaiting != b.awaiting)
       return a.awaiting > b.awaiting;
     if (a.awaiting)
-      return a.lod < b.lod;
+      return a.lod > b.lod;
     return a.lod > b.lod;
   });
 
@@ -242,7 +243,7 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
   {
     if (uploads_done >= max_uploads)
       break;
-    if (gpu_memory_used >= upload_limit)
+    if (gpu_memory_used >= upload_limit && !candidate.awaiting)
       break;
     auto &render_buffer = *render_buffers[candidate.index];
 
@@ -265,6 +266,10 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
       {
         callbacks.do_modify_buffer(render_buffer.params_buffer, 0, sizeof(render_buffer.params_data), &render_buffer.params_data);
       }
+
+      render_buffer.old_color_memory = render_buffer.attribute_data_size;
+      render_buffer.attribute_data_size = loaded.attribute_data_size;
+      render_buffer.gpu_memory_size += loaded.attribute_data_size;
 
       render_buffer.crossfade_frame = 0;
       render_buffer.awaiting_new_color = false;
@@ -304,6 +309,7 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
 
       size_t buf_mem = loaded.vertex_data_size + loaded.attribute_data_size + sizeof(render_buffer.camera_view);
       render_buffer.gpu_memory_size = buf_mem;
+      render_buffer.attribute_data_size = loaded.attribute_data_size;
       gpu_memory_used += buf_mem;
 
       render_buffer.rendered = true;
@@ -321,13 +327,7 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
                                        std::unique_ptr<render::node_data_loader_t> &node_loader,
                                        int max_requests)
 {
-  struct frontier_candidate_t
-  {
-    int index;
-    int lod;
-    bool awaiting;
-  };
-  std::vector<frontier_candidate_t> frontier;
+  m_frontier.clear();
 
   auto needs_load = [](const gpu_node_buffer_t &rb) {
     return rb.load_handle == render::invalid_load_handle && (!rb.rendered || rb.awaiting_new_color);
@@ -343,7 +343,7 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
     {
       auto &rb = *render_buffers[idx];
       if (needs_load(rb))
-        frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
+        m_frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
     }
     // One-level lookahead: children of active nodes
     for (auto &child_id : node->children)
@@ -355,7 +355,7 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
       {
         auto &rb = *render_buffers[idx];
         if (needs_load(rb))
-          frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
+          m_frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
       }
     }
   }
@@ -366,21 +366,21 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
   {
     auto &rb = *render_buffers[idx];
     if (rb.awaiting_new_color && needs_load(rb))
-      frontier.push_back({idx, rb.node_info.lod, true});
+      m_frontier.push_back({idx, rb.node_info.lod, true});
   }
 
   // Awaiting nodes first (root-to-leaf), then normal frontier nodes (deepest-first)
-  std::sort(frontier.begin(), frontier.end(), [](const auto &a, const auto &b) {
+  std::sort(m_frontier.begin(), m_frontier.end(), [](const auto &a, const auto &b) {
     if (a.awaiting != b.awaiting)
       return a.awaiting > b.awaiting;
     if (a.awaiting)
-      return a.lod < b.lod;
+      return a.lod > b.lod;
     return a.lod > b.lod;
   });
 
   std::unordered_set<int> started;
   int requests_started = 0;
-  for (auto &fc : frontier)
+  for (auto &fc : m_frontier)
   {
     if (requests_started >= max_requests)
       break;
@@ -405,11 +405,14 @@ void gpu_buffer_manager_t::evict(std::vector<std::unique_ptr<gpu_node_buffer_t>>
                                   render::callback_manager_t &callbacks,
                                   std::unique_ptr<render::node_data_loader_t> &node_loader)
 {
+  if (gpu_memory_used <= target_memory)
+    return;
+
   // Build non-evictable set: active nodes + ancestors
-  frame_node_registry_t::node_set_t non_evictable;
+  m_non_evictable.clear();
   for (auto &node_id : selection.active_set)
   {
-    non_evictable.insert(node_id);
+    m_non_evictable.insert(node_id);
     node_id_t current = node_id;
     while (true)
     {
@@ -419,36 +422,42 @@ void gpu_buffer_manager_t::evict(std::vector<std::unique_ptr<gpu_node_buffer_t>>
       auto parent = node->parent_id;
       if (!registry.get_node(parent))
         break;
-      if (!non_evictable.insert(parent).second)
+      if (!m_non_evictable.insert(parent).second)
         break;
       current = parent;
     }
   }
 
-  struct evictable_node_t
-  {
-    node_id_t node_id;
-    double distance;
-  };
-  std::vector<evictable_node_t> evictable;
+  m_evictable.clear();
   for (auto &[node_id, node] : registry.nodes())
   {
-    if (non_evictable.count(node_id))
+    if (m_non_evictable.count(node_id))
       continue;
     if (!node.all_rendered)
       continue;
     glm::dvec3 center = (node.tight_aabb.min + node.tight_aabb.max) * 0.5;
     double dist = glm::length(center - camera_position);
-    evictable.push_back({node_id, dist});
+    m_evictable.push_back({node_id, dist});
   }
-  std::sort(evictable.begin(), evictable.end(), [](const evictable_node_t &a, const evictable_node_t &b) { return a.distance > b.distance; });
+  std::sort(m_evictable.begin(), m_evictable.end(), [](const evictable_node_t &a, const evictable_node_t &b) { return a.distance > b.distance; });
 
-  for (auto &ev : evictable)
+  for (auto &ev : m_evictable)
   {
     if (gpu_memory_used <= target_memory)
       break;
     auto *node = registry.get_node(ev.node_id);
     if (!node)
+      continue;
+    bool has_awaiting = false;
+    for (int idx : node->buffer_indices)
+    {
+      if (render_buffers[idx]->awaiting_new_color)
+      {
+        has_awaiting = true;
+        break;
+      }
+    }
+    if (has_awaiting)
       continue;
     for (int idx : node->buffer_indices)
       destroy_gpu_buffer(*render_buffers[idx], callbacks, node_loader, gpu_memory_used);
@@ -478,11 +487,16 @@ void gpu_buffer_manager_t::handle_attribute_change(std::vector<std::unique_ptr<g
       else
       {
         if (buf.old_color_valid)
+        {
           callbacks.do_destroy_buffer(buf.old_color_buffer);
+          gpu_memory_used -= buf.old_color_memory;
+          buf.gpu_memory_size -= buf.old_color_memory;
+        }
         buf.old_color_buffer = buf.render_buffers[1];
         buf.render_buffers[1] = {};
         buf.old_color_valid = true;
         buf.old_color_is_mono = (buf.draw_type == render::dyn_points_1);
+        buf.old_color_memory = buf.attribute_data_size;
         buf.awaiting_new_color = true;
         buf.crossfade_frame = 0;
       }

@@ -41,17 +41,26 @@ selection_result_t node_selector_t::select(const frame_node_registry_t &registry
   }
 
   // Iteratively expand active nodes into children, closest-first
+  struct expansion_t
+  {
+    node_id_t node_id;
+    double distance;
+  };
+  std::vector<expansion_t> candidates;
+  std::vector<node_id_t> to_remove;
+  std::vector<node_id_t> to_add;
+  std::vector<node_id_t> rendered_children;
+  std::vector<node_id_t> new_children;
+
+  constexpr int MAX_EXPANSION_ITERATIONS = 8;
   bool changed = true;
-  while (changed)
+  int iterations = 0;
+  while (changed && iterations < MAX_EXPANSION_ITERATIONS)
   {
     changed = false;
+    iterations++;
 
-    struct expansion_t
-    {
-      node_id_t node_id;
-      double distance;
-    };
-    std::vector<expansion_t> candidates;
+    candidates.clear();
     for (auto &node_id : result.active_set)
     {
       auto *node = registry.get_node(node_id);
@@ -63,8 +72,8 @@ selection_result_t node_selector_t::select(const frame_node_registry_t &registry
     }
     std::sort(candidates.begin(), candidates.end(), [](const expansion_t &a, const expansion_t &b) { return a.distance < b.distance; });
 
-    std::vector<node_id_t> to_remove;
-    std::vector<node_id_t> to_add;
+    to_remove.clear();
+    to_add.clear();
     for (auto &candidate : candidates)
     {
       auto *parent_node = registry.get_node(candidate.node_id);
@@ -75,7 +84,7 @@ selection_result_t node_selector_t::select(const frame_node_registry_t &registry
       bool all_children_faded = true;
       size_t all_children_memory = 0;
       uint64_t all_children_points = 0;
-      std::vector<node_id_t> rendered_children;
+      rendered_children.clear();
       for (auto &child_id : parent_node->children)
       {
         auto *child = registry.get_node(child_id);
@@ -125,7 +134,7 @@ selection_result_t node_selector_t::select(const frame_node_registry_t &registry
         // Partial: keep parent, add rendered children alongside
         size_t new_children_memory = 0;
         uint64_t new_children_points = 0;
-        std::vector<node_id_t> new_children;
+        new_children.clear();
         for (auto &child_id : rendered_children)
         {
           if (!result.active_set.count(child_id))

@@ -155,6 +155,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   // Phase 7: Draw emission
   auto draw_result = draw_emitter.emit(render_buffers, node_registry, selection, callbacks, camera, tree_config, to_render);
   points_rendered_last_frame = draw_result.points_rendered;
+  gpu_memory_used -= draw_result.freed_gpu_memory;
   auto t_after_draw = clock::now();
 
   // Phase 8: Eviction

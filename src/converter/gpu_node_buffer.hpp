@@ -62,6 +62,8 @@ struct gpu_node_buffer_t
   glm::mat4 camera_view = {};
   render::load_handle_t load_handle = render::invalid_load_handle;
   size_t gpu_memory_size = 0;
+  size_t attribute_data_size = 0;
+  size_t old_color_memory = 0;
   bool rendered = false;
 
   // Fade-in

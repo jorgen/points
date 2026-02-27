@@ -172,6 +172,8 @@ static void make_rendered_steady(gpu_node_buffer_t &buf, test_callback_context_t
   buf.crossfade_frame = 0;
   buf.params_buffer = {};
   buf.gpu_memory_size = 1024;
+  buf.attribute_data_size = 256;
+  buf.old_color_memory = 0;
 }
 
 static void setup_single_node_registry(frame_node_registry_t &registry,
@@ -244,11 +246,14 @@ TEST_CASE("handle_attribute_change", "[gpu_buffer_manager]")
     void *prev_old_color = reinterpret_cast<void *>(++ctx.counter);
     b->old_color_buffer.user_ptr = prev_old_color;
     b->old_color_valid = true;
+    b->old_color_memory = 128;
+    b->gpu_memory_size += 128; // old color is on GPU
     b->awaiting_new_color = false;
     void *current_color = b->render_buffers[1].user_ptr;
     gpu_mem = b->gpu_memory_size;
     bufs.push_back(std::move(b));
 
+    size_t mem_before = gpu_mem;
     mgr.handle_attribute_change(bufs, *callbacks, loader_ptr, gpu_mem);
 
     // Previous old_color was destroyed
@@ -258,6 +263,10 @@ TEST_CASE("handle_attribute_change", "[gpu_buffer_manager]")
     REQUIRE(bufs[0]->old_color_valid == true);
     REQUIRE(bufs[0]->awaiting_new_color == true);
     REQUIRE(bufs[0]->render_buffers[1].user_ptr == nullptr);
+    // Memory accounting: old color (128) subtracted from gpu_memory_used
+    REQUIRE(gpu_mem == mem_before - 128);
+    // new old_color_memory tracks the current attribute_data_size
+    REQUIRE(bufs[0]->old_color_memory == 256);
   }
 
   SECTION("cancels pending load handles")
@@ -656,9 +665,13 @@ TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -
   }
 
   // Phase 2: attribute change -> awaiting
+  size_t mem_before_change = gpu_mem;
   mgr.handle_attribute_change(bufs, *callbacks, loader_ptr, gpu_mem);
   REQUIRE(bufs[0]->awaiting_new_color == true);
   REQUIRE(bufs[0]->old_color_buffer.user_ptr == original_color);
+  REQUIRE(bufs[0]->old_color_memory == 256); // attribute_data_size saved
+  // gpu_memory_used unchanged — old color still on GPU, just moved to old_color_buffer
+  REQUIRE(gpu_mem == mem_before_change);
 
   // Phase 3: emit while awaiting (old color shown for both slots)
   {
@@ -668,24 +681,40 @@ TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -
     REQUIRE(result.any_animating == true);
     REQUIRE(to_render[0].buffers[1].user_ptr == original_color);
     REQUIRE(to_render[0].buffers[3].user_ptr == original_color);
+    REQUIRE(result.freed_gpu_memory == 0);
   }
 
   // Phase 4: simulate new color data arrival
   // (In production this happens via upload_ready, but we manually set the state)
   void *new_color = reinterpret_cast<void *>(++ctx.counter);
   bufs[0]->render_buffers[1].user_ptr = new_color;
+  size_t new_attr_size = 512;
+  bufs[0]->old_color_memory = bufs[0]->attribute_data_size;
+  bufs[0]->attribute_data_size = new_attr_size;
+  bufs[0]->gpu_memory_size += new_attr_size;
+  gpu_mem += new_attr_size;
   bufs[0]->awaiting_new_color = false;
   bufs[0]->crossfade_frame = 0;
   // old_color_valid stays true to trigger crossfade
 
+  size_t mem_during_crossfade = gpu_mem;
+
   // Phase 5: emit through crossfade (10 frames)
+  size_t total_freed = 0;
   for (int i = 0; i < 10; i++)
   {
     std::vector<draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     REQUIRE(to_render[0].draw_type == dyn_points_crossfade);
     REQUIRE(result.any_animating == true);
+    total_freed += result.freed_gpu_memory;
+    gpu_mem -= result.freed_gpu_memory;
   }
+
+  // Crossfade completed on frame 10: old color memory freed
+  REQUIRE(total_freed == 256); // old_color_memory was 256
+  REQUIRE(bufs[0]->old_color_memory == 0);
+  REQUIRE(gpu_mem == mem_during_crossfade - 256);
 
   // Phase 6: next emit should be back to steady state
   REQUIRE(bufs[0]->old_color_valid == false);
@@ -696,6 +725,7 @@ TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -
     REQUIRE(to_render[0].buffers_size == 3);
     REQUIRE(result.any_animating == false);
     REQUIRE(to_render[0].buffers[1].user_ptr == new_color);
+    REQUIRE(result.freed_gpu_memory == 0);
   }
 }
 
@@ -966,4 +996,90 @@ TEST_CASE("upload_ready processes root node whose parent equals empty_node_id", 
   REQUIRE(bufs[0]->load_handle == render::invalid_load_handle);
   REQUIRE(bufs[1]->awaiting_new_color == false);
   REQUIRE(bufs[1]->load_handle == render::invalid_load_handle);
+}
+
+TEST_CASE("upload_ready awaiting uploads bypass memory budget", "[gpu_buffer_manager]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  auto loader = std::make_unique<mock_node_data_loader_t>();
+  auto *mock_loader = loader.get();
+  std::unique_ptr<node_data_loader_t> loader_ptr = std::move(loader);
+  gpu_buffer_manager_t mgr;
+
+  auto root = make_nid(1, 0, 0);
+  auto child = make_nid(1, 1, 0);
+  node_id_t empty = {};
+
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+
+  // Buffer 0: awaiting new color, with ready load
+  auto awaiting_buf = std::make_unique<gpu_node_buffer_t>();
+  awaiting_buf->node_info = make_sub(root, empty, 10);
+  make_rendered_steady(*awaiting_buf, ctx);
+  awaiting_buf->old_color_buffer.user_ptr = awaiting_buf->render_buffers[1].user_ptr;
+  awaiting_buf->old_color_valid = true;
+  awaiting_buf->old_color_is_mono = false;
+  awaiting_buf->render_buffers[1] = {};
+  awaiting_buf->awaiting_new_color = true;
+
+  load_handle_t awaiting_handle = 200;
+  awaiting_buf->load_handle = awaiting_handle;
+  mock_loader->ready_handles.insert(awaiting_handle);
+
+  static uint16_t dummy_attr[3] = {255, 128, 64};
+  loaded_node_data_t awaiting_data;
+  awaiting_data.attribute_data = dummy_attr;
+  awaiting_data.attribute_data_size = sizeof(dummy_attr);
+  awaiting_data.attribute_type = type_u16;
+  awaiting_data.attribute_components = components_3;
+  awaiting_data.point_count = 1;
+  awaiting_data.draw_type = dyn_points_3;
+  mock_loader->loaded_data[awaiting_handle] = awaiting_data;
+
+  bufs.push_back(std::move(awaiting_buf));
+
+  // Buffer 1: normal (not awaiting), with ready load
+  auto normal_buf = std::make_unique<gpu_node_buffer_t>();
+  normal_buf->node_info = make_sub(child, root, 9);
+  // Not rendered yet — this is a fresh node needing full upload
+  normal_buf->rendered = false;
+
+  load_handle_t normal_handle = 201;
+  normal_buf->load_handle = normal_handle;
+  mock_loader->ready_handles.insert(normal_handle);
+
+  static float dummy_verts[3] = {0.0f, 0.0f, 0.0f};
+  loaded_node_data_t normal_data;
+  normal_data.vertex_data = dummy_verts;
+  normal_data.vertex_data_size = sizeof(dummy_verts);
+  normal_data.vertex_type = type_r32;
+  normal_data.vertex_components = components_3;
+  normal_data.attribute_data = dummy_attr;
+  normal_data.attribute_data_size = sizeof(dummy_attr);
+  normal_data.attribute_type = type_u16;
+  normal_data.attribute_components = components_3;
+  normal_data.point_count = 1;
+  normal_data.draw_type = dyn_points_3;
+  mock_loader->loaded_data[normal_handle] = normal_data;
+
+  bufs.push_back(std::move(normal_buf));
+
+  // Set gpu_memory_used >= upload_limit so the budget gate would normally block
+  size_t gpu_mem = 1000;
+  size_t upload_limit = 1000; // exactly at limit
+
+  int uploads = mgr.upload_ready(bufs, *callbacks, loader_ptr, gpu_mem,
+                                  upload_limit, 4, make_identity_camera(),
+                                  "intensity", 0.0, 1.0);
+
+  // Awaiting buffer should have been uploaded (bypasses budget)
+  REQUIRE(bufs[0]->awaiting_new_color == false);
+  REQUIRE(bufs[0]->load_handle == render::invalid_load_handle);
+
+  // Normal buffer should NOT have been uploaded (blocked by budget)
+  REQUIRE(bufs[1]->rendered == false);
+  REQUIRE(bufs[1]->load_handle == normal_handle);
+
+  REQUIRE(uploads == 1);
 }

@@ -37,14 +37,8 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
   glm::dvec3 camera_position = glm::dvec3(camera.inverse_view[3]);
 
   // Distance-sort active nodes
-  struct active_node_info_t
-  {
-    node_id_t node_id;
-    double distance;
-    bool frustum_visible;
-  };
-  std::vector<active_node_info_t> sorted_active;
-  sorted_active.reserve(selection.active_set.size());
+  m_sorted_active.clear();
+  m_sorted_active.reserve(selection.active_set.size());
   for (auto &node_id : selection.active_set)
   {
     auto *node = registry.get_node(node_id);
@@ -52,14 +46,14 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
       continue;
     glm::dvec3 center = (node->tight_aabb.min + node->tight_aabb.max) * 0.5;
     double dist = glm::length(center - camera_position);
-    sorted_active.push_back({node_id, dist, node->frustum_visible});
+    m_sorted_active.push_back({node_id, dist, node->frustum_visible});
   }
-  std::sort(sorted_active.begin(), sorted_active.end(), [](const active_node_info_t &a, const active_node_info_t &b) { return a.distance < b.distance; });
+  std::sort(m_sorted_active.begin(), m_sorted_active.end(), [](const active_node_info_t &a, const active_node_info_t &b) { return a.distance < b.distance; });
 
   // Build set of node_ids still in any color transition (for top-down crossfade ordering).
   // Only consider active nodes — a parent swapped out by the selector is not being rendered
   // and must not block its children's crossfade.
-  frame_node_registry_t::node_set_t transitioning_nodes;
+  m_transitioning_nodes.clear();
   for (auto &node_id : selection.active_set)
   {
     auto *node = registry.get_node(node_id);
@@ -68,16 +62,16 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
     for (int idx : node->buffer_indices)
     {
       auto &rb = *render_buffers[idx];
-      if (rb.old_color_valid || rb.awaiting_new_color)
+      if (rb.old_color_valid)
       {
-        transitioning_nodes.insert(node_id);
+        m_transitioning_nodes.insert(node_id);
         break;
       }
     }
   }
 
   // Emit draw commands
-  for (auto &info : sorted_active)
+  for (auto &info : m_sorted_active)
   {
     if (!info.frustum_visible)
       continue;
@@ -117,7 +111,7 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
         else if (is_crossfading)
         {
           old_is_mono = render_buffer.old_color_is_mono;
-          bool parent_transitioning = transitioning_nodes.count(render_buffer.node_info.parent) > 0;
+          bool parent_transitioning = m_transitioning_nodes.count(render_buffer.node_info.parent) > 0;
           if (parent_transitioning)
           {
             blend = 0.0f;
@@ -130,6 +124,9 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
             {
               callbacks.do_destroy_buffer(render_buffer.old_color_buffer);
               render_buffer.old_color_valid = false;
+              result.freed_gpu_memory += render_buffer.old_color_memory;
+              render_buffer.gpu_memory_size -= render_buffer.old_color_memory;
+              render_buffer.old_color_memory = 0;
               is_crossfading = false;
             }
           }

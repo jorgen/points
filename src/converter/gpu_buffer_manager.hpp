@@ -68,6 +68,23 @@ public:
                                render::callback_manager_t &callbacks,
                                std::unique_ptr<render::node_data_loader_t> &node_loader,
                                size_t &gpu_memory_used);
+
+private:
+  struct frontier_candidate_t
+  {
+    int index;
+    int lod;
+    bool awaiting;
+  };
+  std::vector<frontier_candidate_t> m_frontier;
+
+  struct evictable_node_t
+  {
+    node_id_t node_id;
+    double distance;
+  };
+  std::vector<evictable_node_t> m_evictable;
+  frame_node_registry_t::node_set_t m_non_evictable;
 };
 
 } // namespace points::converter
