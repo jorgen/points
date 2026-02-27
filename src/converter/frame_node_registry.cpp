@@ -27,67 +27,40 @@ registry_diff_t frame_node_registry_t::update_from_walker(const std::vector<tree
 {
   registry_diff_t diff;
 
-  // Build the new set of node_ids from walker output
+  // Build the new set of node_ids from walker output using try_emplace
+  // to avoid a separate seen set for dedup
   node_set_t new_node_ids;
   for (auto &ps : point_subsets)
+  {
     new_node_ids.insert(ps.node);
-
-  // Find removed nodes
-  for (auto &[id, node] : m_nodes)
-  {
-    if (!new_node_ids.count(id))
-      diff.removed.push_back(id);
-  }
-
-  // Remove them
-  for (auto &id : diff.removed)
-    m_nodes.erase(id);
-
-  // Update or add nodes from point_subsets
-  for (int idx = 0; idx < int(point_subsets.size()); idx++)
-  {
-    auto &ps = point_subsets[idx];
-    auto it = m_nodes.find(ps.node);
-    if (it == m_nodes.end())
+    auto [it, inserted] = m_nodes.try_emplace(ps.node);
+    if (inserted)
     {
-      // New node
-      auto &node = m_nodes[ps.node];
+      auto &node = it->second;
       node.id = ps.node;
       node.parent_id = ps.parent;
       node.aabb = ps.aabb;
       node.tight_aabb = ps.tight_aabb;
       node.lod = ps.lod;
-      node.frustum_visible = ps.frustum_visible;
-      node.total_point_count = ps.point_count.data;
-      node.buffer_indices.push_back(idx);
       diff.added.push_back(ps.node);
+    }
+  }
+
+  // Find and remove nodes no longer in walker output
+  for (auto it = m_nodes.begin(); it != m_nodes.end();)
+  {
+    if (!new_node_ids.count(it->first))
+    {
+      diff.removed.push_back(it->first);
+      it = m_nodes.erase(it);
     }
     else
     {
-      // Existing node — update mutable fields
-      auto &node = it->second;
-      node.frustum_visible = node.frustum_visible || ps.frustum_visible;
-      node.total_point_count += ps.point_count.data;
-      node.buffer_indices.push_back(idx);
-      // Only add to updated on first buffer of this node
-      if (node.buffer_indices.size() == 1)
-        diff.updated.push_back(ps.node);
+      ++it;
     }
   }
 
-  // Deduplicate added (multiple subsets for same node)
-  {
-    node_set_t seen;
-    std::vector<node_id_t> unique_added;
-    for (auto &id : diff.added)
-    {
-      if (seen.insert(id).second)
-        unique_added.push_back(id);
-    }
-    diff.added = std::move(unique_added);
-  }
-
-  // Reset per-frame fields before recomputing
+  // Reset per-frame fields before recomputing from render_buffers
   for (auto &[id, node] : m_nodes)
   {
     node.buffer_indices.clear();
@@ -99,7 +72,7 @@ registry_diff_t frame_node_registry_t::update_from_walker(const std::vector<tree
     node.gpu_memory_size = 0;
   }
 
-  // Recompute buffer_indices and aggregate state from render_buffers
+  // Compute buffer_indices and aggregate state from render_buffers
   for (int idx = 0; idx < int(render_buffers.size()); idx++)
   {
     auto &rb = *render_buffers[idx];
@@ -116,40 +89,39 @@ registry_diff_t frame_node_registry_t::update_from_walker(const std::vector<tree
     node.lod = rb.node_info.lod;
     if (!rb.rendered)
       node.all_rendered = false;
-    if (!rb.rendered || rb.fade_frame < gpu_node_buffer_t::FADE_FRAMES)
+    if (!rb.rendered || (rb.node_info.frustum_visible && rb.fade_frame < gpu_node_buffer_t::FADE_FRAMES))
       node.all_fade_complete = false;
     node.gpu_memory_size += rb.gpu_memory_size;
   }
 
-  // Build children from edges
-  node_set_t all_node_ids;
-  for (auto &[id, node] : m_nodes)
-    all_node_ids.insert(id);
-
+  // Build children from edges (use m_nodes.find directly, no separate set)
   for (auto &[parent_id, child_id] : parent_child_edges)
   {
-    if (all_node_ids.count(parent_id) && all_node_ids.count(child_id))
-      m_nodes[parent_id].children.push_back(child_id);
-  }
-
-  // Deduplicate children
-  for (auto &[id, node] : m_nodes)
-  {
-    node_set_t child_set;
-    std::vector<node_id_t> unique_children;
-    for (auto &child : node.children)
+    auto parent_it = m_nodes.find(parent_id);
+    if (parent_it == m_nodes.end())
+      continue;
+    if (m_nodes.find(child_id) == m_nodes.end())
+      continue;
+    // Linear scan dedup (max 8 children per octree node)
+    auto &children = parent_it->second.children;
+    bool already_present = false;
+    for (auto &c : children)
     {
-      if (child_set.insert(child).second)
-        unique_children.push_back(child);
+      if ((c <=> child_id) == std::strong_ordering::equal)
+      {
+        already_present = true;
+        break;
+      }
     }
-    node.children = std::move(unique_children);
+    if (!already_present)
+      children.push_back(child_id);
   }
 
   // Find roots: nodes whose parent is not in the registry
   m_roots.clear();
   for (auto &[id, node] : m_nodes)
   {
-    if (!m_nodes.count(node.parent_id))
+    if (m_nodes.find(node.parent_id) == m_nodes.end())
       m_roots.push_back(id);
   }
 
