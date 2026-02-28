@@ -1083,3 +1083,1012 @@ TEST_CASE("upload_ready awaiting uploads bypass memory budget", "[gpu_buffer_man
 
   REQUIRE(uploads == 1);
 }
+
+// ---------------------------------------------------------------------------
+// Frustum-culled crossfade completion
+// ---------------------------------------------------------------------------
+
+TEST_CASE("frustum-culled crossfading node is force-completed", "[draw_emitter][frustum_cull]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  auto sub = make_sub(root, empty, 10);
+  sub.frustum_visible = false;
+
+  std::vector<tree_walker_data_t> subsets = {sub};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->awaiting_new_color = false;
+  b->old_color_memory = 512;
+  b->gpu_memory_size = 2048;
+  b->crossfade_frame = 3;
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  std::vector<draw_group_t> to_render;
+  auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  REQUIRE(to_render.empty());
+  REQUIRE(bufs[0]->old_color_valid == false);
+  REQUIRE(bufs[0]->old_color_buffer.user_ptr == nullptr);
+  REQUIRE(result.freed_gpu_memory == 512);
+  REQUIRE(bufs[0]->gpu_memory_size == 2048 - 512);
+  REQUIRE(bufs[0]->old_color_memory == 0);
+}
+
+TEST_CASE("frustum-culled awaiting node is NOT force-completed", "[draw_emitter][frustum_cull]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  auto sub = make_sub(root, empty, 10);
+  sub.frustum_visible = false;
+
+  std::vector<tree_walker_data_t> subsets = {sub};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->awaiting_new_color = true;
+  b->old_color_memory = 512;
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  std::vector<draw_group_t> to_render;
+  auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  REQUIRE(bufs[0]->old_color_valid == true);
+  REQUIRE(bufs[0]->old_color_buffer.user_ptr != nullptr);
+  REQUIRE(result.freed_gpu_memory == 0);
+}
+
+TEST_CASE("node transitions from visible crossfading to frustum-culled mid-crossfade", "[draw_emitter][frustum_cull]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  // Start visible and crossfading
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->awaiting_new_color = false;
+  b->old_color_memory = 256;
+  b->gpu_memory_size = 1024;
+  b->crossfade_frame = 0;
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  // Emit 3 frames while visible — crossfade advances
+  for (int i = 0; i < 3; i++)
+  {
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+  }
+  REQUIRE(bufs[0]->crossfade_frame == 3);
+
+  // Now frustum-cull the node: update subset and re-register
+  subsets[0].frustum_visible = false;
+  bufs[0]->node_info = subsets[0];
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  std::vector<draw_group_t> to_render;
+  auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  REQUIRE(to_render.empty());
+  REQUIRE(bufs[0]->old_color_valid == false);
+  REQUIRE(bufs[0]->old_color_buffer.user_ptr == nullptr);
+  REQUIRE(result.freed_gpu_memory == 256);
+}
+
+TEST_CASE("multiple frustum-culled nodes at different stages get force-completed", "[draw_emitter][frustum_cull]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto node_a = make_nid(1, 0, 0);
+  auto node_b = make_nid(1, 0, 1);
+  node_id_t empty = {};
+
+  auto sub_a = make_sub(node_a, empty, 10);
+  sub_a.frustum_visible = false;
+  auto sub_b = make_sub(node_b, empty, 10);
+  sub_b.frustum_visible = false;
+
+  std::vector<tree_walker_data_t> subsets = {sub_a, sub_b};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+
+  auto buf_a = std::make_unique<gpu_node_buffer_t>();
+  buf_a->node_info = subsets[0];
+  make_rendered_steady(*buf_a, ctx);
+  buf_a->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  buf_a->old_color_valid = true;
+  buf_a->awaiting_new_color = false;
+  buf_a->old_color_memory = 100;
+  buf_a->gpu_memory_size = 500;
+  buf_a->crossfade_frame = 2;
+  bufs.push_back(std::move(buf_a));
+
+  auto buf_b = std::make_unique<gpu_node_buffer_t>();
+  buf_b->node_info = subsets[1];
+  make_rendered_steady(*buf_b, ctx);
+  buf_b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  buf_b->old_color_valid = true;
+  buf_b->awaiting_new_color = false;
+  buf_b->old_color_memory = 200;
+  buf_b->gpu_memory_size = 700;
+  buf_b->crossfade_frame = 7;
+  bufs.push_back(std::move(buf_b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(node_a);
+  selection.active_set.insert(node_b);
+
+  std::vector<draw_group_t> to_render;
+  auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  REQUIRE(to_render.empty());
+  REQUIRE(bufs[0]->old_color_valid == false);
+  REQUIRE(bufs[0]->old_color_buffer.user_ptr == nullptr);
+  REQUIRE(bufs[1]->old_color_valid == false);
+  REQUIRE(bufs[1]->old_color_buffer.user_ptr == nullptr);
+  REQUIRE(result.freed_gpu_memory == 300);
+  REQUIRE(bufs[0]->gpu_memory_size == 400);
+  REQUIRE(bufs[1]->gpu_memory_size == 500);
+}
+
+// ---------------------------------------------------------------------------
+// Params correctness
+// ---------------------------------------------------------------------------
+
+TEST_CASE("awaiting state params: blend=1, new_is_mono copies old_color_is_mono", "[draw_emitter][params]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+
+  auto setup_awaiting = [&](bool old_is_mono) {
+    std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+    auto b = std::make_unique<gpu_node_buffer_t>();
+    b->node_info = subsets[0];
+    make_rendered_steady(*b, ctx);
+    b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+    b->old_color_valid = true;
+    b->old_color_is_mono = old_is_mono;
+    b->render_buffers[1] = {};
+    b->awaiting_new_color = true;
+    bufs.push_back(std::move(b));
+    return bufs;
+  };
+
+  SECTION("old_color_is_mono=true")
+  {
+    auto bufs = setup_awaiting(true);
+    setup_single_node_registry(registry, subsets, {}, bufs);
+
+    selection_result_t selection;
+    selection.active_set.insert(root);
+
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+    // params: {fade_alpha, blend=1.0, old_is_mono=0.0, new_is_mono=old_color_is_mono}
+    REQUIRE(bufs[0]->params_data.y == Approx(1.0f));
+    REQUIRE(bufs[0]->params_data.z == Approx(0.0f));
+    REQUIRE(bufs[0]->params_data.w == Approx(1.0f));
+  }
+
+  SECTION("old_color_is_mono=false")
+  {
+    auto bufs = setup_awaiting(false);
+    setup_single_node_registry(registry, subsets, {}, bufs);
+
+    selection_result_t selection;
+    selection.active_set.insert(root);
+
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+    REQUIRE(bufs[0]->params_data.y == Approx(1.0f));
+    REQUIRE(bufs[0]->params_data.z == Approx(0.0f));
+    REQUIRE(bufs[0]->params_data.w == Approx(0.0f));
+  }
+}
+
+TEST_CASE("crossfading state params: blend ramps, mono flags from old_color_is_mono and draw_type", "[draw_emitter][params]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->old_color_is_mono = true;
+  b->awaiting_new_color = false;
+  b->crossfade_frame = 0;
+  b->draw_type = dyn_points_3; // new is RGB
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  for (int frame = 1; frame <= 10; frame++)
+  {
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+    if (frame < 10)
+    {
+      float expected_blend = float(frame) / 10.0f;
+      REQUIRE(bufs[0]->params_data.y == Approx(expected_blend));
+      REQUIRE(bufs[0]->params_data.z == Approx(1.0f)); // old mono
+      REQUIRE(bufs[0]->params_data.w == Approx(0.0f)); // new RGB
+    }
+  }
+
+  // After 10 frames, crossfade completes: blend reached 1.0 and old_color is freed
+  REQUIRE(bufs[0]->old_color_valid == false);
+  REQUIRE(bufs[0]->crossfade_frame == 10);
+}
+
+TEST_CASE("fade-only state params: fade_alpha ramps, blend=1.0", "[draw_emitter][params]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->fade_frame = 0; // trigger fade-in
+  b->draw_type = dyn_points_1; // mono
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  for (int frame = 1; frame <= 10; frame++)
+  {
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+    float expected_alpha = float(frame) / 10.0f;
+    REQUIRE(bufs[0]->params_data.x == Approx(expected_alpha));
+    REQUIRE(bufs[0]->params_data.y == Approx(1.0f));  // blend (no crossfade)
+    REQUIRE(bufs[0]->params_data.z == Approx(0.0f));  // old_is_mono (always 0 in fade-only)
+    REQUIRE(bufs[0]->params_data.w == Approx(1.0f));  // new_is_mono (dyn_points_1)
+  }
+}
+
+TEST_CASE("parent-blocked crossfade params: blend stays 0.0, crossfade_frame stays 0", "[draw_emitter][params]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto parent_id = make_nid(1, 0, 0);
+  auto child_id = make_nid(1, 1, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {
+    make_sub(parent_id, empty, 10),
+    make_sub(child_id, parent_id, 9),
+  };
+  std::vector<std::pair<node_id_t, node_id_t>> edges = {{parent_id, child_id}};
+
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+
+  // Parent: crossfading
+  auto parent_buf = std::make_unique<gpu_node_buffer_t>();
+  parent_buf->node_info = subsets[0];
+  make_rendered_steady(*parent_buf, ctx);
+  parent_buf->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  parent_buf->old_color_valid = true;
+  parent_buf->crossfade_frame = 0;
+  bufs.push_back(std::move(parent_buf));
+
+  // Child: crossfading
+  auto child_buf = std::make_unique<gpu_node_buffer_t>();
+  child_buf->node_info = subsets[1];
+  make_rendered_steady(*child_buf, ctx);
+  child_buf->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  child_buf->old_color_valid = true;
+  child_buf->crossfade_frame = 0;
+  bufs.push_back(std::move(child_buf));
+
+  setup_single_node_registry(registry, subsets, edges, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(parent_id);
+  selection.active_set.insert(child_id);
+
+  std::vector<draw_group_t> to_render;
+  emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  // Child blocked: blend=0.0, crossfade_frame stays 0
+  REQUIRE(bufs[1]->params_data.y == Approx(0.0f));
+  REQUIRE(bufs[1]->crossfade_frame == 0);
+
+  // Parent advancing: blend=0.1, crossfade_frame=1
+  REQUIRE(bufs[0]->params_data.y == Approx(0.1f));
+  REQUIRE(bufs[0]->crossfade_frame == 1);
+}
+
+// ---------------------------------------------------------------------------
+// Memory accounting
+// ---------------------------------------------------------------------------
+
+TEST_CASE("natural crossfade completion frees memory on completion frame only", "[draw_emitter][memory]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->awaiting_new_color = false;
+  b->old_color_memory = 768;
+  b->gpu_memory_size = 2048;
+  b->crossfade_frame = 0;
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  // Frames 1-9: no memory freed
+  for (int i = 0; i < 9; i++)
+  {
+    std::vector<draw_group_t> to_render;
+    auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    REQUIRE(result.freed_gpu_memory == 0);
+  }
+
+  // Frame 10: crossfade completes, memory freed
+  {
+    std::vector<draw_group_t> to_render;
+    auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    REQUIRE(result.freed_gpu_memory == 768);
+  }
+
+  REQUIRE(bufs[0]->gpu_memory_size == 2048 - 768);
+}
+
+TEST_CASE("frustum-cull force-completion frees memory correctly", "[draw_emitter][memory][frustum_cull]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  auto sub = make_sub(root, empty, 10);
+  sub.frustum_visible = false;
+
+  std::vector<tree_walker_data_t> subsets = {sub};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->awaiting_new_color = false;
+  b->old_color_memory = 1024;
+  b->gpu_memory_size = 3072;
+  b->crossfade_frame = 5;
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  std::vector<draw_group_t> to_render;
+  auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  REQUIRE(result.freed_gpu_memory == 1024);
+  REQUIRE(bufs[0]->gpu_memory_size == 2048);
+}
+
+TEST_CASE("cumulative freed_gpu_memory across visible completion and frustum-cull in same emit", "[draw_emitter][memory]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto node_a = make_nid(1, 0, 0);
+  auto node_b = make_nid(1, 0, 1);
+  node_id_t empty = {};
+
+  // Node A: visible, crossfade_frame=9 (completes this frame)
+  auto sub_a = make_sub(node_a, empty, 10);
+  sub_a.frustum_visible = true;
+
+  // Node B: frustum-culled, crossfading
+  auto sub_b = make_sub(node_b, empty, 10);
+  sub_b.frustum_visible = false;
+
+  std::vector<tree_walker_data_t> subsets = {sub_a, sub_b};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+
+  auto buf_a = std::make_unique<gpu_node_buffer_t>();
+  buf_a->node_info = subsets[0];
+  make_rendered_steady(*buf_a, ctx);
+  buf_a->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  buf_a->old_color_valid = true;
+  buf_a->awaiting_new_color = false;
+  buf_a->old_color_memory = 100;
+  buf_a->crossfade_frame = 9; // will reach 10 this frame
+  bufs.push_back(std::move(buf_a));
+
+  auto buf_b = std::make_unique<gpu_node_buffer_t>();
+  buf_b->node_info = subsets[1];
+  make_rendered_steady(*buf_b, ctx);
+  buf_b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  buf_b->old_color_valid = true;
+  buf_b->awaiting_new_color = false;
+  buf_b->old_color_memory = 300;
+  buf_b->crossfade_frame = 4;
+  bufs.push_back(std::move(buf_b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(node_a);
+  selection.active_set.insert(node_b);
+
+  std::vector<draw_group_t> to_render;
+  auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  REQUIRE(result.freed_gpu_memory == 400);
+  REQUIRE(bufs[0]->old_color_valid == false);
+  REQUIRE(bufs[1]->old_color_valid == false);
+}
+
+// ---------------------------------------------------------------------------
+// Multi-node hierarchy
+// ---------------------------------------------------------------------------
+
+TEST_CASE("three-level hierarchy: grandparent blocks parent blocks child", "[draw_emitter][hierarchy]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto grandparent = make_nid(1, 0, 0);
+  auto parent_id = make_nid(1, 1, 0);
+  auto child_id = make_nid(1, 2, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {
+    make_sub(grandparent, empty, 10),
+    make_sub(parent_id, grandparent, 9),
+    make_sub(child_id, parent_id, 8),
+  };
+  std::vector<std::pair<node_id_t, node_id_t>> edges = {
+    {grandparent, parent_id},
+    {parent_id, child_id},
+  };
+
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+
+  auto gp_buf = std::make_unique<gpu_node_buffer_t>();
+  gp_buf->node_info = subsets[0];
+  make_rendered_steady(*gp_buf, ctx);
+  gp_buf->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  gp_buf->old_color_valid = true;
+  gp_buf->crossfade_frame = 0;
+  bufs.push_back(std::move(gp_buf));
+
+  auto p_buf = std::make_unique<gpu_node_buffer_t>();
+  p_buf->node_info = subsets[1];
+  make_rendered_steady(*p_buf, ctx);
+  p_buf->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  p_buf->old_color_valid = true;
+  p_buf->crossfade_frame = 0;
+  bufs.push_back(std::move(p_buf));
+
+  auto c_buf = std::make_unique<gpu_node_buffer_t>();
+  c_buf->node_info = subsets[2];
+  make_rendered_steady(*c_buf, ctx);
+  c_buf->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  c_buf->old_color_valid = true;
+  c_buf->crossfade_frame = 0;
+  bufs.push_back(std::move(c_buf));
+
+  setup_single_node_registry(registry, subsets, edges, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(grandparent);
+  selection.active_set.insert(parent_id);
+  selection.active_set.insert(child_id);
+
+  // Phase 1: grandparent completes in 10 frames, parent and child blocked
+  for (int i = 0; i < 10; i++)
+  {
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+  }
+
+  REQUIRE(bufs[0]->old_color_valid == false); // grandparent done
+  REQUIRE(bufs[1]->crossfade_frame == 0);     // parent was blocked
+  REQUIRE(bufs[2]->crossfade_frame == 0);     // child was blocked
+
+  // Phase 2: parent completes in 10 frames, child still blocked
+  for (int i = 0; i < 10; i++)
+  {
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+  }
+
+  REQUIRE(bufs[1]->old_color_valid == false); // parent done
+  REQUIRE(bufs[2]->crossfade_frame == 0);     // child was blocked
+
+  // Phase 3: child completes in 10 frames
+  for (int i = 0; i < 10; i++)
+  {
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+  }
+
+  REQUIRE(bufs[2]->old_color_valid == false); // child done
+  REQUIRE(bufs[2]->crossfade_frame == 10);
+}
+
+TEST_CASE("sibling nodes crossfade independently when parent is steady", "[draw_emitter][hierarchy]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  auto sib_a = make_nid(1, 1, 0);
+  auto sib_b = make_nid(1, 1, 1);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {
+    make_sub(root, empty, 10),
+    make_sub(sib_a, root, 9),
+    make_sub(sib_b, root, 9),
+  };
+  std::vector<std::pair<node_id_t, node_id_t>> edges = {
+    {root, sib_a},
+    {root, sib_b},
+  };
+
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+
+  // Root: steady
+  auto root_buf = std::make_unique<gpu_node_buffer_t>();
+  root_buf->node_info = subsets[0];
+  make_rendered_steady(*root_buf, ctx);
+  bufs.push_back(std::move(root_buf));
+
+  // Sibling A: crossfading
+  auto a_buf = std::make_unique<gpu_node_buffer_t>();
+  a_buf->node_info = subsets[1];
+  make_rendered_steady(*a_buf, ctx);
+  a_buf->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  a_buf->old_color_valid = true;
+  a_buf->crossfade_frame = 0;
+  bufs.push_back(std::move(a_buf));
+
+  // Sibling B: crossfading
+  auto b_buf = std::make_unique<gpu_node_buffer_t>();
+  b_buf->node_info = subsets[2];
+  make_rendered_steady(*b_buf, ctx);
+  b_buf->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b_buf->old_color_valid = true;
+  b_buf->crossfade_frame = 0;
+  bufs.push_back(std::move(b_buf));
+
+  setup_single_node_registry(registry, subsets, edges, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+  selection.active_set.insert(sib_a);
+  selection.active_set.insert(sib_b);
+
+  // Both siblings should advance in parallel
+  for (int i = 0; i < 10; i++)
+  {
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    REQUIRE(bufs[1]->crossfade_frame == i + 1);
+    REQUIRE(bufs[2]->crossfade_frame == i + 1);
+  }
+
+  REQUIRE(bufs[1]->old_color_valid == false);
+  REQUIRE(bufs[2]->old_color_valid == false);
+}
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+
+TEST_CASE("concurrent fade-in and crossfade (both active simultaneously)", "[draw_emitter][edge_case]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->fade_frame = 0;
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->awaiting_new_color = false;
+  b->crossfade_frame = 0;
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  // Both fade and crossfade should progress simultaneously
+  for (int i = 0; i < 10; i++)
+  {
+    std::vector<draw_group_t> to_render;
+    auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    REQUIRE(result.any_animating == true);
+    REQUIRE(bufs[0]->fade_frame == i + 1);
+    REQUIRE(bufs[0]->crossfade_frame == i + 1);
+  }
+
+  // Both should be complete
+  REQUIRE(bufs[0]->fade_frame == 10);
+  REQUIRE(bufs[0]->crossfade_frame == 10);
+  REQUIRE(bufs[0]->old_color_valid == false);
+
+  // Frame 11: steady state
+  {
+    std::vector<draw_group_t> to_render;
+    auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    REQUIRE(to_render[0].draw_type == dyn_points_3);
+    REQUIRE(result.any_animating == false);
+  }
+}
+
+TEST_CASE("mono to RGB crossfade sets correct is_mono flags", "[draw_emitter][edge_case]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->old_color_is_mono = true;
+  b->awaiting_new_color = false;
+  b->crossfade_frame = 0;
+  b->draw_type = dyn_points_3; // new is RGB
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  std::vector<draw_group_t> to_render;
+  emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  REQUIRE(bufs[0]->params_data.z == Approx(1.0f)); // old mono
+  REQUIRE(bufs[0]->params_data.w == Approx(0.0f)); // new RGB
+}
+
+TEST_CASE("RGB to mono crossfade sets correct is_mono flags", "[draw_emitter][edge_case]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->old_color_is_mono = false;
+  b->awaiting_new_color = false;
+  b->crossfade_frame = 0;
+  b->draw_type = dyn_points_1; // new is mono
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  std::vector<draw_group_t> to_render;
+  emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  REQUIRE(bufs[0]->params_data.z == Approx(0.0f)); // old RGB
+  REQUIRE(bufs[0]->params_data.w == Approx(1.0f)); // new mono
+}
+
+TEST_CASE("mixed visible and culled nodes in same emit", "[draw_emitter][edge_case]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto node_a = make_nid(1, 0, 0);
+  auto node_b = make_nid(1, 0, 1);
+  node_id_t empty = {};
+
+  // Node A: visible + crossfading
+  auto sub_a = make_sub(node_a, empty, 10);
+  sub_a.frustum_visible = true;
+
+  // Node B: culled + crossfading
+  auto sub_b = make_sub(node_b, empty, 10);
+  sub_b.frustum_visible = false;
+
+  std::vector<tree_walker_data_t> subsets = {sub_a, sub_b};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+
+  auto buf_a = std::make_unique<gpu_node_buffer_t>();
+  buf_a->node_info = subsets[0];
+  make_rendered_steady(*buf_a, ctx);
+  buf_a->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  buf_a->old_color_valid = true;
+  buf_a->awaiting_new_color = false;
+  buf_a->crossfade_frame = 0;
+  bufs.push_back(std::move(buf_a));
+
+  auto buf_b = std::make_unique<gpu_node_buffer_t>();
+  buf_b->node_info = subsets[1];
+  make_rendered_steady(*buf_b, ctx);
+  buf_b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  buf_b->old_color_valid = true;
+  buf_b->awaiting_new_color = false;
+  buf_b->old_color_memory = 256;
+  buf_b->crossfade_frame = 3;
+  bufs.push_back(std::move(buf_b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(node_a);
+  selection.active_set.insert(node_b);
+
+  std::vector<draw_group_t> to_render;
+  auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+  // A produces a draw group and advances
+  REQUIRE(to_render.size() == 1);
+  REQUIRE(bufs[0]->crossfade_frame == 1);
+
+  // B is force-completed with no draw group
+  REQUIRE(bufs[1]->old_color_valid == false);
+  REQUIRE(bufs[1]->old_color_buffer.user_ptr == nullptr);
+  REQUIRE(result.freed_gpu_memory == 256);
+}
+
+// ---------------------------------------------------------------------------
+// Steady-state cleanup
+// ---------------------------------------------------------------------------
+
+TEST_CASE("params_buffer lifecycle across crossfade to steady transition", "[draw_emitter][cleanup]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  frame_node_registry_t registry;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  auto b = std::make_unique<gpu_node_buffer_t>();
+  b->node_info = subsets[0];
+  make_rendered_steady(*b, ctx);
+  b->old_color_buffer.user_ptr = reinterpret_cast<void *>(++ctx.counter);
+  b->old_color_valid = true;
+  b->awaiting_new_color = false;
+  b->crossfade_frame = 0;
+  REQUIRE(b->params_buffer.user_ptr == nullptr); // starts null
+  bufs.push_back(std::move(b));
+
+  setup_single_node_registry(registry, subsets, {}, bufs);
+
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  SECTION("params_buffer created lazily on first animating frame")
+  {
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+    REQUIRE(bufs[0]->params_buffer.user_ptr != nullptr);
+    REQUIRE(to_render[0].buffers[4].buffer_mapping == dyn_points_bm_params);
+    REQUIRE(to_render[0].buffers[4].user_ptr == bufs[0]->params_buffer.user_ptr);
+  }
+
+  SECTION("params_buffer destroyed when returning from crossfade to steady")
+  {
+    // Complete the crossfade
+    for (int i = 0; i < 10; i++)
+    {
+      std::vector<draw_group_t> to_render;
+      emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    }
+
+    void *params_ptr = bufs[0]->params_buffer.user_ptr;
+    // params_buffer may have been nulled already by do_destroy_buffer on the completion frame
+    // if crossfade completes, the node transitions to steady on the NEXT emit
+    // Actually, completion happens mid-frame (blend>=1.0), is_crossfading becomes false,
+    // but the node still takes the animating path because fade may still be active.
+    // Let's check: after 10 frames, fade_frame has been incremented 10 times from its initial
+    // value of FADE_FRAMES (10), so fade_frame = 20. So is_fading is false.
+    // And is_crossfading was set to false on frame 10. So the next emit goes to steady.
+
+    // Emit one more frame — should be steady and destroy params_buffer
+    ctx.destroyed_buffers.clear();
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+    REQUIRE(to_render.size() == 1);
+    REQUIRE(to_render[0].draw_type == dyn_points_3);
+    REQUIRE(to_render[0].buffers_size == 3);
+    // params_buffer should have been destroyed (user_ptr nulled by do_destroy_buffer)
+    REQUIRE(bufs[0]->params_buffer.user_ptr == nullptr);
+  }
+
+  SECTION("params_buffer not double-destroyed on consecutive steady frames")
+  {
+    // Complete the crossfade
+    for (int i = 0; i < 10; i++)
+    {
+      std::vector<draw_group_t> to_render;
+      emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    }
+
+    // First steady frame — destroys params_buffer
+    {
+      std::vector<draw_group_t> to_render;
+      emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    }
+
+    size_t destroy_count_after_first_steady = ctx.destroyed_buffers.size();
+
+    // Second steady frame — should NOT call destroy again (user_ptr is null)
+    {
+      std::vector<draw_group_t> to_render;
+      emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    }
+
+    REQUIRE(ctx.destroyed_buffers.size() == destroy_count_after_first_steady);
+
+    // Third steady frame — same
+    {
+      std::vector<draw_group_t> to_render;
+      emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+    }
+
+    REQUIRE(ctx.destroyed_buffers.size() == destroy_count_after_first_steady);
+  }
+}
