@@ -234,6 +234,7 @@ int main(int argc, char **argv)
   float screen_fraction_threshold = 0.5f;
   int gpu_memory_budget_mb = 64;
   bool show_bounding_boxes = false;
+  bool debug_transitions = false;
 
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
   points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get_bbox_data_source(converter_points.get()));
@@ -524,6 +525,10 @@ int main(int argc, char **argv)
     {
       points::converter::converter_data_source_set_show_bounding_boxes(converter_points.get(), show_bounding_boxes);
     }
+    if (ImGui::Checkbox("Debug Transitions", &debug_transitions))
+    {
+      points::converter::converter_data_source_set_debug_transitions(converter_points.get(), debug_transitions);
+    }
     ImGui::SliderFloat("Point World Size", &points_gl_renderer.point_world_size, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("LOD Scale Base", &points_gl_renderer.lod_scale_base, 1.0f, 5.0f, "%.1f");
     {
@@ -538,7 +543,9 @@ int main(int argc, char **argv)
     if (ImGui::CollapsingHeader("Frame Timings"))
     {
       double tree_walk, reconciliation, upload, refine, frontier, draw, eviction, total;
-      points::converter::converter_data_source_get_frame_timings(converter_points.get(), &tree_walk, &reconciliation, &upload, &refine, &frontier, &draw, &eviction, &total);
+      int registry_nodes, active_set, nodes_drawn, transitioning, evicted, reconcile_destroyed;
+      points::converter::converter_data_source_get_frame_timings(converter_points.get(), &tree_walk, &reconciliation, &upload, &refine, &frontier, &draw, &eviction, &total,
+                                                                  &registry_nodes, &active_set, &nodes_drawn, &transitioning, &evicted, &reconcile_destroyed);
       ImGui::Text("Total:          %.2f ms", total);
       ImGui::Text("Tree Walk:      %.2f ms", tree_walk);
       ImGui::Text("Reconciliation: %.2f ms", reconciliation);
@@ -547,6 +554,15 @@ int main(int argc, char **argv)
       ImGui::Text("Frontier I/O:   %.2f ms", frontier);
       ImGui::Text("Draw Emission:  %.2f ms", draw);
       ImGui::Text("Eviction:       %.2f ms", eviction);
+      if (debug_transitions)
+      {
+        ImGui::Separator();
+        ImGui::Text("Registry Nodes:  %d", registry_nodes);
+        ImGui::Text("Active Set:      %d", active_set);
+        ImGui::Text("Transitioning:   %d", transitioning);
+        ImGui::Text("Evicted:         %d", evicted);
+        ImGui::Text("Reconcile Dest:  %d", reconcile_destroyed);
+      }
     }
     ImGui::PopItemWidth();
     ImGui::End();

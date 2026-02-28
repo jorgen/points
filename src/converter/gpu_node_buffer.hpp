@@ -37,6 +37,12 @@ struct frame_timings_t
   double draw_emission_ms = 0;
   double eviction_ms = 0;
   double total_ms = 0;
+  int registry_node_count = 0;
+  int active_set_size = 0;
+  int nodes_drawn = 0;
+  int transitioning_count = 0;
+  int nodes_evicted = 0;
+  int nodes_reconcile_destroyed = 0;
 };
 
 struct tree_walker_with_buffer_t

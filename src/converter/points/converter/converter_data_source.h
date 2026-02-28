@@ -54,7 +54,11 @@ POINTS_CONVERTER_EXPORT uint64_t converter_data_source_get_points_rendered(struc
 POINTS_CONVERTER_EXPORT void converter_data_source_get_frame_timings(struct converter_data_source_t *converter_data_source,
   double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms,
   double *refine_strategy_ms, double *frontier_scheduling_ms,
-  double *draw_emission_ms, double *eviction_ms, double *total_ms);
+  double *draw_emission_ms, double *eviction_ms, double *total_ms,
+  int *registry_node_count, int *active_set_size, int *nodes_drawn,
+  int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed);
+
+POINTS_CONVERTER_EXPORT void converter_data_source_set_debug_transitions(struct converter_data_source_t *cds, bool enabled);
 
 POINTS_CONVERTER_EXPORT void converter_data_source_set_show_bounding_boxes(struct converter_data_source_t *cds, bool enabled);
 POINTS_CONVERTER_EXPORT struct render::data_source_t converter_data_source_get_bbox_data_source(struct converter_data_source_t *cds);

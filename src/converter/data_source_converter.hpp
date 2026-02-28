@@ -84,5 +84,7 @@ struct converter_data_source_t
 
   std::unique_ptr<node_bbox_data_source_t> bbox_data_source;
   bool show_bounding_boxes = false;
+  bool debug_transitions = false;
+  frame_node_registry_t::node_set_t previous_active_set;
 };
 } // namespace points::converter

@@ -99,6 +99,8 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   // Handle attribute change
   if (new_attribute)
   {
+    if (debug_transitions)
+      fmt::print(stderr, "[transition-debug] === ATTRIBUTE CHANGE to '{}' ===\n", current_attribute_name);
     buffer_manager.handle_attribute_change(render_buffers, callbacks, node_loader, gpu_memory_used);
 
     current_attr_min = 0.0;
@@ -133,7 +135,10 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   auto t_after_tree_walk = clock::now();
 
   // Phase 2: Buffer reconciliation
-  buffer_manager.reconcile(render_buffers, walker_subsets, callbacks, node_loader, gpu_memory_used);
+  int reconcile_destroyed = 0;
+  buffer_manager.reconcile(render_buffers, walker_subsets, callbacks, node_loader, gpu_memory_used,
+                           debug_transitions, &reconcile_destroyed);
+  frame_timings.nodes_reconcile_destroyed = reconcile_destroyed;
   auto t_after_reconciliation = clock::now();
 
   // Phase 3: GPU upload
@@ -146,14 +151,79 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
 
   // Phase 4: Update registry from walker
   node_registry.update_from_walker(walker_subsets, walker.m_new_nodes.parent_child_edges, render_buffers);
+  if (debug_transitions)
+  {
+    fmt::print(stderr, "[transition-debug] registry: {} nodes, {} roots\n",
+               node_registry.nodes().size(), node_registry.roots().size());
+    frame_timings.registry_node_count = int(node_registry.nodes().size());
+  }
 
   // Phase 5: Node selection (refine strategy + point budget)
+  // Check if any node is transitioning to protect all from budget-based collapse
+  bool any_transitioning = false;
+  for (auto &[node_id, node] : node_registry.nodes())
+  {
+    for (int idx : node.buffer_indices)
+    {
+      auto &rb = *render_buffers[idx];
+      if (rb.awaiting_new_color || rb.old_color_valid)
+      {
+        any_transitioning = true;
+        break;
+      }
+    }
+    if (any_transitioning)
+      break;
+  }
+
   selection_params_t sel_params;
   sel_params.camera_position = camera_position;
   sel_params.memory_budget = mem_budget;
   sel_params.point_budget = pt_budget;
-  auto selection = node_selector.select(node_registry, sel_params);
+  auto selection = node_selector.select(node_registry, sel_params, debug_transitions, any_transitioning);
   auto t_after_refine = clock::now();
+
+  if (debug_transitions)
+  {
+    int transitioning = 0;
+    for (auto &node_id : selection.active_set)
+    {
+      auto *node = node_registry.get_node(node_id);
+      if (!node)
+        continue;
+      for (int idx : node->buffer_indices)
+      {
+        auto &rb = *render_buffers[idx];
+        if (rb.awaiting_new_color || rb.old_color_valid)
+        {
+          transitioning++;
+          break;
+        }
+      }
+    }
+    fmt::print(stderr, "[transition-debug] selection: active={} memory={}/{} points={}/{} transitioning={} reconcile_destroyed={}\n",
+               selection.active_set.size(), selection.total_memory, mem_budget,
+               selection.total_points, pt_budget, transitioning, reconcile_destroyed);
+    frame_timings.active_set_size = int(selection.active_set.size());
+    frame_timings.transitioning_count = transitioning;
+
+    if (!previous_active_set.empty())
+    {
+      for (auto &prev_id : previous_active_set)
+      {
+        if (!selection.active_set.count(prev_id))
+        {
+          auto *node = node_registry.get_node(prev_id);
+          if (node)
+            fmt::print(stderr, "[transition-debug] DISAPPEARED: node lod={} rendered={} mem={}\n",
+                       node->lod, node->all_rendered, node->gpu_memory_size);
+          else
+            fmt::print(stderr, "[transition-debug] DISAPPEARED: node (not in registry)\n");
+        }
+      }
+    }
+    previous_active_set = selection.active_set;
+  }
 
   // Collect bounding boxes for active nodes
   if (show_bounding_boxes)
@@ -168,7 +238,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
       loose_boxes.push_back({node->aabb.min, node->aabb.max});
       tight_boxes.push_back({node->tight_aabb.min, node->tight_aabb.max});
     }
-    bbox_data_source->update_boxes(loose_boxes, tight_boxes);
+    bbox_data_source->update_boxes(loose_boxes, tight_boxes, to_glm(tree_config.offset));
   }
 
   // Phase 6: Frontier I/O scheduling
@@ -176,14 +246,18 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   auto t_after_frontier = clock::now();
 
   // Phase 7: Draw emission
-  auto draw_result = draw_emitter.emit(render_buffers, node_registry, selection, callbacks, camera, tree_config, to_render);
+  auto draw_result = draw_emitter.emit(render_buffers, node_registry, selection, callbacks, camera, tree_config, to_render, debug_transitions);
   points_rendered_last_frame = draw_result.points_rendered;
+  frame_timings.nodes_drawn = draw_result.nodes_drawn;
   gpu_memory_used -= draw_result.freed_gpu_memory;
   auto t_after_draw = clock::now();
 
   // Phase 8: Eviction
+  int evicted_count = 0;
   buffer_manager.evict(render_buffers, node_registry, selection, camera_position,
-                       gpu_memory_used, upload_limit, callbacks, node_loader);
+                       gpu_memory_used, upload_limit, callbacks, node_loader,
+                       debug_transitions, &evicted_count);
+  frame_timings.nodes_evicted = evicted_count;
 
   auto t_end = clock::now();
 
@@ -270,7 +344,9 @@ uint64_t converter_data_source_get_points_rendered(struct converter_data_source_
 }
 
 void converter_data_source_get_frame_timings(struct converter_data_source_t *cds, double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms, double *refine_strategy_ms, double *frontier_scheduling_ms,
-                                             double *draw_emission_ms, double *eviction_ms, double *total_ms)
+                                             double *draw_emission_ms, double *eviction_ms, double *total_ms,
+                                             int *registry_node_count, int *active_set_size, int *nodes_drawn,
+                                             int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed)
 {
   auto &t = cds->frame_timings;
   *tree_walk_ms = t.tree_walk_ms;
@@ -281,6 +357,17 @@ void converter_data_source_get_frame_timings(struct converter_data_source_t *cds
   *draw_emission_ms = t.draw_emission_ms;
   *eviction_ms = t.eviction_ms;
   *total_ms = t.total_ms;
+  if (registry_node_count) *registry_node_count = t.registry_node_count;
+  if (active_set_size) *active_set_size = t.active_set_size;
+  if (nodes_drawn) *nodes_drawn = t.nodes_drawn;
+  if (transitioning_count) *transitioning_count = t.transitioning_count;
+  if (nodes_evicted) *nodes_evicted = t.nodes_evicted;
+  if (nodes_reconcile_destroyed) *nodes_reconcile_destroyed = t.nodes_reconcile_destroyed;
+}
+
+void converter_data_source_set_debug_transitions(struct converter_data_source_t *cds, bool enabled)
+{
+  cds->debug_transitions = enabled;
 }
 
 void converter_data_source_set_show_bounding_boxes(struct converter_data_source_t *cds, bool enabled)
