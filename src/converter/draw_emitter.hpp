@@ -32,6 +32,7 @@ struct draw_result_t
   uint64_t points_rendered = 0;
   size_t freed_gpu_memory = 0;
   bool any_animating = false;
+  int nodes_drawn = 0;
 };
 
 class draw_emitter_t
@@ -43,7 +44,8 @@ public:
                      render::callback_manager_t &callbacks,
                      const render::frame_camera_cpp_t &camera,
                      const tree_config_t &tree_config,
-                     render::to_render_t *to_render);
+                     render::to_render_t *to_render,
+                     bool debug = false);
 
 private:
   struct active_node_info_t
