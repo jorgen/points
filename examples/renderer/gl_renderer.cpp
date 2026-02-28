@@ -364,7 +364,6 @@ void gl_dyn_points_handler::draw_crossfade(points::render::draw_group_t &group, 
   glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glDepthMask(GL_FALSE);
 
   glBindVertexArray(crossfade_handle.vao);
   glUseProgram(crossfade_handle.program);
@@ -412,7 +411,6 @@ void gl_dyn_points_handler::draw_crossfade(points::render::draw_group_t &group, 
   glDrawArrays(GL_POINTS, 0, group.draw_size);
   glBindVertexArray(0);
 
-  glDepthMask(GL_TRUE);
   glDisable(GL_BLEND);
 }
 
