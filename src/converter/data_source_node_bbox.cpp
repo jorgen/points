@@ -24,22 +24,23 @@ namespace points::converter
 {
 
 static void add_box_edges(std::vector<glm::vec3> &vertices, std::vector<glm::u8vec3> &colors,
-                          const node_bbox_t &box, const glm::u8vec3 &color)
+                          const node_bbox_t &box, const glm::u8vec3 &color,
+                          const glm::dvec3 &offset)
 {
-  // 8 corners of the AABB
+  // 8 corners of the AABB, shifted by offset so float precision is sufficient
   // 0: min.x, min.y, min.z    4: min.x, max.y, min.z
   // 1: max.x, min.y, min.z    5: max.x, max.y, min.z
   // 2: min.x, min.y, max.z    6: min.x, max.y, max.z
   // 3: max.x, min.y, max.z    7: max.x, max.y, max.z
   glm::vec3 c[8];
-  c[0] = glm::vec3(box.min);
-  c[1] = glm::vec3(box.max.x, box.min.y, box.min.z);
-  c[2] = glm::vec3(box.min.x, box.min.y, box.max.z);
-  c[3] = glm::vec3(box.max.x, box.min.y, box.max.z);
-  c[4] = glm::vec3(box.min.x, box.max.y, box.min.z);
-  c[5] = glm::vec3(box.max.x, box.max.y, box.min.z);
-  c[6] = glm::vec3(box.min.x, box.max.y, box.max.z);
-  c[7] = glm::vec3(box.max);
+  c[0] = glm::vec3(box.min - offset);
+  c[1] = glm::vec3(glm::dvec3(box.max.x, box.min.y, box.min.z) - offset);
+  c[2] = glm::vec3(glm::dvec3(box.min.x, box.min.y, box.max.z) - offset);
+  c[3] = glm::vec3(glm::dvec3(box.max.x, box.min.y, box.max.z) - offset);
+  c[4] = glm::vec3(glm::dvec3(box.min.x, box.max.y, box.min.z) - offset);
+  c[5] = glm::vec3(glm::dvec3(box.max.x, box.max.y, box.min.z) - offset);
+  c[6] = glm::vec3(glm::dvec3(box.min.x, box.max.y, box.max.z) - offset);
+  c[7] = glm::vec3(box.max - offset);
 
   // 12 edges = 24 vertices
   auto edge = [&](int a, int b) {
@@ -86,8 +87,10 @@ node_bbox_data_source_t::~node_bbox_data_source_t()
 }
 
 void node_bbox_data_source_t::update_boxes(const std::vector<node_bbox_t> &loose_boxes,
-                                            const std::vector<node_bbox_t> &tight_boxes)
+                                            const std::vector<node_bbox_t> &tight_boxes,
+                                            const glm::dvec3 &offset)
 {
+  world_offset = offset;
   vertices.clear();
   colors.clear();
 
@@ -95,35 +98,58 @@ void node_bbox_data_source_t::update_boxes(const std::vector<node_bbox_t> &loose
   glm::u8vec3 tight_color(0, 255, 255);  // cyan
 
   for (auto &box : loose_boxes)
-    add_box_edges(vertices, colors, box, loose_color);
+    add_box_edges(vertices, colors, box, loose_color, world_offset);
   for (auto &box : tight_boxes)
-    add_box_edges(vertices, colors, box, tight_color);
+    add_box_edges(vertices, colors, box, tight_color, world_offset);
 
   line_count = int(vertices.size()) / 2;
 
   if (vertices.empty())
     return;
 
+  int vertex_data_size = int(vertices.size() * sizeof(vertices[0]));
+  int color_data_size = int(colors.size() * sizeof(colors[0]));
+
+  constexpr int initial_box_count = 200; // 100 nodes × 2 (loose + tight)
+  constexpr int vertices_per_box = 24;
+  constexpr int initial_vertex_count = initial_box_count * vertices_per_box;
+
   if (!buffers_created)
   {
+    int initial_vertex_capacity = std::max(vertex_data_size,
+        int(initial_vertex_count * sizeof(vertices[0])));
+    int initial_color_capacity = std::max(color_data_size,
+        int(initial_vertex_count * sizeof(colors[0])));
+
     callbacks.do_create_buffer(vertex_buffer, render::buffer_type_vertex);
     callbacks.do_initialize_buffer(vertex_buffer, type_r32, components_3,
-                                   int(vertices.size() * sizeof(vertices[0])), vertices.data());
+                                   initial_vertex_capacity, nullptr);
+    callbacks.do_modify_buffer(vertex_buffer, 0, vertex_data_size, vertices.data());
+    vertex_buffer_capacity = initial_vertex_capacity;
+
     callbacks.do_create_buffer(color_buffer, render::buffer_type_vertex);
     callbacks.do_initialize_buffer(color_buffer, type_u8, components_3,
-                                   int(colors.size() * sizeof(colors[0])), colors.data());
+                                   initial_color_capacity, nullptr);
+    callbacks.do_modify_buffer(color_buffer, 0, color_data_size, colors.data());
+    color_buffer_capacity = initial_color_capacity;
+
     buffers_created = true;
+  }
+  else if (vertex_data_size <= vertex_buffer_capacity && color_data_size <= color_buffer_capacity)
+  {
+    // Data fits: update in-place (glBufferSubData)
+    callbacks.do_modify_buffer(vertex_buffer, 0, vertex_data_size, vertices.data());
+    callbacks.do_modify_buffer(color_buffer, 0, color_data_size, colors.data());
   }
   else
   {
-    callbacks.do_destroy_buffer(vertex_buffer);
-    callbacks.do_create_buffer(vertex_buffer, render::buffer_type_vertex);
+    // Data grew: re-initialize in-place (glBufferData orphans old storage)
     callbacks.do_initialize_buffer(vertex_buffer, type_r32, components_3,
-                                   int(vertices.size() * sizeof(vertices[0])), vertices.data());
-    callbacks.do_destroy_buffer(color_buffer);
-    callbacks.do_create_buffer(color_buffer, render::buffer_type_vertex);
+                                   vertex_data_size, vertices.data());
+    vertex_buffer_capacity = vertex_data_size;
     callbacks.do_initialize_buffer(color_buffer, type_u8, components_3,
-                                   int(colors.size() * sizeof(colors[0])), colors.data());
+                                   color_data_size, colors.data());
+    color_buffer_capacity = color_data_size;
   }
 }
 
@@ -132,7 +158,7 @@ void node_bbox_data_source_t::add_to_frame(const render::frame_camera_cpp_t &cam
   if (!enabled || line_count <= 0)
     return;
 
-  camera_matrix = glm::mat4(camera.projection * camera.view);
+  camera_matrix = glm::mat4(camera.projection * glm::translate(camera.view, world_offset));
   callbacks.do_modify_buffer(camera_buffer, 0, sizeof(camera_matrix), &camera_matrix);
 
   render_list[0].buffer_mapping = render::node_bbox_bm_camera;
