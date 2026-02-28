@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cstring>
 #include <unordered_set>
+#include <fmt/printf.h>
 
 namespace points::converter
 {
@@ -135,8 +136,11 @@ void gpu_buffer_manager_t::reconcile(std::vector<std::unique_ptr<gpu_node_buffer
                                      const std::vector<tree_walker_data_t> &walker_subsets,
                                      render::callback_manager_t &callbacks,
                                      std::unique_ptr<render::node_data_loader_t> &node_loader,
-                                     size_t &gpu_memory_used)
+                                     size_t &gpu_memory_used,
+                                     bool debug,
+                                     int *reconcile_destroyed_count)
 {
+  int destroyed_count = 0;
   std::vector<std::unique_ptr<gpu_node_buffer_t>> new_render_buffers;
   new_render_buffers.reserve(walker_subsets.size());
 
@@ -147,6 +151,11 @@ void gpu_buffer_manager_t::reconcile(std::vector<std::unique_ptr<gpu_node_buffer
     auto &node = walker_subsets[i];
     while (render_buffers_it != render_buffers.end() && less_than(render_buffers_it->get()->node_info, node))
     {
+      if (debug)
+        fmt::print(stderr, "[transition-debug] reconcile: destroyed node lod={} input={}.{} (not in walker)\n",
+                   render_buffers_it->get()->node_info.lod, render_buffers_it->get()->node_info.input_id.data,
+                   render_buffers_it->get()->node_info.input_id.sub);
+      destroyed_count++;
       destroy_gpu_buffer(*render_buffers_it->get(), callbacks, node_loader, gpu_memory_used);
       render_buffers_it++;
     }
@@ -169,6 +178,11 @@ void gpu_buffer_manager_t::reconcile(std::vector<std::unique_ptr<gpu_node_buffer
   }
   while (render_buffers_it != render_buffers.end())
   {
+    if (debug)
+      fmt::print(stderr, "[transition-debug] reconcile: destroyed node lod={} input={}.{} (trailing, not in walker)\n",
+                 render_buffers_it->get()->node_info.lod, render_buffers_it->get()->node_info.input_id.data,
+                 render_buffers_it->get()->node_info.input_id.sub);
+    destroyed_count++;
     destroy_gpu_buffer(*render_buffers_it->get(), callbacks, node_loader, gpu_memory_used);
     render_buffers_it++;
   }
@@ -179,6 +193,8 @@ void gpu_buffer_manager_t::reconcile(std::vector<std::unique_ptr<gpu_node_buffer
     new_buffer->node_info = node;
   }
 
+  if (reconcile_destroyed_count)
+    *reconcile_destroyed_count = destroyed_count;
   render_buffers = std::move(new_render_buffers);
 }
 
@@ -403,10 +419,17 @@ void gpu_buffer_manager_t::evict(std::vector<std::unique_ptr<gpu_node_buffer_t>>
                                   size_t &gpu_memory_used,
                                   size_t target_memory,
                                   render::callback_manager_t &callbacks,
-                                  std::unique_ptr<render::node_data_loader_t> &node_loader)
+                                  std::unique_ptr<render::node_data_loader_t> &node_loader,
+                                  bool debug,
+                                  int *evicted_count_out)
 {
+  int local_evicted_count = 0;
   if (gpu_memory_used <= target_memory)
+  {
+    if (evicted_count_out)
+      *evicted_count_out = 0;
     return;
+  }
 
   // Build non-evictable set: active nodes + ancestors
   m_non_evictable.clear();
@@ -448,20 +471,27 @@ void gpu_buffer_manager_t::evict(std::vector<std::unique_ptr<gpu_node_buffer_t>>
     auto *node = registry.get_node(ev.node_id);
     if (!node)
       continue;
-    bool has_awaiting = false;
+    bool is_transitioning = false;
     for (int idx : node->buffer_indices)
     {
-      if (render_buffers[idx]->awaiting_new_color)
+      auto &rb = *render_buffers[idx];
+      if (rb.awaiting_new_color || rb.old_color_valid)
       {
-        has_awaiting = true;
+        is_transitioning = true;
         break;
       }
     }
-    if (has_awaiting)
+    if (is_transitioning)
       continue;
+    if (debug)
+      fmt::print(stderr, "[transition-debug] evict: node lod={} dist={:.1f} (gpu_mem_used={} target={})\n",
+                 node->lod, ev.distance, gpu_memory_used, target_memory);
+    local_evicted_count++;
     for (int idx : node->buffer_indices)
       destroy_gpu_buffer(*render_buffers[idx], callbacks, node_loader, gpu_memory_used);
   }
+  if (evicted_count_out)
+    *evicted_count_out = local_evicted_count;
 }
 
 void gpu_buffer_manager_t::handle_attribute_change(std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers,

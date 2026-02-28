@@ -41,7 +41,8 @@ struct selection_result_t
 class node_selector_t
 {
 public:
-  selection_result_t select(const frame_node_registry_t &registry, const selection_params_t &params) const;
+  selection_result_t select(const frame_node_registry_t &registry, const selection_params_t &params, bool debug = false,
+                            bool any_transitioning = false) const;
 };
 
 } // namespace points::converter

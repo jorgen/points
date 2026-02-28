@@ -17,11 +17,13 @@
 ************************************************************************/
 #include "node_selector.hpp"
 #include <algorithm>
+#include <fmt/printf.h>
 
 namespace points::converter
 {
 
-selection_result_t node_selector_t::select(const frame_node_registry_t &registry, const selection_params_t &params) const
+selection_result_t node_selector_t::select(const frame_node_registry_t &registry, const selection_params_t &params, bool debug,
+                                            bool any_transitioning) const
 {
   selection_result_t result;
 
@@ -118,10 +120,23 @@ selection_result_t node_selector_t::select(const frame_node_registry_t &registry
         uint64_t parent_points = parent_node->total_point_count;
         size_t new_total_memory = result.total_memory - parent_memory + all_children_memory;
         uint64_t new_total_points = result.total_points - parent_points + all_children_points;
-        if (new_total_memory > params.memory_budget)
+        if (new_total_memory > params.memory_budget && !any_transitioning)
+        {
+          if (debug)
+            fmt::print(stderr, "[transition-debug] selector: rejected clean swap of node lod={} "
+                       "(memory: {} - {} + {} = {} > budget {})\n",
+                       parent_node->lod, result.total_memory, parent_memory, all_children_memory,
+                       new_total_memory, params.memory_budget);
           continue;
+        }
         if (new_total_points > params.point_budget)
+        {
+          if (debug)
+            fmt::print(stderr, "[transition-debug] selector: rejected clean swap of node lod={} "
+                       "(points: {} > budget {})\n",
+                       parent_node->lod, new_total_points, params.point_budget);
           continue;
+        }
         to_remove.push_back(candidate.node_id);
         for (auto &child_id : rendered_children)
           to_add.push_back(child_id);
@@ -150,10 +165,22 @@ selection_result_t node_selector_t::select(const frame_node_registry_t &registry
         }
         if (new_children.empty())
           continue;
-        if (result.total_memory + new_children_memory > params.memory_budget)
+        if (result.total_memory + new_children_memory > params.memory_budget && !any_transitioning)
+        {
+          if (debug)
+            fmt::print(stderr, "[transition-debug] selector: rejected partial expansion of node lod={} "
+                       "(memory: {} + {} > budget {})\n",
+                       parent_node->lod, result.total_memory, new_children_memory, params.memory_budget);
           continue;
+        }
         if (result.total_points + new_children_points > params.point_budget)
+        {
+          if (debug)
+            fmt::print(stderr, "[transition-debug] selector: rejected partial expansion of node lod={} "
+                       "(points: {} + {} > budget {})\n",
+                       parent_node->lod, result.total_points, new_children_points, params.point_budget);
           continue;
+        }
         for (auto &child_id : new_children)
           to_add.push_back(child_id);
         result.total_memory += new_children_memory;

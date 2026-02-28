@@ -36,7 +36,9 @@ public:
                  const std::vector<tree_walker_data_t> &walker_subsets,
                  render::callback_manager_t &callbacks,
                  std::unique_ptr<render::node_data_loader_t> &node_loader,
-                 size_t &gpu_memory_used);
+                 size_t &gpu_memory_used,
+                 bool debug = false,
+                 int *reconcile_destroyed_count = nullptr);
 
   int upload_ready(std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers,
                    render::callback_manager_t &callbacks,
@@ -62,7 +64,9 @@ public:
              size_t &gpu_memory_used,
              size_t target_memory,
              render::callback_manager_t &callbacks,
-             std::unique_ptr<render::node_data_loader_t> &node_loader);
+             std::unique_ptr<render::node_data_loader_t> &node_loader,
+             bool debug = false,
+             int *evicted_count = nullptr);
 
   void handle_attribute_change(std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers,
                                render::callback_manager_t &callbacks,
