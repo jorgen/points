@@ -91,7 +91,10 @@ registry_diff_t frame_node_registry_t::update_from_walker(const std::vector<tree
       node.all_rendered = false;
     if (!rb.rendered || (rb.node_info.frustum_visible && rb.fade_frame < gpu_node_buffer_t::FADE_FRAMES))
       node.all_fade_complete = false;
-    node.gpu_memory_size += rb.gpu_memory_size;
+    size_t budget_memory = rb.gpu_memory_size;
+    if (rb.old_color_valid && !rb.awaiting_new_color)
+      budget_memory -= rb.old_color_memory;
+    node.gpu_memory_size += budget_memory;
   }
 
   // Build children from edges (use m_nodes.find directly, no separate set)
