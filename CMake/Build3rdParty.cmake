@@ -31,14 +31,11 @@ macro(Build3rdParty)
         file(READ "${laszip_SOURCE_DIR}/cmake/macros.cmake" _laszip_macros)
         string(REPLACE "CXX_STANDARD 11" "CXX_STANDARD 17" _laszip_macros "${_laszip_macros}")
         file(WRITE "${laszip_SOURCE_DIR}/cmake/macros.cmake" "${_laszip_macros}")
-        # laszip 3.5.0 doesn't define LASZIP_DYN_LINK or LASZIP_SOURCE when
-        # building the API DLL, so LASZIP_API expands to nothing and no symbols
-        # are exported.  Add the required compile definitions.
-        file(APPEND "${laszip_SOURCE_DIR}/dll/CMakeLists.txt"
-                "\ntarget_compile_definitions(\${LASZIP_API_LIB_NAME} PRIVATE LASZIP_DYN_LINK LASZIP_SOURCE)\n")
         file(WRITE "${_laszip_patch_stamp}" "")
     endif ()
+    set(LASZIP_BUILD_STATIC ON CACHE BOOL "" FORCE)
     add_subdirectory(${laszip_SOURCE_DIR} ${CMAKE_BINARY_DIR}/laszip_build SYSTEM)
+    unset(LASZIP_BUILD_STATIC CACHE)
     target_include_directories(laszip_api PUBLIC
         ${laszip_SOURCE_DIR}/dll
         ${laszip_SOURCE_DIR}/include/laszip
