@@ -25,6 +25,58 @@
 
 namespace points::converter
 {
+
+// Awaitable wrapper for callback-based storage_handler operations.
+// The callback is called on the storage handler's event loop, and posts
+// the result back to the caller's event loop to resume the coroutine.
+template <typename Result>
+struct callback_awaitable_t
+{
+  struct state_t
+  {
+    Result result;
+    std::coroutine_handle<> continuation;
+    vio::event_loop_t &caller_loop;
+  };
+
+  std::shared_ptr<state_t> _state;
+
+  explicit callback_awaitable_t(vio::event_loop_t &caller_loop)
+    : _state(std::make_shared<state_t>(Result{}, std::coroutine_handle<>{}, caller_loop))
+  {
+  }
+
+  bool await_ready() const noexcept { return false; }
+
+  void await_suspend(std::coroutine_handle<> continuation) noexcept
+  {
+    _state->continuation = continuation;
+  }
+
+  Result await_resume() noexcept
+  {
+    return std::move(_state->result);
+  }
+};
+
+struct write_trees_result_t
+{
+  std::vector<tree_id_t> tree_ids;
+  std::vector<storage_location_t> locations;
+  error_t error;
+};
+
+struct write_tree_registry_result_t
+{
+  storage_location_t location;
+  error_t error;
+};
+
+struct write_blob_result_t
+{
+  error_t error;
+};
+
 tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, vio::event_pipe_t<input_data_id_t> &done_with_input)
   : _thread_pool(thread_pool)
   , _event_loop_thread()
@@ -39,7 +91,6 @@ tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_
   , _tree_lod_generator(_event_loop, _thread_pool, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
   , add_points(_event_loop, bind(&tree_handler_t::handle_add_points))
   , _serialize_trees(_event_loop, bind(&tree_handler_t::handle_serialize_trees))
-  , _serialize_trees_done(_event_loop, bind(&tree_handler_t::handle_trees_serialized))
   , _deserialize_tree(_event_loop, bind(&tree_handler_t::handle_deserialize_tree))
   , _done_with_input(done_with_input)
   , _request_aabb(_event_loop, bind(&tree_handler_t::handle_request_aabb))
@@ -138,15 +189,17 @@ void tree_handler_t::handle_request_trees_batch(std::vector<tree_id_t> &&tree_id
       continue;
     _tree_id_requested[tree_id.data] = 1;
     auto location = _tree_registry.locations[tree_id.data];
-    _file_cache.read(location, [this, tree_id](const storage_handler_request_t &request) {
-      if (request.error.code != 0)
+    auto req = _file_cache.read(location);
+    _thread_pool.enqueue([this, req, tree_id]() {
+      req->wait_for_read();
+      if (req->error.code != 0)
       {
         fmt::print("Error reading tree\n");
         return;
       }
       serialized_tree_t data;
-      data.size = int(request.buffer_info.size);
-      data.data = request.buffer;
+      data.size = int(req->buffer_info.size);
+      data.data = req->buffer;
       this->_deserialize_tree.post_event(tree_id_t(tree_id.data), std::move(data));
     });
   }
@@ -154,6 +207,16 @@ void tree_handler_t::handle_request_trees_batch(std::vector<tree_id_t> &&tree_id
 
 void tree_handler_t::handle_serialize_trees()
 {
+  // Launch the serialization chain as a detached coroutine
+  [](tree_handler_t *self) -> vio::detached_task_t
+  {
+    co_await self->do_serialize_trees();
+  }(this);
+}
+
+vio::task_t<void> tree_handler_t::do_serialize_trees()
+{
+  // Step 1: Serialize dirty trees
   std::vector<tree_id_t> tree_ids;
   std::vector<serialized_tree_t> serialized_trees;
   for (auto &tree : _tree_registry.data)
@@ -165,38 +228,69 @@ void tree_handler_t::handle_serialize_trees()
       if (serialized_trees.back().data == nullptr)
       {
         fmt::print(stderr, "Error serializing tree\n");
-        return;
+        co_return;
       }
       tree->is_dirty = false;
     }
   }
-  _file_cache.write_trees(std::move(tree_ids), std::move(serialized_trees), [this](std::vector<tree_id_t> &&tree_ids, std::vector<storage_location_t> &&new_locations, error_t &&error) {
-    this->_serialize_trees_done.post_event(std::move(tree_ids), std::move(new_locations), std::move(error));
-  });
-}
 
-void tree_handler_t::handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, std::vector<storage_location_t> &&storage, error_t &&error)
-{
-  (void)error;
-  std::vector<storage_location_t> old_locations;
-  for (int i = 0; i < int(tree_ids.size()); i++)
+  // Step 2: Write trees to storage (cross-loop call via callback)
+  callback_awaitable_t<write_trees_result_t> write_trees_awaitable(_event_loop);
   {
-    auto &tree_id = tree_ids[i];
+    auto state = write_trees_awaitable._state;
+    _file_cache.write_trees(std::move(tree_ids), std::move(serialized_trees),
+      [state](std::vector<tree_id_t> &&ids, std::vector<storage_location_t> &&locs, error_t &&err)
+      {
+        state->result.tree_ids = std::move(ids);
+        state->result.locations = std::move(locs);
+        state->result.error = std::move(err);
+        state->caller_loop.run_in_loop([state] { state->continuation.resume(); });
+      });
+  }
+  auto trees_result = co_await write_trees_awaitable;
+
+  // Step 3: Update tree registry with new locations
+  std::vector<storage_location_t> old_locations;
+  for (int i = 0; i < int(trees_result.tree_ids.size()); i++)
+  {
+    auto &tree_id = trees_result.tree_ids[i];
     auto &location = _tree_registry.locations[tree_id.data];
     if (location.offset > 0)
     {
       old_locations.emplace_back(location);
     }
-    location = storage[i];
+    location = trees_result.locations[i];
   }
+
+  // Step 4: Serialize and write tree registry
   auto serialized_registry = tree_registry_serialize(_tree_registry);
-  _file_cache.write_tree_registry(std::move(serialized_registry), [this, old_locations_moved = std::move(old_locations)](storage_location_t tree_registry_location, error_t &&error_arg) mutable {
-    (void)error_arg;
-    this->_file_cache.write_blob_locations_and_update_header(tree_registry_location, std::move(old_locations_moved), [](error_t &&err) {
-      (void)err;
-      fmt::print("Trees serialized\n");
-    });
-  });
+  callback_awaitable_t<write_tree_registry_result_t> write_registry_awaitable(_event_loop);
+  {
+    auto state = write_registry_awaitable._state;
+    _file_cache.write_tree_registry(std::move(serialized_registry),
+      [state](storage_location_t loc, error_t &&err)
+      {
+        state->result.location = loc;
+        state->result.error = std::move(err);
+        state->caller_loop.run_in_loop([state] { state->continuation.resume(); });
+      });
+  }
+  auto registry_result = co_await write_registry_awaitable;
+
+  // Step 5: Write blob locations and update header
+  callback_awaitable_t<write_blob_result_t> write_blob_awaitable(_event_loop);
+  {
+    auto state = write_blob_awaitable._state;
+    _file_cache.write_blob_locations_and_update_header(registry_result.location, std::move(old_locations),
+      [state](error_t &&err)
+      {
+        state->result.error = std::move(err);
+        state->caller_loop.run_in_loop([state] { state->continuation.resume(); });
+      });
+  }
+  auto blob_result = co_await write_blob_awaitable;
+  (void)blob_result;
+  fmt::print("Trees serialized\n");
 }
 
 void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tree_t &&data)

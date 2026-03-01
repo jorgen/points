@@ -43,8 +43,6 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
   , _storage_handler(_url, _thread_pool, _attributes_configs, _storage_index_write_done, _storage_handler_error, error)
   , _tree_handler(_thread_pool, _storage_handler, _attributes_configs, _tree_done_with_input)
   , _files_added(_event_loop, bind(&processor_t::handle_new_files))
-  , _pre_init_info_file_result(_event_loop, bind(&processor_t::handle_pre_init_info_for_files))
-  , _pre_init_file_errors(_event_loop, bind(&processor_t::handle_file_errors_headers))
   , _input_init(_event_loop, bind(&processor_t::handle_input_init_done))
   , _sub_added(_event_loop, bind(&processor_t::handle_sub_added))
   , _sorted_points(_event_loop, bind(&processor_t::handle_sorted_points))
@@ -170,33 +168,89 @@ const attributes_t &processor_t::get_attributes(attributes_id_t id)
 
 void processor_t::handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files)
 {
-  auto tree_config = _tree_handler.tree_config();
+  auto tree_config_val = _tree_handler.tree_config();
+  std::vector<std::pair<input_data_id_t, input_name_ref_t>> file_refs;
+  file_refs.reserve(new_files.size());
   for (auto &new_file : new_files)
   {
     auto input_ref = _input_data_source_registry.register_file(std::move(new_file.first), new_file.second);
-    _pre_init_info_workers.emplace_back(new get_pre_init_info_worker_t(tree_config, input_ref.input_id, input_ref.name, _convert_callbacks, _pre_init_info_file_result, _pre_init_file_errors));
-    _pre_init_info_workers.back()->enqueue(_event_loop, _thread_pool);
+    file_refs.emplace_back(input_ref.input_id, input_ref.name);
   }
-  std::unique_lock<std::mutex> lock(_idle_mutex);
-  _new_file_events_sent--;
+  {
+    std::unique_lock<std::mutex> lock(_idle_mutex);
+    _new_file_events_sent--;
+  }
+
+  // Launch pre-init processing as a detached coroutine using schedule_work
+  [](processor_t *self, std::vector<std::pair<input_data_id_t, input_name_ref_t>> refs, tree_config_t tc) -> vio::detached_task_t
+  {
+    co_await self->do_handle_new_files(std::move(refs), std::move(tc));
+  }(this, std::move(file_refs), std::move(tree_config_val));
 }
 
-void processor_t::handle_pre_init_info_for_files(pre_init_info_file_result_t &&pre_init_for_file)
+struct pre_init_work_result_t
 {
-  assert(std::count_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == pre_init_for_file.id; }) == 1);
-  _pre_init_info_workers.erase(std::find_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == pre_init_for_file.id; }));
-  _input_data_source_registry.register_pre_init_result(_tree_handler.tree_config(), pre_init_for_file.id, pre_init_for_file.found_min, pre_init_for_file.min, pre_init_for_file.approximate_point_count,
-                                                       pre_init_for_file.approximate_point_size_bytes);
-}
+  input_data_id_t input_id;
+  pre_init_info_file_result_t pre_init_result;
+  file_error_t file_error;
+  bool has_error = false;
+};
 
-void processor_t::handle_file_errors_headers(file_error_t &&error)
+vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_data_id_t, input_name_ref_t>> file_refs, tree_config_t tree_config_val)
 {
-  assert(std::count_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == error.input_id; }) == 1);
-  _pre_init_info_workers.erase(std::find_if(_pre_init_info_workers.begin(), _pre_init_info_workers.end(), [&](std::unique_ptr<get_pre_init_info_worker_t> &worker) { return worker->input_id == error.input_id; }));
-  _input_data_source_registry.handle_file_failed(error.input_id);
-  _has_errors = true;
-  if (_runtime_callbacks.error)
-    _runtime_callbacks.error(_runtime_callback_user_ptr, &error.error);
+  std::vector<std::function<std::expected<pre_init_work_result_t, vio::error_t>()>> work_items;
+  work_items.reserve(file_refs.size());
+
+  for (auto &[input_id, file_name] : file_refs)
+  {
+    auto *callbacks = &_convert_callbacks;
+    work_items.push_back([input_id, file_name, callbacks]() -> std::expected<pre_init_work_result_t, vio::error_t>
+    {
+      pre_init_work_result_t result;
+      result.input_id = input_id;
+
+      error_t *local_error = nullptr;
+      auto pre_init_info = callbacks->pre_init(file_name.name, file_name.name_length, &local_error);
+      if (local_error)
+      {
+        std::unique_ptr<error_t> error(local_error);
+        result.has_error = true;
+        result.file_error.input_id = input_id;
+        result.file_error.error = std::move(*error);
+      }
+      else
+      {
+        result.pre_init_result.id = input_id;
+        result.pre_init_result.found_min = pre_init_info.found_aabb_min;
+        memcpy(result.pre_init_result.min, pre_init_info.aabb_min, sizeof(result.pre_init_result.min));
+        result.pre_init_result.approximate_point_count = pre_init_info.approximate_point_count;
+        result.pre_init_result.approximate_point_size_bytes = pre_init_info.approximate_point_size_bytes;
+      }
+      return result;
+    });
+  }
+
+  auto results = co_await vio::schedule_work(_event_loop, _thread_pool, std::move(work_items));
+
+  // Process results on the event loop thread
+  for (auto &result : results)
+  {
+    if (!result.has_value())
+      continue;
+    auto &r = result.value();
+    if (r.has_error)
+    {
+      _input_data_source_registry.handle_file_failed(r.input_id);
+      _has_errors = true;
+      if (_runtime_callbacks.error)
+        _runtime_callbacks.error(_runtime_callback_user_ptr, &r.file_error.error);
+    }
+    else
+    {
+      _input_data_source_registry.register_pre_init_result(_tree_handler.tree_config(), r.pre_init_result.id, r.pre_init_result.found_min, r.pre_init_result.min,
+                                                           r.pre_init_result.approximate_point_count, r.pre_init_result.approximate_point_size_bytes);
+    }
+  }
 }
 
 void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t> &&event)
@@ -214,7 +268,7 @@ void processor_t::handle_sorted_points(std::pair<points_t, error_t> &&event)
   _input_data_source_registry.handle_sorted_points(event.first.header.input_id, event.first.header.morton_min, event.first.header.morton_max);
   _storage_handler.write(
     event.first.header, event.first.attributes_id, std::move(event.first.buffers),
-    [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations, const error_t &) { this->handle_points_written(header, attributes, std::move(locations)); });
+    [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> locations, const error_t &) { this->handle_points_written(header, attributes, std::move(locations)); });
 }
 
 void processor_t::handle_file_errors(file_error_t &&error)

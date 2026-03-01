@@ -27,6 +27,8 @@
 
 #include <vio/event_loop.h>
 #include <vio/event_pipe.h>
+#include <vio/operation/work.h>
+#include <vio/task.h>
 #include <vio/thread_pool.h>
 
 #include "attributes_configs.hpp"
@@ -112,9 +114,6 @@ private:
 
   vio::event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
 
-  vio::event_pipe_t<pre_init_info_file_result_t> _pre_init_info_file_result;
-  vio::event_pipe_t<file_error_t> _pre_init_file_errors;
-  std::vector<std::unique_ptr<get_pre_init_info_worker_t>> _pre_init_info_workers;
 
   vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> _input_init;
   vio::event_pipe_t<input_data_id_t> _sub_added;
@@ -137,8 +136,7 @@ private:
   std::vector<std::string> _cached_attribute_names;
 
   void handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files);
-  void handle_pre_init_info_for_files(pre_init_info_file_result_t &&pre_init_info_for_files);
-  void handle_file_errors_headers(file_error_t &&error);
+  vio::task_t<void> do_handle_new_files(std::vector<std::pair<input_data_id_t, input_name_ref_t>> file_refs, tree_config_t tree_config);
   void handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t> &&event);
   void handle_sub_added(input_data_id_t &&event);
   void handle_sorted_points(std::pair<points_t, error_t> &&event);

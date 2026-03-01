@@ -38,6 +38,7 @@ struct dyn_points_data_handler_t
 
   void start_requests(const std::shared_ptr<dyn_points_data_handler_t> &self, storage_handler_t &storage_handler, const storage_location_t (&locations)[4])
   {
+    (void)self;
     read_request.reserve(4);
     for (int i = 0; i < 4; i++)
     {
@@ -46,56 +47,49 @@ struct dyn_points_data_handler_t
         break;
       }
       target_count++;
-
-      auto set_error = [&self](const error_t &error) {
-        if (error.code != 0)
-        {
-          std::unique_lock<std::mutex> lock(self->mutex);
-          if (self->error.code == 0)
-          {
-            self->error = error;
-          }
-          self->done++;
-
-          return true;
-        }
-        return false;
-      };
-      if (i == 0)
-      {
-        read_request.emplace_back(storage_handler.read(locations[i], [self, set_error](const storage_handler_request_t &request) {
-          if (set_error(request.error))
-          {
-            return;
-          }
-          error_t error;
-          deserialize_points(request.buffer_info, self->header, self->data_info[0], error);
-          if (set_error(error))
-          {
-            return;
-          }
-
-          std::unique_lock<std::mutex> lock(self->mutex);
-          self->done++;
-        }));
-      }
-      else
-      {
-        read_request.emplace_back(storage_handler.read(locations[i], [self, set_error, i](const storage_handler_request_t &request) {
-          if (set_error(request.error))
-          {
-            return;
-          }
-          self->data_info[i] = request.buffer_info;
-          self->done++;
-        }));
-      }
+      read_request.emplace_back(storage_handler.read(locations[i]));
     }
   }
 
   bool is_done()
   {
     std::unique_lock<std::mutex> lock(mutex);
+    if (done == target_count)
+      return true;
+
+    // Check if all reads have completed
+    for (int i = done; i < target_count; i++)
+    {
+      auto &req = read_request[i];
+      std::unique_lock<std::mutex> req_lock(req->_mutex);
+      if (!req->_done)
+        return false;
+    }
+
+    // All reads complete - process results
+    for (int i = 0; i < target_count; i++)
+    {
+      auto &req = read_request[i];
+      if (req->error.code != 0)
+      {
+        if (error.code == 0)
+          error = req->error;
+        done++;
+        continue;
+      }
+      if (i == 0)
+      {
+        error_t deser_error;
+        deserialize_points(req->buffer_info, header, data_info[0], deser_error);
+        if (deser_error.code != 0 && error.code == 0)
+          error = deser_error;
+      }
+      else
+      {
+        data_info[i] = req->buffer_info;
+      }
+      done++;
+    }
     return done == target_count;
   }
 

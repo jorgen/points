@@ -19,6 +19,9 @@
 
 #include <vio/event_loop.h>
 #include <vio/event_pipe.h>
+#include <vio/operation/file.h>
+#include <vio/operation/work.h>
+#include <vio/task.h>
 #include <vio/thread_pool.h>
 
 #include "attributes_configs.hpp"
@@ -31,49 +34,18 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <set>
 
 #include <cstdint>
-#include <deque>
 
 namespace points::converter
 {
-
-struct write_tree_registry_request_t
-{
-  serialized_tree_registry_t serialized_tree_registry;
-  std::function<void(storage_location_t, error_t &&error)> done_callback;
-  storage_location_t location;
-  error_t error;
-};
-
-struct write_trees_request_t
-{
-  int target_count = 0;
-  int done = 0;
-  std::vector<serialized_tree_t> serialized_trees;
-  std::vector<tree_id_t> tree_ids;
-  std::vector<storage_location_t> locations;
-  error_t error;
-  std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)> done_callback;
-};
-
-struct write_requests_t
-{
-  int target_count = 0;
-  int done = 0;
-  storage_header_t header;
-  attributes_id_t attributes_id;
-  std::vector<storage_location_t> locations;
-  error_t error;
-  std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)> done_callback;
-};
 
 class storage_handler_t;
 
 struct compressed_write_data_t
 {
-  write_requests_t *write_req;
   int buffer_index;
   std::shared_ptr<uint8_t[]> data;
   uint32_t size;
@@ -85,32 +57,15 @@ struct compressed_write_data_t
   bool is_lod = false;
 };
 
-struct storage_handler_request_t
+struct read_request_t
 {
-  storage_handler_request_t(storage_handler_t &storage_handler, std::function<void(const storage_handler_request_t &)> done_callback);
-
-  void do_read(uint64_t offset, uint32_t size);
-  void do_write(const std::shared_ptr<uint8_t[]> &data, uint64_t offset, uint32_t size);
-
-  storage_handler_t &storage_handler;
-  std::function<void(const storage_handler_request_t &)> done_callback;
+  void wait_for_read();
 
   std::shared_ptr<uint8_t[]> buffer;
   buffer_t buffer_info;
   error_t error;
 
-  uv_buf_t uv_buffer{};
-  uv_fs_t uv_request{};
-};
-
-struct read_request_t : storage_handler_request_t
-{
-  read_request_t(storage_handler_t &storage_handler, compressor_t *compressor, std::function<void(const storage_handler_request_t &)> done_callback);
-
-  void wait_for_read();
-
-  compressor_t *_compressor;
-  bool _done;
+  bool _done = false;
   std::mutex _mutex;
   std::condition_variable _block_for_read;
 };
@@ -135,17 +90,13 @@ public:
   void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done);
   void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> done);
 
-  std::shared_ptr<read_request_t> read(storage_location_t location, std::function<void(const storage_handler_request_t &)> done_callback);
+  std::shared_ptr<read_request_t> read(storage_location_t location);
 
   void set_compressor(compression_method_t method);
 
   const compression_stats_t &get_compression_stats() const { return _compression_stats; }
 
-  void add_request(std::shared_ptr<storage_handler_request_t> request);
-  void remove_request(storage_handler_request_t *request);
-
 private:
-  void handle_compressed_write(compressed_write_data_t &&event);
   void handle_write_events(
     std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event);
   void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)>> &&event);
@@ -154,17 +105,24 @@ private:
   void handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
                           const storage_location_t &compression_stats, std::function<void(error_t &&error)> &&done);
   void handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location);
-  void remove_write_requests(write_requests_t *write_requests);
-  void remove_write_tree_requests(write_trees_request_t *write_requests);
-  void remove_write_tree_registry_requests(write_tree_registry_request_t *write_requests);
-  std::shared_ptr<storage_handler_request_t> handle_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location, std::function<void(const storage_handler_request_t &)> done_callback);
+
+  vio::task_t<void> do_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location);
+  vio::task_t<void> do_write_events(storage_header_t header, attributes_id_t attributes_id, attribute_buffers_t attribute_buffers,
+                                    std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)> done);
+  vio::task_t<void> do_write_trees(std::vector<tree_id_t> tree_ids, std::vector<serialized_tree_t> serialized_trees,
+                                   std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)> done);
+  vio::task_t<void> do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done);
+  vio::task_t<void> do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(error_t &&error)> done);
+  vio::task_t<void> do_write_index(free_blob_manager_t new_blob_manager, storage_location_t free_blobs, storage_location_t attribute_configs, storage_location_t tree_registry,
+                                   storage_location_t compression_stats, std::function<void(error_t &&error)> done);
+  vio::task_t<void> do_read_request(std::shared_ptr<read_request_t> read_request, storage_location_t location);
 
   std::string _file_name;
   vio::thread_pool_t &_thread_pool;
   std::unique_ptr<compressor_t> _compressor;
   vio::thread_with_event_loop_t _event_loop_thread;
   vio::event_loop_t &_event_loop;
-  uv_file _file_handle;
+  std::optional<vio::auto_close_file_t> _file;
   std::atomic_bool _file_opened;
   std::atomic_bool _file_exists;
   std::atomic_bool _file_opened_in_write_mode;
@@ -173,9 +131,9 @@ private:
   uint32_t _serialized_index_size;
   free_blob_manager_t _blob_manager;
 
-  storage_location_t attributes_location;
-  storage_location_t blobs_location;
-  storage_location_t stats_location;
+  storage_location_t _attributes_location;
+  storage_location_t _blobs_location;
+  storage_location_t _stats_location;
 
   compression_stats_t _compression_stats;
   std::set<uint32_t> _seen_input_files;
@@ -187,18 +145,8 @@ private:
   vio::event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, error_t &&error)>> _write_tree_registry_pipe;
   vio::event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(error_t &&error)>> _write_blob_locations_and_update_header_pipe;
   vio::event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;
-  vio::event_pipe_t<compressed_write_data_t> _compressed_write_pipe;
 
   std::mutex _mutex;
-
-  std::vector<std::unique_ptr<write_requests_t>> _write_requests;
-  std::vector<std::unique_ptr<write_trees_request_t>> _write_trees_requests;
-  std::vector<std::unique_ptr<write_tree_registry_request_t>> _write_tree_registry_requests;
-
-  std::mutex _requests_mutex;
-  std::deque<std::shared_ptr<storage_handler_request_t>> _requests;
-
-  friend struct storage_handler_request_t;
 };
 
 static bool deserialize_points(const buffer_t &data, storage_header_t &header, buffer_t &point_data, error_t &error)
@@ -220,7 +168,7 @@ struct read_only_points_t
 {
   read_only_points_t(storage_handler_t &storage_handler, storage_location_t location)
     : location(location)
-    , read_request(storage_handler.read(location, [](const storage_handler_request_t &) {}))
+    , read_request(storage_handler.read(location))
   {
     read_request->wait_for_read();
     deserialize_points(read_request->buffer_info, header, data, error);
@@ -241,7 +189,7 @@ struct read_attribute_t
   read_attribute_t(storage_handler_t &storage_handler, storage_location_t location)
     : storage_handler(storage_handler)
     , location(location)
-    , read_request(storage_handler.read(location, nullptr))
+    , read_request(storage_handler.read(location))
   {
     read_request->wait_for_read();
     data = read_request->buffer_info;

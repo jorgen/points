@@ -17,8 +17,10 @@
 ************************************************************************/
 #pragma once
 
+#include <vio/awaitable_event_pipe.h>
 #include <vio/event_loop.h>
 #include <vio/event_pipe.h>
+#include <vio/task.h>
 #include <vio/thread_pool.h>
 
 #include "tree.hpp"
@@ -52,7 +54,7 @@ public:
 private:
   void handle_add_points(storage_header_t &&header, attributes_id_t &&attributes_id, std::vector<storage_location_t> &&storage);
   void handle_serialize_trees();
-  void handle_trees_serialized(std::vector<tree_id_t> &&tree_ids, std::vector<storage_location_t> &&storage, error_t &&error);
+  vio::task_t<void> do_serialize_trees();
   void handle_deserialize_tree(tree_id_t &&tree_id, serialized_tree_t &&data);
   void handle_request_aabb(std::function<void(double *, double *)> &&function);
   void handle_request_root();
@@ -94,7 +96,6 @@ private:
 public:
   vio::event_pipe_t<storage_header_t, attributes_id_t, std::vector<storage_location_t>> add_points;
   vio::event_pipe_t<void> _serialize_trees;
-  vio::event_pipe_t<std::vector<tree_id_t>, std::vector<storage_location_t>, error_t> _serialize_trees_done;
   vio::event_pipe_t<tree_id_t, serialized_tree_t> _deserialize_tree;
   vio::event_pipe_t<input_data_id_t> &_done_with_input;
   vio::event_pipe_t<std::function<void(double *, double *)>> _request_aabb;
