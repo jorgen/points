@@ -13,9 +13,15 @@ macro(Build3rdParty)
     string(REPLACE "/GR-" "/GR" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     string(REPLACE "-D_HAS_EXCEPTIONS=0" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
+    set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
     add_subdirectory(${sdl_SOURCE_DIR} SYSTEM)
+    unset(SDL_TEST_LIBRARY CACHE)
 
+    set(VIO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(VIO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     add_subdirectory(${vio_SOURCE_DIR} SYSTEM)
+    unset(VIO_BUILD_TESTS CACHE)
+    unset(VIO_BUILD_EXAMPLES CACHE)
     # vio changed its include directory from PUBLIC to PRIVATE; re-expose it
     target_include_directories(vio PUBLIC ${vio_SOURCE_DIR}/src)
 
