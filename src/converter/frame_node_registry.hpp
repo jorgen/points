@@ -85,7 +85,8 @@ public:
 
   registry_diff_t update_from_walker(const std::vector<tree_walker_data_t> &point_subsets,
                                      const std::vector<std::pair<node_id_t, node_id_t>> &parent_child_edges,
-                                     const std::vector<std::unique_ptr<struct gpu_node_buffer_t>> &render_buffers);
+                                     const std::vector<std::unique_ptr<struct gpu_node_buffer_t>> &render_buffers,
+                                     const node_set_t &fade_out_retain = {});
 
   const registry_node_t *get_node(const node_id_t &id) const;
   registry_node_t *get_node_mut(const node_id_t &id);

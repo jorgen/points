@@ -2092,3 +2092,538 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition", "[dra
     REQUIRE(ctx.destroyed_buffers.size() == destroy_count_after_first_steady);
   }
 }
+
+// ---------------------------------------------------------------------------
+// prepare_fade_outs tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("prepare_fade_outs detects nodes leaving active set", "[draw_emitter][fade_out]")
+{
+  draw_emitter_t emitter;
+
+  auto root = make_nid(1, 0, 0);
+  auto child = make_nid(1, 1, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> frame1_subsets = {
+    make_sub(root, empty, 10),
+    make_sub(child, root, 9),
+  };
+
+  // Frame 1: both nodes in walker — seed prev_active_set via emit
+  {
+    test_callback_context_t ctx;
+    auto callbacks = make_test_callbacks(ctx);
+    frame_node_registry_t registry;
+    tree_config_t tree_config = {};
+
+    std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+    for (auto &s : frame1_subsets)
+    {
+      auto b = std::make_unique<gpu_node_buffer_t>();
+      b->node_info = s;
+      make_rendered_steady(*b, ctx);
+      bufs.push_back(std::move(b));
+    }
+
+    setup_single_node_registry(registry, frame1_subsets, {{root, child}}, bufs);
+
+    selection_result_t selection;
+    selection.active_set.insert(root);
+    selection.active_set.insert(child);
+
+    // First prepare + emit to seed prev_active_set
+    auto &retain1 = emitter.prepare_fade_outs(frame1_subsets);
+    REQUIRE(retain1.empty()); // nothing fading yet
+
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+  }
+
+  // Frame 2: only root in walker — child should start fading out
+  {
+    std::vector<tree_walker_data_t> frame2_subsets = {make_sub(root, empty, 10)};
+    auto &retain2 = emitter.prepare_fade_outs(frame2_subsets);
+    REQUIRE(retain2.size() == 1);
+    REQUIRE(retain2.count(child) == 1);
+  }
+}
+
+TEST_CASE("prepare_fade_outs removes reappearing nodes from fading set", "[draw_emitter][fade_out]")
+{
+  draw_emitter_t emitter;
+
+  auto root = make_nid(1, 0, 0);
+  auto child = make_nid(1, 1, 0);
+  node_id_t empty = {};
+
+  // Frame 1: both nodes active — seed prev_active_set
+  {
+    test_callback_context_t ctx;
+    auto callbacks = make_test_callbacks(ctx);
+    frame_node_registry_t registry;
+    tree_config_t tree_config = {};
+
+    std::vector<tree_walker_data_t> subsets = {
+      make_sub(root, empty, 10),
+      make_sub(child, root, 9),
+    };
+
+    std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+    for (auto &s : subsets)
+    {
+      auto b = std::make_unique<gpu_node_buffer_t>();
+      b->node_info = s;
+      make_rendered_steady(*b, ctx);
+      bufs.push_back(std::move(b));
+    }
+
+    setup_single_node_registry(registry, subsets, {{root, child}}, bufs);
+
+    selection_result_t selection;
+    selection.active_set.insert(root);
+    selection.active_set.insert(child);
+
+    emitter.prepare_fade_outs(subsets);
+    std::vector<draw_group_t> to_render;
+    emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+  }
+
+  // Frame 2: child gone — starts fading
+  {
+    std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+    auto &retain = emitter.prepare_fade_outs(subsets);
+    REQUIRE(retain.count(child) == 1);
+  }
+
+  // Frame 3: child comes back — should be removed from fading set
+  {
+    std::vector<tree_walker_data_t> subsets = {
+      make_sub(root, empty, 10),
+      make_sub(child, root, 9),
+    };
+    auto &retain = emitter.prepare_fade_outs(subsets);
+    REQUIRE(retain.count(child) == 0);
+    REQUIRE(retain.empty());
+  }
+}
+
+TEST_CASE("prepare_fade_outs returns empty on first frame", "[draw_emitter][fade_out]")
+{
+  draw_emitter_t emitter;
+
+  auto root = make_nid(1, 0, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
+  auto &retain = emitter.prepare_fade_outs(subsets);
+  REQUIRE(retain.empty());
+}
+
+// ---------------------------------------------------------------------------
+// reconcile with fade_out_retain tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("reconcile retains fade-out buffers instead of destroying them", "[gpu_buffer_manager][fade_out]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  auto loader = std::make_unique<mock_node_data_loader_t>();
+  std::unique_ptr<node_data_loader_t> loader_ptr = std::move(loader);
+  gpu_buffer_manager_t mgr;
+  size_t gpu_mem = 0;
+
+  auto root = make_nid(1, 0, 0);
+  auto child = make_nid(1, 1, 0);
+  node_id_t empty = {};
+
+  // Build initial render_buffers for both nodes (sorted by node_info)
+  auto root_sub = make_sub(root, empty, 10);
+  auto child_sub = make_sub(child, root, 9);
+  // reconcile expects sorted order: lod ascending then node ascending
+  // root lod=10, child lod=9 → child first (lod 9 < lod 10)
+  std::vector<tree_walker_data_t> initial_subsets = {child_sub, root_sub};
+  std::sort(initial_subsets.begin(), initial_subsets.end(), [](const tree_walker_data_t &a, const tree_walker_data_t &b) {
+    if (a.lod == b.lod) return (a.node <=> b.node) == std::strong_ordering::less;
+    return a.lod < b.lod;
+  });
+
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  for (auto &s : initial_subsets)
+  {
+    auto b = std::make_unique<gpu_node_buffer_t>();
+    b->node_info = s;
+    make_rendered_steady(*b, ctx);
+    gpu_mem += b->gpu_memory_size;
+    bufs.push_back(std::move(b));
+  }
+
+  // Reconcile with only root in walker — child would normally be destroyed
+  std::vector<tree_walker_data_t> walker_subsets = {root_sub};
+  std::sort(walker_subsets.begin(), walker_subsets.end(), [](const tree_walker_data_t &a, const tree_walker_data_t &b) {
+    if (a.lod == b.lod) return (a.node <=> b.node) == std::strong_ordering::less;
+    return a.lod < b.lod;
+  });
+
+  // But child is in the retain set — should survive
+  frame_node_registry_t::node_set_t retain;
+  retain.insert(child);
+
+  size_t mem_before = gpu_mem;
+  int destroyed = 0;
+  mgr.reconcile(bufs, walker_subsets, *callbacks, loader_ptr, gpu_mem, false, &destroyed, retain);
+
+  REQUIRE(destroyed == 0);
+  REQUIRE(gpu_mem == mem_before); // no memory freed
+
+  // Both buffers should still exist
+  REQUIRE(bufs.size() == 2);
+
+  // Retained buffer should have frustum_visible set to false
+  bool found_child = false;
+  for (auto &b : bufs)
+  {
+    if ((b->node_info.node <=> child) == std::strong_ordering::equal)
+    {
+      REQUIRE(b->node_info.frustum_visible == false);
+      REQUIRE(b->rendered == true); // buffers preserved
+      found_child = true;
+    }
+  }
+  REQUIRE(found_child);
+}
+
+TEST_CASE("reconcile destroys non-retained buffers normally", "[gpu_buffer_manager][fade_out]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  auto loader = std::make_unique<mock_node_data_loader_t>();
+  std::unique_ptr<node_data_loader_t> loader_ptr = std::move(loader);
+  gpu_buffer_manager_t mgr;
+  size_t gpu_mem = 0;
+
+  auto root = make_nid(1, 0, 0);
+  auto child = make_nid(1, 1, 0);
+  node_id_t empty = {};
+
+  auto root_sub = make_sub(root, empty, 10);
+  auto child_sub = make_sub(child, root, 9);
+  std::vector<tree_walker_data_t> initial_subsets = {child_sub, root_sub};
+  std::sort(initial_subsets.begin(), initial_subsets.end(), [](const tree_walker_data_t &a, const tree_walker_data_t &b) {
+    if (a.lod == b.lod) return (a.node <=> b.node) == std::strong_ordering::less;
+    return a.lod < b.lod;
+  });
+
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  for (auto &s : initial_subsets)
+  {
+    auto b = std::make_unique<gpu_node_buffer_t>();
+    b->node_info = s;
+    make_rendered_steady(*b, ctx);
+    gpu_mem += b->gpu_memory_size;
+    bufs.push_back(std::move(b));
+  }
+
+  // Reconcile with only root — child NOT in retain set → destroyed
+  std::vector<tree_walker_data_t> walker_subsets = {root_sub};
+  std::sort(walker_subsets.begin(), walker_subsets.end(), [](const tree_walker_data_t &a, const tree_walker_data_t &b) {
+    if (a.lod == b.lod) return (a.node <=> b.node) == std::strong_ordering::less;
+    return a.lod < b.lod;
+  });
+
+  frame_node_registry_t::node_set_t empty_retain;
+  int destroyed = 0;
+  mgr.reconcile(bufs, walker_subsets, *callbacks, loader_ptr, gpu_mem, false, &destroyed, empty_retain);
+
+  REQUIRE(destroyed == 1);
+  REQUIRE(bufs.size() == 1);
+}
+
+// ---------------------------------------------------------------------------
+// update_from_walker with fade_out_retain tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("registry retains fade-out nodes not in walker output", "[frame_node_registry][fade_out]")
+{
+  frame_node_registry_t registry;
+
+  auto root = make_nid(1, 0, 0);
+  auto child = make_nid(1, 1, 0);
+  node_id_t empty = {};
+
+  // Frame 1: both nodes
+  std::vector<tree_walker_data_t> subsets1 = {
+    make_sub(root, empty, 10),
+    make_sub(child, root, 9),
+  };
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs1;
+  for (auto &s : subsets1)
+  {
+    auto b = std::make_unique<gpu_node_buffer_t>();
+    b->node_info = s;
+    bufs1.push_back(std::move(b));
+  }
+  registry.update_from_walker(subsets1, {{root, child}}, bufs1);
+  REQUIRE(registry.get_node(child) != nullptr);
+
+  // Frame 2: only root in walker, but child in retain set
+  std::vector<tree_walker_data_t> subsets2 = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs2;
+  auto b2 = std::make_unique<gpu_node_buffer_t>();
+  b2->node_info = subsets2[0];
+  bufs2.push_back(std::move(b2));
+
+  frame_node_registry_t::node_set_t retain;
+  retain.insert(child);
+
+  auto diff = registry.update_from_walker(subsets2, {}, bufs2, retain);
+
+  // Child should NOT be removed
+  REQUIRE(registry.get_node(child) != nullptr);
+  // Child should not be in the removed list
+  for (auto &r : diff.removed)
+    REQUIRE_FALSE((r <=> child) == std::strong_ordering::equal);
+}
+
+TEST_CASE("registry removes nodes not in walker and not in retain set", "[frame_node_registry][fade_out]")
+{
+  frame_node_registry_t registry;
+
+  auto root = make_nid(1, 0, 0);
+  auto child = make_nid(1, 1, 0);
+  node_id_t empty = {};
+
+  std::vector<tree_walker_data_t> subsets1 = {
+    make_sub(root, empty, 10),
+    make_sub(child, root, 9),
+  };
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs1;
+  for (auto &s : subsets1)
+  {
+    auto b = std::make_unique<gpu_node_buffer_t>();
+    b->node_info = s;
+    bufs1.push_back(std::move(b));
+  }
+  registry.update_from_walker(subsets1, {{root, child}}, bufs1);
+
+  // Frame 2: only root, empty retain → child should be removed
+  std::vector<tree_walker_data_t> subsets2 = {make_sub(root, empty, 10)};
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs2;
+  auto b2 = std::make_unique<gpu_node_buffer_t>();
+  b2->node_info = subsets2[0];
+  bufs2.push_back(std::move(b2));
+
+  auto diff = registry.update_from_walker(subsets2, {}, bufs2, {});
+
+  REQUIRE(registry.get_node(child) == nullptr);
+  REQUIRE(diff.removed.size() == 1);
+}
+
+// ---------------------------------------------------------------------------
+// evict with fade_out_retain tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("evict does not evict fade-out retained nodes", "[gpu_buffer_manager][fade_out]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  auto loader = std::make_unique<mock_node_data_loader_t>();
+  std::unique_ptr<node_data_loader_t> loader_ptr = std::move(loader);
+  gpu_buffer_manager_t mgr;
+
+  auto root = make_nid(1, 0, 0);
+  auto extra = make_nid(1, 0, 1); // a second root-level node
+  node_id_t empty = {};
+
+  frame_node_registry_t registry;
+  std::vector<tree_walker_data_t> subsets = {
+    make_sub(root, empty, 10),
+    make_sub(extra, empty, 10),
+  };
+
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  size_t gpu_mem = 0;
+  for (auto &s : subsets)
+  {
+    auto b = std::make_unique<gpu_node_buffer_t>();
+    b->node_info = s;
+    make_rendered_steady(*b, ctx);
+    b->gpu_memory_size = 512 * 1024; // 512KB each
+    gpu_mem += b->gpu_memory_size;
+    bufs.push_back(std::move(b));
+  }
+
+  registry.update_from_walker(subsets, {}, bufs);
+
+  // Only root is active — extra is evictable normally
+  selection_result_t selection;
+  selection.active_set.insert(root);
+
+  // But extra is in fade_out_retain → should not be evicted
+  frame_node_registry_t::node_set_t retain;
+  retain.insert(extra);
+
+  glm::dvec3 cam_pos(0, 0, 0);
+  size_t target = 256 * 1024; // force eviction pressure (target < used)
+  int evicted = 0;
+  mgr.evict(bufs, registry, selection, cam_pos, gpu_mem, target, *callbacks, loader_ptr, false, &evicted, retain);
+
+  REQUIRE(evicted == 0); // extra protected by retain set
+}
+
+// ---------------------------------------------------------------------------
+// Full fade-out lifecycle integration test
+// ---------------------------------------------------------------------------
+
+TEST_CASE("full fade-out lifecycle: node leaves walker, fades out, completes", "[draw_emitter][fade_out]")
+{
+  test_callback_context_t ctx;
+  auto callbacks = make_test_callbacks(ctx);
+  draw_emitter_t emitter;
+  tree_config_t tree_config = {};
+
+  auto root = make_nid(1, 0, 0);
+  auto child = make_nid(1, 1, 0);
+  node_id_t empty = {};
+
+  auto root_sub = make_sub(root, empty, 10);
+  auto child_sub = make_sub(child, root, 9);
+
+  auto sort_subsets = [](std::vector<tree_walker_data_t> &v) {
+    std::sort(v.begin(), v.end(), [](const tree_walker_data_t &a, const tree_walker_data_t &b) {
+      if (a.lod == b.lod) return (a.node <=> b.node) == std::strong_ordering::less;
+      return a.lod < b.lod;
+    });
+  };
+
+  auto loader = std::make_unique<mock_node_data_loader_t>();
+  std::unique_ptr<node_data_loader_t> loader_ptr = std::move(loader);
+  gpu_buffer_manager_t mgr;
+  frame_node_registry_t registry;
+  size_t gpu_mem = 0;
+
+  // === Frame 1: both nodes visible ===
+  {
+    std::vector<tree_walker_data_t> walker = {root_sub, child_sub};
+    sort_subsets(walker);
+
+    // Build initial buffers via reconcile
+    std::vector<std::unique_ptr<gpu_node_buffer_t>> empty_bufs;
+    mgr.reconcile(empty_bufs, walker, *callbacks, loader_ptr, gpu_mem);
+    // Manually make them rendered
+    for (auto &b : empty_bufs)
+    {
+      make_rendered_steady(*b, ctx);
+      gpu_mem += b->gpu_memory_size;
+    }
+
+    auto &retain = emitter.prepare_fade_outs(walker);
+    REQUIRE(retain.empty());
+
+    mgr.reconcile(empty_bufs, walker, *callbacks, loader_ptr, gpu_mem, false, nullptr, retain);
+    registry.update_from_walker(walker, {{root, child}}, empty_bufs, retain);
+
+    selection_result_t selection;
+    selection.active_set.insert(root);
+    selection.active_set.insert(child);
+
+    std::vector<draw_group_t> to_render;
+    auto result = emitter.emit(empty_bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
+
+    REQUIRE(to_render.size() == 2); // both nodes drawn steady
+    REQUIRE(result.points_rendered > 0);
+
+    // Store for next frame
+    // We need a persistent bufs vector - create a new scope
+  }
+
+  // For the full lifecycle we need persistent state across frames.
+  // Restart with persistent variables.
+  test_callback_context_t ctx2;
+  auto callbacks2 = make_test_callbacks(ctx2);
+  draw_emitter_t emitter2;
+  frame_node_registry_t registry2;
+  gpu_buffer_manager_t mgr2;
+  auto loader2 = std::make_unique<mock_node_data_loader_t>();
+  std::unique_ptr<node_data_loader_t> loader_ptr2 = std::move(loader2);
+  size_t gpu_mem2 = 0;
+
+  // Frame 1: build both nodes
+  std::vector<tree_walker_data_t> walker1 = {root_sub, child_sub};
+  sort_subsets(walker1);
+
+  std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+  mgr2.reconcile(bufs, walker1, *callbacks2, loader_ptr2, gpu_mem2);
+  for (auto &b : bufs)
+  {
+    make_rendered_steady(*b, ctx2);
+    gpu_mem2 += b->gpu_memory_size;
+  }
+
+  auto &retain1 = emitter2.prepare_fade_outs(walker1);
+  REQUIRE(retain1.empty());
+
+  registry2.update_from_walker(walker1, {{root, child}}, bufs, retain1);
+
+  selection_result_t sel1;
+  sel1.active_set.insert(root);
+  sel1.active_set.insert(child);
+
+  std::vector<draw_group_t> to_render1;
+  emitter2.emit(bufs, registry2, sel1, *callbacks2, make_identity_camera(), tree_config, to_render_ptr(to_render1));
+  REQUIRE(to_render1.size() == 2);
+
+  // Frame 2: child leaves walker → starts fade-out
+  std::vector<tree_walker_data_t> walker2 = {root_sub};
+  sort_subsets(walker2);
+
+  auto &retain2 = emitter2.prepare_fade_outs(walker2);
+  REQUIRE(retain2.size() == 1);
+  REQUIRE(retain2.count(child) == 1);
+
+  // Reconcile with retain — child buffer survives
+  mgr2.reconcile(bufs, walker2, *callbacks2, loader_ptr2, gpu_mem2, false, nullptr, retain2);
+  REQUIRE(bufs.size() == 2); // both buffers still present
+
+  // Registry with retain — child stays in registry
+  registry2.update_from_walker(walker2, {}, bufs, retain2);
+  REQUIRE(registry2.get_node(child) != nullptr);
+
+  // Only root in active set (child left the walker)
+  selection_result_t sel2;
+  sel2.active_set.insert(root);
+
+  // Emit: pass 1 draws root steady, pass 3 draws child fading
+  std::vector<draw_group_t> to_render2;
+  auto result2 = emitter2.emit(bufs, registry2, sel2, *callbacks2, make_identity_camera(), tree_config, to_render_ptr(to_render2));
+  REQUIRE(to_render2.size() == 2); // root + fading child
+  REQUIRE(result2.any_animating == true);
+
+  // Emit FADE_FRAMES-1 more times to complete the fade-out
+  for (int i = 1; i < gpu_node_buffer_t::FADE_FRAMES; i++)
+  {
+    std::vector<tree_walker_data_t> walker_n = {root_sub};
+    sort_subsets(walker_n);
+
+    auto &retain_n = emitter2.prepare_fade_outs(walker_n);
+    // Child should still be in retain until fade completes in emit()
+    mgr2.reconcile(bufs, walker_n, *callbacks2, loader_ptr2, gpu_mem2, false, nullptr, retain_n);
+    registry2.update_from_walker(walker_n, {}, bufs, retain_n);
+
+    selection_result_t sel_n;
+    sel_n.active_set.insert(root);
+
+    std::vector<draw_group_t> to_render_n;
+    emitter2.emit(bufs, registry2, sel_n, *callbacks2, make_identity_camera(), tree_config, to_render_ptr(to_render_n));
+  }
+
+  // After FADE_FRAMES, the fade-out entry is removed from m_fading_out.
+  // Next prepare_fade_outs should return empty retain (child fully faded).
+  {
+    std::vector<tree_walker_data_t> walker_final = {root_sub};
+    sort_subsets(walker_final);
+
+    auto &retain_final = emitter2.prepare_fade_outs(walker_final);
+    REQUIRE(retain_final.empty()); // child fully faded out
+  }
+}

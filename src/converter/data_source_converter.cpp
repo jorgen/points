@@ -134,10 +134,13 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   std::sort(walker_subsets.begin(), walker_subsets.end(), less_than);
   auto t_after_tree_walk = clock::now();
 
+  // Phase 1.5: Prepare fade-out retain set (before reconcile destroys buffers)
+  auto &fade_out_retain = draw_emitter.prepare_fade_outs(walker_subsets);
+
   // Phase 2: Buffer reconciliation
   int reconcile_destroyed = 0;
   buffer_manager.reconcile(render_buffers, walker_subsets, callbacks, node_loader, gpu_memory_used,
-                           debug_transitions, &reconcile_destroyed);
+                           debug_transitions, &reconcile_destroyed, fade_out_retain);
   frame_timings.nodes_reconcile_destroyed = reconcile_destroyed;
   auto t_after_reconciliation = clock::now();
 
@@ -150,7 +153,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   auto t_after_upload = clock::now();
 
   // Phase 4: Update registry from walker
-  node_registry.update_from_walker(walker_subsets, walker.m_new_nodes.parent_child_edges, render_buffers);
+  node_registry.update_from_walker(walker_subsets, walker.m_new_nodes.parent_child_edges, render_buffers, fade_out_retain);
   if (debug_transitions)
   {
     fmt::print(stderr, "[transition-debug] registry: {} nodes, {} roots\n",
@@ -256,7 +259,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   int evicted_count = 0;
   buffer_manager.evict(render_buffers, node_registry, selection, camera_position,
                        gpu_memory_used, upload_limit, callbacks, node_loader,
-                       debug_transitions, &evicted_count);
+                       debug_transitions, &evicted_count, fade_out_retain);
   frame_timings.nodes_evicted = evicted_count;
 
   auto t_end = clock::now();

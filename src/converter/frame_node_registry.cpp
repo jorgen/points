@@ -23,7 +23,8 @@ namespace points::converter
 
 registry_diff_t frame_node_registry_t::update_from_walker(const std::vector<tree_walker_data_t> &point_subsets,
                                                           const std::vector<std::pair<node_id_t, node_id_t>> &parent_child_edges,
-                                                          const std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers)
+                                                          const std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers,
+                                                          const node_set_t &fade_out_retain)
 {
   registry_diff_t diff;
 
@@ -49,7 +50,7 @@ registry_diff_t frame_node_registry_t::update_from_walker(const std::vector<tree
   // Find and remove nodes no longer in walker output
   for (auto it = m_nodes.begin(); it != m_nodes.end();)
   {
-    if (!new_node_ids.count(it->first))
+    if (!new_node_ids.count(it->first) && !fade_out_retain.count(it->first))
     {
       diff.removed.push_back(it->first);
       it = m_nodes.erase(it);

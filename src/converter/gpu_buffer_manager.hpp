@@ -38,7 +38,8 @@ public:
                  std::unique_ptr<render::node_data_loader_t> &node_loader,
                  size_t &gpu_memory_used,
                  bool debug = false,
-                 int *reconcile_destroyed_count = nullptr);
+                 int *reconcile_destroyed_count = nullptr,
+                 const frame_node_registry_t::node_set_t &fade_out_retain = {});
 
   int upload_ready(std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers,
                    render::callback_manager_t &callbacks,
@@ -66,7 +67,8 @@ public:
              render::callback_manager_t &callbacks,
              std::unique_ptr<render::node_data_loader_t> &node_loader,
              bool debug = false,
-             int *evicted_count = nullptr);
+             int *evicted_count = nullptr,
+             const frame_node_registry_t::node_set_t &fade_out_retain = {});
 
   void handle_attribute_change(std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers,
                                render::callback_manager_t &callbacks,

@@ -17,6 +17,8 @@
 ************************************************************************/
 #pragma once
 
+#include <unordered_map>
+
 #include "conversion_types.hpp"
 #include "data_source.hpp"
 #include "frame_node_registry.hpp"
@@ -38,6 +40,9 @@ struct draw_result_t
 class draw_emitter_t
 {
 public:
+  const frame_node_registry_t::node_set_t &prepare_fade_outs(
+    const std::vector<tree_walker_data_t> &walker_subsets);
+
   draw_result_t emit(std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers,
                      const frame_node_registry_t &registry,
                      const selection_result_t &selection,
@@ -56,6 +61,9 @@ private:
   };
   std::vector<active_node_info_t> m_sorted_active;
   frame_node_registry_t::node_set_t m_transitioning_nodes;
+  frame_node_registry_t::node_set_t m_prev_active_set;
+  std::unordered_map<node_id_t, int, node_id_hash, node_id_equal> m_fading_out;
+  frame_node_registry_t::node_set_t m_fade_out_retain;
 };
 
 } // namespace points::converter
