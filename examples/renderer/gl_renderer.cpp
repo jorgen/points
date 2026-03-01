@@ -349,6 +349,9 @@ void gl_dyn_points_handler::draw(points::render::draw_group_t &group, color_comp
       glUniformMatrix4fv(gl_handle.uniform_camera, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
     }
+    case points::render::dyn_points_bm_old_color:
+    case points::render::dyn_points_bm_params:
+      break;
     }
   }
 

@@ -1,38 +1,24 @@
 set(LASZIP_API_INCLUDE_DIRECTORIES "${LASZIP_INSTALL_DIR}/include;${LASZIP_INSTALL_DIR}/include/laszip")
 
 if (WIN32)
-  set(LASZIP_API_IMPLIB_RELEASE ${LASZIP_INSTALL_DIR}/lib/laszip_api3.lib)
-  set(LASZIP_API_IMPLIB_DEBUG ${LASZIP_INSTALL_DIR}/lib/laszip_api3d.lib)
-  set(LASZIP_IMPL_IMPLIB_RELEASE ${LASZIP_INSTALL_DIR}/lib/laszip3.lib)
-  set(LASZIP_IMPL_IMPLIB_DEBUG ${LASZIP_INSTALL_DIR}/lib/laszip3d.lib)
-
-  set(LASZIP_API_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/bin/laszip_api3.dll)
-  set(LASZIP_API_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/bin/laszip_api3d.dll)
-  set(LASZIP_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/bin/laszip3.dll)
-  set(LASZIP_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/bin/laszip3d.dll)
-
-elseif(APPLE)
-  set(LASZIP_API_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/lib/liblaszip_api.8.dylib)
-  set(LASZIP_API_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/lib/liblaszip_api.8.dylib)
-  set(LASZIP_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/lib/liblaszip.dylib)
-  set(LASZIP_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/lib/liblaszip.dylib)
+  set(LASZIP_API_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/lib/laszip_api.lib)
+  set(LASZIP_API_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/lib/laszip_api.lib)
+  set(LASZIP_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/lib/laszip.lib)
+  set(LASZIP_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/lib/laszip.lib)
 else()
-  set(LASZIP_API_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/bin/laszip_api3.dll)
-  set(LASZIP_API_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/bin/laszip_api3d.dll)
-  set(LASZIP_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/bin/laszip3.dll)
-  set(LASZIP_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/bin/laszip3d.dll)
+  set(LASZIP_API_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/lib/liblaszip_api.a)
+  set(LASZIP_API_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/lib/liblaszip_api.a)
+  set(LASZIP_LOCATION_RELEASE ${LASZIP_INSTALL_DIR}/lib/liblaszip.a)
+  set(LASZIP_LOCATION_DEBUG ${LASZIP_INSTALL_DIR}/lib/liblaszip.a)
 endif()
 
 if (NOT TARGET laszip::api)
-  add_library(laszip::api SHARED IMPORTED)
+  add_library(laszip::api STATIC IMPORTED)
   set_target_properties(laszip::api
     PROPERTIES
     CMDEP_EXTERNAL "On"
     CMDEP_TARGET laszip_build
     CMDEP_INCLUDE_DIRS      "${LASZIP_API_INCLUDE_DIRECTORIES}"
-    CMDEP_COMPILE_DEFS      "LASZIP_DYN_LINK=1"
-    CMDEP_IMPLIB_RELEASE            "${LASZIP_API_IMPLIB_RELEASE}"
-    CMDEP_IMPLIB_DEBUG              "${LASZIP_API_IMPLIB_DEBUG}"
     CMDEP_LOCATION_RELEASE          "${LASZIP_API_LOCATION_RELEASE}"
     CMDEP_LOCATION_DEBUG            "${LASZIP_API_LOCATION_DEBUG}"
     CMDEP_SUB_TARGETS         "laszip::impl"
@@ -43,15 +29,12 @@ if (NOT TARGET laszip::api)
 endif()
 
 if (NOT TARGET laszip::impl)
-  add_library(laszip::impl SHARED IMPORTED)
+  add_library(laszip::impl STATIC IMPORTED)
   set_target_properties(laszip::impl
     PROPERTIES
     CMDEP_EXTERNAL "On"
     CMDEP_TARGET laszip_build
     CMDEP_INCLUDE_DIRS      "${LASZIP_API_INCLUDE_DIRECTORIES}"
-    CMDEP_COMPILE_DEFS      "LASZIP_DYN_LINK=1"
-    CMDEP_IMPLIB_RELEASE            "${LASZIP_IMPL_IMPLIB_RELEASE}"
-    CMDEP_IMPLIB_DEBUG              "${LASZIP_IMPL_IMPLIB_DEBUG}"
     CMDEP_LOCATION_RELEASE          "${LASZIP_LOCATION_RELEASE}"
     CMDEP_LOCATION_DEBUG            "${LASZIP_LOCATION_DEBUG}"
     MAP_IMPORTED_CONFIG_MINSIZEREL     Release
