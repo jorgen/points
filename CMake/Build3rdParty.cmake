@@ -4,10 +4,14 @@ macro(Build3rdParty)
     #Find_Package(SDL2 REQUIRED)
     #BuildExternalCMake(sdl_build ${sdl_VERSION} ${sdl_SOURCE_DIR} "" "SDL2::SDL2;SDL2::SDL2main")
     # Save and strip -fno-exceptions/-fno-rtti for third-party subdirectories
-    # that need exceptions (vio tests, fmt, etc). Restore after.
+    # that need exceptions (vio tests, fmt, laszip, etc). Restore after.
     set(_SAVED_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
     string(REPLACE "-fno-exceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     string(REPLACE "-fno-rtti" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    # MSVC equivalents: restore /EHsc (exceptions) and /GR (RTTI), remove _HAS_EXCEPTIONS=0
+    string(REPLACE "/EHs-c-" "/EHsc" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    string(REPLACE "/GR-" "/GR" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    string(REPLACE "-D_HAS_EXCEPTIONS=0" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
     add_subdirectory(${sdl_SOURCE_DIR} SYSTEM)
 
@@ -36,10 +40,24 @@ macro(Build3rdParty)
     set(LASZIP_BUILD_STATIC ON CACHE BOOL "" FORCE)
     add_subdirectory(${laszip_SOURCE_DIR} ${CMAKE_BINARY_DIR}/laszip_build SYSTEM)
     unset(LASZIP_BUILD_STATIC CACHE)
-    target_include_directories(laszip_api PUBLIC
+    # Link against the base laszip library (laszip3 on Windows), NOT the
+    # laszip_api shim (laszip_api3).  The API shim is a DLL-loader trampoline
+    # that calls LoadLibrary/GetProcAddress at runtime; when built as a static
+    # lib the function-pointer table stays NULL and every call returns 1 (error).
+    # The base library contains the real implementation (laszip_dll.cpp) and
+    # uses the same laszip_api.h header, so consumers don't need any changes.
+    set(_laszip_base_target laszip)
+    if(WIN32)
+        set(_laszip_base_target "laszip3")
+    endif()
+    target_include_directories(${_laszip_base_target} PUBLIC
         ${laszip_SOURCE_DIR}/dll
         ${laszip_SOURCE_DIR}/include/laszip
         ${CMAKE_BINARY_DIR}/laszip_build/include/laszip)
+    # Add an alias so downstream targets can link to laszip_api regardless of platform
+    if(NOT TARGET laszip_api)
+        add_library(laszip_api ALIAS ${_laszip_base_target})
+    endif()
 
     set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)

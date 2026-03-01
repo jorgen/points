@@ -31,7 +31,8 @@ static std::string get_error_string(const points::error_t *error)
 
 void converter_error_callback_t(void *user_data, const struct points::error_t *error)
 {
-  (void)user_data;
+  bool *had_errors = static_cast<bool *>(user_data);
+  *had_errors = true;
   auto error_str = get_error_string(error);
   fmt::print("Error: {}\n", error_str);
 }
@@ -230,8 +231,9 @@ int main(int argc, char **argv)
     }
     return 1;
   }
+  bool had_errors = false;
   points::converter::converter_runtime_callbacks_t runtime_callbacks = {&converter_progress_callback_t, &converter_warning_callback_t, &converter_error_callback_t, &converter_done_callback_t};
-  points::converter::converter_set_runtime_callbacks(converter.get(), runtime_callbacks, nullptr);
+  points::converter::converter_set_runtime_callbacks(converter.get(), runtime_callbacks, &had_errors);
   points::converter::converter_set_compression(converter.get(), args.compression);
   points::converter::converter_add_data_file(converter.get(), input_str_buf.data(), int(input_str_buf.size()));
   points::converter::converter_wait_idle(converter.get());
@@ -240,5 +242,5 @@ int main(int argc, char **argv)
   points::converter::converter_get_compression_stats(converter.get(), &stats);
   print_compression_stats(stats);
 
-  return 0;
+  return had_errors ? 1 : 0;
 }
