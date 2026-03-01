@@ -9,20 +9,17 @@ macro(Build3rdParty)
     string(REPLACE "-fno-exceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     string(REPLACE "-fno-rtti" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
-    add_subdirectory(${sdl_SOURCE_DIR})
+    add_subdirectory(${sdl_SOURCE_DIR} SYSTEM)
 
-    add_subdirectory(${vio_SOURCE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vio_build")
+    add_subdirectory(${vio_SOURCE_DIR} SYSTEM)
     # vio changed its include directory from PUBLIC to PRIVATE; re-expose it
     target_include_directories(vio PUBLIC ${vio_SOURCE_DIR}/src)
 
-    list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/laszip)
-    CmDepInstallDir(LASZIP_INSTALL_DIR laszip_build ${laszip_VERSION})
-    Find_Package(laszip REQUIRED)
     # Patch laszip 3.5.0 source files (only once after fresh extraction).
     # Guard with a stamp file to avoid re-patching (and corrupting) on
     # subsequent configure runs.
     set(_laszip_patch_stamp "${laszip_SOURCE_DIR}/.points_patched")
-    if(NOT EXISTS "${_laszip_patch_stamp}")
+    if (NOT EXISTS "${_laszip_patch_stamp}")
         # Remove add_compile_options(-std=c++17) which wrongly applies C++
         # flags to C files.  CMAKE_CXX_STANDARD 17 is already set.
         file(READ "${laszip_SOURCE_DIR}/CMakeLists.txt" _laszip_cml)
@@ -38,25 +35,25 @@ macro(Build3rdParty)
         # building the API DLL, so LASZIP_API expands to nothing and no symbols
         # are exported.  Add the required compile definitions.
         file(APPEND "${laszip_SOURCE_DIR}/dll/CMakeLists.txt"
-            "\ntarget_compile_definitions(\${LASZIP_API_LIB_NAME} PRIVATE LASZIP_DYN_LINK LASZIP_SOURCE)\n")
+                "\ntarget_compile_definitions(\${LASZIP_API_LIB_NAME} PRIVATE LASZIP_DYN_LINK LASZIP_SOURCE)\n")
         file(WRITE "${_laszip_patch_stamp}" "")
-    endif()
-    set(LASZIP_CMAKE_OPTIONS "-DCMAKE_CXX_STANDARD=17;-DCMAKE_CXX_STANDARD_REQUIRED=ON;-DLASZIP_BUILD_STATIC=ON")
-    if (WIN32)
-        list(APPEND LASZIP_CMAKE_OPTIONS "-DCMAKE_DEBUG_POSTFIX=d")
     endif ()
-    CmDepBuildExternal(laszip_build ${laszip_VERSION} ${laszip_SOURCE_DIR} "${LASZIP_CMAKE_OPTIONS}" "laszip::api;laszip::impl")
+    add_subdirectory(${laszip_SOURCE_DIR} ${CMAKE_BINARY_DIR}/laszip_build SYSTEM)
+    target_include_directories(laszip_api PUBLIC
+        ${laszip_SOURCE_DIR}/dll
+        ${laszip_SOURCE_DIR}/include/laszip
+        ${CMAKE_BINARY_DIR}/laszip_build/include/laszip)
 
     set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)
-    add_subdirectory(${fmt_SOURCE_DIR})
+    add_subdirectory(${fmt_SOURCE_DIR} SYSTEM)
     # Clang on MinGW doesn't properly auto-detect -fno-exceptions for fmt headers
     if (NOT MSVC)
         target_compile_definitions(fmt PUBLIC FMT_EXCEPTIONS=0)
     endif ()
-    add_subdirectory(${glm_SOURCE_DIR})
-    add_subdirectory(${catch2_SOURCE_DIR})
-    add_subdirectory(${unordered_dense_SOURCE_DIR})
+    add_subdirectory(${glm_SOURCE_DIR} SYSTEM)
+    add_subdirectory(${catch2_SOURCE_DIR} SYSTEM)
+    add_subdirectory(${unordered_dense_SOURCE_DIR} SYSTEM)
     set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
     set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -64,7 +61,7 @@ macro(Build3rdParty)
     set(BLOSC_INSTALL OFF CACHE BOOL "" FORCE)
     set(BUILD_SHARED OFF CACHE BOOL "" FORCE)
     set(BUILD_STATIC ON CACHE BOOL "" FORCE)
-    add_subdirectory(${blosc2_SOURCE_DIR} SYSTEM)
+    add_subdirectory(${blosc2_SOURCE_DIR} SYSTEM SYSTEM)
     unset(BUILD_TESTS CACHE)
     unset(BUILD_BENCHMARKS CACHE)
     unset(BUILD_EXAMPLES CACHE)

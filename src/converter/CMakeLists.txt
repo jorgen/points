@@ -78,7 +78,7 @@ set(sources
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
 target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio blosc2_static)
-CmDepTargetLinkLibrary(points_converter_objects PRIVATE laszip::impl)
+target_link_libraries(points_converter_objects PRIVATE laszip_api)
 target_include_directories(points_converter_objects
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -108,4 +108,4 @@ endif ()
 add_library(points_converter empty_dylib_function.cpp $<TARGET_OBJECTS:points_converter_objects>)
 #target_compile_options(points_converter PRIVATE -fsanitize=address)
 #target_link_options(points_converter PRIVATE -fsanitize=address)
-CmDepTargetLinkLibrary(points_converter PUBLIC points_converter_objects)
+target_link_libraries(points_converter PUBLIC points_converter_objects)

@@ -23,7 +23,7 @@
 
 #include <fmt/printf.h>
 
-#include <laszip/laszip_api.h>
+#include <laszip_api.h>
 
 namespace points::render
 {

@@ -22,7 +22,7 @@
 #include "error.hpp"
 
 #include <fmt/format.h>
-#include <laszip/laszip_api.h>
+#include <laszip_api.h>
 
 #include <assert.h>
 
