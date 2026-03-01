@@ -824,8 +824,10 @@ void gl_node_bbox_handler::draw(points::render::draw_group_t &group)
     }
   }
 
+  glDisable(GL_DEPTH_TEST);
   glLineWidth(1.0f);
   glDrawArrays(GL_LINES, 0, group.draw_size);
+  glEnable(GL_DEPTH_TEST);
   glBindVertexArray(0);
 }
 
