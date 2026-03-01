@@ -121,10 +121,20 @@ void get_data_worker_t::work()
   }
 }
 
-void get_data_worker_t::after_work(completion_t completion)
+void get_data_worker_t::after_work()
 {
-  (void)completion;
   point_reader_file.input_split = split;
+}
+
+void get_data_worker_t::enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool)
+{
+  thread_pool.enqueue([this, &event_loop] {
+    this->work();
+    event_loop.run_in_loop([this] {
+      this->_done = true;
+      this->after_work();
+    });
+  });
 }
 
 sort_worker_t::sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, header_t public_header, points_t &&points)
@@ -141,11 +151,21 @@ void sort_worker_t::work()
   sort_points(_tree_config, attributes_configs, public_header, points, error);
 }
 
-void sort_worker_t::after_work(completion_t completion)
+void sort_worker_t::after_work()
 {
-  (void)completion;
   reader_file.sort_done++;
   reader_file.sorted_points_pipe.post_event(std::make_pair(std::move(points), std::move(error)));
+}
+
+void sort_worker_t::enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool)
+{
+  thread_pool.enqueue([this, &event_loop] {
+    this->work();
+    event_loop.run_in_loop([this] {
+      this->_done = true;
+      this->after_work();
+    });
+  });
 }
 
 point_reader_t::point_reader_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,

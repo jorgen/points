@@ -12,6 +12,8 @@ macro(Build3rdParty)
     add_subdirectory(${sdl_SOURCE_DIR})
 
     add_subdirectory(${vio_SOURCE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vio_build")
+    # vio changed its include directory from PUBLIC to PRIVATE; re-expose it
+    target_include_directories(vio PUBLIC ${vio_SOURCE_DIR}/src)
 
     list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/FindPackage/laszip)
     CmDepInstallDir(LASZIP_INSTALL_DIR laszip_build ${laszip_VERSION})
@@ -39,12 +41,9 @@ macro(Build3rdParty)
             "\ntarget_compile_definitions(\${LASZIP_API_LIB_NAME} PRIVATE LASZIP_DYN_LINK LASZIP_SOURCE)\n")
         file(WRITE "${_laszip_patch_stamp}" "")
     endif()
-    set(LASZIP_CMAKE_OPTIONS "-DCMAKE_CXX_STANDARD=17;-DCMAKE_CXX_STANDARD_REQUIRED=ON")
+    set(LASZIP_CMAKE_OPTIONS "-DCMAKE_CXX_STANDARD=17;-DCMAKE_CXX_STANDARD_REQUIRED=ON;-DLASZIP_BUILD_STATIC=ON")
     if (WIN32)
         list(APPEND LASZIP_CMAKE_OPTIONS "-DCMAKE_DEBUG_POSTFIX=d")
-        # Export all symbols from laszip DLLs so that functions like
-        # laszip_load_dll (which lack the LASZIP_API decorator) are visible.
-        list(APPEND LASZIP_CMAKE_OPTIONS "-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON")
     endif ()
     CmDepBuildExternal(laszip_build ${laszip_VERSION} ${laszip_SOURCE_DIR} "${LASZIP_CMAKE_OPTIONS}" "laszip::api;laszip::impl")
 

@@ -31,7 +31,6 @@
 #include <vio/event_loop.h>
 #include <vio/event_pipe.h>
 #include <vio/thread_pool.h>
-#include <vio/worker.h>
 
 #include "attributes_configs.hpp"
 #include "conversion_types.hpp"
@@ -64,13 +63,15 @@ struct unsorted_points_event_t
   point_reader_file_t &reader_file;
 };
 
-class get_data_worker_t : public vio::worker_t
+class get_data_worker_t
 {
 public:
   get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, const get_points_file_t &file, vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,
                     vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<unsorted_points_event_t> &unsorted_points_queue);
-  void work() override;
-  void after_work(completion_t completion) override;
+  void work();
+  void after_work();
+  void enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool);
+  [[nodiscard]] bool done() const { return _done; }
 
   point_reader_file_t &point_reader_file;
   attributes_configs_t &attribute_configs;
@@ -82,14 +83,17 @@ public:
   storage_header_t storage_header;
   uint64_t points_read;
   uint32_t split;
+  bool _done{false};
 };
 
-class sort_worker_t : public vio::worker_t
+class sort_worker_t
 {
 public:
   sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, header_t public_header, points_t &&points);
-  void work() override;
-  void after_work(completion_t completion) override;
+  void work();
+  void after_work();
+  void enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool);
+  [[nodiscard]] bool done() const { return _done; }
 
   tree_config_t _tree_config;
   point_reader_file_t &reader_file;
@@ -97,6 +101,7 @@ public:
   header_t public_header;
   points_t points;
   error_t error;
+  bool _done{false};
 };
 
 struct point_reader_file_t

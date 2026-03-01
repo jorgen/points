@@ -17,8 +17,9 @@
 ************************************************************************/
 #pragma once
 
+#include <vio/event_loop.h>
 #include <vio/event_pipe.h>
-#include <vio/worker.h>
+#include <vio/thread_pool.h>
 
 #include "conversion_types.hpp"
 #include "error.hpp"
@@ -41,12 +42,14 @@ struct pre_init_info_file_result_t
   bool found_min;
 };
 
-struct get_pre_init_info_worker_t : vio::worker_t
+struct get_pre_init_info_worker_t
 {
   get_pre_init_info_worker_t(const tree_config_t &tree_config, input_data_id_t input_id, const input_name_ref_t &file_name, converter_file_convert_callbacks_t &convert_callbacks,
                              vio::event_pipe_t<pre_init_info_file_result_t> &pre_init_for_file, vio::event_pipe_t<file_error_t> &file_errors);
-  void work() override;
-  void after_work(completion_t completion) override;
+  void work();
+  void after_work();
+  void enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool);
+  [[nodiscard]] bool done() const { return _done; }
 
   tree_config_t tree_config;
   input_data_id_t input_id;
@@ -58,6 +61,7 @@ struct get_pre_init_info_worker_t : vio::worker_t
   std::unique_ptr<error_t> _error;
   file_error_t _file_error;
   pre_init_info_file_result_t _pre_init_file;
+  bool _done{false};
 };
 
 } // namespace points::converter

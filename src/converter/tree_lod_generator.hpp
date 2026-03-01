@@ -20,7 +20,6 @@
 #include <vio/event_loop.h>
 #include <vio/event_pipe.h>
 #include <vio/thread_pool.h>
-#include <vio/worker.h>
 
 #include "tree.hpp"
 
@@ -75,12 +74,17 @@ struct lod_tree_worker_data_t
 class tree_lod_generator_t;
 class attributes_configs_t;
 struct lod_worker_batch_t;
-class lod_worker_t : public vio::worker_t
+class lod_worker_t
 {
 public:
   lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, storage_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data, const std::vector<float> &random_offsets);
-  void work() override;
-  void after_work(completion_t completion) override;
+  void work();
+  void enqueue_lod(vio::thread_pool_t &pool)
+  {
+    pool.enqueue([this] { this->work(); });
+  }
+  void mark_done() { _done = true; }
+  [[nodiscard]] bool done() const { return _done; }
 
 private:
   tree_lod_generator_t &lod_generator;
@@ -89,6 +93,7 @@ private:
   attributes_configs_t &attributes_configs;
   lod_node_worker_data_t &data;
   const std::vector<float> &random_offsets;
+  bool _done{false};
 };
 
 struct lod_worker_batch_t

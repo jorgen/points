@@ -836,11 +836,6 @@ void lod_worker_t::work()
   data.generated_max = destination_header.morton_max;
 }
 
-void lod_worker_t::after_work(completion_t completion)
-{
-  (void)completion;
-}
-
 static void get_storage_info(tree_registry_t &tree_cache, lod_node_worker_data_t &node)
 {
   for (int i = 0; i < int(node.child_data.size()); i++)
@@ -895,6 +890,8 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
     adjust_tree_after_lod(tree_cache, batch.worker_data, batch.level);
 
   batch.new_batch = false;
+  for (auto &worker : batch.lod_workers)
+    worker.mark_done();
   batch.lod_workers.clear();
   batch.level--;
   batch.completed = 0;
@@ -922,7 +919,7 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
       assert(!node.child_data.empty());
       get_storage_info(tree_cache, node);
       auto &lod_worker = batch.lod_workers.emplace_back(lod_generator, batch, cache_file, attributes_configs, node, random_offsets);
-      lod_worker.enqueue(loop, pool);
+      lod_worker.enqueue_lod(pool);
     }
   }
 }
@@ -986,6 +983,8 @@ void tree_lod_generator_t::iterate_workers()
   if (!_lod_batches.empty() && _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size()) && _lod_batches.front()->level == 0)
   {
     adjust_tree_after_lod(_tree_cache, _lod_batches.front()->worker_data, 0);
+    for (auto &worker : _lod_batches.front()->lod_workers)
+      worker.mark_done();
     _lod_batches.pop_front();
   }
   if (!_lod_batches.empty() && (_lod_batches.front()->new_batch || _lod_batches.front()->completed == int(_lod_batches.front()->lod_workers.size())))

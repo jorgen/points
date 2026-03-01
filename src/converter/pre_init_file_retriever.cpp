@@ -55,13 +55,23 @@ void get_pre_init_info_worker_t::work()
   }
 }
 
-void get_pre_init_info_worker_t::after_work(completion_t completion)
+void get_pre_init_info_worker_t::after_work()
 {
-  (void)completion;
   if (_file_error.error.code != 0)
     file_errors.post_event(std::move(_file_error));
   else
     pre_init_info_file_result.post_event(std::move(_pre_init_file));
+}
+
+void get_pre_init_info_worker_t::enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool)
+{
+  thread_pool.enqueue([this, &event_loop] {
+    this->work();
+    event_loop.run_in_loop([this] {
+      this->_done = true;
+      this->after_work();
+    });
+  });
 }
 
 } // namespace converter
