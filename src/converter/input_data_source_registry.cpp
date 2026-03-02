@@ -173,6 +173,13 @@ std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_
   return ret;
 }
 
+uint64_t input_data_source_registry_t::get_approximate_size(input_data_id_t id)
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  auto &item = get_item(id, _registry);
+  return item.approximate_point_count * item.approximate_point_size_bytes;
+}
+
 std::optional<morton::morton192_t> input_data_source_registry_t::get_done_morton()
 {
   std::unique_lock<std::mutex> lock(_mutex);

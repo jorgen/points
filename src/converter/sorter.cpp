@@ -18,6 +18,7 @@
 #include "sorter.hpp"
 #include "attributes_configs.hpp"
 #include "error.hpp"
+#include "input_header.hpp"
 #include "morton.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 
@@ -163,6 +164,18 @@ void reorder_buffer_two(uint32_t count, const INDEX_T *indecies_begin, const voi
   }
 }
 
+template <typename INDEX_T, size_t C, typename T>
+void reorder_buffer_two_into(uint32_t count, const INDEX_T *indecies_begin, const void *source, uint8_t *target)
+{
+  using copy_t = std::array<T, C>;
+  const copy_t *source_data = reinterpret_cast<const copy_t *>(source);
+  copy_t *target_data = reinterpret_cast<copy_t *>(target);
+  for (uint32_t i = 0; i < count; i++)
+  {
+    memcpy(target_data + i, source_data + indecies_begin[i], sizeof(copy_t));
+  }
+}
+
 template <typename INDEX_T, size_t C>
 void reorder_buffer_one(uint32_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void *source, std::unique_ptr<uint8_t[]> &target, uint32_t &target_size)
 {
@@ -213,6 +226,56 @@ void reorder_buffer_one(uint32_t count, const INDEX_T *indecies_begin, std::pair
   }
 }
 
+template <typename INDEX_T, size_t C>
+void reorder_buffer_one_into(uint32_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void *source, uint8_t *target)
+{
+  switch (format.first)
+  {
+  case type_u8:
+    reorder_buffer_two_into<INDEX_T, C, uint8_t>(count, indecies_begin, source, target);
+    break;
+  case type_i8:
+    reorder_buffer_two_into<INDEX_T, C, int8_t>(count, indecies_begin, source, target);
+    break;
+  case type_u16:
+    reorder_buffer_two_into<INDEX_T, C, uint16_t>(count, indecies_begin, source, target);
+    break;
+  case type_i16:
+    reorder_buffer_two_into<INDEX_T, C, int16_t>(count, indecies_begin, source, target);
+    break;
+  case type_u32:
+    reorder_buffer_two_into<INDEX_T, C, uint32_t>(count, indecies_begin, source, target);
+    break;
+  case type_i32:
+    reorder_buffer_two_into<INDEX_T, C, int32_t>(count, indecies_begin, source, target);
+    break;
+  case type_m32:
+    reorder_buffer_two_into<INDEX_T, C, morton::morton32_t>(count, indecies_begin, source, target);
+    break;
+  case type_r32:
+    reorder_buffer_two_into<INDEX_T, C, float>(count, indecies_begin, source, target);
+    break;
+  case type_u64:
+    reorder_buffer_two_into<INDEX_T, C, uint64_t>(count, indecies_begin, source, target);
+    break;
+  case type_i64:
+    reorder_buffer_two_into<INDEX_T, C, int64_t>(count, indecies_begin, source, target);
+    break;
+  case type_m64:
+    reorder_buffer_two_into<INDEX_T, C, morton::morton64_t>(count, indecies_begin, source, target);
+    break;
+  case type_r64:
+    reorder_buffer_two_into<INDEX_T, C, double>(count, indecies_begin, source, target);
+    break;
+  case type_m128:
+    reorder_buffer_two_into<INDEX_T, C, morton::morton128_t>(count, indecies_begin, source, target);
+    break;
+  case type_m192:
+    reorder_buffer_two_into<INDEX_T, C, morton::morton192_t>(count, indecies_begin, source, target);
+    break;
+  }
+}
+
 template <typename INDEX_T>
 static void reorder_buffer(uint32_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void *source, std::unique_ptr<uint8_t[]> &target, uint32_t &target_size)
 {
@@ -232,6 +295,29 @@ static void reorder_buffer(uint32_t count, const INDEX_T *indecies_begin, std::p
     break;
   case components_4x4:
     reorder_buffer_one<INDEX_T, 16>(count, indecies_begin, format, source, target, target_size);
+    break;
+  }
+}
+
+template <typename INDEX_T>
+static void reorder_buffer_into(uint32_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void *source, uint8_t *target)
+{
+  switch (format.second)
+  {
+  case components_1:
+    reorder_buffer_one_into<INDEX_T, 1>(count, indecies_begin, format, source, target);
+    break;
+  case components_2:
+    reorder_buffer_one_into<INDEX_T, 2>(count, indecies_begin, format, source, target);
+    break;
+  case components_3:
+    reorder_buffer_one_into<INDEX_T, 3>(count, indecies_begin, format, source, target);
+    break;
+  case components_4:
+    reorder_buffer_one_into<INDEX_T, 4>(count, indecies_begin, format, source, target);
+    break;
+  case components_4x4:
+    reorder_buffer_one_into<INDEX_T, 16>(count, indecies_begin, format, source, target);
     break;
   }
 }
@@ -285,7 +371,7 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   INDEX_T *indecies_end = indecies_begin + count;
   std::iota(indecies_begin, indecies_end, INDEX_T(0));
 
-  std::stable_sort(indecies_begin, indecies_end, [morton_begin](INDEX_T a, INDEX_T b) { return morton_begin[a] < morton_begin[b]; });
+  std::sort(indecies_begin, indecies_end, [morton_begin](INDEX_T a, INDEX_T b) { return morton_begin[a] < morton_begin[b]; });
 
   morton::morton192_t base_morton;
   morton::encode(tmp, base_morton);
@@ -325,16 +411,29 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   memcpy(attributes.attribute_names.back().get(), POINTS_ATTRIBUTE_ORIGINAL_ORDER, sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER));
   attributes.attribute_names.back().get()[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)] = 0;
   attributes.attributes.emplace_back(attributes.attribute_names.back().get(), uint32_t(sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)), type_from_type<INDEX_T>(), components_1);
-  for (int i = 1; i < int(attributes.attributes.size()) - 1; i++)
+  int reorder_attr_count = int(attributes.attributes.size()) - 2;
+  if (reorder_attr_count > 0)
   {
-    std::unique_ptr<uint8_t[]> new_attr_data;
-    auto &attr = attributes.attributes[i];
-    auto attr_format = std::make_pair(attr.type, attr.components);
-    reorder_buffer<INDEX_T>(count, indecies_begin, attr_format, points.buffers.data[i].get(), new_attr_data, new_buffer_size);
-    points.buffers.data[i] = std::move(new_attr_data);
-    assert(new_buffer_size == points.buffers.buffers[i].size);
-
-    points.buffers.buffers[i].data = points.buffers.data[i].get();
+    uint32_t total_reorder_size = 0;
+    for (int i = 1; i <= reorder_attr_count; i++)
+    {
+      auto &attr = attributes.attributes[i];
+      total_reorder_size += uint32_t(size_for_format(attr.type, attr.components)) * count;
+    }
+    std::unique_ptr<uint8_t[]> reorder_block(new uint8_t[total_reorder_size]);
+    uint8_t *block_ptr = reorder_block.get();
+    for (int i = 1; i <= reorder_attr_count; i++)
+    {
+      auto &attr = attributes.attributes[i];
+      auto attr_format = std::make_pair(attr.type, attr.components);
+      uint32_t attr_size = uint32_t(size_for_format(attr.type, attr.components)) * count;
+      reorder_buffer_into<INDEX_T>(count, indecies_begin, attr_format, points.buffers.data[i].get(), block_ptr);
+      points.buffers.data[i].reset();
+      points.buffers.buffers[i].data = block_ptr;
+      assert(attr_size == points.buffers.buffers[i].size);
+      block_ptr += attr_size;
+    }
+    points.buffers.data.emplace_back(std::move(reorder_block));
   }
   points.buffers.data.emplace_back(std::move(indecies));
   points.buffers.buffers.emplace_back(points.buffers.data.back().get(), uint32_t(sizeof(INDEX_T)) * count);

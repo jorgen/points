@@ -280,6 +280,7 @@ void processor_t::handle_file_errors(file_error_t &&error)
 
 void processor_t::handle_file_reading_done(input_data_id_t &&file)
 {
+  _read_sort_active_approximate_size -= _input_data_source_registry.get_approximate_size(file);
   _input_data_source_registry.handle_reading_done(file);
 }
 

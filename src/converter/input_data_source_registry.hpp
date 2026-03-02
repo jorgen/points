@@ -84,6 +84,7 @@ public:
   bool all_inserted_into_tree() const;
 
   std::optional<input_data_next_input_t> next_input_to_process();
+  uint64_t get_approximate_size(input_data_id_t id);
 
   std::optional<morton::morton192_t> get_done_morton();
 
