@@ -36,17 +36,13 @@ macro(Build3rdParty)
     # Patch laszip 3.5.0 source files (only once after fresh extraction).
     # Guard with a stamp file to avoid re-patching (and corrupting) on
     # subsequent configure runs.
-    set(_laszip_patch_stamp "${laszip_SOURCE_DIR}/.points_patched_v2")
+    set(_laszip_patch_stamp "${laszip_SOURCE_DIR}/.points_patched")
     if (NOT EXISTS "${_laszip_patch_stamp}")
         # Remove add_compile_options(-std=c++17) which wrongly applies C++
         # flags to C files.  CMAKE_CXX_STANDARD 17 is already set.
         file(READ "${laszip_SOURCE_DIR}/CMakeLists.txt" _laszip_cml)
         string(REPLACE "add_compile_options(\"/std:c++17\")" "# patched out: add_compile_options(\"/std:c++17\")" _laszip_cml "${_laszip_cml}")
         string(REPLACE "add_compile_options(-std=c++17)" "# patched out: add_compile_options(-std=c++17)" _laszip_cml "${_laszip_cml}")
-        # Skip building the dll/ API shim.  On non-Windows the shim target
-        # is called "laszip_api" which collides with the alias we create
-        # below, and the shim is a DLL-loader trampoline we don't use.
-        string(REPLACE "add_subdirectory(dll)" "# patched out: add_subdirectory(dll)" _laszip_cml "${_laszip_cml}")
         file(WRITE "${laszip_SOURCE_DIR}/CMakeLists.txt" "${_laszip_cml}")
         # LASZIP_ADD_LIBRARY sets CXX_STANDARD 11 on targets, overriding the
         # global CMAKE_CXX_STANDARD 17.  Fix to use 17.
@@ -58,24 +54,16 @@ macro(Build3rdParty)
     set(LASZIP_BUILD_STATIC ON CACHE BOOL "" FORCE)
     add_subdirectory(${laszip_SOURCE_DIR} ${CMAKE_BINARY_DIR}/laszip_build SYSTEM)
     unset(LASZIP_BUILD_STATIC CACHE)
-    # Link against the base laszip library (laszip3 on Windows), NOT the
-    # laszip_api shim (laszip_api3).  The API shim is a DLL-loader trampoline
-    # that calls LoadLibrary/GetProcAddress at runtime; when built as a static
-    # lib the function-pointer table stays NULL and every call returns 1 (error).
-    # The base library contains the real implementation (laszip_dll.cpp) and
-    # uses the same laszip_api.h header, so consumers don't need any changes.
-    set(_laszip_base_target laszip)
+    # The base laszip target is "laszip" on Linux, "laszip3" on Windows.
+    # Expose it via POINTS_LASZIP_TARGET so consumers use it directly.
+    set(POINTS_LASZIP_TARGET laszip)
     if(WIN32)
-        set(_laszip_base_target "laszip3")
+        set(POINTS_LASZIP_TARGET "laszip3")
     endif()
-    target_include_directories(${_laszip_base_target} PUBLIC
+    target_include_directories(${POINTS_LASZIP_TARGET} PUBLIC
         ${laszip_SOURCE_DIR}/dll
         ${laszip_SOURCE_DIR}/include/laszip
         ${CMAKE_BINARY_DIR}/laszip_build/include/laszip)
-    # Add an alias so downstream targets can link to laszip_api regardless of platform
-    if(NOT TARGET laszip_api)
-        add_library(laszip_api ALIAS ${_laszip_base_target})
-    endif()
 
     set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)
