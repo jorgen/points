@@ -18,13 +18,17 @@
 #ifndef INTERNAL_GLM_INCLUDE_H
 #define INTERNAL_GLM_INCLUDE_H
 
+#ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4201)
 #pragma warning(disable : 4127)
+#endif
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 
 #include <array>
 

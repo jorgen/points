@@ -41,7 +41,7 @@ struct aabb_buffer_t
 
 struct aabb_data_source_t : public data_source_cpp_t
 {
-  aabb_data_source_t(callback_manager_t &callbacks, const glm::dvec3 &offset);
+  aabb_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &a_offset);
 
   void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
 

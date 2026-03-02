@@ -85,10 +85,10 @@ inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_
   callbacks.do_initialize_buffer(buffer, type, components, int(data_vector.size() * sizeof(data_vector[0])), data_vector.data());
 }
 
-aabb_data_source_t::aabb_data_source_t(callback_manager_t &callbacks, const glm::dvec3 &offset)
-  : callbacks(callbacks)
+aabb_data_source_t::aabb_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &a_offset)
+  : callbacks(a_callbacks)
   , project_view(1)
-  , offset(offset)
+  , offset(a_offset)
 {
   callbacks.do_create_buffer(project_view_buffer, buffer_type_uniform);
   callbacks.do_initialize_buffer(project_view_buffer, type_r32, components_4x4, sizeof(project_view), &project_view);

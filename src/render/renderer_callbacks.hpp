@@ -17,6 +17,7 @@
 ************************************************************************/
 #pragma once
 
+#include <cstring>
 #include <mutex>
 
 #include <points/render/renderer.h>
@@ -29,8 +30,8 @@ namespace render
 class callback_manager_t
 {
 public:
-  callback_manager_t(struct renderer_t *renderer)
-    : renderer(renderer)
+  callback_manager_t(struct renderer_t *a_renderer)
+    : renderer(a_renderer)
     , user_ptr(nullptr)
   {
     memset(&callbacks, 0, sizeof(callbacks));
