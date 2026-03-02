@@ -36,13 +36,17 @@ macro(Build3rdParty)
     # Patch laszip 3.5.0 source files (only once after fresh extraction).
     # Guard with a stamp file to avoid re-patching (and corrupting) on
     # subsequent configure runs.
-    set(_laszip_patch_stamp "${laszip_SOURCE_DIR}/.points_patched")
+    set(_laszip_patch_stamp "${laszip_SOURCE_DIR}/.points_patched_v2")
     if (NOT EXISTS "${_laszip_patch_stamp}")
         # Remove add_compile_options(-std=c++17) which wrongly applies C++
         # flags to C files.  CMAKE_CXX_STANDARD 17 is already set.
         file(READ "${laszip_SOURCE_DIR}/CMakeLists.txt" _laszip_cml)
         string(REPLACE "add_compile_options(\"/std:c++17\")" "# patched out: add_compile_options(\"/std:c++17\")" _laszip_cml "${_laszip_cml}")
         string(REPLACE "add_compile_options(-std=c++17)" "# patched out: add_compile_options(-std=c++17)" _laszip_cml "${_laszip_cml}")
+        # Skip building the dll/ API shim.  On non-Windows the shim target
+        # is called "laszip_api" which collides with the alias we create
+        # below, and the shim is a DLL-loader trampoline we don't use.
+        string(REPLACE "add_subdirectory(dll)" "# patched out: add_subdirectory(dll)" _laszip_cml "${_laszip_cml}")
         file(WRITE "${laszip_SOURCE_DIR}/CMakeLists.txt" "${_laszip_cml}")
         # LASZIP_ADD_LIBRARY sets CXX_STANDARD 11 on targets, overriding the
         # global CMAKE_CXX_STANDARD 17.  Fix to use 17.
