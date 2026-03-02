@@ -19,7 +19,13 @@ macro(Build3rdParty)
 
     set(VIO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(VIO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    # vio builds libuv as static (LIBUV_BUILD_SHARED OFF) but libuv's alias
+    # target selects uv vs uv_a based on BUILD_SHARED_LIBS. Override it so
+    # the alias points to the static target that actually gets built.
+    set(_SAVED_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+    set(BUILD_SHARED_LIBS OFF)
     add_subdirectory(${vio_SOURCE_DIR} SYSTEM)
+    set(BUILD_SHARED_LIBS ${_SAVED_BUILD_SHARED_LIBS})
     unset(VIO_BUILD_TESTS CACHE)
     unset(VIO_BUILD_EXAMPLES CACHE)
     # vio changed its include directory from PUBLIC to PRIVATE; re-expose it
