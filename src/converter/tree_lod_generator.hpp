@@ -21,6 +21,7 @@
 #include <vio/event_pipe.h>
 #include <vio/thread_pool.h>
 
+#include "perf_stats.hpp"
 #include "tree.hpp"
 
 #include <ankerl/unordered_dense.h>
@@ -109,7 +110,7 @@ struct lod_worker_batch_t
 class tree_lod_generator_t
 {
 public:
-  tree_lod_generator_t(vio::event_loop_t &loop, vio::thread_pool_t &thread_pool, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, vio::event_pipe_t<void> &lod_done);
+  tree_lod_generator_t(vio::event_loop_t &loop, vio::thread_pool_t &thread_pool, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &lod_done);
   void generate_lods(tree_id_t &tree_id, const morton::morton192_t &max);
 
   void iterate_workers();
@@ -128,6 +129,7 @@ private:
   tree_registry_t &_tree_cache;
   storage_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;
+  perf_stats_t &_perf_stats;
   vio::event_pipe_t<void> &_lod_done;
   vio::event_pipe_t<void> _iterate_workers;
 

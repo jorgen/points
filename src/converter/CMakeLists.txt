@@ -35,6 +35,7 @@ set(private_headers
         input_storage_map.hpp
         native_node_data_loader.hpp
         compressor.hpp
+        perf_stats.hpp
         compressor_blosc2.hpp
         byte_shuffle.hpp
         compressor_zstd.hpp

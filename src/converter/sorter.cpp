@@ -450,7 +450,7 @@ void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &at
 {
   auto &header = points.header;
 
-  fmt::print(stderr, "Sorting {} - {}\n", points.header.input_id.data, points.header.input_id.sub);
+
   double smallest_scale = tree_config.scale;
 
   morton::morton192_t global_min = {};

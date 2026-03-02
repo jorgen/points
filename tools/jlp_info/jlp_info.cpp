@@ -258,6 +258,35 @@ int main(int argc, char **argv)
       }
     }
 
+    // Performance stats
+    converter_perf_stats_t perf;
+    if (converter_read_file_perf_stats(filename, len, &perf) == 0 && perf.total_time_seconds > 0)
+    {
+      fmt::print("\nPerformance stats:\n");
+      fmt::print("  Total time:          {:.2f}s\n", perf.total_time_seconds);
+      fmt::print("  Total written:       {:.2f} MB ({:.2f} MB/s)\n", perf.total_bytes_written_mb, perf.overall_mbps);
+      if (perf.source_read.operation_count > 0)
+      {
+        double read_mb = double(perf.source_read.total_bytes) / 1e6;
+        double read_s = double(perf.source_read.total_time_us) / 1e6;
+        fmt::print("  Source reading:      {:.2f} MB in {:.2f}s ({:.2f} MB/s)\n", read_mb, read_s, perf.source_read.avg_mbps);
+      }
+      if (perf.sort.operation_count > 0)
+        fmt::print("  Sorting:             avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", perf.sort.avg_mbps, perf.sort.peak_mbps, perf.sort.low_mbps);
+      if (perf.source_write.operation_count > 0)
+        fmt::print("  Source write IO:     avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", perf.source_write.avg_mbps, perf.source_write.peak_mbps, perf.source_write.low_mbps);
+      if (perf.tree_build_seconds > 0)
+        fmt::print("  Tree building:       {:.2f}s\n", perf.tree_build_seconds);
+      if (perf.lod_generation_seconds > 0)
+      {
+        fmt::print("  LOD generation:      {:.2f}s\n", perf.lod_generation_seconds);
+        if (perf.lod_read.operation_count > 0)
+          fmt::print("    LOD read IO:       avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", perf.lod_read.avg_mbps, perf.lod_read.peak_mbps, perf.lod_read.low_mbps);
+        if (perf.lod_write.operation_count > 0)
+          fmt::print("    LOD write IO:      avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", perf.lod_write.avg_mbps, perf.lod_write.peak_mbps, perf.lod_write.low_mbps);
+      }
+    }
+
     if (arg + 1 < argc)
       fmt::print("\n");
   }

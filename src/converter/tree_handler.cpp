@@ -22,6 +22,7 @@
 #include "morton_tree_coordinate_transform.hpp"
 #include "storage_handler.hpp"
 #include <atomic>
+#include <chrono>
 
 namespace points::converter
 {
@@ -77,7 +78,7 @@ struct write_blob_result_t
   error_t error;
 };
 
-tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, vio::event_pipe_t<input_data_id_t> &done_with_input)
+tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<input_data_id_t> &done_with_input)
   : _thread_pool(thread_pool)
   , _event_loop_thread()
   , _event_loop(_event_loop_thread.event_loop())
@@ -88,7 +89,8 @@ tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_
   , _first_root_initialized(false)
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
-  , _tree_lod_generator(_event_loop, _thread_pool, _tree_registry, _file_cache, _attributes_configs, _serialize_trees)
+  , _perf_stats(perf_stats)
+  , _tree_lod_generator(_event_loop, _thread_pool, _tree_registry, _file_cache, _attributes_configs, _perf_stats, _serialize_trees)
   , add_points(_event_loop, bind(&tree_handler_t::handle_add_points))
   , _serialize_trees(_event_loop, bind(&tree_handler_t::handle_serialize_trees))
   , _deserialize_tree(_event_loop, bind(&tree_handler_t::handle_deserialize_tree))
@@ -142,6 +144,7 @@ void tree_handler_t::about_to_block()
 
 void tree_handler_t::handle_add_points(storage_header_t &&header, attributes_id_t &&attributes_id, std::vector<storage_location_t> &&storage)
 {
+  auto tree_start = std::chrono::steady_clock::now();
   if (!_initialized)
   {
     _initialized = true;
@@ -152,12 +155,18 @@ void tree_handler_t::handle_add_points(storage_header_t &&header, attributes_id_
   {
     _tree_registry.root = tree_add_points(_tree_registry, _file_cache, _tree_registry.root, header, attributes_id, std::move(storage));
   }
+  auto tree_end = std::chrono::steady_clock::now();
+  auto tree_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(tree_end - tree_start).count());
+  _perf_stats.tree_build_time_us.fetch_add(tree_us, std::memory_order_relaxed);
+
   auto to_send = header.input_id;
   _done_with_input.post_event(std::move(to_send));
 }
 
 void tree_handler_t::generate_lod(const morton::morton192_t &max)
 {
+  _perf_stats.lod_start = perf_stats_t::clock_t::now();
+  _perf_stats.lod_phase.store(true, std::memory_order_release);
   _tree_lod_generator.generate_lods(_tree_registry.root, max);
 }
 

@@ -24,7 +24,6 @@
 #include "storage_handler.hpp"
 
 #include <fixed_size_vector.hpp>
-#include <fmt/printf.h>
 #include <numeric>
 #include <random>
 
@@ -897,10 +896,6 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
   batch.level--;
   batch.completed = 0;
 
-  auto current_global_level = uint32_t(batch.worker_data.front().magnitude * 5 + batch.level);
-  auto end_global_level = uint32_t(batch.worker_data.back().magnitude * 5 + batch.level);
-  fprintf(stderr, "Iterating batch on level %d of %d\n", current_global_level, end_global_level);
-
   size_t batch_size = 0;
   while (batch_size == 0 && batch.level >= 0)
   {
@@ -926,12 +921,13 @@ static void iterate_batch(const std::vector<float> &random_offsets, tree_lod_gen
 }
 
 tree_lod_generator_t::tree_lod_generator_t(vio::event_loop_t &loop, vio::thread_pool_t &thread_pool, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs,
-                                           vio::event_pipe_t<void> &lod_done)
+                                           perf_stats_t &perf_stats, vio::event_pipe_t<void> &lod_done)
   : _loop(loop)
   , _thread_pool(thread_pool)
   , _tree_cache(tree_cache)
   , _file_cache(file_cache)
   , _attributes_configs(attributes_configs)
+  , _perf_stats(perf_stats)
   , _lod_done(lod_done)
   , _iterate_workers(_loop, vio::event_bind_t::bind(*this, &tree_lod_generator_t::iterate_workers))
 {
@@ -992,6 +988,9 @@ void tree_lod_generator_t::iterate_workers()
     iterate_batch(_random_offsets, *this, *_lod_batches.front(), _tree_cache, _file_cache, _attributes_configs, _loop, _thread_pool);
   if (_lod_batches.empty())
   {
+    auto lod_end = perf_stats_t::clock_t::now();
+    auto lod_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(lod_end - _perf_stats.lod_start).count());
+    _perf_stats.lod_generation_time_us.store(lod_us, std::memory_order_relaxed);
     _lod_done.post_event();
   }
 }

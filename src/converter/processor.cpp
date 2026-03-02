@@ -40,8 +40,8 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
   , _has_errors(false)
   , _idle(true)
   , _new_file_events_sent(0)
-  , _storage_handler(_url, _thread_pool, _attributes_configs, _storage_index_write_done, _storage_handler_error, error)
-  , _tree_handler(_thread_pool, _storage_handler, _attributes_configs, _tree_done_with_input)
+  , _storage_handler(_url, _thread_pool, _attributes_configs, _perf_stats, _storage_index_write_done, _storage_handler_error, error)
+  , _tree_handler(_thread_pool, _storage_handler, _attributes_configs, _perf_stats, _tree_done_with_input)
   , _files_added(_event_loop, bind(&processor_t::handle_new_files))
   , _input_init(_event_loop, bind(&processor_t::handle_input_init_done))
   , _sub_added(_event_loop, bind(&processor_t::handle_sub_added))
@@ -53,7 +53,7 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
   , _tree_done_with_input(_event_loop, bind(&processor_t::handle_tree_done_with_input))
   , _input_event_loop_thread()
   , _input_event_loop(_input_event_loop_thread.event_loop())
-  , _point_reader(_input_event_loop, _thread_pool, _attributes_configs, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
+  , _point_reader(_input_event_loop, _thread_pool, _attributes_configs, _perf_stats, _input_init, _sub_added, _sorted_points, _point_reader_done_with_file, _point_reader_file_errors)
   , _read_sort_budget(uint64_t(1) << 30)
   , _read_sort_active_approximate_size(0)
 {
@@ -109,6 +109,7 @@ void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint3
     _idle = false;
     _new_file_events_sent++;
   }
+  _perf_stats.conversion_start = perf_stats_t::clock_t::now();
   _files_added.post_event(std::move(input_files));
 }
 
@@ -287,7 +288,7 @@ void processor_t::handle_file_reading_done(input_data_id_t &&file)
 void processor_t::handle_index_write_done()
 {
   _generating_lod = false;
-  fwrite(fmt::format("index write done\n").c_str(), 1, 9, stderr);
+  _perf_stats.conversion_end = perf_stats_t::clock_t::now();
   if (_runtime_callbacks.done)
   {
     _runtime_callbacks.done(_runtime_callback_user_ptr);
@@ -356,6 +357,10 @@ void processor_t::set_runtime_callbacks(const converter_runtime_callbacks_t &run
 {
   _runtime_callbacks = runtime_callbacks;
   _runtime_callback_user_ptr = user_ptr;
+  _storage_handler.set_on_write_progress([this]() {
+    if (_runtime_callbacks.progress)
+      _runtime_callbacks.progress(_runtime_callback_user_ptr, 0.0f);
+  });
 }
 
 void processor_t::set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks)

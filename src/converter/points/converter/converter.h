@@ -176,6 +176,30 @@ struct converter_stats_t
   struct converter_attribute_stats_t attributes[32];
 };
 
+struct converter_io_stats_t
+{
+  uint64_t total_bytes;
+  uint64_t total_time_us;
+  uint32_t operation_count;
+  double avg_mbps;
+  double peak_mbps;
+  double low_mbps;
+};
+
+struct converter_perf_stats_t
+{
+  double total_time_seconds;
+  double total_bytes_written_mb;
+  double overall_mbps;
+  struct converter_io_stats_t source_read;
+  struct converter_io_stats_t sort;
+  struct converter_io_stats_t source_write;
+  struct converter_io_stats_t lod_read;
+  struct converter_io_stats_t lod_write;
+  double tree_build_seconds;
+  double lod_generation_seconds;
+};
+
 struct converter_t;
 POINTS_CONVERTER_EXPORT struct converter_t *converter_create(const char *cache_filename, uint64_t cache_filename_size, enum converter_open_file_semantics_t open_file_semantics, struct error_t **error);
 
@@ -196,6 +220,10 @@ POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter
 POINTS_CONVERTER_EXPORT void converter_get_compression_stats(struct converter_t *converter, struct converter_stats_t *stats);
 
 POINTS_CONVERTER_EXPORT int converter_read_file_stats(const char *filename, uint64_t filename_size, struct converter_stats_t *stats);
+
+POINTS_CONVERTER_EXPORT int converter_read_file_perf_stats(const char *filename, uint64_t filename_size, struct converter_perf_stats_t *perf_stats);
+
+POINTS_CONVERTER_EXPORT void converter_get_live_perf_stats(struct converter_t *converter, struct converter_perf_stats_t *perf_stats);
 } // namespace converter
 } // namespace points
 #ifdef __cplusplus

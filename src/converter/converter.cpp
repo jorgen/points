@@ -19,6 +19,7 @@
 #include <points/converter/converter.h>
 
 #include "compressor.hpp"
+#include "perf_stats.hpp"
 #include "processor.hpp"
 
 #include <cstdio>
@@ -182,6 +183,118 @@ int converter_read_file_stats(const char *filename, uint64_t filename_size, stru
   auto parsed = compression_stats_t::deserialize(blob.get(), stats_loc.size);
   fill_converter_stats(parsed, stats);
   return 0;
+}
+
+static void fill_live_io_stats(converter_io_stats_t &dst, const io_counter_t &src)
+{
+  dst.total_bytes = src.total_bytes.load(std::memory_order_relaxed);
+  dst.total_time_us = src.total_time_us.load(std::memory_order_relaxed);
+  dst.operation_count = src.operation_count.load(std::memory_order_relaxed);
+  dst.avg_mbps = src.avg_mbps();
+  dst.peak_mbps = src.peak_mbps();
+  dst.low_mbps = src.low_mbps();
+}
+
+static void fill_io_stats(converter_io_stats_t &dst, const perf_stats_t::deserialized_perf_stats_t::counter_data_t &src)
+{
+  dst.total_bytes = src.total_bytes;
+  dst.total_time_us = src.total_time_us;
+  dst.operation_count = src.operation_count;
+  dst.avg_mbps = src.avg_mbps();
+  dst.peak_mbps = src.peak_mbps();
+  dst.low_mbps = src.low_mbps();
+}
+
+int converter_read_file_perf_stats(const char *filename, uint64_t filename_size, struct converter_perf_stats_t *perf_stats)
+{
+  std::string path(filename, filename_size);
+  FILE *f = nullptr;
+#ifdef _MSC_VER
+  fopen_s(&f, path.c_str(), "rb");
+#else
+  f = fopen(path.c_str(), "rb");
+#endif
+  if (!f)
+    return -1;
+
+  uint8_t index_buf[128];
+  memset(index_buf, 0, sizeof(index_buf));
+  if (fread(index_buf, 1, 128, f) != 128)
+  {
+    fclose(f);
+    return -1;
+  }
+
+  if (index_buf[0] != 'J' || index_buf[1] != 'L' || index_buf[2] != 'P' || index_buf[3] != 0)
+  {
+    fclose(f);
+    return -1;
+  }
+
+  // perf_stats location is the 5th storage_location_t at offset 4 + 4*16 = 68
+  storage_location_t perf_loc;
+  memcpy(&perf_loc, index_buf + 68, sizeof(perf_loc));
+
+  if (perf_loc.size == 0 || perf_loc.offset == 0)
+  {
+    fclose(f);
+    memset(perf_stats, 0, sizeof(*perf_stats));
+    return 0;
+  }
+
+  auto blob = std::make_unique<uint8_t[]>(perf_loc.size);
+  if (fseek(f, static_cast<long>(perf_loc.offset), SEEK_SET) != 0)
+  {
+    fclose(f);
+    return -1;
+  }
+  if (fread(blob.get(), 1, perf_loc.size, f) != perf_loc.size)
+  {
+    fclose(f);
+    return -1;
+  }
+  fclose(f);
+
+  auto parsed = perf_stats_t::deserialize(blob.get(), perf_loc.size);
+  if (!parsed.valid)
+  {
+    memset(perf_stats, 0, sizeof(*perf_stats));
+    return 0;
+  }
+
+  perf_stats->total_time_seconds = parsed.total_time_seconds;
+  uint64_t written = parsed.source_write.total_bytes + parsed.lod_write.total_bytes;
+  perf_stats->total_bytes_written_mb = double(written) / 1e6;
+  perf_stats->overall_mbps = parsed.total_time_seconds > 0 ? perf_stats->total_bytes_written_mb / parsed.total_time_seconds : 0;
+  fill_io_stats(perf_stats->source_read, parsed.source_read);
+  fill_io_stats(perf_stats->sort, parsed.sort);
+  fill_io_stats(perf_stats->source_write, parsed.source_write);
+  fill_io_stats(perf_stats->lod_read, parsed.lod_read);
+  fill_io_stats(perf_stats->lod_write, parsed.lod_write);
+  perf_stats->tree_build_seconds = double(parsed.tree_build_us) / 1e6;
+  perf_stats->lod_generation_seconds = double(parsed.lod_generation_us) / 1e6;
+  return 0;
+}
+
+void converter_get_live_perf_stats(struct converter_t *converter, struct converter_perf_stats_t *perf_stats)
+{
+  auto &ps = converter->processor.perf_stats();
+  auto now = perf_stats_t::clock_t::now();
+  double elapsed = double(std::chrono::duration_cast<std::chrono::microseconds>(now - ps.conversion_start).count()) / 1e6;
+
+  perf_stats->total_time_seconds = elapsed;
+  uint64_t written = ps.source_write.total_bytes.load(std::memory_order_relaxed) + ps.lod_write.total_bytes.load(std::memory_order_relaxed);
+  perf_stats->total_bytes_written_mb = double(written) / 1e6;
+  perf_stats->overall_mbps = elapsed > 0 ? perf_stats->total_bytes_written_mb / elapsed : 0;
+
+  fill_live_io_stats(perf_stats->source_read, ps.source_read);
+  fill_live_io_stats(perf_stats->sort, ps.sort);
+  fill_live_io_stats(perf_stats->source_write, ps.source_write);
+  fill_live_io_stats(perf_stats->lod_read, ps.lod_read);
+  fill_live_io_stats(perf_stats->lod_write, ps.lod_write);
+
+  perf_stats->tree_build_seconds = double(ps.tree_build_time_us.load(std::memory_order_relaxed)) / 1e6;
+  perf_stats->lod_generation_seconds = double(ps.lod_generation_time_us.load(std::memory_order_relaxed)) / 1e6;
 }
 
 } // namespace points::converter

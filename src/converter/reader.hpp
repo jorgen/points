@@ -35,6 +35,7 @@
 #include "attributes_configs.hpp"
 #include "conversion_types.hpp"
 #include "error.hpp"
+#include "perf_stats.hpp"
 
 namespace points::converter
 {
@@ -66,7 +67,8 @@ struct unsorted_points_event_t
 class get_data_worker_t
 {
 public:
-  get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, const get_points_file_t &file, vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,
+  get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, perf_stats_t &perf_stats, const get_points_file_t &file,
+                    vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,
                     vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<unsorted_points_event_t> &unsorted_points_queue);
   void work();
   void after_work();
@@ -75,6 +77,7 @@ public:
 
   point_reader_file_t &point_reader_file;
   attributes_configs_t &attribute_configs;
+  perf_stats_t &perf_stats;
   vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe;
   vio::event_pipe_t<input_data_id_t> &sub_added;
   vio::event_pipe_t<unsorted_points_event_t> &unsorted_points_queue;
@@ -89,7 +92,7 @@ public:
 class sort_worker_t
 {
 public:
-  sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, header_t public_header, points_t &&points);
+  sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, header_t public_header, points_t &&points);
   void work();
   void after_work();
   void enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool);
@@ -98,6 +101,7 @@ public:
   tree_config_t _tree_config;
   point_reader_file_t &reader_file;
   attributes_configs_t &attributes_configs;
+  perf_stats_t &perf_stats;
   header_t public_header;
   points_t points;
   error_t error;
@@ -106,13 +110,15 @@ public:
 
 struct point_reader_file_t
 {
-  point_reader_file_t(const tree_config_t &tree_config, vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, const get_points_file_t &file,
+  point_reader_file_t(const tree_config_t &tree_config, vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats,
+                      const get_points_file_t &file,
                       vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<unsorted_points_event_t> &unsorted_points,
                       vio::event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe)
     : tree_config(tree_config)
     , event_loop(event_loop)
     , thread_pool(thread_pool)
-    , input_reader(new get_data_worker_t(*this, attributes_configs, file, input_init_pipe, sub_added, unsorted_points))
+    , perf_stats(perf_stats)
+    , input_reader(new get_data_worker_t(*this, attributes_configs, perf_stats, file, input_init_pipe, sub_added, unsorted_points))
     , sorted_points_pipe(sorted_points_pipe)
   {
     input_reader->enqueue(event_loop, thread_pool);
@@ -124,6 +130,7 @@ struct point_reader_file_t
   tree_config_t tree_config;
   vio::event_loop_t &event_loop;
   vio::thread_pool_t &thread_pool;
+  perf_stats_t &perf_stats;
   std::unique_ptr<get_data_worker_t> input_reader;
   std::vector<std::unique_ptr<sort_worker_t>> sort_workers;
   vio::event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe;
@@ -166,7 +173,8 @@ private:
 class point_reader_t : public vio::about_to_block_t
 {
 public:
-  point_reader_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added,
+  point_reader_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats,
+                 vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added,
                  vio::event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, vio::event_pipe_t<input_data_id_t> &done_with_file, vio::event_pipe_t<file_error_t> &file_errors);
   void add_file(tree_config_t tree_config, get_points_file_t &&new_file);
 
@@ -179,6 +187,7 @@ private:
   vio::event_loop_t &_event_loop;
   vio::thread_pool_t &_thread_pool;
   attributes_configs_t &_attributes_configs;
+  perf_stats_t &_perf_stats;
   vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &_input_init_pipe;
   vio::event_pipe_t<input_data_id_t> &_sub_added;
   vio::event_pipe_t<std::pair<points_t, error_t>> &_sorted_points_pipe;

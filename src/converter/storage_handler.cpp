@@ -20,8 +20,6 @@
 
 #include <uv.h>
 
-#include <fmt/printf.h>
-
 #include <cassert>
 #include <cstring>
 #include <fcntl.h>
@@ -30,13 +28,11 @@
 #include <limits>
 #include <utility>
 
-#include <fmt/format.h>
-
 namespace points::converter
 {
 
 static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                                                   const storage_location_t &compression_stats)
+                                                   const storage_location_t &compression_stats, const storage_location_t &perf_stats)
 {
   auto serialized_index = std::make_shared<uint8_t[]>(index_size);
   auto *data = serialized_index.get();
@@ -56,11 +52,14 @@ static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   data += sizeof(tree_registry);
 
   memcpy(data, &compression_stats, sizeof(compression_stats));
+  data += sizeof(compression_stats);
+
+  memcpy(data, &perf_stats, sizeof(perf_stats));
 
   return serialized_index;
 }
 [[nodiscard]] static error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry,
-                                               storage_location_t &compression_stats)
+                                               storage_location_t &compression_stats, storage_location_t &perf_stats)
 {
   (void)buffer_size; // buffer size is validated by the caller
   uint8_t magic[] = {'J', 'L', 'P', 0};
@@ -82,6 +81,9 @@ static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   ptr += sizeof(tree_registry);
 
   memcpy(&compression_stats, ptr, sizeof(compression_stats));
+  ptr += sizeof(compression_stats);
+
+  memcpy(&perf_stats, ptr, sizeof(perf_stats));
   return {};
 }
 
@@ -108,7 +110,7 @@ static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop
   return buffer;
 }
 
-storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, vio::event_pipe_t<void> &index_written,
+storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written,
                                      vio::event_pipe_t<error_t> &storage_error_pipe, error_t &error)
   : _file_name(url)
   , _thread_pool(thread_pool)
@@ -119,6 +121,7 @@ storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t 
   , _file_opened_in_write_mode(false)
   , _attributes_configs(attributes_configs)
   , _serialized_index_size(128)
+  , _perf_stats(perf_stats)
   , _index_written(index_written)
   , _storage_error(storage_error_pipe)
   , _write_event_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_events))
@@ -193,7 +196,8 @@ error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buf
   storage_location_t attribute_configs;
   storage_location_t tree_registry;
   storage_location_t compression_stats;
-  error = deserialize_index(index_buffer.get(), _serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats);
+  storage_location_t perf_stats;
+  error = deserialize_index(index_buffer.get(), _serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats);
   if (error.code != 0)
   {
     return error;
@@ -344,17 +348,26 @@ vio::task_t<void> storage_handler_t::do_write(const std::shared_ptr<uint8_t[]> &
   auto result = co_await vio::write_file(_event_loop, file, data.get(), location.size, int64_t(location.offset));
   if (!result.has_value())
   {
-    fprintf(stderr, "Write error %d - %s\n", result.error().code, result.error().msg.c_str());
+    error_t error;
+    error.code = result.error().code;
+    error.msg = result.error().msg;
+    _storage_error.post_event(std::move(error));
   }
 }
 
 vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, attributes_id_t attributes_id, attribute_buffers_t attribute_buffers,
                                                      std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)> done)
 {
+  auto write_start = std::chrono::steady_clock::now();
   std::unique_lock<std::mutex> lock(_mutex);
 
-  if (input_data_id_is_leaf(header.input_id))
+  bool is_leaf = input_data_id_is_leaf(header.input_id);
+  if (is_leaf)
     _seen_input_files.insert(header.input_id.data);
+
+  uint64_t uncompressed_total = 0;
+  for (auto &buf : attribute_buffers.buffers)
+    uncompressed_total += buf.size;
 
   auto formats = _attributes_configs.get_format_components(attributes_id);
   auto &attributes = _attributes_configs.get(attributes_id);
@@ -372,7 +385,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
   };
   std::vector<buffer_info_t> buffer_infos(buffer_count);
 
-  bool is_lod = !input_data_id_is_leaf(header.input_id);
+  bool is_lod = !is_leaf;
 
   for (int i = 0; i < buffer_count; i++)
   {
@@ -503,6 +516,15 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
       co_await do_write(info.data_owner, location);
     }
   }
+
+  auto write_end = std::chrono::steady_clock::now();
+  auto write_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(write_end - write_start).count());
+  if (is_leaf)
+    _perf_stats.source_write.record(uncompressed_total, write_us);
+  else
+    _perf_stats.lod_write.record(uncompressed_total, write_us);
+  if (_on_write_progress)
+    _on_write_progress();
 
   if (done)
   {
@@ -652,6 +674,19 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
     }
   }
 
+  if (_perf_stats_location.offset > 0)
+  {
+    auto removed = new_blob_manager.unregister_blob({_perf_stats_location.offset}, {_perf_stats_location.size});
+    if (!removed)
+    {
+      error_t error;
+      error.code = -1;
+      error.msg = "Failed to remove perf stats location";
+      done(std::move(error));
+      co_return;
+    }
+  }
+
   auto serialized_attributes_configs = _attributes_configs.serialize();
   storage_location_t serialized_attributes_configs_location;
   serialized_attributes_configs_location.offset = new_blob_manager.register_blob({serialized_attributes_configs.size}).data;
@@ -667,11 +702,17 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
   serialized_stats_location.offset = new_blob_manager.register_blob({stats_size}).data;
   serialized_stats_location.size = stats_size;
 
+  uint32_t perf_size = 0;
+  auto serialized_perf_data = _perf_stats.serialize(perf_size);
+  storage_location_t serialized_perf_location;
+  serialized_perf_location.offset = new_blob_manager.register_blob({perf_size}).data;
+  serialized_perf_location.size = perf_size;
+
   auto serialized_blob = new_blob_manager.serialize();
 
   storage_location_t serialized_blob_location = {0, serialized_blob.size, serialized_blob.offset};
 
-  // Write all three blobs
+  // Write all blobs
   auto &file = **_file;
   auto result1 = co_await vio::write_file(_event_loop, file, reinterpret_cast<const uint8_t *>(serialized_blob.data.get()), serialized_blob.size, int64_t(serialized_blob.offset));
   if (!result1.has_value())
@@ -703,8 +744,18 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
     co_return;
   }
 
+  auto result4 = co_await vio::write_file(_event_loop, file, serialized_perf_data.get(), serialized_perf_location.size, int64_t(serialized_perf_location.offset));
+  if (!result4.has_value())
+  {
+    error_t error;
+    error.code = result4.error().code;
+    error.msg = result4.error().msg;
+    done(std::move(error));
+    co_return;
+  }
+
   co_await do_write_index(std::move(new_blob_manager), serialized_blob_location, serialized_attributes_configs_location, new_tree_registry_location,
-                          serialized_stats_location, std::move(done));
+                          serialized_stats_location, serialized_perf_location, std::move(done));
 }
 
 void storage_handler_t::handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done)
@@ -717,17 +768,14 @@ void storage_handler_t::handle_write_blob_locations_and_update_header(storage_lo
 }
 
 vio::task_t<void> storage_handler_t::do_write_index(free_blob_manager_t new_blob_manager, storage_location_t free_blobs, storage_location_t attribute_configs, storage_location_t tree_registry,
-                                                    storage_location_t compression_stats, std::function<void(error_t &&error)> done)
+                                                    storage_location_t compression_stats, storage_location_t perf_stats, std::function<void(error_t &&error)> done)
 {
-  auto serialized_index = serialize_index(_serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats);
-
-  fmt::print(stderr, "Writing index:\n  free_blobs: {}\n  attribute_configs: {}\n  tree_registry: {}\n", free_blobs, attribute_configs, tree_registry);
+  auto serialized_index = serialize_index(_serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats);
 
   auto &file = **_file;
   auto result = co_await vio::write_file(_event_loop, file, serialized_index.get(), _serialized_index_size, 0);
 
   error_t error;
-  fmt::print(stderr, "Write index done {}\n", result.has_value() ? 0 : result.error().code);
   if (!result.has_value())
   {
     error.code = result.error().code;
@@ -740,6 +788,7 @@ vio::task_t<void> storage_handler_t::do_write_index(free_blob_manager_t new_blob
   _blobs_location = free_blobs;
   _attributes_location = attribute_configs;
   _stats_location = compression_stats;
+  _perf_stats_location = perf_stats;
 
   uv_fs_t req = {};
   uv_fs_fsync(_event_loop.loop(), &req, file.handle, NULL);
@@ -748,13 +797,13 @@ vio::task_t<void> storage_handler_t::do_write_index(free_blob_manager_t new_blob
 }
 
 void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                                           const storage_location_t &compression_stats, std::function<void(error_t &&error)> &&done)
+                                           const storage_location_t &compression_stats, const storage_location_t &perf_stats, std::function<void(error_t &&error)> &&done)
 {
   [](storage_handler_t *self, free_blob_manager_t bm, storage_location_t fb, storage_location_t ac, storage_location_t tr,
-     storage_location_t cs, std::function<void(error_t &&error)> done_cb) -> vio::detached_task_t
+     storage_location_t cs, storage_location_t ps, std::function<void(error_t &&error)> done_cb) -> vio::detached_task_t
   {
-    co_await self->do_write_index(std::move(bm), fb, ac, tr, cs, std::move(done_cb));
-  }(this, std::move(new_blob_manager), free_blobs, attribute_configs, tree_registry, compression_stats, std::move(done));
+    co_await self->do_write_index(std::move(bm), fb, ac, tr, cs, ps, std::move(done_cb));
+  }(this, std::move(new_blob_manager), free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats, std::move(done));
 }
 
 void storage_handler_t::set_compressor(compression_method_t method)
@@ -780,6 +829,7 @@ void storage_handler_t::handle_read_request(std::shared_ptr<read_request_t> &&re
 
 vio::task_t<void> storage_handler_t::do_read_request(std::shared_ptr<read_request_t> read_request, storage_location_t location)
 {
+  auto read_start = std::chrono::steady_clock::now();
   auto &file = **_file;
   auto buffer = std::make_shared<uint8_t[]>(location.size);
   auto result = co_await vio::read_file(_event_loop, file, buffer.get(), location.size, int64_t(location.offset));
@@ -788,7 +838,6 @@ vio::task_t<void> storage_handler_t::do_read_request(std::shared_ptr<read_reques
   {
     read_request->error.code = result.error().code;
     read_request->error.msg = result.error().msg;
-    fprintf(stderr, "Read error %d - %s\n", read_request->error.code, read_request->error.msg.c_str());
   }
   else
   {
@@ -812,6 +861,10 @@ vio::task_t<void> storage_handler_t::do_read_request(std::shared_ptr<read_reques
       }
     }
   }
+
+  auto read_end = std::chrono::steady_clock::now();
+  auto read_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(read_end - read_start).count());
+  _perf_stats.lod_read.record(location.size, read_us);
 
   std::unique_lock<std::mutex> lock(read_request->_mutex);
   read_request->_done = true;

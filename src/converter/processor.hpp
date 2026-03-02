@@ -35,6 +35,7 @@
 #include "conversion_types.hpp"
 #include "frustum_tree_walker.hpp"
 #include "input_data_source_registry.hpp"
+#include "perf_stats.hpp"
 #include "pre_init_file_retriever.hpp"
 #include "reader.hpp"
 #include "storage_handler.hpp"
@@ -87,6 +88,11 @@ public:
     return _storage_handler;
   }
 
+  perf_stats_t &perf_stats()
+  {
+    return _perf_stats;
+  }
+
   const attributes_t &get_attributes(attributes_id_t id);
 
 private:
@@ -107,6 +113,7 @@ private:
   std::mutex _idle_mutex;
   std::condition_variable _idle_condition;
 
+  perf_stats_t _perf_stats;
   storage_handler_t _storage_handler;
   input_data_source_registry_t _input_data_source_registry;
   attributes_configs_t _attributes_configs;

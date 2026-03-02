@@ -29,9 +29,11 @@
 #include "compressor.hpp"
 #include "conversion_types.hpp"
 #include "error.hpp"
+#include "perf_stats.hpp"
 #include "tree.hpp"
 #include <ankerl/unordered_dense.h>
 
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -73,7 +75,7 @@ struct read_request_t
 class storage_handler_t
 {
 public:
-  storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, vio::event_pipe_t<void> &index_written, vio::event_pipe_t<error_t> &storage_error_pipe, error_t &error);
+  storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written, vio::event_pipe_t<error_t> &storage_error_pipe, error_t &error);
   ~storage_handler_t();
   [[nodiscard]] bool file_exists() const
   {
@@ -93,6 +95,7 @@ public:
   std::shared_ptr<read_request_t> read(storage_location_t location);
 
   void set_compressor(compression_method_t method);
+  void set_on_write_progress(std::function<void()> cb) { _on_write_progress = std::move(cb); }
 
   const compression_stats_t &get_compression_stats() const { return _compression_stats; }
 
@@ -103,7 +106,7 @@ private:
   void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, error_t &&error)> &&done);
   void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done);
   void handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                          const storage_location_t &compression_stats, std::function<void(error_t &&error)> &&done);
+                          const storage_location_t &compression_stats, const storage_location_t &perf_stats, std::function<void(error_t &&error)> &&done);
   void handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location);
 
   vio::task_t<void> do_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location);
@@ -114,7 +117,7 @@ private:
   vio::task_t<void> do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done);
   vio::task_t<void> do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(error_t &&error)> done);
   vio::task_t<void> do_write_index(free_blob_manager_t new_blob_manager, storage_location_t free_blobs, storage_location_t attribute_configs, storage_location_t tree_registry,
-                                   storage_location_t compression_stats, std::function<void(error_t &&error)> done);
+                                   storage_location_t compression_stats, storage_location_t perf_stats, std::function<void(error_t &&error)> done);
   vio::task_t<void> do_read_request(std::shared_ptr<read_request_t> read_request, storage_location_t location);
 
   std::string _file_name;
@@ -134,7 +137,10 @@ private:
   storage_location_t _attributes_location;
   storage_location_t _blobs_location;
   storage_location_t _stats_location;
+  storage_location_t _perf_stats_location;
 
+  perf_stats_t &_perf_stats;
+  std::function<void()> _on_write_progress;
   compression_stats_t _compression_stats;
   std::set<uint32_t> _seen_input_files;
 

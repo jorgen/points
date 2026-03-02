@@ -26,14 +26,16 @@
 #include <points/converter/default_attribute_names.h>
 
 #include <assert.h>
+#include <chrono>
 
 namespace points::converter
 {
-get_data_worker_t::get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, const get_points_file_t &file,
+get_data_worker_t::get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, perf_stats_t &perf_stats, const get_points_file_t &file,
                                      vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added,
                                      vio::event_pipe_t<unsorted_points_event_t> &unsorted_points_queue)
   : point_reader_file(point_reader_file)
   , attribute_configs(attribute_configs)
+  , perf_stats(perf_stats)
   , input_init_pipe(input_init_pipe)
   , sub_added(sub_added)
   , unsorted_points_queue(unsorted_points_queue)
@@ -97,6 +99,7 @@ void get_data_worker_t::work()
   uint32_t sub_part = 0;
   while (!done_read_file)
   {
+    auto batch_start = std::chrono::steady_clock::now();
     points_t points;
     points.header = storage_header;
     points.header.input_id.sub = sub_part++;
@@ -115,6 +118,15 @@ void get_data_worker_t::work()
     attribute_buffers_adjust_buffers_to_size(attribute_info, points.buffers, local_points_read);
     points_read += local_points_read;
     points.header.point_count = local_points_read;
+
+    uint64_t batch_bytes = 0;
+    for (auto &buf : points.buffers.buffers)
+      batch_bytes += buf.size;
+
+    auto batch_end = std::chrono::steady_clock::now();
+    auto batch_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(batch_end - batch_start).count());
+    perf_stats.source_read.record(batch_bytes, batch_us);
+
     split++;
     unsorted_points_event_t event(attribute_info, public_header, std::move(points), point_reader_file);
     unsorted_points_queue.post_event(std::move(event));
@@ -137,10 +149,11 @@ void get_data_worker_t::enqueue(vio::event_loop_t &event_loop, vio::thread_pool_
   });
 }
 
-sort_worker_t::sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, header_t public_header, points_t &&points)
+sort_worker_t::sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, header_t public_header, points_t &&points)
   : _tree_config(tree_config)
   , reader_file(reader_file)
   , attributes_configs(attributes_configs)
+  , perf_stats(perf_stats)
   , public_header(public_header)
   , points(std::move(points))
 {
@@ -148,7 +161,16 @@ sort_worker_t::sort_worker_t(const tree_config_t &tree_config, point_reader_file
 
 void sort_worker_t::work()
 {
+  auto sort_start = std::chrono::steady_clock::now();
   sort_points(_tree_config, attributes_configs, public_header, points, error);
+  auto sort_end = std::chrono::steady_clock::now();
+
+  uint64_t sort_bytes = 0;
+  for (auto &buf : points.buffers.buffers)
+    sort_bytes += buf.size;
+
+  auto sort_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(sort_end - sort_start).count());
+  perf_stats.sort.record(sort_bytes, sort_us);
 }
 
 void sort_worker_t::after_work()
@@ -168,12 +190,14 @@ void sort_worker_t::enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &t
   });
 }
 
-point_reader_t::point_reader_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,
+point_reader_t::point_reader_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats,
+                               vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,
                                vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, vio::event_pipe_t<input_data_id_t> &done_with_file,
                                vio::event_pipe_t<file_error_t> &file_errors)
   : _event_loop(event_loop)
   , _thread_pool(thread_pool)
   , _attributes_configs(attributes_configs)
+  , _perf_stats(perf_stats)
   , _input_init_pipe(input_init_pipe)
   , _sub_added(sub_added)
   , _sorted_points_pipe(sorted_points_pipe)
@@ -213,14 +237,14 @@ void point_reader_t::about_to_block()
 
 void point_reader_t::handle_new_files(tree_config_t &&tree_config, get_points_file_t &&new_file)
 {
-  _point_reader_files.emplace_back(new point_reader_file_t(tree_config, _event_loop, _thread_pool, _attributes_configs, new_file, _input_init_pipe, _sub_added, _unsorted_points, _sorted_points_pipe));
+  _point_reader_files.emplace_back(new point_reader_file_t(tree_config, _event_loop, _thread_pool, _attributes_configs, _perf_stats, new_file, _input_init_pipe, _sub_added, _unsorted_points, _sorted_points_pipe));
 }
 
 void point_reader_t::handle_unsorted_points(unsorted_points_event_t &&unsorted_points)
 {
   auto &tree_config = unsorted_points.reader_file.tree_config;
   auto &reader_file = unsorted_points.reader_file;
-  unsorted_points.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_config, reader_file, _attributes_configs, unsorted_points.public_header, std::move(unsorted_points.points)));
+  unsorted_points.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_config, reader_file, _attributes_configs, _perf_stats, unsorted_points.public_header, std::move(unsorted_points.points)));
   unsorted_points.reader_file.sort_workers.back()->enqueue(unsorted_points.reader_file.event_loop, unsorted_points.reader_file.thread_pool);
 }
 

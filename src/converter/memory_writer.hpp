@@ -15,6 +15,8 @@ bool write_memory(uint8_t *&ptr, const uint8_t *end, const T &value)
 template <typename T>
 bool write_vec_type(uint8_t *&ptr, const uint8_t *end, const T &data)
 {
+  if (data.empty())
+    return true;
   auto to_copy = sizeof(data[0]) * data.size();
   if (ptr + to_copy > end)
     return false;
@@ -36,6 +38,11 @@ bool read_memory(const uint8_t *&ptr, const uint8_t *end, T &value)
 template <typename T>
 bool read_vec_type(const uint8_t *&ptr, const uint8_t *end, T &data, uint32_t size)
 {
+  if (size == 0)
+  {
+    data.clear();
+    return true;
+  }
   data.resize(size);
   auto to_copy = sizeof(data[0]) * size;
   if (ptr + to_copy > end)

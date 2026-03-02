@@ -8,10 +8,24 @@
 
 #include <points/converter/converter.h>
 
+struct callback_data_t
+{
+  bool had_errors = false;
+  points::converter::converter_t *converter = nullptr;
+};
+
 void converter_progress_callback_t(void *user_data, float progress)
 {
-  (void)user_data;
-  fmt::print("Progress: {:.2f}\n", progress);
+  (void)progress;
+  auto *data = static_cast<callback_data_t *>(user_data);
+  points::converter::converter_perf_stats_t stats;
+  points::converter::converter_get_live_perf_stats(data->converter, &stats);
+  fmt::print(stderr, "\r[{:.1f}s] read: {} ops  sort: {} ops  write: {} ops  {:.1f} MB/s",
+             stats.total_time_seconds,
+             stats.source_read.operation_count,
+             stats.sort.operation_count,
+             stats.source_write.operation_count,
+             stats.overall_mbps);
 }
 
 void converter_warning_callback_t(void *user_data, const char *message)
@@ -31,8 +45,8 @@ static std::string get_error_string(const points::error_t *error)
 
 void converter_error_callback_t(void *user_data, const struct points::error_t *error)
 {
-  bool *had_errors = static_cast<bool *>(user_data);
-  *had_errors = true;
+  auto *data = static_cast<callback_data_t *>(user_data);
+  data->had_errors = true;
   auto error_str = get_error_string(error);
   fmt::print("Error: {}\n", error_str);
 }
@@ -40,7 +54,7 @@ void converter_error_callback_t(void *user_data, const struct points::error_t *e
 void converter_done_callback_t(void *user_data)
 {
   (void)user_data;
-  fmt::print("Done\n");
+  fmt::print(stderr, "\n");
 }
 
 template <typename T, typename Deleter>
@@ -148,6 +162,41 @@ static void print_compression_stats(const points::converter::converter_stats_t &
              format_number(total_compressed), total_ratio);
 }
 
+static void print_perf_stats(const points::converter::converter_perf_stats_t &ps)
+{
+  double overall = ps.total_time_seconds > 0 ? ps.total_bytes_written_mb / ps.total_time_seconds : 0;
+
+  fmt::print(stderr, "\n--- Performance Summary ---\n");
+  fmt::print(stderr, "  Total time:          {:.2f}s\n", ps.total_time_seconds);
+  fmt::print(stderr, "  Total written:       {:.2f} MB ({:.2f} MB/s)\n", ps.total_bytes_written_mb, overall);
+
+  if (ps.source_read.operation_count > 0)
+  {
+    double read_mb = double(ps.source_read.total_bytes) / 1e6;
+    double read_s = double(ps.source_read.total_time_us) / 1e6;
+    fmt::print(stderr, "  Source reading:      {:.2f} MB in {:.2f}s ({:.2f} MB/s)\n", read_mb, read_s, ps.source_read.avg_mbps);
+  }
+
+  if (ps.sort.operation_count > 0)
+    fmt::print(stderr, "  Sorting:             avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", ps.sort.avg_mbps, ps.sort.peak_mbps, ps.sort.low_mbps);
+
+  if (ps.source_write.operation_count > 0)
+    fmt::print(stderr, "  Source write IO:     avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", ps.source_write.avg_mbps, ps.source_write.peak_mbps, ps.source_write.low_mbps);
+
+  if (ps.tree_build_seconds > 0)
+    fmt::print(stderr, "  Tree building:       {:.2f}s\n", ps.tree_build_seconds);
+
+  if (ps.lod_generation_seconds > 0)
+  {
+    fmt::print(stderr, "  LOD generation:      {:.2f}s\n", ps.lod_generation_seconds);
+    if (ps.lod_read.operation_count > 0)
+      fmt::print(stderr, "    LOD read IO:       avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", ps.lod_read.avg_mbps, ps.lod_read.peak_mbps, ps.lod_read.low_mbps);
+    if (ps.lod_write.operation_count > 0)
+      fmt::print(stderr, "    LOD write IO:      avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", ps.lod_write.avg_mbps, ps.lod_write.peak_mbps, ps.lod_write.low_mbps);
+  }
+  fmt::print(stderr, "---\n");
+}
+
 struct args_t
 {
   std::vector<std::string> input;
@@ -231,16 +280,21 @@ int main(int argc, char **argv)
     }
     return 1;
   }
-  bool had_errors = false;
+  callback_data_t cb_data;
+  cb_data.converter = converter.get();
   points::converter::converter_runtime_callbacks_t runtime_callbacks = {&converter_progress_callback_t, &converter_warning_callback_t, &converter_error_callback_t, &converter_done_callback_t};
-  points::converter::converter_set_runtime_callbacks(converter.get(), runtime_callbacks, &had_errors);
+  points::converter::converter_set_runtime_callbacks(converter.get(), runtime_callbacks, &cb_data);
   points::converter::converter_set_compression(converter.get(), args.compression);
   points::converter::converter_add_data_file(converter.get(), input_str_buf.data(), int(input_str_buf.size()));
   points::converter::converter_wait_idle(converter.get());
+
+  points::converter::converter_perf_stats_t perf_stats;
+  points::converter::converter_get_live_perf_stats(converter.get(), &perf_stats);
+  print_perf_stats(perf_stats);
 
   points::converter::converter_stats_t stats;
   points::converter::converter_get_compression_stats(converter.get(), &stats);
   print_compression_stats(stats);
 
-  return had_errors ? 1 : 0;
+  return cb_data.had_errors ? 1 : 0;
 }

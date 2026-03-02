@@ -23,6 +23,7 @@
 #include <vio/task.h>
 #include <vio/thread_pool.h>
 
+#include "perf_stats.hpp"
 #include "tree.hpp"
 #include "tree_lod_generator.hpp"
 
@@ -37,7 +38,7 @@ struct waiting_for_root_t
 class tree_handler_t : public vio::about_to_block_t
 {
 public:
-  tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, vio::event_pipe_t<input_data_id_t> &done_input);
+  tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<input_data_id_t> &done_input);
   [[nodiscard]] error_t deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size);
   void request_root();
   void set_tree_initialization_config(const tree_config_t &config);
@@ -85,6 +86,7 @@ private:
 
   storage_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;
+  perf_stats_t &_perf_stats;
 
   tree_registry_t _tree_registry;
   std::vector<uint8_t> _tree_id_requested;

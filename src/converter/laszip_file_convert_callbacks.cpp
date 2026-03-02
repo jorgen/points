@@ -42,15 +42,8 @@ struct laszip_handle_t
   {
     if (reader)
     {
-      if (laszip_close_reader(reader))
-      {
-        fprintf(stderr, "Failed to close laszip reader\n");
-      }
-
-      if (laszip_destroy(reader))
-      {
-        fprintf(stderr, "Failed to destroy laszip reader\n");
-      }
+      laszip_close_reader(reader);
+      laszip_destroy(reader);
     }
   }
 };
