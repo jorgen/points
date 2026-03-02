@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: jorgen/points-ci
+
+jobs:
+  docker:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tag from Dockerfile
+        id: tag
+        run: echo "tag=sha-$(sha256sum Dockerfile | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if image exists
+        id: check
+        run: |
+          if docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }} > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push Docker image
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  build:
+    needs: docker
+    runs-on: ubuntu-24.04
+    container: ghcr.io/jorgen/points-ci:${{ needs.docker.outputs.image-tag }}
+    name: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache 3rdparty dependencies
+        uses: actions/cache@v4
+        with:
+          path: 3rdparty
+          key: 3rdparty-${{ hashFiles('CMake/3rdPartyPackages.cmake', 'CMakeLists.txt') }}
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-build-${{ github.sha }}
+          restore-keys: ccache-build-
+
+      - name: Configure
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          ccache --zero-stats
+          cmake -G Ninja -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER=gcc-14 \
+            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DPOINTS_BUILD_EXAMPLES=OFF
+
+      - name: Build
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          cmake --build build
+          ccache --show-stats
+
+      - name: Test
+        run: |
+          ./build/tests/public_interface_unit_tests
+          ./build/tests/private_interface_unit_tests
+
+  sanitizers:
+    needs: docker
+    runs-on: ubuntu-24.04
+    container: ghcr.io/jorgen/points-ci:${{ needs.docker.outputs.image-tag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: asan
+            cc: gcc-14
+            cxx: g++-14
+            c_flags: -fsanitize=address -fno-omit-frame-pointer
+            cxx_flags: -fsanitize=address -fno-omit-frame-pointer
+            linker_flags: -fsanitize=address
+          - name: tsan
+            cc: gcc-14
+            cxx: g++-14
+            c_flags: -fsanitize=thread -fno-omit-frame-pointer
+            cxx_flags: -fsanitize=thread -fno-omit-frame-pointer
+            linker_flags: -fsanitize=thread
+          - name: ubsan
+            cc: gcc-14
+            cxx: g++-14
+            c_flags: -fsanitize=undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
+            cxx_flags: -fsanitize=undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
+            linker_flags: -fsanitize=undefined
+    name: ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache 3rdparty dependencies
+        uses: actions/cache@v4
+        with:
+          path: 3rdparty
+          key: 3rdparty-${{ hashFiles('CMake/3rdPartyPackages.cmake', 'CMakeLists.txt') }}
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ matrix.name }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.name }}-
+
+      - name: Configure
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          ccache --zero-stats
+          cmake -G Ninja -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_C_FLAGS="${{ matrix.c_flags }}" \
+            -DCMAKE_CXX_FLAGS="${{ matrix.cxx_flags }}" \
+            -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.linker_flags }}" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DPOINTS_BUILD_EXAMPLES=OFF
+
+      - name: Build
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          cmake --build build
+          ccache --show-stats
+
+      - name: Test
+        run: |
+          ./build/tests/public_interface_unit_tests
+          ./build/tests/private_interface_unit_tests
