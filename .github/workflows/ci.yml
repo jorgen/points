@@ -51,54 +51,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-  build:
-    needs: docker
-    runs-on: ubuntu-24.04
-    container: ghcr.io/jorgen/points-ci:${{ needs.docker.outputs.image-tag }}
-    name: build
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cache 3rdparty dependencies
-        uses: actions/cache@v4
-        with:
-          path: 3rdparty
-          key: 3rdparty-${{ hashFiles('CMake/3rdPartyPackages.cmake', 'CMakeLists.txt') }}
-
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: .ccache
-          key: ccache-build-${{ github.sha }}
-          restore-keys: ccache-build-
-
-      - name: Configure
-        env:
-          CCACHE_DIR: ${{ github.workspace }}/.ccache
-        run: |
-          ccache --zero-stats
-          cmake -G Ninja -B build \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_C_COMPILER=gcc-14 \
-            -DCMAKE_CXX_COMPILER=g++-14 \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DPOINTS_BUILD_EXAMPLES=OFF
-
-      - name: Build
-        env:
-          CCACHE_DIR: ${{ github.workspace }}/.ccache
-        run: |
-          cmake --build build
-          ccache --show-stats
-
-      - name: Test
-        run: |
-          ./build/tests/public_interface_unit_tests
-          ./build/tests/private_interface_unit_tests
-
   sanitizers:
     needs: docker
     runs-on: ubuntu-24.04
