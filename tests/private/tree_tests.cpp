@@ -8,6 +8,7 @@
 
 #include "conversion_types.hpp"
 #include "storage_handler.hpp"
+#include "tree_lod_generator.hpp"
 #include <attributes_configs.hpp>
 #include <input_header.hpp>
 #include <morton.hpp>
@@ -51,7 +52,7 @@ struct tree_test_infrastructure : vio::about_to_block_t
     , index_written(event_loop, bind(&tree_test_infrastructure::handle_index_written))
     , cache_file_error(event_loop, bind(&tree_test_infrastructure::handle_file_error))
 
-    , cache_file_handler("test_cache_file", worker_thread_pool, attributes_config, index_written, cache_file_error, error)
+    , cache_file_handler("test_cache_file", worker_thread_pool, attributes_config, perf_stats, index_written, cache_file_error, error)
   {
     event_loop.add_about_to_block_listener(this);
     cache_file_handler.upgrade_to_write(true);
@@ -105,6 +106,7 @@ struct tree_test_infrastructure : vio::about_to_block_t
   points::converter::attributes_configs_t attributes_config;
   vio::event_pipe_t<void> index_written;
   vio::event_pipe_t<points::error_t> cache_file_error;
+  points::converter::perf_stats_t perf_stats;
   points::converter::storage_handler_t cache_file_handler;
 
   uint32_t next_input_id = 0;
@@ -355,4 +357,54 @@ TEST_CASE("reparent non-zero child position", "[converter, tree_t]")
     REQUIRE(tree.magnitude == 1);
   }
 }
+TEST_CASE("lod generation updates subset count and offset", "[converter, tree_t, lod]")
+{
+  tree_test_infrastructure test_util(256);
+
+  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
+  auto points = create_points(test_util, 0, morton_max, 256);
+  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+
+  uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
+  auto second_points = create_points(test_util, morton_min, morton_max, 256);
+  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+
+  {
+    auto &tree = *test_util.tree_registry.get(root_id);
+    REQUIRE(tree.nodes[0][0] > 0);
+    REQUIRE(tree.data[0][0].data.empty());
+  }
+
+  std::mutex lod_mutex;
+  std::condition_variable lod_cv;
+  bool lod_complete = false;
+
+  vio::event_pipe_t<void> lod_done(test_util.event_loop, std::function<void()>([&] {
+    std::lock_guard<std::mutex> lock(lod_mutex);
+    lod_complete = true;
+    lod_cv.notify_all();
+  }));
+
+  points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+                                                   test_util.perf_stats, lod_done);
+
+  points::converter::morton::morton192_t max_morton{};
+  max_morton.data[0] = morton_max;
+  lod_gen.generate_lods(root_id, max_morton);
+
+  {
+    std::unique_lock<std::mutex> lock(lod_mutex);
+    REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
+  }
+
+  auto &tree = *test_util.tree_registry.get(root_id);
+  auto &root_collection = tree.data[0][0];
+
+  REQUIRE(root_collection.data.size() == 1);
+  REQUIRE(root_collection.point_count > 0);
+  REQUIRE(root_collection.data[0].count.data > 0);
+  REQUIRE(root_collection.data[0].count.data == root_collection.point_count);
+  REQUIRE(root_collection.data[0].offset.data == 0);
+}
+
 } // namespace
