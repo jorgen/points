@@ -877,6 +877,9 @@ static void adjust_tree_after_lod(tree_registry_t &tree_cache, std::vector<lod_t
       points_collection.point_count = done_node.generated_point_count.data;
       points_collection.min = done_node.generated_min;
       points_collection.max = done_node.generated_max;
+      assert(points_collection.data.size() == 1);
+      points_collection.data[0].count.data = done_node.generated_point_count.data;
+      points_collection.data[0].offset.data = 0;
       tree->storage_map.add_storage(done_node.storage_name, done_node.generated_attributes_id, std::move(done_node.generated_locations));
     }
   }
