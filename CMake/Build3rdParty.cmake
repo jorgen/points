@@ -33,37 +33,57 @@ macro(Build3rdParty)
     # vio changed its include directory from PUBLIC to PRIVATE; re-expose it
     target_include_directories(vio PUBLIC ${vio_SOURCE_DIR}/src)
 
-    # Patch laszip 3.5.0 source files (only once after fresh extraction).
-    # Guard with a stamp file to avoid re-patching (and corrupting) on
-    # subsequent configure runs.
-    set(_laszip_patch_stamp "${laszip_SOURCE_DIR}/.points_patched")
-    if (NOT EXISTS "${_laszip_patch_stamp}")
-        # Remove add_compile_options(-std=c++17) which wrongly applies C++
-        # flags to C files.  CMAKE_CXX_STANDARD 17 is already set.
-        file(READ "${laszip_SOURCE_DIR}/CMakeLists.txt" _laszip_cml)
-        string(REPLACE "add_compile_options(\"/std:c++17\")" "# patched out: add_compile_options(\"/std:c++17\")" _laszip_cml "${_laszip_cml}")
-        string(REPLACE "add_compile_options(-std=c++17)" "# patched out: add_compile_options(-std=c++17)" _laszip_cml "${_laszip_cml}")
-        file(WRITE "${laszip_SOURCE_DIR}/CMakeLists.txt" "${_laszip_cml}")
-        # LASZIP_ADD_LIBRARY sets CXX_STANDARD 11 on targets, overriding the
-        # global CMAKE_CXX_STANDARD 17.  Fix to use 17.
-        file(READ "${laszip_SOURCE_DIR}/cmake/macros.cmake" _laszip_macros)
-        string(REPLACE "CXX_STANDARD 11" "CXX_STANDARD 17" _laszip_macros "${_laszip_macros}")
-        file(WRITE "${laszip_SOURCE_DIR}/cmake/macros.cmake" "${_laszip_macros}")
-        file(WRITE "${_laszip_patch_stamp}" "")
-    endif ()
-    set(LASZIP_BUILD_STATIC ON CACHE BOOL "" FORCE)
-    add_subdirectory(${laszip_SOURCE_DIR} ${CMAKE_BINARY_DIR}/laszip_build SYSTEM)
-    unset(LASZIP_BUILD_STATIC CACHE)
-    # The base laszip target is "laszip" on Linux, "laszip3" on Windows.
-    # Expose it via POINTS_LASZIP_TARGET so consumers use it directly.
-    set(POINTS_LASZIP_TARGET laszip)
-    if(WIN32)
-        set(POINTS_LASZIP_TARGET "laszip3")
-    endif()
-    target_include_directories(${POINTS_LASZIP_TARGET} PUBLIC
+    # Build laszip as an OBJECT library directly from sources
+    set(LASZIP_API_VERSION_MAJOR 3)
+    set(LASZIP_API_VERSION_MINOR 5)
+    set(LASZIP_API_VERSION_PATCH 1)
+    set(HAVE_UNORDERED_MAP 1)
+    set(_laszip_generated_dir "${CMAKE_CURRENT_BINARY_DIR}/laszip_generated")
+    configure_file(
+        "${laszip_SOURCE_DIR}/laszip_api_version.h.in"
+        "${_laszip_generated_dir}/laszip_api_version.h"
+    )
+    add_library(laszip OBJECT
+        ${laszip_SOURCE_DIR}/src/mydefs.cpp
+        ${laszip_SOURCE_DIR}/src/arithmeticdecoder.cpp
+        ${laszip_SOURCE_DIR}/src/arithmeticencoder.cpp
+        ${laszip_SOURCE_DIR}/src/arithmeticmodel.cpp
+        ${laszip_SOURCE_DIR}/src/integercompressor.cpp
+        ${laszip_SOURCE_DIR}/src/lasindex.cpp
+        ${laszip_SOURCE_DIR}/src/lasinterval.cpp
+        ${laszip_SOURCE_DIR}/src/lasmessage.cpp
+        ${laszip_SOURCE_DIR}/src/lasquadtree.cpp
+        ${laszip_SOURCE_DIR}/src/lasreadpoint.cpp
+        ${laszip_SOURCE_DIR}/src/lasreaditemcompressed_v1.cpp
+        ${laszip_SOURCE_DIR}/src/lasreaditemcompressed_v2.cpp
+        ${laszip_SOURCE_DIR}/src/lasreaditemcompressed_v3.cpp
+        ${laszip_SOURCE_DIR}/src/lasreaditemcompressed_v4.cpp
+        ${laszip_SOURCE_DIR}/src/laswritepoint.cpp
+        ${laszip_SOURCE_DIR}/src/laswriteitemcompressed_v1.cpp
+        ${laszip_SOURCE_DIR}/src/laswriteitemcompressed_v2.cpp
+        ${laszip_SOURCE_DIR}/src/laswriteitemcompressed_v3.cpp
+        ${laszip_SOURCE_DIR}/src/laswriteitemcompressed_v4.cpp
+        ${laszip_SOURCE_DIR}/src/laszip.cpp
+        ${laszip_SOURCE_DIR}/src/laszip_dll.cpp
+    )
+    target_include_directories(laszip SYSTEM PUBLIC
         ${laszip_SOURCE_DIR}/dll
         ${laszip_SOURCE_DIR}/include/laszip
-        ${CMAKE_BINARY_DIR}/laszip_build/include/laszip)
+        ${_laszip_generated_dir}
+    )
+    target_include_directories(laszip PRIVATE
+        ${laszip_SOURCE_DIR}/src
+    )
+    target_compile_definitions(laszip PRIVATE UNORDERED HAVE_UNORDERED_MAP=1 LASZIPDLL_EXPORTS)
+    if (WIN32)
+        target_compile_definitions(laszip PRIVATE NOMINMAX)
+    endif ()
+    set_property(TARGET laszip PROPERTY CXX_STANDARD 17)
+    if (MSVC)
+        target_compile_options(laszip PRIVATE /w)
+    else ()
+        target_compile_options(laszip PRIVATE -w)
+    endif ()
 
     set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)

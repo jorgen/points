@@ -29,7 +29,7 @@ add_executable(private_interface_unit_tests
         private/draw_emitter_tests.cpp
 )
 target_link_libraries(private_interface_unit_tests PRIVATE vio blosc2_static)
-target_link_libraries(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm unordered_dense ${POINTS_LASZIP_TARGET})
+target_link_libraries(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm unordered_dense laszip)
 target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
     #target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)
