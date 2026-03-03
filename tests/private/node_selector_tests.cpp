@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <frame_node_registry.hpp>
 #include <gpu_node_buffer.hpp>
 #include <node_selector.hpp>
@@ -51,12 +51,12 @@ static void setup_registry(frame_node_registry_t &registry,
   registry.update_from_walker(subsets, edges, bufs);
 }
 
-TEST_CASE("node_selector selection", "[node_selector]")
+TEST_CASE("node_selector selection")
 {
   node_selector_t selector;
   frame_node_registry_t registry;
 
-  SECTION("empty registry produces empty active set")
+  SUBCASE("empty registry produces empty active set")
   {
     selection_params_t params;
     params.camera_position = {0, 0, 0};
@@ -65,7 +65,7 @@ TEST_CASE("node_selector selection", "[node_selector]")
     REQUIRE(result.total_points == 0);
   }
 
-  SECTION("single root loaded -> root in active set")
+  SUBCASE("single root loaded -> root in active set")
   {
     auto root = make_nid(1, 0, 0);
     node_id_t empty = {};
@@ -83,7 +83,7 @@ TEST_CASE("node_selector selection", "[node_selector]")
     REQUIRE(result.active_set.count(root));
   }
 
-  SECTION("root + all children loaded and faded -> children replace root")
+  SUBCASE("root + all children loaded and faded -> children replace root")
   {
     auto root = make_nid(1, 0, 0);
     auto child_a = make_nid(1, 1, 0);
@@ -113,7 +113,7 @@ TEST_CASE("node_selector selection", "[node_selector]")
     REQUIRE(!result.active_set.count(root));
   }
 
-  SECTION("root + partial children -> mixed covering")
+  SUBCASE("root + partial children -> mixed covering")
   {
     auto root = make_nid(1, 0, 0);
     auto child_a = make_nid(1, 1, 0);
@@ -144,7 +144,7 @@ TEST_CASE("node_selector selection", "[node_selector]")
     REQUIRE(!result.active_set.count(child_b));
   }
 
-  SECTION("point budget exceeded -> expansion stops")
+  SUBCASE("point budget exceeded -> expansion stops")
   {
     auto root = make_nid(1, 0, 0);
     auto child_a = make_nid(1, 1, 0);
@@ -172,7 +172,7 @@ TEST_CASE("node_selector selection", "[node_selector]")
     REQUIRE(result.active_set.count(root));
   }
 
-  SECTION("memory budget exceeded -> expansion stops")
+  SUBCASE("memory budget exceeded -> expansion stops")
   {
     auto root = make_nid(1, 0, 0);
     auto child_a = make_nid(1, 1, 0);
@@ -200,7 +200,7 @@ TEST_CASE("node_selector selection", "[node_selector]")
     REQUIRE(result.active_set.count(root));
   }
 
-  SECTION("distance priority - closer nodes expanded first")
+  SUBCASE("distance priority - closer nodes expanded first")
   {
     auto root = make_nid(1, 0, 0);
     auto close_child = make_nid(1, 1, 0);

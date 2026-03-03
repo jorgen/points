@@ -1,11 +1,9 @@
-add_library(catch_main STATIC catch-main.cpp)
-target_link_libraries(catch_main Catch2::Catch2)
+add_library(doctest_main STATIC doctest-main.cpp)
+target_link_libraries(doctest_main PUBLIC doctest)
+target_compile_definitions(doctest_main PUBLIC DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)
 
 add_executable(public_interface_unit_tests "public/renderer_base.cpp")
-target_link_libraries(public_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt points_render)
-if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
-    #target_precompile_headers(public_interface_unit_tests PRIVATE <catch2/catch.hpp>)
-endif ()
+target_link_libraries(public_interface_unit_tests PRIVATE doctest_main doctest fmt points_render)
 
 add_executable(private_interface_unit_tests
         private/basic_camera.cpp
@@ -30,10 +28,7 @@ add_executable(private_interface_unit_tests
         private/memory_writer_tests.cpp
 )
 target_link_libraries(private_interface_unit_tests PRIVATE vio blosc2_static)
-target_link_libraries(private_interface_unit_tests PRIVATE catch_main Catch2::Catch2 fmt glm unordered_dense laszip)
-target_include_directories(private_interface_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
-if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
-    #target_precompile_headers(private_interface_unit_tests PRIVATE <catch2/catch.hpp>)
-endif ()
+target_link_libraries(private_interface_unit_tests PRIVATE doctest_main doctest fmt glm unordered_dense laszip)
+target_include_directories(private_interface_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
 copy_dll_for_target(public_interface_unit_tests points_render points_converter)
 copy_dll_for_target(private_interface_unit_tests points_render points_converter)

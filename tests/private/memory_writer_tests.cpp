@@ -1,10 +1,10 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include "memory_writer.hpp"
 
 #include <vector>
 #include <cstdint>
 
-TEST_CASE("write_vec_type with empty vector succeeds", "[memory_writer]")
+TEST_CASE("write_vec_type with empty vector succeeds")
 {
   uint8_t buffer[64];
   uint8_t *ptr = buffer;
@@ -15,7 +15,7 @@ TEST_CASE("write_vec_type with empty vector succeeds", "[memory_writer]")
   REQUIRE(ptr == buffer);
 }
 
-TEST_CASE("read_vec_type with size zero succeeds", "[memory_writer]")
+TEST_CASE("read_vec_type with size zero succeeds")
 {
   uint8_t buffer[64];
   const uint8_t *ptr = buffer;
@@ -27,7 +27,7 @@ TEST_CASE("read_vec_type with size zero succeeds", "[memory_writer]")
   REQUIRE(ptr == buffer);
 }
 
-TEST_CASE("write_vec_type and read_vec_type round-trip", "[memory_writer]")
+TEST_CASE("write_vec_type and read_vec_type round-trip")
 {
   uint8_t buffer[256];
   uint8_t *write_ptr = buffer;
@@ -43,7 +43,7 @@ TEST_CASE("write_vec_type and read_vec_type round-trip", "[memory_writer]")
   REQUIRE(result == original);
 }
 
-TEST_CASE("write_vec_type fails when buffer too small", "[memory_writer]")
+TEST_CASE("write_vec_type fails when buffer too small")
 {
   uint8_t buffer[4];
   uint8_t *ptr = buffer;
@@ -53,7 +53,7 @@ TEST_CASE("write_vec_type fails when buffer too small", "[memory_writer]")
   REQUIRE_FALSE(write_vec_type(ptr, end, data));
 }
 
-TEST_CASE("read_vec_type fails when buffer too small", "[memory_writer]")
+TEST_CASE("read_vec_type fails when buffer too small")
 {
   uint8_t buffer[4];
   const uint8_t *ptr = buffer;

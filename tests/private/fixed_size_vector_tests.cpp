@@ -1,16 +1,14 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <fmt/printf.h>
 #include "fixed_size_vector.hpp"
 
-#include <catch2/catch.hpp>
-
-TEST_CASE("fixed_capacity_vector_t construction and basic properties", "[fixed_capacity_vector_t]") {
+TEST_CASE("fixed_capacity_vector_t construction and basic properties") {
   points::fixed_capacity_vector_t<int> vec(5);
 
   REQUIRE(vec.capacity() == 5);
 }
 
-TEST_CASE("fixed_capacity_vector_t element initialization and access", "[fixed_capacity_vector_t]") {
+TEST_CASE("fixed_capacity_vector_t element initialization and access") {
   points::fixed_capacity_vector_t<int> vec(3);
 
   vec.initialize_at(0, 1);
@@ -22,7 +20,7 @@ TEST_CASE("fixed_capacity_vector_t element initialization and access", "[fixed_c
   REQUIRE(vec[2] == 3);
 }
 
-TEST_CASE("fixed_capacity_vector_t iterator usage", "[fixed_capacity_vector_t]") {
+TEST_CASE("fixed_capacity_vector_t iterator usage") {
   points::fixed_capacity_vector_t<int> vec(3);
 
   vec.initialize_at(0, 1);
@@ -39,7 +37,7 @@ TEST_CASE("fixed_capacity_vector_t iterator usage", "[fixed_capacity_vector_t]")
   REQUIRE(it == vec.end());
 }
 
-TEST_CASE("fixed_capacity_vector_t const iterator usage", "[fixed_capacity_vector_t]") {
+TEST_CASE("fixed_capacity_vector_t const iterator usage") {
   points::fixed_capacity_vector_t<int> vec(3);
 
   vec.initialize_at(0,1);
@@ -55,7 +53,7 @@ TEST_CASE("fixed_capacity_vector_t const iterator usage", "[fixed_capacity_vecto
   REQUIRE(cit == vec.cend());
 }
 
-TEST_CASE("fixed_capacity_vector_t move constructor", "[fixed_capacity_vector_t]") {
+TEST_CASE("fixed_capacity_vector_t move constructor") {
   points::fixed_capacity_vector_t<int> vec(3);
   vec.initialize_at(0, 1);
   vec.initialize_at(1, 2);
@@ -70,7 +68,7 @@ TEST_CASE("fixed_capacity_vector_t move constructor", "[fixed_capacity_vector_t]
 
 }
 
-TEST_CASE("fixed_capacity_vector_t move assignment", "[fixed_capacity_vector_t]") {
+TEST_CASE("fixed_capacity_vector_t move assignment") {
   points::fixed_capacity_vector_t<int> vec(3);
   vec.initialize_at(0, 1);
   vec.initialize_at(1, 2);
@@ -86,7 +84,7 @@ TEST_CASE("fixed_capacity_vector_t move assignment", "[fixed_capacity_vector_t]"
 
 }
 
-TEST_CASE("fixed_capacity_vector_t clear", "[fixed_capacity_vector_t]")
+TEST_CASE("fixed_capacity_vector_t clear")
 {
   points::fixed_capacity_vector_t<int> vec(3);
   vec.initialize_at(0, 1);
@@ -97,7 +95,7 @@ TEST_CASE("fixed_capacity_vector_t clear", "[fixed_capacity_vector_t]")
   REQUIRE(vec.capacity() == 0);
 }
 
-TEST_CASE("fixed_capacity_vector_t noexcept move assignment", "[fixed_capacity_vector_t]") {
+TEST_CASE("fixed_capacity_vector_t noexcept move assignment") {
   points::fixed_capacity_vector_t<int> vec(3);
   vec.initialize_at(0, 1);
   vec.initialize_at(1, 2);
@@ -114,7 +112,7 @@ TEST_CASE("fixed_capacity_vector_t noexcept move assignment", "[fixed_capacity_v
   REQUIRE(moved_vec[2] == 3);
 }
 
-TEST_CASE("fixed_capacity_vector_t deleted copy constructor and assignment", "[fixed_capacity_vector_t]") {
+TEST_CASE("fixed_capacity_vector_t deleted copy constructor and assignment") {
   REQUIRE_FALSE(std::is_copy_constructible_v<points::fixed_capacity_vector_t<int>>);
   REQUIRE_FALSE(std::is_copy_assignable_v<points::fixed_capacity_vector_t<int>>);
 }

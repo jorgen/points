@@ -1,9 +1,9 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <fmt/printf.h>
 #include <points/render/renderer.h>
 #include <points/render/camera.h>
 
-TEST_CASE("CreateRenderer", "[render]")
+TEST_CASE("CreateRenderer")
 {
   auto* renderer = points::render::renderer_create();
   auto* camera = points::render::camera_create();

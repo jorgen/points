@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <fmt/printf.h>
 #include "vector_updater.hpp"
 
@@ -16,7 +16,7 @@ struct target_t
   int data;
 };
 
-TEST_CASE("vector_updater_start", "[vector]")
+TEST_CASE("vector_updater_start")
 {
   std::vector<target_t> old = { 6, 7, 8 };
   std::vector<source_t> source = { 2,4,6,7,8 };
@@ -29,7 +29,7 @@ TEST_CASE("vector_updater_start", "[vector]")
     REQUIRE(source[i].data == target[i].data);
   }
 }
-TEST_CASE("vector_updater_start_old", "[vector]")
+TEST_CASE("vector_updater_start_old")
 {
   std::vector<target_t> old = { 2,4,6,7,8 };
   std::vector<source_t> source = { 6, 7, 8 };
@@ -43,7 +43,7 @@ TEST_CASE("vector_updater_start_old", "[vector]")
   }
 }
 
-TEST_CASE("vector_updater_end", "[vector]")
+TEST_CASE("vector_updater_end")
 {
   std::vector<target_t> old = { 6, 7, 8 };
   std::vector<source_t> source = { 6,7,8, 9, 10, 11 };
@@ -57,7 +57,7 @@ TEST_CASE("vector_updater_end", "[vector]")
   }
 }
 
-TEST_CASE("vector_updater_end_old", "[vector]")
+TEST_CASE("vector_updater_end_old")
 {
   std::vector<target_t> old = { 6,7,8, 9, 10, 11 };
   std::vector<source_t> source = { 6, 7, 8 };
@@ -71,7 +71,7 @@ TEST_CASE("vector_updater_end_old", "[vector]")
   }
 }
 
-TEST_CASE("vector_updater_middle", "[vector]")
+TEST_CASE("vector_updater_middle")
 {
   std::vector<target_t> old = { 6, 7, 8, 11 };
   std::vector<source_t> source = { 6,7,8, 9, 10, 11 };
@@ -85,7 +85,7 @@ TEST_CASE("vector_updater_middle", "[vector]")
   }
 }
 
-TEST_CASE("vector_updater_middle_old", "[vector]")
+TEST_CASE("vector_updater_middle_old")
 {
   std::vector<target_t> old = { 6,7,8, 9, 10, 11 };
   std::vector<source_t> source = { 6, 7, 8, 11 };
@@ -99,7 +99,7 @@ TEST_CASE("vector_updater_middle_old", "[vector]")
   }
 }
 
-TEST_CASE("vector_updater_empty_new", "[vector]")
+TEST_CASE("vector_updater_empty_new")
 {
   std::vector<target_t> old = { 6,7,8, 9, 10, 11 };
   std::vector<source_t> source = { };
@@ -109,7 +109,7 @@ TEST_CASE("vector_updater_empty_new", "[vector]")
   REQUIRE(source.size() == target.size());
 }
 
-TEST_CASE("vector_updater_empty_old", "[vector]")
+TEST_CASE("vector_updater_empty_old")
 {
   std::vector<target_t> old = { };
   std::vector<source_t> source = { 6,7,8, 9, 10, 11 };
@@ -119,7 +119,7 @@ TEST_CASE("vector_updater_empty_old", "[vector]")
   REQUIRE(source.size() == target.size());
 }
 
-TEST_CASE("vector_updater_empty_both", "[vector]")
+TEST_CASE("vector_updater_empty_both")
 {
   std::vector<target_t> old = { };
   std::vector<source_t> source = { 6,7,8, 9, 10, 11 };
@@ -180,7 +180,7 @@ std::vector<collection_t> make_collection(std::vector<int> &levels, std::vector<
   return ret;
 }
 
-TEST_CASE("vector_multi_updater_start", "[vector]")
+TEST_CASE("vector_multi_updater_start")
 {
   std::vector<int> old_collection_d = {6,7,8,9};
   std::vector<int> old_d = { 6, 7, 8 };

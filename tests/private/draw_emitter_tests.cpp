@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <draw_emitter.hpp>
 #include <gpu_buffer_manager.hpp>
 #include <gpu_node_buffer.hpp>
@@ -188,7 +188,7 @@ static void setup_single_node_registry(frame_node_registry_t &registry,
 // handle_attribute_change tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("handle_attribute_change", "[gpu_buffer_manager]")
+TEST_CASE("handle_attribute_change")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -198,7 +198,7 @@ TEST_CASE("handle_attribute_change", "[gpu_buffer_manager]")
   gpu_buffer_manager_t mgr;
   size_t gpu_mem = 0;
 
-  SECTION("saves current color to old_color_buffer")
+  SUBCASE("saves current color to old_color_buffer")
   {
     std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
     auto b = std::make_unique<gpu_node_buffer_t>();
@@ -216,7 +216,7 @@ TEST_CASE("handle_attribute_change", "[gpu_buffer_manager]")
     REQUIRE(bufs[0]->crossfade_frame == 0);
   }
 
-  SECTION("already-awaiting buffer keeps existing old_color")
+  SUBCASE("already-awaiting buffer keeps existing old_color")
   {
     std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
     auto b = std::make_unique<gpu_node_buffer_t>();
@@ -237,7 +237,7 @@ TEST_CASE("handle_attribute_change", "[gpu_buffer_manager]")
     REQUIRE(bufs[0]->old_color_valid == true);
   }
 
-  SECTION("crossfading buffer gets old_color destroyed then replaced")
+  SUBCASE("crossfading buffer gets old_color destroyed then replaced")
   {
     std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
     auto b = std::make_unique<gpu_node_buffer_t>();
@@ -269,7 +269,7 @@ TEST_CASE("handle_attribute_change", "[gpu_buffer_manager]")
     REQUIRE(bufs[0]->old_color_memory == 256);
   }
 
-  SECTION("cancels pending load handles")
+  SUBCASE("cancels pending load handles")
   {
     std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
     auto b = std::make_unique<gpu_node_buffer_t>();
@@ -285,7 +285,7 @@ TEST_CASE("handle_attribute_change", "[gpu_buffer_manager]")
     REQUIRE(bufs[0]->load_handle == invalid_load_handle);
   }
 
-  SECTION("non-rendered buffer gets destroyed entirely")
+  SUBCASE("non-rendered buffer gets destroyed entirely")
   {
     std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
     auto b = std::make_unique<gpu_node_buffer_t>();
@@ -307,7 +307,7 @@ TEST_CASE("handle_attribute_change", "[gpu_buffer_manager]")
 // draw_emitter_t::emit() tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("draw_emitter steady state emits 3-buffer draw group", "[draw_emitter]")
+TEST_CASE("draw_emitter steady state emits 3-buffer draw group")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -349,7 +349,7 @@ TEST_CASE("draw_emitter steady state emits 3-buffer draw group", "[draw_emitter]
   REQUIRE(result.any_animating == false);
 }
 
-TEST_CASE("draw_emitter fade-in emits crossfade with incrementing alpha", "[draw_emitter]")
+TEST_CASE("draw_emitter fade-in emits crossfade with incrementing alpha")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -400,7 +400,7 @@ TEST_CASE("draw_emitter fade-in emits crossfade with incrementing alpha", "[draw
   REQUIRE(result.any_animating == false);
 }
 
-TEST_CASE("draw_emitter awaiting state uses old_color_buffer for both color slots", "[draw_emitter]")
+TEST_CASE("draw_emitter awaiting state uses old_color_buffer for both color slots")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -446,10 +446,10 @@ TEST_CASE("draw_emitter awaiting state uses old_color_buffer for both color slot
   REQUIRE(to_render[0].buffers[3].user_ptr == old_color_ptr);
 
   // blend should be 1.0 (params_data.y)
-  REQUIRE(bufs[0]->params_data.y == Approx(1.0f));
+  REQUIRE(bufs[0]->params_data.y == doctest::Approx(1.0f));
 }
 
-TEST_CASE("draw_emitter crossfade progresses when parent is not transitioning", "[draw_emitter]")
+TEST_CASE("draw_emitter crossfade progresses when parent is not transitioning")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -502,7 +502,7 @@ TEST_CASE("draw_emitter crossfade progresses when parent is not transitioning", 
   REQUIRE(bufs[1]->old_color_valid == false);
 }
 
-TEST_CASE("draw_emitter crossfade blocked when parent is transitioning", "[draw_emitter]")
+TEST_CASE("draw_emitter crossfade blocked when parent is transitioning")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -551,7 +551,7 @@ TEST_CASE("draw_emitter crossfade blocked when parent is transitioning", "[draw_
   emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(bufs[1]->crossfade_frame == 0);
-  REQUIRE(bufs[1]->params_data.y == Approx(0.0f));
+  REQUIRE(bufs[1]->params_data.y == doctest::Approx(0.0f));
   // Parent should be advancing
   REQUIRE(bufs[0]->crossfade_frame == 1);
 
@@ -569,7 +569,7 @@ TEST_CASE("draw_emitter crossfade blocked when parent is transitioning", "[draw_
   REQUIRE(bufs[1]->crossfade_frame == 1);
 }
 
-TEST_CASE("draw_emitter skips non-visible and non-rendered nodes", "[draw_emitter]")
+TEST_CASE("draw_emitter skips non-visible and non-rendered nodes")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -580,7 +580,7 @@ TEST_CASE("draw_emitter skips non-visible and non-rendered nodes", "[draw_emitte
   auto root = make_nid(1, 0, 0);
   node_id_t empty = {};
 
-  SECTION("non-visible node produces no draw groups")
+  SUBCASE("non-visible node produces no draw groups")
   {
     auto sub = make_sub(root, empty, 10);
     sub.frustum_visible = false;
@@ -603,7 +603,7 @@ TEST_CASE("draw_emitter skips non-visible and non-rendered nodes", "[draw_emitte
     REQUIRE(to_render.empty());
   }
 
-  SECTION("non-rendered node produces no draw groups")
+  SUBCASE("non-rendered node produces no draw groups")
   {
     std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
     std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
@@ -628,7 +628,7 @@ TEST_CASE("draw_emitter skips non-visible and non-rendered nodes", "[draw_emitte
 // Lifecycle / regression tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -> steady", "[draw_emitter][gpu_buffer_manager]")
+TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -> steady")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -729,7 +729,7 @@ TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -
   }
 }
 
-TEST_CASE("rapid double attribute change preserves old_color", "[draw_emitter][gpu_buffer_manager]")
+TEST_CASE("rapid double attribute change preserves old_color")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -778,7 +778,7 @@ TEST_CASE("rapid double attribute change preserves old_color", "[draw_emitter][g
   }
 }
 
-TEST_CASE("color crossfade does not block LOD fade_complete", "[gpu_buffer_manager]")
+TEST_CASE("color crossfade does not block LOD fade_complete")
 {
   // Regression: old_color_valid and awaiting_new_color used to set
   // all_fade_complete=false, blocking parent->child LOD swap in the
@@ -788,7 +788,7 @@ TEST_CASE("color crossfade does not block LOD fade_complete", "[gpu_buffer_manag
 
   std::vector<tree_walker_data_t> subsets = {make_sub(root, empty, 10)};
 
-  SECTION("awaiting_new_color does not prevent all_fade_complete")
+  SUBCASE("awaiting_new_color does not prevent all_fade_complete")
   {
     std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
     auto b = std::make_unique<gpu_node_buffer_t>();
@@ -807,7 +807,7 @@ TEST_CASE("color crossfade does not block LOD fade_complete", "[gpu_buffer_manag
     REQUIRE(node->all_fade_complete == true);
   }
 
-  SECTION("old_color_valid does not prevent all_fade_complete")
+  SUBCASE("old_color_valid does not prevent all_fade_complete")
   {
     std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
     auto b = std::make_unique<gpu_node_buffer_t>();
@@ -825,7 +825,7 @@ TEST_CASE("color crossfade does not block LOD fade_complete", "[gpu_buffer_manag
     REQUIRE(node->all_fade_complete == true);
   }
 
-  SECTION("incomplete LOD fade still blocks all_fade_complete")
+  SUBCASE("incomplete LOD fade still blocks all_fade_complete")
   {
     std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
     auto b = std::make_unique<gpu_node_buffer_t>();
@@ -842,7 +842,7 @@ TEST_CASE("color crossfade does not block LOD fade_complete", "[gpu_buffer_manag
   }
 }
 
-TEST_CASE("child crossfade not blocked by non-active parent", "[draw_emitter]")
+TEST_CASE("child crossfade not blocked by non-active parent")
 {
   // Regression: after separating color crossfade from LOD fade_complete,
   // the selector clean-swaps the parent out of the active set. If emit()
@@ -911,7 +911,7 @@ TEST_CASE("child crossfade not blocked by non-active parent", "[draw_emitter]")
 // upload_ready deadlock regression test
 // ---------------------------------------------------------------------------
 
-TEST_CASE("upload_ready processes root node whose parent equals empty_node_id", "[gpu_buffer_manager]")
+TEST_CASE("upload_ready processes root node whose parent equals empty_node_id")
 {
   // Regression: when a root node has node_id == {0,0,0} (empty_node_id),
   // the old top-down check would find its parent (also {0,0,0}) in the
@@ -998,7 +998,7 @@ TEST_CASE("upload_ready processes root node whose parent equals empty_node_id", 
   REQUIRE(bufs[1]->load_handle == render::invalid_load_handle);
 }
 
-TEST_CASE("upload_ready awaiting uploads bypass memory budget", "[gpu_buffer_manager]")
+TEST_CASE("upload_ready awaiting uploads bypass memory budget")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1088,7 +1088,7 @@ TEST_CASE("upload_ready awaiting uploads bypass memory budget", "[gpu_buffer_man
 // Frustum-culled crossfade completion
 // ---------------------------------------------------------------------------
 
-TEST_CASE("frustum-culled crossfading node is force-completed", "[draw_emitter][frustum_cull]")
+TEST_CASE("frustum-culled crossfading node is force-completed")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1131,7 +1131,7 @@ TEST_CASE("frustum-culled crossfading node is force-completed", "[draw_emitter][
   REQUIRE(bufs[0]->old_color_memory == 0);
 }
 
-TEST_CASE("frustum-culled awaiting node is NOT force-completed", "[draw_emitter][frustum_cull]")
+TEST_CASE("frustum-culled awaiting node is NOT force-completed")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1169,7 +1169,7 @@ TEST_CASE("frustum-culled awaiting node is NOT force-completed", "[draw_emitter]
   REQUIRE(result.freed_gpu_memory == 0);
 }
 
-TEST_CASE("node transitions from visible crossfading to frustum-culled mid-crossfade", "[draw_emitter][frustum_cull]")
+TEST_CASE("node transitions from visible crossfading to frustum-culled mid-crossfade")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1221,7 +1221,7 @@ TEST_CASE("node transitions from visible crossfading to frustum-culled mid-cross
   REQUIRE(result.freed_gpu_memory == 256);
 }
 
-TEST_CASE("multiple frustum-culled nodes at different stages get force-completed", "[draw_emitter][frustum_cull]")
+TEST_CASE("multiple frustum-culled nodes at different stages get force-completed")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1286,7 +1286,7 @@ TEST_CASE("multiple frustum-culled nodes at different stages get force-completed
 // Params correctness
 // ---------------------------------------------------------------------------
 
-TEST_CASE("awaiting state params: blend=1, new_is_mono copies old_color_is_mono", "[draw_emitter][params]")
+TEST_CASE("awaiting state params: blend=1, new_is_mono copies old_color_is_mono")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1313,7 +1313,7 @@ TEST_CASE("awaiting state params: blend=1, new_is_mono copies old_color_is_mono"
     return bufs;
   };
 
-  SECTION("old_color_is_mono=true")
+  SUBCASE("old_color_is_mono=true")
   {
     auto bufs = setup_awaiting(true);
     setup_single_node_registry(registry, subsets, {}, bufs);
@@ -1325,12 +1325,12 @@ TEST_CASE("awaiting state params: blend=1, new_is_mono copies old_color_is_mono"
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     // params: {fade_alpha, blend=1.0, old_is_mono=0.0, new_is_mono=old_color_is_mono}
-    REQUIRE(bufs[0]->params_data.y == Approx(1.0f));
-    REQUIRE(bufs[0]->params_data.z == Approx(0.0f));
-    REQUIRE(bufs[0]->params_data.w == Approx(1.0f));
+    REQUIRE(bufs[0]->params_data.y == doctest::Approx(1.0f));
+    REQUIRE(bufs[0]->params_data.z == doctest::Approx(0.0f));
+    REQUIRE(bufs[0]->params_data.w == doctest::Approx(1.0f));
   }
 
-  SECTION("old_color_is_mono=false")
+  SUBCASE("old_color_is_mono=false")
   {
     auto bufs = setup_awaiting(false);
     setup_single_node_registry(registry, subsets, {}, bufs);
@@ -1341,13 +1341,13 @@ TEST_CASE("awaiting state params: blend=1, new_is_mono copies old_color_is_mono"
     std::vector<draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
-    REQUIRE(bufs[0]->params_data.y == Approx(1.0f));
-    REQUIRE(bufs[0]->params_data.z == Approx(0.0f));
-    REQUIRE(bufs[0]->params_data.w == Approx(0.0f));
+    REQUIRE(bufs[0]->params_data.y == doctest::Approx(1.0f));
+    REQUIRE(bufs[0]->params_data.z == doctest::Approx(0.0f));
+    REQUIRE(bufs[0]->params_data.w == doctest::Approx(0.0f));
   }
 }
 
-TEST_CASE("crossfading state params: blend ramps, mono flags from old_color_is_mono and draw_type", "[draw_emitter][params]")
+TEST_CASE("crossfading state params: blend ramps, mono flags from old_color_is_mono and draw_type")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1384,9 +1384,9 @@ TEST_CASE("crossfading state params: blend ramps, mono flags from old_color_is_m
     if (frame < 10)
     {
       float expected_blend = float(frame) / 10.0f;
-      REQUIRE(bufs[0]->params_data.y == Approx(expected_blend));
-      REQUIRE(bufs[0]->params_data.z == Approx(1.0f)); // old mono
-      REQUIRE(bufs[0]->params_data.w == Approx(0.0f)); // new RGB
+      REQUIRE(bufs[0]->params_data.y == doctest::Approx(expected_blend));
+      REQUIRE(bufs[0]->params_data.z == doctest::Approx(1.0f)); // old mono
+      REQUIRE(bufs[0]->params_data.w == doctest::Approx(0.0f)); // new RGB
     }
   }
 
@@ -1395,7 +1395,7 @@ TEST_CASE("crossfading state params: blend ramps, mono flags from old_color_is_m
   REQUIRE(bufs[0]->crossfade_frame == 10);
 }
 
-TEST_CASE("fade-only state params: fade_alpha ramps, blend=1.0", "[draw_emitter][params]")
+TEST_CASE("fade-only state params: fade_alpha ramps, blend=1.0")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1426,14 +1426,14 @@ TEST_CASE("fade-only state params: fade_alpha ramps, blend=1.0", "[draw_emitter]
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     float expected_alpha = float(frame) / 10.0f;
-    REQUIRE(bufs[0]->params_data.x == Approx(expected_alpha));
-    REQUIRE(bufs[0]->params_data.y == Approx(1.0f));  // blend (no crossfade)
-    REQUIRE(bufs[0]->params_data.z == Approx(0.0f));  // old_is_mono (always 0 in fade-only)
-    REQUIRE(bufs[0]->params_data.w == Approx(1.0f));  // new_is_mono (dyn_points_1)
+    REQUIRE(bufs[0]->params_data.x == doctest::Approx(expected_alpha));
+    REQUIRE(bufs[0]->params_data.y == doctest::Approx(1.0f));  // blend (no crossfade)
+    REQUIRE(bufs[0]->params_data.z == doctest::Approx(0.0f));  // old_is_mono (always 0 in fade-only)
+    REQUIRE(bufs[0]->params_data.w == doctest::Approx(1.0f));  // new_is_mono (dyn_points_1)
   }
 }
 
-TEST_CASE("parent-blocked crossfade params: blend stays 0.0, crossfade_frame stays 0", "[draw_emitter][params]")
+TEST_CASE("parent-blocked crossfade params: blend stays 0.0, crossfade_frame stays 0")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1481,11 +1481,11 @@ TEST_CASE("parent-blocked crossfade params: blend stays 0.0, crossfade_frame sta
   emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   // Child blocked: blend=0.0, crossfade_frame stays 0
-  REQUIRE(bufs[1]->params_data.y == Approx(0.0f));
+  REQUIRE(bufs[1]->params_data.y == doctest::Approx(0.0f));
   REQUIRE(bufs[1]->crossfade_frame == 0);
 
   // Parent advancing: blend=0.1, crossfade_frame=1
-  REQUIRE(bufs[0]->params_data.y == Approx(0.1f));
+  REQUIRE(bufs[0]->params_data.y == doctest::Approx(0.1f));
   REQUIRE(bufs[0]->crossfade_frame == 1);
 }
 
@@ -1493,7 +1493,7 @@ TEST_CASE("parent-blocked crossfade params: blend stays 0.0, crossfade_frame sta
 // Memory accounting
 // ---------------------------------------------------------------------------
 
-TEST_CASE("natural crossfade completion frees memory on completion frame only", "[draw_emitter][memory]")
+TEST_CASE("natural crossfade completion frees memory on completion frame only")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1540,7 +1540,7 @@ TEST_CASE("natural crossfade completion frees memory on completion frame only", 
   REQUIRE(bufs[0]->gpu_memory_size == 2048 - 768);
 }
 
-TEST_CASE("frustum-cull force-completion frees memory correctly", "[draw_emitter][memory][frustum_cull]")
+TEST_CASE("frustum-cull force-completion frees memory correctly")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1579,7 +1579,7 @@ TEST_CASE("frustum-cull force-completion frees memory correctly", "[draw_emitter
   REQUIRE(bufs[0]->gpu_memory_size == 2048);
 }
 
-TEST_CASE("cumulative freed_gpu_memory across visible completion and frustum-cull in same emit", "[draw_emitter][memory]")
+TEST_CASE("cumulative freed_gpu_memory across visible completion and frustum-cull in same emit")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1640,7 +1640,7 @@ TEST_CASE("cumulative freed_gpu_memory across visible completion and frustum-cul
 // Multi-node hierarchy
 // ---------------------------------------------------------------------------
 
-TEST_CASE("three-level hierarchy: grandparent blocks parent blocks child", "[draw_emitter][hierarchy]")
+TEST_CASE("three-level hierarchy: grandparent blocks parent blocks child")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1728,7 +1728,7 @@ TEST_CASE("three-level hierarchy: grandparent blocks parent blocks child", "[dra
   REQUIRE(bufs[2]->crossfade_frame == 10);
 }
 
-TEST_CASE("sibling nodes crossfade independently when parent is steady", "[draw_emitter][hierarchy]")
+TEST_CASE("sibling nodes crossfade independently when parent is steady")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1801,7 +1801,7 @@ TEST_CASE("sibling nodes crossfade independently when parent is steady", "[draw_
 // Edge cases
 // ---------------------------------------------------------------------------
 
-TEST_CASE("concurrent fade-in and crossfade (both active simultaneously)", "[draw_emitter][edge_case]")
+TEST_CASE("concurrent fade-in and crossfade (both active simultaneously)")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1853,7 +1853,7 @@ TEST_CASE("concurrent fade-in and crossfade (both active simultaneously)", "[dra
   }
 }
 
-TEST_CASE("mono to RGB crossfade sets correct is_mono flags", "[draw_emitter][edge_case]")
+TEST_CASE("mono to RGB crossfade sets correct is_mono flags")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1885,11 +1885,11 @@ TEST_CASE("mono to RGB crossfade sets correct is_mono flags", "[draw_emitter][ed
   std::vector<draw_group_t> to_render;
   emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
-  REQUIRE(bufs[0]->params_data.z == Approx(1.0f)); // old mono
-  REQUIRE(bufs[0]->params_data.w == Approx(0.0f)); // new RGB
+  REQUIRE(bufs[0]->params_data.z == doctest::Approx(1.0f)); // old mono
+  REQUIRE(bufs[0]->params_data.w == doctest::Approx(0.0f)); // new RGB
 }
 
-TEST_CASE("RGB to mono crossfade sets correct is_mono flags", "[draw_emitter][edge_case]")
+TEST_CASE("RGB to mono crossfade sets correct is_mono flags")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1921,11 +1921,11 @@ TEST_CASE("RGB to mono crossfade sets correct is_mono flags", "[draw_emitter][ed
   std::vector<draw_group_t> to_render;
   emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
-  REQUIRE(bufs[0]->params_data.z == Approx(0.0f)); // old RGB
-  REQUIRE(bufs[0]->params_data.w == Approx(1.0f)); // new mono
+  REQUIRE(bufs[0]->params_data.z == doctest::Approx(0.0f)); // old RGB
+  REQUIRE(bufs[0]->params_data.w == doctest::Approx(1.0f)); // new mono
 }
 
-TEST_CASE("mixed visible and culled nodes in same emit", "[draw_emitter][edge_case]")
+TEST_CASE("mixed visible and culled nodes in same emit")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -1990,7 +1990,7 @@ TEST_CASE("mixed visible and culled nodes in same emit", "[draw_emitter][edge_ca
 // Steady-state cleanup
 // ---------------------------------------------------------------------------
 
-TEST_CASE("params_buffer lifecycle across crossfade to steady transition", "[draw_emitter][cleanup]")
+TEST_CASE("params_buffer lifecycle across crossfade to steady transition")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -2018,7 +2018,7 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition", "[dra
   selection_result_t selection;
   selection.active_set.insert(root);
 
-  SECTION("params_buffer created lazily on first animating frame")
+  SUBCASE("params_buffer created lazily on first animating frame")
   {
     std::vector<draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
@@ -2028,7 +2028,7 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition", "[dra
     REQUIRE(to_render[0].buffers[4].user_ptr == bufs[0]->params_buffer.user_ptr);
   }
 
-  SECTION("params_buffer destroyed when returning from crossfade to steady")
+  SUBCASE("params_buffer destroyed when returning from crossfade to steady")
   {
     // Complete the crossfade
     for (int i = 0; i < 10; i++)
@@ -2058,7 +2058,7 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition", "[dra
     REQUIRE(bufs[0]->params_buffer.user_ptr == nullptr);
   }
 
-  SECTION("params_buffer not double-destroyed on consecutive steady frames")
+  SUBCASE("params_buffer not double-destroyed on consecutive steady frames")
   {
     // Complete the crossfade
     for (int i = 0; i < 10; i++)
@@ -2097,7 +2097,7 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition", "[dra
 // prepare_fade_outs tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("prepare_fade_outs detects nodes leaving active set", "[draw_emitter][fade_out]")
+TEST_CASE("prepare_fade_outs detects nodes leaving active set")
 {
   draw_emitter_t emitter;
 
@@ -2149,7 +2149,7 @@ TEST_CASE("prepare_fade_outs detects nodes leaving active set", "[draw_emitter][
   }
 }
 
-TEST_CASE("prepare_fade_outs removes reappearing nodes from fading set", "[draw_emitter][fade_out]")
+TEST_CASE("prepare_fade_outs removes reappearing nodes from fading set")
 {
   draw_emitter_t emitter;
 
@@ -2208,7 +2208,7 @@ TEST_CASE("prepare_fade_outs removes reappearing nodes from fading set", "[draw_
   }
 }
 
-TEST_CASE("prepare_fade_outs returns empty on first frame", "[draw_emitter][fade_out]")
+TEST_CASE("prepare_fade_outs returns empty on first frame")
 {
   draw_emitter_t emitter;
 
@@ -2224,7 +2224,7 @@ TEST_CASE("prepare_fade_outs returns empty on first frame", "[draw_emitter][fade
 // reconcile with fade_out_retain tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("reconcile retains fade-out buffers instead of destroying them", "[gpu_buffer_manager][fade_out]")
+TEST_CASE("reconcile retains fade-out buffers instead of destroying them")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -2293,7 +2293,7 @@ TEST_CASE("reconcile retains fade-out buffers instead of destroying them", "[gpu
   REQUIRE(found_child);
 }
 
-TEST_CASE("reconcile destroys non-retained buffers normally", "[gpu_buffer_manager][fade_out]")
+TEST_CASE("reconcile destroys non-retained buffers normally")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -2343,7 +2343,7 @@ TEST_CASE("reconcile destroys non-retained buffers normally", "[gpu_buffer_manag
 // update_from_walker with fade_out_retain tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("registry retains fade-out nodes not in walker output", "[frame_node_registry][fade_out]")
+TEST_CASE("registry retains fade-out nodes not in walker output")
 {
   frame_node_registry_t registry;
 
@@ -2385,7 +2385,7 @@ TEST_CASE("registry retains fade-out nodes not in walker output", "[frame_node_r
     REQUIRE_FALSE((r <=> child) == std::strong_ordering::equal);
 }
 
-TEST_CASE("registry removes nodes not in walker and not in retain set", "[frame_node_registry][fade_out]")
+TEST_CASE("registry removes nodes not in walker and not in retain set")
 {
   frame_node_registry_t registry;
 
@@ -2423,7 +2423,7 @@ TEST_CASE("registry removes nodes not in walker and not in retain set", "[frame_
 // evict with fade_out_retain tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE("evict does not evict fade-out retained nodes", "[gpu_buffer_manager][fade_out]")
+TEST_CASE("evict does not evict fade-out retained nodes")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);
@@ -2475,7 +2475,7 @@ TEST_CASE("evict does not evict fade-out retained nodes", "[gpu_buffer_manager][
 // Full fade-out lifecycle integration test
 // ---------------------------------------------------------------------------
 
-TEST_CASE("full fade-out lifecycle: node leaves walker, fades out, completes", "[draw_emitter][fade_out]")
+TEST_CASE("full fade-out lifecycle: node leaves walker, fades out, completes")
 {
   test_callback_context_t ctx;
   auto callbacks = make_test_callbacks(ctx);

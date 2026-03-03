@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <fmt/printf.h>
 #include <utility>
 
@@ -159,7 +159,7 @@ write_done_event_t create_points(tree_test_infrastructure &test_util, uint64_t m
   return test_util.wait_for_write_done();
 }
 
-TEST_CASE("initialize empty tree", "[converter, tree_t]")
+TEST_CASE("initialize empty tree")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   tree_test_infrastructure test_util;
@@ -177,7 +177,7 @@ TEST_CASE("initialize empty tree", "[converter, tree_t]")
   REQUIRE(tree.morton_min.data[2] == 0);
 }
 
-TEST_CASE("add inclusion", "[converter, tree_t]")
+TEST_CASE("add inclusion")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   tree_test_infrastructure test_util;
@@ -202,7 +202,7 @@ TEST_CASE("add inclusion", "[converter, tree_t]")
   REQUIRE(tree.nodes[0][0] == 0);
 }
 
-TEST_CASE("add_new_node", "[converter, tree_t]")
+TEST_CASE("add_new_node")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   tree_test_infrastructure test_util(256);
@@ -219,7 +219,7 @@ TEST_CASE("add_new_node", "[converter, tree_t]")
   REQUIRE(tree.data[0][0].data.empty());
 }
 
-TEST_CASE("add_new_subtree", "[converter, tree_t]")
+TEST_CASE("add_new_subtree")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
   tree_test_infrastructure test_util(256);
@@ -244,7 +244,7 @@ TEST_CASE("add_new_subtree", "[converter, tree_t]")
   REQUIRE(sub_tree.nodes[1].size() == 8);
 }
 
-TEST_CASE("add_new_subtree_offsets", "[converter, tree_t]")
+TEST_CASE("add_new_subtree_offsets")
 {
   for (int i = 1; i < 11; i++)
   {
@@ -271,7 +271,7 @@ TEST_CASE("add_new_subtree_offsets", "[converter, tree_t]")
     REQUIRE(sub_tree.nodes[0].size() >= 1);
   }
 }
-TEST_CASE("reparent", "[converter, tree_t]")
+TEST_CASE("reparent")
 {
   tree_test_infrastructure test_util(256);
 
@@ -317,7 +317,7 @@ TEST_CASE("reparent", "[converter, tree_t]")
     REQUIRE(tree.magnitude == 2);
   }
 }
-TEST_CASE("reparent non-zero child position", "[converter, tree_t]")
+TEST_CASE("reparent non-zero child position")
 {
   tree_test_infrastructure test_util(256);
 
@@ -357,7 +357,7 @@ TEST_CASE("reparent non-zero child position", "[converter, tree_t]")
     REQUIRE(tree.magnitude == 1);
   }
 }
-TEST_CASE("lod generation updates subset count and offset", "[converter, tree_t, lod]")
+TEST_CASE("lod generation updates subset count and offset")
 {
   tree_test_infrastructure test_util(256);
 

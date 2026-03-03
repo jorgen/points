@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 
 template <typename T>
 bool write_memory(uint8_t *&ptr, const uint8_t *end, const T &value)

@@ -1,4 +1,5 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
+#include "approx_abs.h"
 #include <camera.hpp>
 #include <points/render/camera.h>
 
@@ -9,7 +10,7 @@ using namespace points::render::camera_manipulator;
 
 static constexpr double MARGIN = 1e-6;
 
-TEST_CASE("arcball create initial state", "[render]")
+TEST_CASE("arcball create initial state")
 {
   auto *cam = camera_create();
   double eye[] = {0, 0, 10};
@@ -19,25 +20,25 @@ TEST_CASE("arcball create initial state", "[render]")
 
   auto *arc = arcball_create(cam, center);
 
-  REQUIRE(arc->distance == Approx(10.0).margin(MARGIN));
+  REQUIRE(arc->distance == approx_abs(10.0, MARGIN));
 
   double arc_center[3];
   arcball_get_center(arc, arc_center);
-  REQUIRE(arc_center[0] == Approx(0.0).margin(MARGIN));
-  REQUIRE(arc_center[1] == Approx(0.0).margin(MARGIN));
-  REQUIRE(arc_center[2] == Approx(0.0).margin(MARGIN));
+  REQUIRE(arc_center[0] == approx_abs(0.0, MARGIN));
+  REQUIRE(arc_center[1] == approx_abs(0.0, MARGIN));
+  REQUIRE(arc_center[2] == approx_abs(0.0, MARGIN));
 
   double arc_up[3];
   arcball_get_up_axis(arc, arc_up);
-  REQUIRE(arc_up[0] == Approx(0.0).margin(MARGIN));
-  REQUIRE(arc_up[1] == Approx(1.0).margin(MARGIN));
-  REQUIRE(arc_up[2] == Approx(0.0).margin(MARGIN));
+  REQUIRE(arc_up[0] == approx_abs(0.0, MARGIN));
+  REQUIRE(arc_up[1] == approx_abs(1.0, MARGIN));
+  REQUIRE(arc_up[2] == approx_abs(0.0, MARGIN));
 
   arcball_destroy(arc);
   camera_destroy(cam);
 }
 
-TEST_CASE("arcball rotate yaw", "[render]")
+TEST_CASE("arcball rotate yaw")
 {
   auto *cam = camera_create();
   double eye[] = {0, 0, 10};
@@ -51,8 +52,8 @@ TEST_CASE("arcball rotate yaw", "[render]")
   float dx = 0.25f;
   arcball_rotate(arc, dx, 0.0f, 0.0f);
 
-  REQUIRE(arc->yaw == Approx(initial_yaw + dx * M_PI).margin(MARGIN));
-  REQUIRE(arc->pitch == Approx(0.0).margin(0.01));
+  REQUIRE(arc->yaw == approx_abs(initial_yaw + dx * M_PI, MARGIN));
+  REQUIRE(arc->pitch == approx_abs(0.0, 0.01));
 
   // Eye should have moved laterally
   double cam_eye[3];
@@ -64,7 +65,7 @@ TEST_CASE("arcball rotate yaw", "[render]")
   camera_destroy(cam);
 }
 
-TEST_CASE("arcball rotate pitch clamped", "[render]")
+TEST_CASE("arcball rotate pitch clamped")
 {
   auto *cam = camera_create();
   double eye[] = {0, 0, 10};
@@ -78,17 +79,17 @@ TEST_CASE("arcball rotate pitch clamped", "[render]")
   arcball_rotate(arc, 0.0f, 10.0f, 0.0f);
 
   constexpr double max_pitch = 89.0 * M_PI / 180.0;
-  REQUIRE(arc->pitch == Approx(max_pitch).margin(MARGIN));
+  REQUIRE(arc->pitch == approx_abs(max_pitch, MARGIN));
 
   // Try negative
   arcball_rotate(arc, 0.0f, -20.0f, 0.0f);
-  REQUIRE(arc->pitch == Approx(-max_pitch).margin(MARGIN));
+  REQUIRE(arc->pitch == approx_abs(-max_pitch, MARGIN));
 
   arcball_destroy(arc);
   camera_destroy(cam);
 }
 
-TEST_CASE("arcball pan moves center", "[render]")
+TEST_CASE("arcball pan moves center")
 {
   auto *cam = camera_create();
   double eye[] = {0, 0, 10};
@@ -115,7 +116,7 @@ TEST_CASE("arcball pan moves center", "[render]")
   camera_destroy(cam);
 }
 
-TEST_CASE("arcball dolly moves center forward", "[render]")
+TEST_CASE("arcball dolly moves center forward")
 {
   auto *cam = camera_create();
   double eye[] = {0, 0, 10};
@@ -141,7 +142,7 @@ TEST_CASE("arcball dolly moves center forward", "[render]")
   camera_destroy(cam);
 }
 
-TEST_CASE("arcball zoom changes distance", "[render]")
+TEST_CASE("arcball zoom changes distance")
 {
   auto *cam = camera_create();
   double eye[] = {0, 0, 10};
@@ -154,18 +155,18 @@ TEST_CASE("arcball zoom changes distance", "[render]")
 
   // Positive zoom (zoom out)
   arcball_zoom(arc, 0.5f);
-  REQUIRE(arc->distance == Approx(initial_distance * 1.5).margin(MARGIN));
+  REQUIRE(arc->distance == approx_abs(initial_distance * 1.5, MARGIN));
 
   // Negative zoom (zoom in)
   double current = arc->distance;
   arcball_zoom(arc, -0.3f);
-  REQUIRE(arc->distance == Approx(current * 0.7).margin(MARGIN));
+  REQUIRE(arc->distance == approx_abs(current * 0.7, MARGIN));
 
   arcball_destroy(arc);
   camera_destroy(cam);
 }
 
-TEST_CASE("arcball zoom clamps minimum", "[render]")
+TEST_CASE("arcball zoom clamps minimum")
 {
   auto *cam = camera_create();
   double eye[] = {0, 0, 0.02};
@@ -184,7 +185,7 @@ TEST_CASE("arcball zoom clamps minimum", "[render]")
   camera_destroy(cam);
 }
 
-TEST_CASE("arcball set up axis Z-up", "[render]")
+TEST_CASE("arcball set up axis Z-up")
 {
   auto *cam = camera_create();
   double eye[] = {0, 10, 0};
@@ -199,21 +200,21 @@ TEST_CASE("arcball set up axis Z-up", "[render]")
 
   double arc_up[3];
   arcball_get_up_axis(arc, arc_up);
-  REQUIRE(arc_up[0] == Approx(0.0).margin(MARGIN));
-  REQUIRE(arc_up[1] == Approx(0.0).margin(MARGIN));
-  REQUIRE(arc_up[2] == Approx(1.0).margin(MARGIN));
+  REQUIRE(arc_up[0] == approx_abs(0.0, MARGIN));
+  REQUIRE(arc_up[1] == approx_abs(0.0, MARGIN));
+  REQUIRE(arc_up[2] == approx_abs(1.0, MARGIN));
 
   // View matrix should have been recomputed — verify by checking eye position
   double cam_eye[3];
   camera_get_eye(cam, cam_eye);
   double dist = std::sqrt(cam_eye[0] * cam_eye[0] + cam_eye[1] * cam_eye[1] + cam_eye[2] * cam_eye[2]);
-  REQUIRE(dist == Approx(arc->distance).margin(0.01));
+  REQUIRE(dist == approx_abs(arc->distance, 0.01));
 
   arcball_destroy(arc);
   camera_destroy(cam);
 }
 
-TEST_CASE("arcball reset re-derives angles", "[render]")
+TEST_CASE("arcball reset re-derives angles")
 {
   auto *cam = camera_create();
   double eye[] = {0, 0, 10};
@@ -238,13 +239,13 @@ TEST_CASE("arcball reset re-derives angles", "[render]")
 
   // View should be essentially the same after reset
   for (int i = 0; i < 16; i++)
-    REQUIRE(view_after[i] == Approx(view_before[i]).margin(1e-4));
+    REQUIRE(view_after[i] == approx_abs(view_before[i], 1e-4));
 
   arcball_destroy(arc);
   camera_destroy(cam);
 }
 
-TEST_CASE("arcball get center and up axis", "[render]")
+TEST_CASE("arcball get center and up axis")
 {
   auto *cam = camera_create();
   double eye[] = {5, 3, 2};
@@ -256,21 +257,21 @@ TEST_CASE("arcball get center and up axis", "[render]")
 
   double arc_center[3];
   arcball_get_center(arc, arc_center);
-  REQUIRE(arc_center[0] == Approx(1.0).margin(MARGIN));
-  REQUIRE(arc_center[1] == Approx(2.0).margin(MARGIN));
-  REQUIRE(arc_center[2] == Approx(3.0).margin(MARGIN));
+  REQUIRE(arc_center[0] == approx_abs(1.0, MARGIN));
+  REQUIRE(arc_center[1] == approx_abs(2.0, MARGIN));
+  REQUIRE(arc_center[2] == approx_abs(3.0, MARGIN));
 
   double arc_up[3];
   arcball_get_up_axis(arc, arc_up);
-  REQUIRE(arc_up[0] == Approx(0.0).margin(MARGIN));
-  REQUIRE(arc_up[1] == Approx(1.0).margin(MARGIN));
-  REQUIRE(arc_up[2] == Approx(0.0).margin(MARGIN));
+  REQUIRE(arc_up[0] == approx_abs(0.0, MARGIN));
+  REQUIRE(arc_up[1] == approx_abs(1.0, MARGIN));
+  REQUIRE(arc_up[2] == approx_abs(0.0, MARGIN));
 
   arcball_destroy(arc);
   camera_destroy(cam);
 }
 
-TEST_CASE("camera_get_eye", "[render]")
+TEST_CASE("camera_get_eye")
 {
   auto *cam = camera_create();
   double eye_in[] = {5, 0, 0};
@@ -280,14 +281,14 @@ TEST_CASE("camera_get_eye", "[render]")
 
   double eye_out[3];
   camera_get_eye(cam, eye_out);
-  REQUIRE(eye_out[0] == Approx(5.0).margin(MARGIN));
-  REQUIRE(eye_out[1] == Approx(0.0).margin(MARGIN));
-  REQUIRE(eye_out[2] == Approx(0.0).margin(MARGIN));
+  REQUIRE(eye_out[0] == approx_abs(5.0, MARGIN));
+  REQUIRE(eye_out[1] == approx_abs(0.0, MARGIN));
+  REQUIRE(eye_out[2] == approx_abs(0.0, MARGIN));
 
   camera_destroy(cam);
 }
 
-TEST_CASE("camera_get_forward", "[render]")
+TEST_CASE("camera_get_forward")
 {
   auto *cam = camera_create();
   double eye[] = {0, 0, 10};
@@ -297,9 +298,9 @@ TEST_CASE("camera_get_forward", "[render]")
 
   double forward[3];
   camera_get_forward(cam, forward);
-  REQUIRE(forward[0] == Approx(0.0).margin(MARGIN));
-  REQUIRE(forward[1] == Approx(0.0).margin(MARGIN));
-  REQUIRE(forward[2] == Approx(-1.0).margin(MARGIN));
+  REQUIRE(forward[0] == approx_abs(0.0, MARGIN));
+  REQUIRE(forward[1] == approx_abs(0.0, MARGIN));
+  REQUIRE(forward[2] == approx_abs(-1.0, MARGIN));
 
   camera_destroy(cam);
 }

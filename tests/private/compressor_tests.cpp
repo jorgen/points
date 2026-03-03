@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <attributes_configs.hpp>
 #include <compressor.hpp>
 #include <compressor_blosc2.hpp>
@@ -46,11 +46,11 @@ static std::vector<uint8_t> make_sorted_u32_buffer(uint32_t count)
 
 // --- blosc2 round trip ---
 
-TEST_CASE("blosc2 round trip", "[converter]")
+TEST_CASE("blosc2 round trip")
 {
   compressor_blosc2_t compressor;
 
-  SECTION("random u8x1")
+  SUBCASE("random u8x1")
   {
     auto data = make_random_buffer(1024);
     point_format_t fmt{type_u8, components_1};
@@ -62,7 +62,7 @@ TEST_CASE("blosc2 round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("random u32x3")
+  SUBCASE("random u32x3")
   {
     auto data = make_random_buffer(4 * 3 * 100);
     point_format_t fmt{type_u32, components_3};
@@ -74,7 +74,7 @@ TEST_CASE("blosc2 round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("random r64x3")
+  SUBCASE("random r64x3")
   {
     auto data = make_random_buffer(8 * 3 * 50);
     point_format_t fmt{type_r64, components_3};
@@ -86,7 +86,7 @@ TEST_CASE("blosc2 round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("constant buffer")
+  SUBCASE("constant buffer")
   {
     auto data = make_constant_buffer(1024, 0x42);
     point_format_t fmt{type_u8, components_1};
@@ -98,7 +98,7 @@ TEST_CASE("blosc2 round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("sorted u32 morton")
+  SUBCASE("sorted u32 morton")
   {
     auto data = make_sorted_u32_buffer(200);
     point_format_t fmt{type_m32, components_1};
@@ -110,7 +110,7 @@ TEST_CASE("blosc2 round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("small buffer")
+  SUBCASE("small buffer")
   {
     auto data = make_random_buffer(32);
     point_format_t fmt{type_u8, components_1};
@@ -125,11 +125,11 @@ TEST_CASE("blosc2 round trip", "[converter]")
 
 // --- zstd round trip ---
 
-TEST_CASE("zstd round trip", "[converter]")
+TEST_CASE("zstd round trip")
 {
   compressor_zstd_t compressor;
 
-  SECTION("random u8x1")
+  SUBCASE("random u8x1")
   {
     auto data = make_random_buffer(1024);
     point_format_t fmt{type_u8, components_1};
@@ -141,7 +141,7 @@ TEST_CASE("zstd round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("random u32x3")
+  SUBCASE("random u32x3")
   {
     auto data = make_random_buffer(4 * 3 * 100);
     point_format_t fmt{type_u32, components_3};
@@ -153,7 +153,7 @@ TEST_CASE("zstd round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("sorted m192")
+  SUBCASE("sorted m192")
   {
     // 5 sorted 24-byte morton codes
     uint8_t data[24 * 5];
@@ -172,7 +172,7 @@ TEST_CASE("zstd round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data, sizeof(data)) == 0);
   }
 
-  SECTION("constant u16x1")
+  SUBCASE("constant u16x1")
   {
     uint32_t count = 200;
     std::vector<uint8_t> data(count * 2);
@@ -190,7 +190,7 @@ TEST_CASE("zstd round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("data with constant component")
+  SUBCASE("data with constant component")
   {
     // u32 x 2 components: component 0 varies, component 1 constant
     uint32_t count = 100;
@@ -214,11 +214,11 @@ TEST_CASE("zstd round trip", "[converter]")
 
 // --- huff0 round trip ---
 
-TEST_CASE("huff0 round trip", "[converter]")
+TEST_CASE("huff0 round trip")
 {
   compressor_huff0_t compressor;
 
-  SECTION("random u8x1")
+  SUBCASE("random u8x1")
   {
     auto data = make_random_buffer(1024);
     point_format_t fmt{type_u8, components_1};
@@ -230,7 +230,7 @@ TEST_CASE("huff0 round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("random u32x3")
+  SUBCASE("random u32x3")
   {
     auto data = make_random_buffer(4 * 3 * 100);
     point_format_t fmt{type_u32, components_3};
@@ -242,7 +242,7 @@ TEST_CASE("huff0 round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("sorted m192")
+  SUBCASE("sorted m192")
   {
     uint8_t data[24 * 5];
     memset(data, 0, sizeof(data));
@@ -260,7 +260,7 @@ TEST_CASE("huff0 round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data, sizeof(data)) == 0);
   }
 
-  SECTION("constant buffer")
+  SUBCASE("constant buffer")
   {
     auto data = make_constant_buffer(1024, 0x42);
     point_format_t fmt{type_u8, components_1};
@@ -272,7 +272,7 @@ TEST_CASE("huff0 round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("large buffer >128KB multi-chunk")
+  SUBCASE("large buffer >128KB multi-chunk")
   {
     auto data = make_random_buffer(200000, 99);
     point_format_t fmt{type_u8, components_1};
@@ -287,9 +287,9 @@ TEST_CASE("huff0 round trip", "[converter]")
 
 // --- has_compression_magic ---
 
-TEST_CASE("has_compression_magic", "[converter]")
+TEST_CASE("has_compression_magic")
 {
-  SECTION("valid header")
+  SUBCASE("valid header")
   {
     compression_header_t header;
     header.magic[0] = 'P';
@@ -305,13 +305,13 @@ TEST_CASE("has_compression_magic", "[converter]")
     REQUIRE(has_compression_magic(&header, sizeof(header)) == true);
   }
 
-  SECTION("wrong magic")
+  SUBCASE("wrong magic")
   {
     uint8_t data[16] = {'P', 'C', 'X', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     REQUIRE(has_compression_magic(data, sizeof(data)) == false);
   }
 
-  SECTION("too small")
+  SUBCASE("too small")
   {
     uint8_t data[8] = {'P', 'C', 'M', 1, 0, 0, 0, 0};
     REQUIRE(has_compression_magic(data, 8) == false);
@@ -320,13 +320,13 @@ TEST_CASE("has_compression_magic", "[converter]")
 
 // --- try_compress_constant ---
 
-TEST_CASE("try_compress_constant constant buffer", "[converter]")
+TEST_CASE("try_compress_constant constant buffer")
 {
   uint32_t count = 100;
   std::vector<uint32_t> data(count, 0xDEADBEEF);
   point_format_t fmt{type_u32, components_1};
   auto result = try_compress_constant(data.data(), uint32_t(count * 4), fmt);
-  REQUIRE(result.data != nullptr);
+  REQUIRE(result.data.get() != nullptr);
   REQUIRE(result.size > 0);
 
   auto decompressed = decompress_any(result.data.get(), result.size);
@@ -335,15 +335,15 @@ TEST_CASE("try_compress_constant constant buffer", "[converter]")
   REQUIRE(memcmp(decompressed.data.get(), data.data(), count * 4) == 0);
 }
 
-TEST_CASE("try_compress_constant non-constant buffer", "[converter]")
+TEST_CASE("try_compress_constant non-constant buffer")
 {
   uint32_t data[] = {1, 2, 3, 4};
   point_format_t fmt{type_u32, components_1};
   auto result = try_compress_constant(data, sizeof(data), fmt);
-  REQUIRE(result.data == nullptr);
+  REQUIRE(result.data.get() == nullptr);
 }
 
-TEST_CASE("try_compress_constant u8x3", "[converter]")
+TEST_CASE("try_compress_constant u8x3")
 {
   uint32_t count = 50;
   // 3-byte elements, all identical
@@ -356,7 +356,7 @@ TEST_CASE("try_compress_constant u8x3", "[converter]")
   }
   point_format_t fmt{type_u8, components_3};
   auto result = try_compress_constant(data.data(), uint32_t(data.size()), fmt);
-  REQUIRE(result.data != nullptr);
+  REQUIRE(result.data.get() != nullptr);
   REQUIRE(result.size > 0);
 
   auto decompressed = decompress_any(result.data.get(), result.size);
@@ -367,7 +367,7 @@ TEST_CASE("try_compress_constant u8x3", "[converter]")
 
 // --- decompress_any dispatches ---
 
-TEST_CASE("decompress_any dispatches blosc2", "[converter]")
+TEST_CASE("decompress_any dispatches blosc2")
 {
   auto data = make_random_buffer(1024);
   point_format_t fmt{type_u8, components_1};
@@ -381,7 +381,7 @@ TEST_CASE("decompress_any dispatches blosc2", "[converter]")
   REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
 }
 
-TEST_CASE("decompress_any dispatches zstd", "[converter]")
+TEST_CASE("decompress_any dispatches zstd")
 {
   auto data = make_random_buffer(1024);
   point_format_t fmt{type_u8, components_1};
@@ -395,7 +395,7 @@ TEST_CASE("decompress_any dispatches zstd", "[converter]")
   REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
 }
 
-TEST_CASE("decompress_any dispatches huff0", "[converter]")
+TEST_CASE("decompress_any dispatches huff0")
 {
   auto data = make_random_buffer(1024);
   point_format_t fmt{type_u8, components_1};
@@ -409,13 +409,13 @@ TEST_CASE("decompress_any dispatches huff0", "[converter]")
   REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
 }
 
-TEST_CASE("decompress_any dispatches constant", "[converter]")
+TEST_CASE("decompress_any dispatches constant")
 {
   uint32_t count = 100;
   std::vector<uint32_t> data(count, 0xCAFEBABE);
   point_format_t fmt{type_u32, components_1};
   auto compressed = try_compress_constant(data.data(), uint32_t(count * 4), fmt);
-  REQUIRE(compressed.data != nullptr);
+  REQUIRE(compressed.data.get() != nullptr);
 
   auto decompressed = decompress_any(compressed.data.get(), compressed.size);
   REQUIRE(decompressed.error.code == 0);
@@ -423,7 +423,7 @@ TEST_CASE("decompress_any dispatches constant", "[converter]")
   REQUIRE(memcmp(decompressed.data.get(), data.data(), count * 4) == 0);
 }
 
-TEST_CASE("decompress_any rejects invalid magic", "[converter]")
+TEST_CASE("decompress_any rejects invalid magic")
 {
   uint8_t data[32] = {};
   data[0] = 'X';
@@ -431,7 +431,7 @@ TEST_CASE("decompress_any rejects invalid magic", "[converter]")
   REQUIRE(result.error.code != 0);
 }
 
-TEST_CASE("decompress_any rejects too-small buffer", "[converter]")
+TEST_CASE("decompress_any rejects too-small buffer")
 {
   uint8_t data[8] = {'P', 'C', 'M', 1, 0, 0, 0, 0};
   auto result = decompress_any(data, 8);
@@ -440,7 +440,7 @@ TEST_CASE("decompress_any rejects too-small buffer", "[converter]")
 
 // --- create_compressor ---
 
-TEST_CASE("create_compressor returns correct types", "[converter]")
+TEST_CASE("create_compressor returns correct types")
 {
   auto blosc2 = create_compressor(compression_method_t::blosc2);
   REQUIRE(blosc2 != nullptr);
@@ -463,7 +463,7 @@ TEST_CASE("create_compressor returns correct types", "[converter]")
 
 // --- compression_stats_t ---
 
-TEST_CASE("compression_stats accumulate", "[converter]")
+TEST_CASE("compression_stats accumulate")
 {
   compression_stats_t stats;
   point_format_t fmt{type_u32, components_3};
@@ -491,7 +491,7 @@ TEST_CASE("compression_stats accumulate", "[converter]")
   REQUIRE(stats.per_attribute[1].buffer_count == 1);
 }
 
-TEST_CASE("compression_stats serialize/deserialize round trip", "[converter]")
+TEST_CASE("compression_stats serialize/deserialize round trip")
 {
   compression_stats_t stats;
   stats.input_file_count = 5;
@@ -523,7 +523,7 @@ TEST_CASE("compression_stats serialize/deserialize round trip", "[converter]")
   }
 }
 
-TEST_CASE("compression_stats serialize/deserialize empty", "[converter]")
+TEST_CASE("compression_stats serialize/deserialize empty")
 {
   compression_stats_t stats;
   uint32_t serialized_size = 0;
@@ -535,7 +535,7 @@ TEST_CASE("compression_stats serialize/deserialize empty", "[converter]")
   REQUIRE(deserialized.total_buffer_count == 0);
 }
 
-TEST_CASE("compression_stats deserialize truncated", "[converter]")
+TEST_CASE("compression_stats deserialize truncated")
 {
   uint8_t data[10] = {};
   auto result = compression_stats_t::deserialize(data, 10);
@@ -543,7 +543,7 @@ TEST_CASE("compression_stats deserialize truncated", "[converter]")
   REQUIRE(result.total_buffer_count == 0);
 }
 
-TEST_CASE("compression_stats deserialize wrong version", "[converter]")
+TEST_CASE("compression_stats deserialize wrong version")
 {
   uint8_t data[20] = {};
   uint32_t version = 99;
@@ -555,7 +555,7 @@ TEST_CASE("compression_stats deserialize wrong version", "[converter]")
 
 // --- offset_subtract_f64 / offset_restore_f64 ---
 
-TEST_CASE("offset_subtract_f64 round trip", "[converter]")
+TEST_CASE("offset_subtract_f64 round trip")
 {
   double values[] = {100.5, 100.7, 100.6, 100.9, 100.1};
   uint32_t size = sizeof(values);
@@ -563,29 +563,29 @@ TEST_CASE("offset_subtract_f64 round trip", "[converter]")
   std::vector<double> original(std::begin(values), std::end(values));
   double min_val = offset_subtract_f64(reinterpret_cast<uint8_t *>(values), size);
 
-  REQUIRE(min_val == Approx(100.1));
+  REQUIRE(min_val == doctest::Approx(100.1));
   // All values should be >= 0 after subtraction
   for (auto &v : values)
     REQUIRE(v >= 0.0);
 
   offset_restore_f64(reinterpret_cast<uint8_t *>(values), size, min_val);
   for (size_t i = 0; i < original.size(); i++)
-    REQUIRE(values[i] == Approx(original[i]));
+    REQUIRE(values[i] == doctest::Approx(original[i]));
 }
 
-TEST_CASE("offset_subtract_f64 single element", "[converter]")
+TEST_CASE("offset_subtract_f64 single element")
 {
   double values[] = {42.0};
   double min_val = offset_subtract_f64(reinterpret_cast<uint8_t *>(values), sizeof(values));
-  REQUIRE(min_val == Approx(42.0));
-  REQUIRE(values[0] == Approx(0.0));
+  REQUIRE(min_val == doctest::Approx(42.0));
+  REQUIRE(values[0] == doctest::Approx(0.0));
   offset_restore_f64(reinterpret_cast<uint8_t *>(values), sizeof(values), min_val);
-  REQUIRE(values[0] == Approx(42.0));
+  REQUIRE(values[0] == doctest::Approx(42.0));
 }
 
 // --- sort_with_permutation_f64 / unsort_with_permutation_f64 ---
 
-TEST_CASE("sort_with_permutation_f64 round trip", "[converter]")
+TEST_CASE("sort_with_permutation_f64 round trip")
 {
   double values[] = {5.0, 1.0, 3.0, 2.0, 4.0};
   uint32_t count = 5;
@@ -603,10 +603,10 @@ TEST_CASE("sort_with_permutation_f64 round trip", "[converter]")
 
   unsort_with_permutation_f64(reinterpret_cast<uint8_t *>(values), size, perm.data());
   for (size_t i = 0; i < original.size(); i++)
-    REQUIRE(values[i] == Approx(original[i]));
+    REQUIRE(values[i] == doctest::Approx(original[i]));
 }
 
-TEST_CASE("sort_with_permutation_f64 too many elements", "[converter]")
+TEST_CASE("sort_with_permutation_f64 too many elements")
 {
   std::vector<uint8_t> data(65536 * 8, 0);
   std::vector<uint16_t> perm(65536);
@@ -616,7 +616,7 @@ TEST_CASE("sort_with_permutation_f64 too many elements", "[converter]")
 
 // --- zstd r64 compression round trip ---
 
-TEST_CASE("zstd r64 offset compression round trip", "[converter]")
+TEST_CASE("zstd r64 offset compression round trip")
 {
   compressor_zstd_t compressor;
 
@@ -634,7 +634,7 @@ TEST_CASE("zstd r64 offset compression round trip", "[converter]")
 
   auto compressed = compressor.compress(data, size, fmt, 0);
   REQUIRE(compressed.error.code == 0);
-  REQUIRE(compressed.data != nullptr);
+  REQUIRE(compressed.data.get() != nullptr);
 
   auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
   REQUIRE(decompressed.error.code == 0);
@@ -642,10 +642,10 @@ TEST_CASE("zstd r64 offset compression round trip", "[converter]")
 
   auto *result = reinterpret_cast<double *>(decompressed.data.get());
   for (uint32_t i = 0; i < count; i++)
-    REQUIRE(result[i] == Approx(values[i]));
+    REQUIRE(result[i] == doctest::Approx(values[i]));
 }
 
-TEST_CASE("zstd r64 small buffer round trip", "[converter]")
+TEST_CASE("zstd r64 small buffer round trip")
 {
   compressor_zstd_t compressor;
 
@@ -662,10 +662,10 @@ TEST_CASE("zstd r64 small buffer round trip", "[converter]")
 
   auto *result = reinterpret_cast<double *>(decompressed.data.get());
   for (int i = 0; i < 3; i++)
-    REQUIRE(result[i] == Approx(values[i]));
+    REQUIRE(result[i] == doctest::Approx(values[i]));
 }
 
-TEST_CASE("huff0 r64 offset compression round trip", "[converter]")
+TEST_CASE("huff0 r64 offset compression round trip")
 {
   compressor_huff0_t compressor;
 
@@ -689,27 +689,27 @@ TEST_CASE("huff0 r64 offset compression round trip", "[converter]")
 
   auto *result = reinterpret_cast<double *>(decompressed.data.get());
   for (uint32_t i = 0; i < count; i++)
-    REQUIRE(result[i] == Approx(values[i]));
+    REQUIRE(result[i] == doctest::Approx(values[i]));
 }
 
 // --- compression_stats with min/max ---
 
-TEST_CASE("compression_stats accumulate with min/max", "[converter]")
+TEST_CASE("compression_stats accumulate with min/max")
 {
   compression_stats_t stats;
   point_format_t fmt{type_r64, components_1};
 
   stats.accumulate("gps_time", fmt, 8000, 2000, 1.0e9, 1.0e9 + 50.0);
   REQUIRE(stats.per_attribute.size() == 1);
-  REQUIRE(stats.per_attribute[0].min_value == Approx(1.0e9));
-  REQUIRE(stats.per_attribute[0].max_value == Approx(1.0e9 + 50.0));
+  REQUIRE(stats.per_attribute[0].min_value == doctest::Approx(1.0e9));
+  REQUIRE(stats.per_attribute[0].max_value == doctest::Approx(1.0e9 + 50.0));
 
   stats.accumulate("gps_time", fmt, 8000, 2000, 1.0e9 - 10.0, 1.0e9 + 100.0);
-  REQUIRE(stats.per_attribute[0].min_value == Approx(1.0e9 - 10.0));
-  REQUIRE(stats.per_attribute[0].max_value == Approx(1.0e9 + 100.0));
+  REQUIRE(stats.per_attribute[0].min_value == doctest::Approx(1.0e9 - 10.0));
+  REQUIRE(stats.per_attribute[0].max_value == doctest::Approx(1.0e9 + 100.0));
 }
 
-TEST_CASE("compression_stats match by name and format", "[converter]")
+TEST_CASE("compression_stats match by name and format")
 {
   compression_stats_t stats;
   point_format_t fmt_m64{type_m64, components_1};
@@ -722,7 +722,7 @@ TEST_CASE("compression_stats match by name and format", "[converter]")
   REQUIRE(stats.per_attribute[1].format.type == type_m128);
 }
 
-TEST_CASE("compression_stats v2 serialize/deserialize with min/max", "[converter]")
+TEST_CASE("compression_stats v2 serialize/deserialize with min/max")
 {
   compression_stats_t stats;
   stats.input_file_count = 10;
@@ -736,8 +736,8 @@ TEST_CASE("compression_stats v2 serialize/deserialize with min/max", "[converter
 
   auto deserialized = compression_stats_t::deserialize(serialized.get(), serialized_size);
   REQUIRE(deserialized.per_attribute.size() == 1);
-  REQUIRE(deserialized.per_attribute[0].min_value == Approx(1.0e9));
-  REQUIRE(deserialized.per_attribute[0].max_value == Approx(1.0e9 + 100.0));
+  REQUIRE(deserialized.per_attribute[0].min_value == doctest::Approx(1.0e9));
+  REQUIRE(deserialized.per_attribute[0].max_value == doctest::Approx(1.0e9 + 100.0));
 }
 
 // --- decorrelate_u16x3 / correlate_u16x3 ---
@@ -761,9 +761,9 @@ static std::vector<uint8_t> make_correlated_u16x3_buffer(uint32_t count, uint32_
   return buf;
 }
 
-TEST_CASE("decorrelate_u16x3 round trip", "[converter]")
+TEST_CASE("decorrelate_u16x3 round trip")
 {
-  SECTION("correlated data")
+  SUBCASE("correlated data")
   {
     auto data = make_correlated_u16x3_buffer(500, 42);
     auto original = data;
@@ -773,7 +773,7 @@ TEST_CASE("decorrelate_u16x3 round trip", "[converter]")
     REQUIRE(data == original);
   }
 
-  SECTION("random data")
+  SUBCASE("random data")
   {
     auto data = make_random_buffer(600, 99);
     auto original = data;
@@ -782,7 +782,7 @@ TEST_CASE("decorrelate_u16x3 round trip", "[converter]")
     REQUIRE(data == original);
   }
 
-  SECTION("all zeros")
+  SUBCASE("all zeros")
   {
     std::vector<uint8_t> data(600, 0);
     auto original = data;
@@ -791,7 +791,7 @@ TEST_CASE("decorrelate_u16x3 round trip", "[converter]")
     REQUIRE(data == original);
   }
 
-  SECTION("single element")
+  SUBCASE("single element")
   {
     uint16_t r = 0xFF00, g = 0x8000, b = 0x4000;
     uint8_t data[6];
@@ -806,7 +806,7 @@ TEST_CASE("decorrelate_u16x3 round trip", "[converter]")
   }
 }
 
-TEST_CASE("decorrelate_u16x3 preserves zero lower bytes", "[converter]")
+TEST_CASE("decorrelate_u16x3 preserves zero lower bytes")
 {
   auto data = make_correlated_u16x3_buffer(200, 77);
   decorrelate_u16x3(data.data(), uint32_t(data.size()));
@@ -820,11 +820,11 @@ TEST_CASE("decorrelate_u16x3 preserves zero lower bytes", "[converter]")
   }
 }
 
-TEST_CASE("zstd u16x3 decorrelated compression round trip", "[converter]")
+TEST_CASE("zstd u16x3 decorrelated compression round trip")
 {
   compressor_zstd_t compressor;
 
-  SECTION("correlated data")
+  SUBCASE("correlated data")
   {
     auto data = make_correlated_u16x3_buffer(1000, 42);
     point_format_t fmt{type_u16, components_3};
@@ -836,7 +836,7 @@ TEST_CASE("zstd u16x3 decorrelated compression round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("random data")
+  SUBCASE("random data")
   {
     auto data = make_random_buffer(6 * 500, 99);
     point_format_t fmt{type_u16, components_3};
@@ -848,7 +848,7 @@ TEST_CASE("zstd u16x3 decorrelated compression round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("small buffer")
+  SUBCASE("small buffer")
   {
     auto data = make_correlated_u16x3_buffer(3, 11);
     point_format_t fmt{type_u16, components_3};
@@ -861,11 +861,11 @@ TEST_CASE("zstd u16x3 decorrelated compression round trip", "[converter]")
   }
 }
 
-TEST_CASE("huff0 u16x3 decorrelated compression round trip", "[converter]")
+TEST_CASE("huff0 u16x3 decorrelated compression round trip")
 {
   compressor_huff0_t compressor;
 
-  SECTION("correlated data")
+  SUBCASE("correlated data")
   {
     auto data = make_correlated_u16x3_buffer(1000, 42);
     point_format_t fmt{type_u16, components_3};
@@ -877,7 +877,7 @@ TEST_CASE("huff0 u16x3 decorrelated compression round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("random data")
+  SUBCASE("random data")
   {
     auto data = make_random_buffer(6 * 500, 99);
     point_format_t fmt{type_u16, components_3};
@@ -889,7 +889,7 @@ TEST_CASE("huff0 u16x3 decorrelated compression round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("small buffer")
+  SUBCASE("small buffer")
   {
     auto data = make_correlated_u16x3_buffer(3, 11);
     point_format_t fmt{type_u16, components_3};
@@ -904,9 +904,9 @@ TEST_CASE("huff0 u16x3 decorrelated compression round trip", "[converter]")
 
 // --- delta_encode_u16x3 / delta_decode_u16x3 ---
 
-TEST_CASE("delta_encode_u16x3 round trip", "[converter]")
+TEST_CASE("delta_encode_u16x3 round trip")
 {
-  SECTION("correlated data")
+  SUBCASE("correlated data")
   {
     auto data = make_correlated_u16x3_buffer(500, 42);
     auto original = data;
@@ -916,7 +916,7 @@ TEST_CASE("delta_encode_u16x3 round trip", "[converter]")
     REQUIRE(data == original);
   }
 
-  SECTION("random data")
+  SUBCASE("random data")
   {
     auto data = make_random_buffer(600, 99);
     auto original = data;
@@ -925,7 +925,7 @@ TEST_CASE("delta_encode_u16x3 round trip", "[converter]")
     REQUIRE(data == original);
   }
 
-  SECTION("all zeros")
+  SUBCASE("all zeros")
   {
     std::vector<uint8_t> data(600, 0);
     auto original = data;
@@ -934,7 +934,7 @@ TEST_CASE("delta_encode_u16x3 round trip", "[converter]")
     REQUIRE(data == original);
   }
 
-  SECTION("single element")
+  SUBCASE("single element")
   {
     uint16_t r = 0xFF00, g = 0x8000, b = 0x4000;
     uint8_t data[6];
@@ -949,7 +949,7 @@ TEST_CASE("delta_encode_u16x3 round trip", "[converter]")
   }
 }
 
-TEST_CASE("delta_encode_u16x3 preserves zero lower bytes", "[converter]")
+TEST_CASE("delta_encode_u16x3 preserves zero lower bytes")
 {
   auto data = make_correlated_u16x3_buffer(200, 77);
   delta_encode_u16x3(data.data(), uint32_t(data.size()));
@@ -961,7 +961,7 @@ TEST_CASE("delta_encode_u16x3 preserves zero lower bytes", "[converter]")
   }
 }
 
-TEST_CASE("decorrelate + delta round trip", "[converter]")
+TEST_CASE("decorrelate + delta round trip")
 {
   auto data = make_correlated_u16x3_buffer(1000, 55);
   auto original = data;
@@ -974,7 +974,7 @@ TEST_CASE("decorrelate + delta round trip", "[converter]")
 
 // --- LOD stats ---
 
-TEST_CASE("compression_stats accumulate with is_lod", "[converter]")
+TEST_CASE("compression_stats accumulate with is_lod")
 {
   compression_stats_t stats;
   point_format_t fmt{type_u32, components_3};
@@ -1009,7 +1009,7 @@ TEST_CASE("compression_stats accumulate with is_lod", "[converter]")
   REQUIRE(stats.per_attribute[1].lod_compressed_bytes == 200);
 }
 
-TEST_CASE("compression_stats v4 serialize/deserialize with LOD fields", "[converter]")
+TEST_CASE("compression_stats v4 serialize/deserialize with LOD fields")
 {
   compression_stats_t stats;
   stats.input_file_count = 3;
@@ -1050,7 +1050,7 @@ TEST_CASE("compression_stats v4 serialize/deserialize with LOD fields", "[conver
 
 // --- delta_encode_single / delta_decode_single ---
 
-TEST_CASE("delta_encode_single round trip u8", "[converter]")
+TEST_CASE("delta_encode_single round trip u8")
 {
   std::vector<uint8_t> data = {10, 12, 15, 14, 20, 20, 25};
   auto original = data;
@@ -1060,7 +1060,7 @@ TEST_CASE("delta_encode_single round trip u8", "[converter]")
   REQUIRE(data == original);
 }
 
-TEST_CASE("delta_encode_single round trip u16", "[converter]")
+TEST_CASE("delta_encode_single round trip u16")
 {
   uint32_t count = 200;
   std::vector<uint8_t> data(count * 2);
@@ -1076,7 +1076,7 @@ TEST_CASE("delta_encode_single round trip u16", "[converter]")
   REQUIRE(data == original);
 }
 
-TEST_CASE("delta_encode_single round trip u32", "[converter]")
+TEST_CASE("delta_encode_single round trip u32")
 {
   uint32_t count = 100;
   std::vector<uint8_t> data(count * 4);
@@ -1092,7 +1092,7 @@ TEST_CASE("delta_encode_single round trip u32", "[converter]")
   REQUIRE(data == original);
 }
 
-TEST_CASE("delta_encode_single round trip random data", "[converter]")
+TEST_CASE("delta_encode_single round trip random data")
 {
   auto data = make_random_buffer(512, 77);
   auto original = data;
@@ -1101,7 +1101,7 @@ TEST_CASE("delta_encode_single round trip random data", "[converter]")
   REQUIRE(data == original);
 }
 
-TEST_CASE("delta_encode_single single element", "[converter]")
+TEST_CASE("delta_encode_single single element")
 {
   uint16_t val = 0x1234;
   uint8_t data[2];
@@ -1112,7 +1112,7 @@ TEST_CASE("delta_encode_single single element", "[converter]")
   REQUIRE(memcmp(data, original, 2) == 0); // no change for single element
 }
 
-TEST_CASE("zstd element delta round trip gradually changing u16x1", "[converter]")
+TEST_CASE("zstd element delta round trip gradually changing u16x1")
 {
   compressor_zstd_t compressor;
   uint32_t count = 1000;
@@ -1134,7 +1134,7 @@ TEST_CASE("zstd element delta round trip gradually changing u16x1", "[converter]
   REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
 }
 
-TEST_CASE("zstd element delta round trip random u16x1", "[converter]")
+TEST_CASE("zstd element delta round trip random u16x1")
 {
   compressor_zstd_t compressor;
   auto data = make_random_buffer(2000, 99);
@@ -1147,7 +1147,7 @@ TEST_CASE("zstd element delta round trip random u16x1", "[converter]")
   REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
 }
 
-TEST_CASE("huff0 element delta round trip gradually changing u16x1", "[converter]")
+TEST_CASE("huff0 element delta round trip gradually changing u16x1")
 {
   compressor_huff0_t compressor;
   uint32_t count = 1000;
@@ -1169,7 +1169,7 @@ TEST_CASE("huff0 element delta round trip gradually changing u16x1", "[converter
   REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
 }
 
-TEST_CASE("zstd element delta round trip u8x1", "[converter]")
+TEST_CASE("zstd element delta round trip u8x1")
 {
   compressor_zstd_t compressor;
   uint32_t count = 500;
@@ -1185,7 +1185,7 @@ TEST_CASE("zstd element delta round trip u8x1", "[converter]")
   REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
 }
 
-TEST_CASE("zstd element delta round trip u32x1", "[converter]")
+TEST_CASE("zstd element delta round trip u32x1")
 {
   compressor_zstd_t compressor;
   uint32_t count = 300;
@@ -1204,7 +1204,7 @@ TEST_CASE("zstd element delta round trip u32x1", "[converter]")
   REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
 }
 
-TEST_CASE("compression_stats v3 backward compat deserialize has zero LOD", "[converter]")
+TEST_CASE("compression_stats v3 backward compat deserialize has zero LOD")
 {
   // Build a v3 blob manually: serialize with old code layout
   compression_stats_t stats;
@@ -1270,11 +1270,11 @@ TEST_CASE("compression_stats v3 backward compat deserialize has zero LOD", "[con
 
 // --- ANS (FSE) round trip ---
 
-TEST_CASE("ans round trip", "[converter]")
+TEST_CASE("ans round trip")
 {
   compressor_ans_t compressor;
 
-  SECTION("random u8x1")
+  SUBCASE("random u8x1")
   {
     auto data = make_random_buffer(1024);
     point_format_t fmt{type_u8, components_1};
@@ -1286,7 +1286,7 @@ TEST_CASE("ans round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("random u32x3")
+  SUBCASE("random u32x3")
   {
     auto data = make_random_buffer(4 * 3 * 100);
     point_format_t fmt{type_u32, components_3};
@@ -1298,7 +1298,7 @@ TEST_CASE("ans round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("sorted m192")
+  SUBCASE("sorted m192")
   {
     uint8_t data[24 * 5];
     memset(data, 0, sizeof(data));
@@ -1316,7 +1316,7 @@ TEST_CASE("ans round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data, sizeof(data)) == 0);
   }
 
-  SECTION("constant buffer")
+  SUBCASE("constant buffer")
   {
     auto data = make_constant_buffer(1024, 0x42);
     point_format_t fmt{type_u8, components_1};
@@ -1328,7 +1328,7 @@ TEST_CASE("ans round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("u16x3 correlated")
+  SUBCASE("u16x3 correlated")
   {
     auto data = make_correlated_u16x3_buffer(1000, 42);
     point_format_t fmt{type_u16, components_3};
@@ -1340,7 +1340,7 @@ TEST_CASE("ans round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("gradually changing u16x1")
+  SUBCASE("gradually changing u16x1")
   {
     uint32_t count = 1000;
     std::vector<uint8_t> data(count * 2);
@@ -1361,7 +1361,7 @@ TEST_CASE("ans round trip", "[converter]")
     REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
   }
 
-  SECTION("r64 offset")
+  SUBCASE("r64 offset")
   {
     uint32_t count = 500;
     std::vector<double> values(count);
@@ -1383,11 +1383,11 @@ TEST_CASE("ans round trip", "[converter]")
 
     auto *result = reinterpret_cast<double *>(decompressed.data.get());
     for (uint32_t i = 0; i < count; i++)
-      REQUIRE(result[i] == Approx(values[i]));
+      REQUIRE(result[i] == doctest::Approx(values[i]));
   }
 }
 
-TEST_CASE("decompress_any dispatches ans", "[converter]")
+TEST_CASE("decompress_any dispatches ans")
 {
   auto data = make_random_buffer(1024);
   point_format_t fmt{type_u8, components_1};
@@ -1401,7 +1401,7 @@ TEST_CASE("decompress_any dispatches ans", "[converter]")
   REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
 }
 
-TEST_CASE("create_compressor returns ans", "[converter]")
+TEST_CASE("create_compressor returns ans")
 {
   auto ans = create_compressor(compression_method_t::ans);
   REQUIRE(ans != nullptr);
@@ -1424,7 +1424,7 @@ static attributes_t make_test_attributes(std::initializer_list<std::tuple<const 
   return attrs;
 }
 
-TEST_CASE("LOD attribute format excludes original_order", "[converter]")
+TEST_CASE("LOD attribute format excludes original_order")
 {
   attributes_configs_t configs;
   auto attrs = make_test_attributes({
@@ -1450,7 +1450,7 @@ TEST_CASE("LOD attribute format excludes original_order", "[converter]")
   REQUIRE(memcmp(lod_attrs.attributes[1].name, POINTS_ATTRIBUTE_RGB, strlen(POINTS_ATTRIBUTE_RGB)) == 0);
 }
 
-TEST_CASE("LOD attribute format without original_order is unchanged", "[converter]")
+TEST_CASE("LOD attribute format without original_order is unchanged")
 {
   attributes_configs_t configs;
   auto attrs = make_test_attributes({

@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <compression_preprocess.hpp>
 #include <byte_shuffle.hpp>
 
@@ -7,7 +7,7 @@
 
 using namespace points::converter;
 
-TEST_CASE("popcount32 known values", "[converter]")
+TEST_CASE("popcount32 known values")
 {
   REQUIRE(popcount32(0) == 0);
   REQUIRE(popcount32(1) == 1);
@@ -18,7 +18,7 @@ TEST_CASE("popcount32 known values", "[converter]")
   REQUIRE(popcount32(0x0F0F0F0F) == 16);
 }
 
-TEST_CASE("delta_encode u32 sorted correct deltas", "[converter]")
+TEST_CASE("delta_encode u32 sorted correct deltas")
 {
   uint32_t values[] = {10, 20, 35, 100, 200};
   uint32_t size = sizeof(values);
@@ -34,7 +34,7 @@ TEST_CASE("delta_encode u32 sorted correct deltas", "[converter]")
   REQUIRE(values[4] == 100);
 }
 
-TEST_CASE("delta_encode u32 unsorted returns false", "[converter]")
+TEST_CASE("delta_encode u32 unsorted returns false")
 {
   uint32_t values[] = {10, 5, 20, 30};
   uint32_t original[4];
@@ -45,7 +45,7 @@ TEST_CASE("delta_encode u32 unsorted returns false", "[converter]")
   REQUIRE(memcmp(values, original, sizeof(values)) == 0);
 }
 
-TEST_CASE("delta_encode_decode round trip u32", "[converter]")
+TEST_CASE("delta_encode_decode round trip u32")
 {
   uint32_t values[] = {0, 5, 10, 100, 1000, 50000, 0xFFFFFFFF};
   uint32_t original[7];
@@ -58,7 +58,7 @@ TEST_CASE("delta_encode_decode round trip u32", "[converter]")
   REQUIRE(memcmp(values, original, sizeof(values)) == 0);
 }
 
-TEST_CASE("delta_encode_decode round trip u64", "[converter]")
+TEST_CASE("delta_encode_decode round trip u64")
 {
   uint64_t values[] = {0, 100, 1000, 1000000, 0xFFFFFFFFFFFFFFFF};
   uint64_t original[5];
@@ -71,7 +71,7 @@ TEST_CASE("delta_encode_decode round trip u64", "[converter]")
   REQUIRE(memcmp(values, original, sizeof(values)) == 0);
 }
 
-TEST_CASE("delta_encode_decode round trip u128", "[converter]")
+TEST_CASE("delta_encode_decode round trip u128")
 {
   // 3 elements of 16 bytes each, sorted by MSW-first comparison
   uint8_t data[48];
@@ -95,7 +95,7 @@ TEST_CASE("delta_encode_decode round trip u128", "[converter]")
   REQUIRE(memcmp(data, original, sizeof(data)) == 0);
 }
 
-TEST_CASE("delta_encode_decode round trip u192", "[converter]")
+TEST_CASE("delta_encode_decode round trip u192")
 {
   // 3 elements of 24 bytes each, sorted
   uint8_t data[72];
@@ -119,7 +119,7 @@ TEST_CASE("delta_encode_decode round trip u192", "[converter]")
   REQUIRE(memcmp(data, original, sizeof(data)) == 0);
 }
 
-TEST_CASE("delta_encode constant values produces zeros", "[converter]")
+TEST_CASE("delta_encode constant values produces zeros")
 {
   uint32_t values[] = {42, 42, 42, 42, 42};
   bool encoded = delta_encode_morton(reinterpret_cast<uint8_t *>(values), sizeof(values), 4);
@@ -130,7 +130,7 @@ TEST_CASE("delta_encode constant values produces zeros", "[converter]")
     REQUIRE(values[i] == 0);
 }
 
-TEST_CASE("delta_encode single element returns true", "[converter]")
+TEST_CASE("delta_encode single element returns true")
 {
   uint32_t value = 12345;
   bool result = delta_encode_morton(reinterpret_cast<uint8_t *>(&value), sizeof(value), 4);
@@ -138,21 +138,21 @@ TEST_CASE("delta_encode single element returns true", "[converter]")
   REQUIRE(value == 12345);
 }
 
-TEST_CASE("delta_encode too small buffer returns false", "[converter]")
+TEST_CASE("delta_encode too small buffer returns false")
 {
   uint8_t data[3] = {1, 2, 3};
   bool result = delta_encode_morton(data, 3, 4);
   REQUIRE(result == false);
 }
 
-TEST_CASE("delta_encode unsupported type_size returns false", "[converter]")
+TEST_CASE("delta_encode unsupported type_size returns false")
 {
   uint8_t data[9] = {};
   bool result = delta_encode_morton(data, 9, 3);
   REQUIRE(result == false);
 }
 
-TEST_CASE("detect_constant_bands all constant", "[converter]")
+TEST_CASE("detect_constant_bands all constant")
 {
   // 4 elements, typesize=2, components=1 => stride=2, 2 bands of 4 bytes
   // Make data where every element has the same value
@@ -171,7 +171,7 @@ TEST_CASE("detect_constant_bands all constant", "[converter]")
   REQUIRE(result.compacted_data.empty());
 }
 
-TEST_CASE("detect_constant_bands no constant", "[converter]")
+TEST_CASE("detect_constant_bands no constant")
 {
   // 3 elements, typesize=2, components=1 => stride=2, 2 bands of 3 bytes
   uint16_t values[] = {0x0102, 0x0304, 0x0506};
@@ -188,7 +188,7 @@ TEST_CASE("detect_constant_bands no constant", "[converter]")
   REQUIRE(memcmp(result.compacted_data.data(), shuffled.data(), total) == 0);
 }
 
-TEST_CASE("detect_constant_bands mixed", "[converter]")
+TEST_CASE("detect_constant_bands mixed")
 {
   // 3 elements of u8 x 3 components => stride=3, 3 bands of 3 bytes
   // Component 0 varies, component 1 constant (0x42), component 2 varies
@@ -213,7 +213,7 @@ TEST_CASE("detect_constant_bands mixed", "[converter]")
   REQUIRE(result.compacted_data.size() == 6);
 }
 
-TEST_CASE("detect then restore round trip", "[converter]")
+TEST_CASE("detect then restore round trip")
 {
   // 5 elements of u32 x 2 components => stride=8, 8 bands of 5 bytes each
   // Component 0 varies, component 1 constant (0xDEADBEEF)
@@ -239,7 +239,7 @@ TEST_CASE("detect then restore round trip", "[converter]")
   REQUIRE(memcmp(shuffled.data(), restored.data(), total) == 0);
 }
 
-TEST_CASE("detect_constant_bands >32 bands graceful degradation", "[converter]")
+TEST_CASE("detect_constant_bands >32 bands graceful degradation")
 {
   // typesize=8, components=5 would be 40 bands — exceeds 32-bit mask
   // Use components_4x4 = 5 but manually set up data

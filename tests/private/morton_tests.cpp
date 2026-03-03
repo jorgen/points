@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <random>
 #include <fmt/printf.h>
 
@@ -6,7 +6,7 @@
 #include <morton_tree_coordinate_transform.hpp>
 
 
-TEST_CASE("SimpleMorton", "[converter]")
+TEST_CASE("SimpleMorton")
 {
   double half[] = {0.51200000001699664, 0.0, 0.0};
   double quarter[] = {0.256, 0.0, 0.0};
@@ -43,7 +43,7 @@ TEST_CASE("SimpleMorton", "[converter]")
 //  REQUIRE(a.data[0] == ~uint64_t(0));
 }
 
-TEST_CASE("Morton order", "[converter]")
+TEST_CASE("Morton order")
 {
   using namespace  points::converter;
   morton::morton_t<uint32_t, 3> first = {};
@@ -73,7 +73,7 @@ TEST_CASE("Morton order", "[converter]")
 }
 
 
-TEST_CASE("Morton random downcast/upcast", "[converter]")
+TEST_CASE("Morton random downcast/upcast")
 {
   using namespace  points::converter;
   std::mt19937 gen(44);
@@ -99,7 +99,7 @@ TEST_CASE("Morton random downcast/upcast", "[converter]")
   }
 }
 
-TEST_CASE("Morton 192 encode/decode x", "[converter]")
+TEST_CASE("Morton 192 encode/decode x")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -127,7 +127,7 @@ TEST_CASE("Morton 192 encode/decode x", "[converter]")
   REQUIRE(outpos[2] == pos[2]);
 }
 
-TEST_CASE("Morton 192 encode/decode x top off", "[converter]")
+TEST_CASE("Morton 192 encode/decode x top off")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -155,7 +155,7 @@ TEST_CASE("Morton 192 encode/decode x top off", "[converter]")
   REQUIRE(outpos[2] == pos[2]);
 }
 
-TEST_CASE("Morton 192 encode/decode y top off", "[converter]")
+TEST_CASE("Morton 192 encode/decode y top off")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -183,7 +183,7 @@ TEST_CASE("Morton 192 encode/decode y top off", "[converter]")
   REQUIRE(outpos[2] == pos[2]);
 }
 
-TEST_CASE("Morton 192 encode/decode y", "[converter]")
+TEST_CASE("Morton 192 encode/decode y")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -211,7 +211,7 @@ TEST_CASE("Morton 192 encode/decode y", "[converter]")
   REQUIRE(outpos[2] == pos[2]);
 }
 
-TEST_CASE("Morton 192 encode_z", "[converter]")
+TEST_CASE("Morton 192 encode_z")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -239,7 +239,7 @@ TEST_CASE("Morton 192 encode_z", "[converter]")
   REQUIRE(outpos[2] == pos[2]);
 }
 
-TEST_CASE("Morton 128 encode/decode x", "[converter]")
+TEST_CASE("Morton 128 encode/decode x")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -269,7 +269,7 @@ TEST_CASE("Morton 128 encode/decode x", "[converter]")
   REQUIRE(outpos[2] == (pos[2] << zmask) >> zmask);
 }
 
-TEST_CASE("Morton 128 encode/decode y", "[converter]")
+TEST_CASE("Morton 128 encode/decode y")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -299,7 +299,7 @@ TEST_CASE("Morton 128 encode/decode y", "[converter]")
   REQUIRE(outpos[2] == (pos[2] << zmask) >> zmask);
 }
 
-TEST_CASE("Morton 128 encode/decode z", "[converter]")
+TEST_CASE("Morton 128 encode/decode z")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -329,7 +329,7 @@ TEST_CASE("Morton 128 encode/decode z", "[converter]")
   REQUIRE(outpos[2] == (pos[2] << zmask) >> zmask);
 }
 
-TEST_CASE("Morton 64 encode/decode x", "[converter]")
+TEST_CASE("Morton 64 encode/decode x")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -361,7 +361,7 @@ TEST_CASE("Morton 64 encode/decode x", "[converter]")
   REQUIRE(outpos[2] == expected_output[2]);
 }
 
-TEST_CASE("Morton 64 encode/decode y", "[converter]")
+TEST_CASE("Morton 64 encode/decode y")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -393,7 +393,7 @@ TEST_CASE("Morton 64 encode/decode y", "[converter]")
   REQUIRE(outpos[2] == expected_output[2]);
 }
 
-TEST_CASE("Morton 64 encode/decode z", "[converter]")
+TEST_CASE("Morton 64 encode/decode z")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -425,7 +425,7 @@ TEST_CASE("Morton 64 encode/decode z", "[converter]")
   REQUIRE(outpos[2] == expected_output[2]);
 }
 
-TEST_CASE("Morton 32 encode/decode x", "[converter]")
+TEST_CASE("Morton 32 encode/decode x")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -457,7 +457,7 @@ TEST_CASE("Morton 32 encode/decode x", "[converter]")
   REQUIRE(outpos[2] == expected_output[2]);
 }
 
-TEST_CASE("Morton 32 encode/decode y", "[converter]")
+TEST_CASE("Morton 32 encode/decode y")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -489,7 +489,7 @@ TEST_CASE("Morton 32 encode/decode y", "[converter]")
   REQUIRE(outpos[2] == expected_output[2]);
 }
 
-TEST_CASE("Morton 32 encode/decode z", "[converter]")
+TEST_CASE("Morton 32 encode/decode z")
 {
   using namespace  points::converter;
   uint64_t pos[3];
@@ -521,7 +521,7 @@ TEST_CASE("Morton 32 encode/decode z", "[converter]")
   REQUIRE(outpos[2] == expected_output[2]);
 }
 
-TEST_CASE("Morton downcast", "[converter]")
+TEST_CASE("Morton downcast")
 {
   using namespace points::converter;
   morton::morton192_t m192;
@@ -549,7 +549,7 @@ TEST_CASE("Morton downcast", "[converter]")
   REQUIRE(m32.data[0] == (~uint32_t(0)) >> 2);
 }
 
-TEST_CASE("Morton upcast", "[converter]")
+TEST_CASE("Morton upcast")
 {
   using namespace points::converter;
   morton::morton192_t m192;
@@ -582,7 +582,7 @@ TEST_CASE("Morton upcast", "[converter]")
   REQUIRE(m128full == upcast128);
 }
 
-TEST_CASE("Morton name", "[converter]")
+TEST_CASE("Morton name")
 {
   using namespace points::converter;
   morton::morton192_t to_test;

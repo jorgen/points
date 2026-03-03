@@ -1,6 +1,6 @@
 #include <aabb.hpp>
 #include <camera.hpp>
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <fmt/printf.h>
 #include <frustum.hpp>
 #include <glm_include.hpp>
@@ -8,7 +8,7 @@
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
 
-TEST_CASE("Verify_Perspective", "[render]")
+TEST_CASE("Verify_Perspective")
 {
   points::render::camera_t *camera = points::render::camera_create();
   glm::dmat4 perspective = glm::perspectiveFov(points::render::to_radians(90.0), 1024.0, 768.0, 3.3, 2345.0);
@@ -22,13 +22,13 @@ TEST_CASE("Verify_Perspective", "[render]")
   double far;
   points::render::camera_perspective_properties(camera, &fov, &aspect, &near, &far);
 
-  REQUIRE(near == Approx(3.3));
-  REQUIRE(far == Approx(2345.0));
-  REQUIRE(fov == Approx(points::render::to_radians(90.0)));
-  REQUIRE(aspect == Approx(1024.0 / 768.0));
+  REQUIRE(near == doctest::Approx(3.3));
+  REQUIRE(far == doctest::Approx(2345.0));
+  REQUIRE(fov == doctest::Approx(points::render::to_radians(90.0)));
+  REQUIRE(aspect == doctest::Approx(1024.0 / 768.0));
 }
 
-TEST_CASE("Check_Frustum_AABB_Culling", "[render]")
+TEST_CASE("Check_Frustum_AABB_Culling")
 {
   points::render::camera_t *camera = points::render::camera_create();
   points::render::camera_set_perspective(camera, points::render::to_radians(45.0), 10.0, 9.0, 0.01, 50.0);

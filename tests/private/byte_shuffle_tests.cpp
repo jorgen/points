@@ -1,13 +1,14 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <byte_shuffle.hpp>
 
 #include <cstring>
 #include <numeric>
+#include <string>
 #include <vector>
 
 using namespace points::converter;
 
-TEST_CASE("byte_shuffle round trip single byte type", "[converter]")
+TEST_CASE("byte_shuffle round trip single byte type")
 {
   std::vector<uint8_t> src = {1, 2, 3, 4, 5};
   std::vector<uint8_t> shuffled(src.size());
@@ -20,7 +21,7 @@ TEST_CASE("byte_shuffle round trip single byte type", "[converter]")
   REQUIRE(memcmp(src.data(), unshuffled.data(), src.size()) == 0);
 }
 
-TEST_CASE("byte_shuffle round trip u16 single component", "[converter]")
+TEST_CASE("byte_shuffle round trip u16 single component")
 {
   uint16_t values[] = {0x0102, 0x0304, 0x0506};
   uint32_t total = sizeof(values);
@@ -33,7 +34,7 @@ TEST_CASE("byte_shuffle round trip u16 single component", "[converter]")
   REQUIRE(memcmp(values, unshuffled.data(), total) == 0);
 }
 
-TEST_CASE("byte_shuffle round trip u32 xyz components", "[converter]")
+TEST_CASE("byte_shuffle round trip u32 xyz components")
 {
   uint32_t values[] = {0x11223344, 0x55667788, 0x99AABBCC,
                        0xDDEEFF00, 0x12345678, 0x9ABCDEF0};
@@ -47,7 +48,7 @@ TEST_CASE("byte_shuffle round trip u32 xyz components", "[converter]")
   REQUIRE(memcmp(values, unshuffled.data(), total) == 0);
 }
 
-TEST_CASE("byte_shuffle round trip r64 xyz components", "[converter]")
+TEST_CASE("byte_shuffle round trip r64 xyz components")
 {
   double values[] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
   uint32_t total = sizeof(values);
@@ -60,7 +61,7 @@ TEST_CASE("byte_shuffle round trip r64 xyz components", "[converter]")
   REQUIRE(memcmp(values, unshuffled.data(), total) == 0);
 }
 
-TEST_CASE("byte_shuffle round trip m192 single component", "[converter]")
+TEST_CASE("byte_shuffle round trip m192 single component")
 {
   uint8_t values[24 * 3];
   for (uint32_t i = 0; i < sizeof(values); i++)
@@ -76,7 +77,7 @@ TEST_CASE("byte_shuffle round trip m192 single component", "[converter]")
   REQUIRE(memcmp(values, unshuffled.data(), total) == 0);
 }
 
-TEST_CASE("byte_shuffle known layout u32 single component", "[converter]")
+TEST_CASE("byte_shuffle known layout u32 single component")
 {
   // 3 elements, typesize=4, components=1 => stride=4, 4 bands of 3 bytes each
   uint32_t values[] = {0x04030201, 0x08070605, 0x0C0B0A09};
@@ -104,7 +105,7 @@ TEST_CASE("byte_shuffle known layout u32 single component", "[converter]")
   REQUIRE(shuffled[11] == src[11]);
 }
 
-TEST_CASE("byte_shuffle known layout u8 xyz components", "[converter]")
+TEST_CASE("byte_shuffle known layout u8 xyz components")
 {
   // typesize=1, components=3 => stride=3, 3 bands of element_count bytes
   // 2 elements: {x0,y0,z0, x1,y1,z1}
@@ -125,7 +126,7 @@ TEST_CASE("byte_shuffle known layout u8 xyz components", "[converter]")
   REQUIRE(shuffled[5] == 60);
 }
 
-TEST_CASE("byte_shuffle handles remainder bytes", "[converter]")
+TEST_CASE("byte_shuffle handles remainder bytes")
 {
   // 7 bytes with stride=4 (typesize=2, components=2) => 1 element + 3 remainder bytes
   uint8_t src[] = {1, 2, 3, 4, 0xAA, 0xBB, 0xCC};
@@ -143,7 +144,7 @@ TEST_CASE("byte_shuffle handles remainder bytes", "[converter]")
   REQUIRE(shuffled[6] == 0xCC);
 }
 
-TEST_CASE("byte_shuffle handles empty buffer", "[converter]")
+TEST_CASE("byte_shuffle handles empty buffer")
 {
   uint8_t dummy = 0;
   std::vector<uint8_t> shuffled(1);
@@ -154,7 +155,7 @@ TEST_CASE("byte_shuffle handles empty buffer", "[converter]")
   // No crash is the test
 }
 
-TEST_CASE("byte_shuffle round trip matrix", "[converter]")
+TEST_CASE("byte_shuffle round trip matrix")
 {
   uint32_t typesizes[] = {1, 2, 4, 8, 16, 24};
   uint32_t comp_counts[] = {1, 2, 3, 4};
@@ -163,7 +164,7 @@ TEST_CASE("byte_shuffle round trip matrix", "[converter]")
   {
     for (auto components : comp_counts)
     {
-      SECTION("typesize=" + std::to_string(typesize) + " components=" + std::to_string(components))
+      SUBCASE(("typesize=" + std::to_string(typesize) + " components=" + std::to_string(components)).c_str())
       {
         uint32_t stride = typesize * components;
         uint32_t element_count = 100;

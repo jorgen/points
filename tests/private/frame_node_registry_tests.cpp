@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <doctest/doctest.h>
 #include <frame_node_registry.hpp>
 #include <gpu_node_buffer.hpp>
 
@@ -27,12 +27,12 @@ static tree_walker_data_t make_subset(node_id_t node, node_id_t parent, int lod,
   return d;
 }
 
-TEST_CASE("frame_node_registry basic operations", "[frame_node_registry]")
+TEST_CASE("frame_node_registry basic operations")
 {
   frame_node_registry_t registry;
   REQUIRE(registry.empty());
 
-  SECTION("first frame - all nodes added")
+  SUBCASE("first frame - all nodes added")
   {
     auto root_id = make_node_id(1, 0, 0);
     auto child_a = make_node_id(1, 1, 0);
@@ -73,7 +73,7 @@ TEST_CASE("frame_node_registry basic operations", "[frame_node_registry]")
     REQUIRE((registry.roots()[0] <=> root_id) == std::strong_ordering::equal);
   }
 
-  SECTION("stable frame - empty diff for existing nodes")
+  SUBCASE("stable frame - empty diff for existing nodes")
   {
     auto root_id = make_node_id(1, 0, 0);
     node_id_t empty = {};
@@ -103,7 +103,7 @@ TEST_CASE("frame_node_registry basic operations", "[frame_node_registry]")
     REQUIRE(registry.get_node(root_id) != nullptr);
   }
 
-  SECTION("node removal")
+  SUBCASE("node removal")
   {
     auto root_id = make_node_id(1, 0, 0);
     auto child_id = make_node_id(1, 1, 0);
@@ -138,7 +138,7 @@ TEST_CASE("frame_node_registry basic operations", "[frame_node_registry]")
     REQUIRE(registry.get_node(child_id) == nullptr);
   }
 
-  SECTION("topology from edges")
+  SUBCASE("topology from edges")
   {
     auto root_id = make_node_id(1, 0, 0);
     auto child_a = make_node_id(1, 1, 0);
