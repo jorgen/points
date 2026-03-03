@@ -138,6 +138,36 @@ TEST_CASE("frame_node_registry basic operations")
     REQUIRE(registry.get_node(child_id) == nullptr);
   }
 
+  SUBCASE("root detected when node id is zero - sentinel collision")
+  {
+    // Root tree_id=0, level=0, index=0 — same as default node_id_t{}
+    // This must still be identified as a root (parent sentinel must not collide)
+    auto root_id = make_node_id(0, 0, 0);
+    auto child_a = make_node_id(0, 1, 0);
+    node_id_t sentinel = {tree_id_t(UINT32_MAX), UINT16_MAX, UINT16_MAX};
+
+    std::vector<tree_walker_data_t> subsets = {
+      make_subset(root_id, sentinel, 10),
+      make_subset(child_a, root_id, 9),
+    };
+
+    std::vector<std::unique_ptr<gpu_node_buffer_t>> bufs;
+    for (auto &s : subsets)
+    {
+      auto b = std::make_unique<gpu_node_buffer_t>();
+      b->node_info = s;
+      bufs.push_back(std::move(b));
+    }
+
+    std::vector<std::pair<node_id_t, node_id_t>> edges = {{root_id, child_a}};
+    registry.update_from_walker(subsets, edges, bufs);
+
+    REQUIRE(registry.roots().size() == 1);
+    REQUIRE((registry.roots()[0] <=> root_id) == std::strong_ordering::equal);
+    REQUIRE(registry.get_node(root_id) != nullptr);
+    REQUIRE(registry.get_node(root_id)->children.size() == 1);
+  }
+
   SUBCASE("topology from edges")
   {
     auto root_id = make_node_id(1, 0, 0);
