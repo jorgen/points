@@ -56,7 +56,8 @@ POINTS_CONVERTER_EXPORT void converter_data_source_get_frame_timings(struct conv
   double *refine_strategy_ms, double *frontier_scheduling_ms,
   double *draw_emission_ms, double *eviction_ms, double *total_ms,
   int *registry_node_count, int *active_set_size, int *nodes_drawn,
-  int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed);
+  int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed,
+  int *walker_node_count, uint64_t *walker_total_points, int *walker_trees_to_load);
 
 POINTS_CONVERTER_EXPORT void converter_data_source_set_debug_transitions(struct converter_data_source_t *cds, bool enabled);
 

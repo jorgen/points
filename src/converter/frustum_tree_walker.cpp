@@ -96,7 +96,7 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
   }
   std::atomic_thread_fence(std::memory_order_acquire);
   auto tree = tree_registry.get(tree_id);
-  if (tree->data[0].empty() && tree->data[0][0].data.empty())
+  if (tree->data[0].empty() || tree->data[0][0].data.empty())
     return;
 
   bool current_buffer_index = false;
@@ -109,15 +109,33 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
 
   node_aabb_t aabb = {glm::dvec3(min[0], min[1], min[2]), glm::dvec3(max[0], max[1], max[2])};
 
+  if (walker.m_debug)
+  {
+    glm::dvec3 center = (aabb.min + aabb.max) * 0.5;
+    glm::dvec3 extent = aabb.max - aabb.min;
+    double magnitude = glm::length(extent);
+    double distance = glm::length(center - walker.m_lod_params.camera_position);
+    double node_size = magnitude * 0.5;
+    double projected_fraction = (distance > node_size) ? walker.m_lod_params.projection[1][1] * 0.5 * node_size / distance : 999.0;
+    bool subdivide = should_subdivide(walker.m_lod_params, aabb);
+    size_t root_subset_count = (!tree->data[0].empty() && !tree->data[0][0].data.empty()) ? tree->data[0][0].data.size() : 0;
+    fmt::print(stderr, "[walker-debug] root tree {}: AABB=[{:.1f},{:.1f},{:.1f}]-[{:.1f},{:.1f},{:.1f}] mag={:.1f}\n",
+               tree_id.data, aabb.min.x, aabb.min.y, aabb.min.z, aabb.max.x, aabb.max.y, aabb.max.z, magnitude);
+    fmt::print(stderr, "[walker-debug]   camera=[{:.1f},{:.1f},{:.1f}] dist={:.1f} projected_frac={:.4f} threshold={:.4f} subdivide={}\n",
+               walker.m_lod_params.camera_position.x, walker.m_lod_params.camera_position.y, walker.m_lod_params.camera_position.z,
+               distance, projected_fraction, walker.m_lod_params.screen_fraction_threshold, subdivide);
+    fmt::print(stderr, "[walker-debug]   root subsets={}\n", root_subset_count);
+  }
+
   auto tree_lod = morton::morton_tree_level_to_lod(tree->magnitude, 0); // we skip the + 1, since we want the half
   double aabb_width_half = double(uint64_t(1) << tree_lod) * tree_registry.tree_config.scale;
   glm::dvec3 center = {min[0] + aabb_width_half, min[1] + aabb_width_half, min[2] + aabb_width_half};
 
-  node_id_t empty_node_id = {};
+  node_id_t empty_node_id = {tree_id_t(UINT32_MAX), UINT16_MAX, UINT16_MAX};
   alternating_possible_nodes[current_buffer_index].emplace_back(tree, empty_node_id, 0, aabb, false);
   render::frustum_t frustum;
   frustum.update(walker.m_view_perspective);
-  int lod = tree->magnitude * 5 + 5;
+  int lod = morton::morton_magnitude_to_lod(tree->magnitude);
   constexpr int max_depth = 40;
   for (int depth = 0; depth < max_depth; depth++, current_buffer_index = !current_buffer_index, lod--)
   {
@@ -154,6 +172,17 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
         }
         if (!valid)
         {
+          if (walker.m_debug)
+          {
+            fmt::print(stderr, "[walker-debug] attribute lookup FAILED: tree={} level={} node={} input_id={}.{}\n",
+                       current_tree->id.data, current_depth_in_tree, node_name, points.input_id.data, points.input_id.sub);
+            for (int ai = 0; ai < 4 && ai < attribute_index_map.get_attribute_count(); ai++)
+            {
+              auto idx = attribute_index_map.get_index(attr_id, ai);
+              if (idx.index == -1)
+                fmt::print(stderr, "[walker-debug]   attrib[{}] MISSING (index=-1)\n", ai);
+            }
+          }
           continue;
         }
         auto &to_add = walker.m_new_nodes.point_subsets.emplace_back();

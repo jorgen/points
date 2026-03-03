@@ -544,8 +544,11 @@ int main(int argc, char **argv)
     {
       double tree_walk, reconciliation, upload, refine, frontier, draw, eviction, total;
       int registry_nodes, active_set, nodes_drawn, transitioning, evicted, reconcile_destroyed;
+      int walker_nodes, walker_trees_pending;
+      uint64_t walker_total_pts;
       points::converter::converter_data_source_get_frame_timings(converter_points.get(), &tree_walk, &reconciliation, &upload, &refine, &frontier, &draw, &eviction, &total,
-                                                                  &registry_nodes, &active_set, &nodes_drawn, &transitioning, &evicted, &reconcile_destroyed);
+                                                                  &registry_nodes, &active_set, &nodes_drawn, &transitioning, &evicted, &reconcile_destroyed,
+                                                                  &walker_nodes, &walker_total_pts, &walker_trees_pending);
       ImGui::Text("Total:          %.2f ms", total);
       ImGui::Text("Tree Walk:      %.2f ms", tree_walk);
       ImGui::Text("Reconciliation: %.2f ms", reconciliation);
@@ -554,11 +557,16 @@ int main(int argc, char **argv)
       ImGui::Text("Frontier I/O:   %.2f ms", frontier);
       ImGui::Text("Draw Emission:  %.2f ms", draw);
       ImGui::Text("Eviction:       %.2f ms", eviction);
+      ImGui::Separator();
+      ImGui::Text("Walker Nodes:    %d", walker_nodes);
+      ImGui::Text("Walker Points:   %.2f M", double(walker_total_pts) / 1000000.0);
+      ImGui::Text("Trees Pending:   %d", walker_trees_pending);
+      ImGui::Text("Registry Nodes:  %d", registry_nodes);
+      ImGui::Text("Active Set:      %d", active_set);
+      ImGui::Text("Nodes Drawn:     %d", nodes_drawn);
       if (debug_transitions)
       {
         ImGui::Separator();
-        ImGui::Text("Registry Nodes:  %d", registry_nodes);
-        ImGui::Text("Active Set:      %d", active_set);
         ImGui::Text("Transitioning:   %d", transitioning);
         ImGui::Text("Evicted:         %d", evicted);
         ImGui::Text("Reconcile Dest:  %d", reconcile_destroyed);

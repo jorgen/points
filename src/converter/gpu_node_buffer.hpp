@@ -43,6 +43,9 @@ struct frame_timings_t
   int transitioning_count = 0;
   int nodes_evicted = 0;
   int nodes_reconcile_destroyed = 0;
+  int walker_node_count = 0;
+  uint64_t walker_total_points = 0;
+  int walker_trees_to_load = 0;
 };
 
 struct tree_walker_with_buffer_t

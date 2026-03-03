@@ -26,7 +26,7 @@ struct extract_args_t
   std::string input_path;
   std::string attribute_name;
   std::string output_path;
-  enum class mode_t { list, index, range, random } mode = mode_t::list;
+  enum class mode_t { list, index, range, random, summary, trees, tree_detail, node_detail } mode = mode_t::list;
   uint32_t index = 0;
   uint32_t range_begin = 0;
   uint32_t range_end = 0;
@@ -36,6 +36,10 @@ struct extract_args_t
   uint32_t print_offset = 0;
   uint32_t print_count = 256;
   bool write_binary = false;
+  uint32_t tree_id = 0;
+  uint32_t node_tree = 0;
+  uint32_t node_level = 0;
+  uint32_t node_index = 0;
 };
 
 static const char *type_name(type_t type)
@@ -65,7 +69,12 @@ static bool parse_args(int argc, char **argv, extract_args_t &args)
   if (argc < 2)
   {
     fmt::print(stderr, "Usage: jlp_extract <file.jlp> [<attribute>] [options]\n\n");
-    fmt::print(stderr, "Options:\n");
+    fmt::print(stderr, "Tree introspection:\n");
+    fmt::print(stderr, "  --summary        High-level overview: root tree ID, tree config, tree count\n");
+    fmt::print(stderr, "  --trees          List all trees with per-level node counts and sub-tree refs\n");
+    fmt::print(stderr, "  --tree N         Full dump of tree N: every node, subsets, storage map\n");
+    fmt::print(stderr, "  --node N:L:I     Single node detail (tree N, level L, index I)\n\n");
+    fmt::print(stderr, "Attribute extraction:\n");
     fmt::print(stderr, "  --index N        Select buffer at index N (default: 0 for hex mode)\n");
     fmt::print(stderr, "  --range A-B      Select buffers A through B (inclusive)\n");
     fmt::print(stderr, "  --random K       Select K random buffers\n");
@@ -128,6 +137,34 @@ static bool parse_args(int argc, char **argv, extract_args_t &args)
     else if ((arg == "--count" || arg == "-n") && i + 1 < argc)
     {
       args.print_count = uint32_t(std::stoul(argv[++i]));
+    }
+    else if (arg == "--summary")
+    {
+      args.mode = extract_args_t::mode_t::summary;
+    }
+    else if (arg == "--trees")
+    {
+      args.mode = extract_args_t::mode_t::trees;
+    }
+    else if (arg == "--tree" && i + 1 < argc)
+    {
+      args.mode = extract_args_t::mode_t::tree_detail;
+      args.tree_id = uint32_t(std::stoul(argv[++i]));
+    }
+    else if (arg == "--node" && i + 1 < argc)
+    {
+      args.mode = extract_args_t::mode_t::node_detail;
+      std::string node_str = argv[++i];
+      auto first_colon = node_str.find(':');
+      auto second_colon = first_colon != std::string::npos ? node_str.find(':', first_colon + 1) : std::string::npos;
+      if (first_colon == std::string::npos || second_colon == std::string::npos)
+      {
+        fmt::print(stderr, "Error: --node requires N:L:I format (e.g. 0:1:2)\n");
+        return false;
+      }
+      args.node_tree = uint32_t(std::stoul(node_str.substr(0, first_colon)));
+      args.node_level = uint32_t(std::stoul(node_str.substr(first_colon + 1, second_colon - first_colon - 1)));
+      args.node_index = uint32_t(std::stoul(node_str.substr(second_colon + 1)));
     }
     else
     {
@@ -194,6 +231,192 @@ static void print_hex_values(const uint8_t *data, uint32_t data_size,
         fmt::print("{:02x}", comp[b]);
     }
     fmt::print("\n");
+  }
+}
+
+static std::string morton_to_hex(const morton::morton192_t &m)
+{
+  if (m.data[2])
+    return fmt::format("{:x}-{:016x}-{:016x}", m.data[2], m.data[1], m.data[0]);
+  if (m.data[1])
+    return fmt::format("{:x}-{:016x}", m.data[1], m.data[0]);
+  return fmt::format("{:x}", m.data[0]);
+}
+
+static int count_children(uint8_t bitmask)
+{
+  int count = 0;
+  for (uint8_t v = bitmask; v; v >>= 1)
+    count += v & 1;
+  return count;
+}
+
+static vio::task_t<bool> load_tree(vio::event_loop_t &event_loop, vio::file_t &file,
+                                    const storage_location_t &loc, tree_t &tree)
+{
+  if (loc.size == 0)
+    co_return false;
+
+  auto blob = std::make_shared<uint8_t[]>(loc.size);
+  auto rd = co_await vio::read_file(event_loop, file, blob.get(), loc.size, int64_t(loc.offset));
+  if (!rd.has_value() || rd.value() != loc.size)
+    co_return false;
+
+  serialized_tree_t st;
+  st.data = std::move(blob);
+  st.size = int(loc.size);
+
+  error_t err;
+  co_return tree_deserialize(st, tree, err);
+}
+
+static void print_tree_registry_header(const tree_registry_t &reg)
+{
+  fmt::print("Tree registry: root={}, trees={}, node_limit={}, scale={}, offset=[{}, {}, {}]\n",
+             reg.root.data, reg.locations.size(), reg.node_limit,
+             reg.tree_config.scale,
+             reg.tree_config.offset[0], reg.tree_config.offset[1], reg.tree_config.offset[2]);
+}
+
+static void print_tree_summary(uint32_t tree_idx, const storage_location_t &loc, const tree_t &tree)
+{
+  fmt::print("Tree {}: magnitude={}, morton=[{}]-[{}], storage: offset={} size={}\n",
+             tree_idx, int(tree.magnitude),
+             morton_to_hex(tree.morton_min), morton_to_hex(tree.morton_max),
+             loc.offset, loc.size);
+
+  for (int level = 0; level < 5; level++)
+  {
+    auto node_count = uint32_t(tree.nodes[level].size());
+    if (node_count == 0)
+      continue;
+    uint32_t with_children = 0;
+    for (auto n : tree.nodes[level])
+      if (n != 0)
+        with_children++;
+    auto lod = morton::morton_tree_level_to_lod(int(tree.magnitude), level);
+    fmt::print("  Level {} (lod {}): {} node{}, {} with children\n",
+               level, lod, node_count, node_count == 1 ? "" : "s", with_children);
+  }
+
+  if (!tree.sub_trees.empty())
+  {
+    fmt::print("  Sub-trees: {} [", tree.sub_trees.size());
+    for (size_t i = 0; i < tree.sub_trees.size(); i++)
+    {
+      if (i > 0)
+        fmt::print(", ");
+      fmt::print("tree {}", tree.sub_trees[i].data);
+    }
+    fmt::print("]\n");
+  }
+}
+
+static void print_tree_detail(uint32_t tree_idx, const tree_t &tree)
+{
+  fmt::print("Tree {}: magnitude={}, morton=[{}]-[{}]\n",
+             tree_idx, int(tree.magnitude),
+             morton_to_hex(tree.morton_min), morton_to_hex(tree.morton_max));
+
+  for (int level = 0; level < 5; level++)
+  {
+    auto node_count = uint32_t(tree.nodes[level].size());
+    if (node_count == 0)
+      continue;
+    auto lod = morton::morton_tree_level_to_lod(int(tree.magnitude), level);
+    fmt::print("  Level {} (lod {}):\n", level, lod);
+
+    for (uint32_t ni = 0; ni < node_count; ni++)
+    {
+      uint8_t children = tree.nodes[level][ni];
+      uint16_t node_id = tree.node_ids[level][ni];
+      auto &pc = tree.data[level][ni];
+      int child_count = count_children(children);
+
+      fmt::print("    [{}] node_id=0x{:04x}, children=0x{:02x} ({}/8), points: {}",
+                 ni, node_id, children, child_count, pc.point_count);
+      if (!pc.data.empty())
+        fmt::print(" ({} subset{})", pc.data.size(), pc.data.size() == 1 ? "" : "s");
+      fmt::print("\n");
+
+      for (size_t si = 0; si < pc.data.size(); si++)
+      {
+        auto &sub = pc.data[si];
+        fmt::print("        subset {}: input_id={}.{}, offset={}, count={}{}\n",
+                   si, sub.input_id.data, sub.input_id.sub,
+                   sub.offset.data, sub.count.data,
+                   input_data_id_is_leaf(sub.input_id) ? "" : " [lod]");
+      }
+    }
+  }
+
+  if (!tree.sub_trees.empty())
+  {
+    fmt::print("  Sub-trees: {} [", tree.sub_trees.size());
+    for (size_t i = 0; i < tree.sub_trees.size(); i++)
+    {
+      if (i > 0)
+        fmt::print(", ");
+      fmt::print("tree {}", tree.sub_trees[i].data);
+    }
+    fmt::print("]\n");
+  }
+
+  uint32_t map_count = 0;
+  tree.storage_map.for_each([&](input_data_id_t, attributes_id_t, const std::vector<storage_location_t> &) {
+    map_count++;
+  });
+
+  if (map_count > 0)
+  {
+    fmt::print("  Storage map ({} entries):\n", map_count);
+    tree.storage_map.for_each([&](input_data_id_t id, attributes_id_t attrib_id, const std::vector<storage_location_t> &storage) {
+      fmt::print("    input_id={}.{}, attrib_id={}, locations: {}\n",
+                 id.data, id.sub, attrib_id.data, storage.size());
+      for (size_t i = 0; i < storage.size(); i++)
+      {
+        fmt::print("      [{}] offset={}, size={}, file_id={}\n",
+                   i, storage[i].offset, storage[i].size, storage[i].file_id);
+      }
+    });
+  }
+}
+
+static void print_node_detail(uint32_t tree_idx, const tree_t &tree, uint32_t level, uint32_t index)
+{
+  auto lod = morton::morton_tree_level_to_lod(int(tree.magnitude), int(level));
+  fmt::print("Tree {}, Level {} (lod {}), Node [{}]:\n", tree_idx, level, lod, index);
+
+  uint8_t children = tree.nodes[level][index];
+  uint16_t node_id = tree.node_ids[level][index];
+  auto &pc = tree.data[level][index];
+  int child_count = count_children(children);
+
+  fmt::print("  node_id: 0x{:04x}\n", node_id);
+  fmt::print("  children bitmask: 0x{:02x} ({}/8)\n", children, child_count);
+  fmt::print("  point_count: {}\n", pc.point_count);
+  fmt::print("  morton_min: [{}]\n", morton_to_hex(pc.min));
+  fmt::print("  morton_max: [{}]\n", morton_to_hex(pc.max));
+
+  if (!pc.data.empty())
+  {
+    fmt::print("  subsets ({}):\n", pc.data.size());
+    for (size_t si = 0; si < pc.data.size(); si++)
+    {
+      auto &sub = pc.data[si];
+      fmt::print("    [{}] input_id={}.{}, offset={}, count={}{}\n",
+                 si, sub.input_id.data, sub.input_id.sub,
+                 sub.offset.data, sub.count.data,
+                 input_data_id_is_leaf(sub.input_id) ? "" : " [lod]");
+
+      auto [attrib_id, storage] = tree.storage_map.info(sub.input_id);
+      fmt::print("         attrib_id={}, storage locations: {}\n", attrib_id.data, storage.size());
+      for (size_t li = 0; li < storage.size(); li++)
+      {
+        fmt::print("           [{}] offset={}, size={}, file_id={}\n",
+                   li, storage[li].offset, storage[li].size, storage[li].file_id);
+      }
+    }
   }
 }
 
@@ -266,6 +489,155 @@ static vio::task_t<void> run_extract(vio::event_loop_t &event_loop, extract_args
     co_return;
   }
 
+  // Read tree registry blob (if available)
+  tree_registry_t tree_registry;
+  bool has_tree_registry = false;
+  if (tree_registry_loc.size > 0)
+  {
+    auto tree_reg_blob = std::make_unique<uint8_t[]>(tree_registry_loc.size);
+    auto tree_reg_read = co_await vio::read_file(event_loop, *jlp_file, tree_reg_blob.get(), tree_registry_loc.size, int64_t(tree_registry_loc.offset));
+    if (!tree_reg_read.has_value() || tree_reg_read.value() != tree_registry_loc.size)
+    {
+      fmt::print(stderr, "Error: failed to read tree registry\n");
+      exit_code = 1;
+      event_loop.stop();
+      co_return;
+    }
+
+    auto tree_reg_err = tree_registry_deserialize(tree_reg_blob, tree_registry_loc.size, tree_registry);
+    if (tree_reg_err.code != 0)
+    {
+      fmt::print(stderr, "Error: failed to deserialize tree registry: {}\n", tree_reg_err.msg);
+      exit_code = 1;
+      event_loop.stop();
+      co_return;
+    }
+    has_tree_registry = true;
+  }
+
+  // Tree introspection modes
+  bool is_tree_mode = args.mode == extract_args_t::mode_t::summary
+                   || args.mode == extract_args_t::mode_t::trees
+                   || args.mode == extract_args_t::mode_t::tree_detail
+                   || args.mode == extract_args_t::mode_t::node_detail;
+
+  if (is_tree_mode)
+  {
+    if (!has_tree_registry)
+    {
+      fmt::print(stderr, "Error: no tree registry in this file\n");
+      exit_code = 1;
+      event_loop.stop();
+      co_return;
+    }
+
+    if (args.mode == extract_args_t::mode_t::summary)
+    {
+      print_tree_registry_header(tree_registry);
+      uint32_t trees_with_data = 0;
+      for (auto &loc : tree_registry.locations)
+        if (loc.size > 0)
+          trees_with_data++;
+      fmt::print("Total trees with data: {} / {}\n", trees_with_data, tree_registry.locations.size());
+    }
+    else if (args.mode == extract_args_t::mode_t::trees)
+    {
+      print_tree_registry_header(tree_registry);
+      fmt::print("\n");
+      for (uint32_t ti = 0; ti < uint32_t(tree_registry.locations.size()); ti++)
+      {
+        auto &loc = tree_registry.locations[ti];
+        if (loc.size == 0)
+          continue;
+
+        tree_t tree;
+        if (!co_await load_tree(event_loop, *jlp_file, loc, tree))
+        {
+          fmt::print(stderr, "Warning: failed to load tree {}, skipping\n", ti);
+          continue;
+        }
+        print_tree_summary(ti, loc, tree);
+        fmt::print("\n");
+      }
+    }
+    else if (args.mode == extract_args_t::mode_t::tree_detail)
+    {
+      if (args.tree_id >= uint32_t(tree_registry.locations.size()))
+      {
+        fmt::print(stderr, "Error: tree {} out of range (0-{})\n", args.tree_id, tree_registry.locations.size() - 1);
+        exit_code = 1;
+        event_loop.stop();
+        co_return;
+      }
+      auto &loc = tree_registry.locations[args.tree_id];
+      if (loc.size == 0)
+      {
+        fmt::print(stderr, "Error: tree {} has no data\n", args.tree_id);
+        exit_code = 1;
+        event_loop.stop();
+        co_return;
+      }
+
+      tree_t tree;
+      if (!co_await load_tree(event_loop, *jlp_file, loc, tree))
+      {
+        fmt::print(stderr, "Error: failed to load tree {}\n", args.tree_id);
+        exit_code = 1;
+        event_loop.stop();
+        co_return;
+      }
+      print_tree_detail(args.tree_id, tree);
+    }
+    else if (args.mode == extract_args_t::mode_t::node_detail)
+    {
+      if (args.node_tree >= uint32_t(tree_registry.locations.size()))
+      {
+        fmt::print(stderr, "Error: tree {} out of range (0-{})\n", args.node_tree, tree_registry.locations.size() - 1);
+        exit_code = 1;
+        event_loop.stop();
+        co_return;
+      }
+      auto &loc = tree_registry.locations[args.node_tree];
+      if (loc.size == 0)
+      {
+        fmt::print(stderr, "Error: tree {} has no data\n", args.node_tree);
+        exit_code = 1;
+        event_loop.stop();
+        co_return;
+      }
+
+      tree_t tree;
+      if (!co_await load_tree(event_loop, *jlp_file, loc, tree))
+      {
+        fmt::print(stderr, "Error: failed to load tree {}\n", args.node_tree);
+        exit_code = 1;
+        event_loop.stop();
+        co_return;
+      }
+
+      if (args.node_level > 4)
+      {
+        fmt::print(stderr, "Error: level {} out of range (0-4)\n", args.node_level);
+        exit_code = 1;
+        event_loop.stop();
+        co_return;
+      }
+      if (args.node_index >= uint32_t(tree.nodes[args.node_level].size()))
+      {
+        fmt::print(stderr, "Error: node index {} out of range for level {} (0-{})\n",
+                   args.node_index, args.node_level, tree.nodes[args.node_level].size() - 1);
+        exit_code = 1;
+        event_loop.stop();
+        co_return;
+      }
+
+      print_node_detail(args.node_tree, tree, args.node_level, args.node_index);
+    }
+
+    event_loop.stop();
+    co_return;
+  }
+
   // List mode: print available attributes and exit
   if (args.attribute_name.empty())
   {
@@ -281,30 +653,9 @@ static vio::task_t<void> run_extract(vio::event_loop_t &event_loop, extract_args
     co_return;
   }
 
-  if (tree_registry_loc.size == 0)
+  if (!has_tree_registry)
   {
     fmt::print(stderr, "Error: no tree registry in this file\n");
-    exit_code = 1;
-    event_loop.stop();
-    co_return;
-  }
-
-  // Read tree registry blob
-  auto tree_reg_blob = std::make_unique<uint8_t[]>(tree_registry_loc.size);
-  auto tree_reg_read = co_await vio::read_file(event_loop, *jlp_file, tree_reg_blob.get(), tree_registry_loc.size, int64_t(tree_registry_loc.offset));
-  if (!tree_reg_read.has_value() || tree_reg_read.value() != tree_registry_loc.size)
-  {
-    fmt::print(stderr, "Error: failed to read tree registry\n");
-    exit_code = 1;
-    event_loop.stop();
-    co_return;
-  }
-
-  tree_registry_t tree_registry;
-  auto tree_reg_err = tree_registry_deserialize(tree_reg_blob, tree_registry_loc.size, tree_registry);
-  if (tree_reg_err.code != 0)
-  {
-    fmt::print(stderr, "Error: failed to deserialize tree registry: {}\n", tree_reg_err.msg);
     exit_code = 1;
     event_loop.stop();
     co_return;

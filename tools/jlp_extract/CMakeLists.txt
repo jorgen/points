@@ -7,12 +7,12 @@ add_executable(jlp_extract
 )
 
 target_link_libraries(jlp_extract PRIVATE vio blosc2_static)
-target_link_libraries(jlp_extract PRIVATE fmt glm unordered_dense laszip_api)
+target_link_libraries(jlp_extract PRIVATE fmt glm unordered_dense laszip)
 target_include_directories(jlp_extract PRIVATE
         ${PROJECT_SOURCE_DIR}/src/converter
         ${PROJECT_SOURCE_DIR}/src/common
         ${PROJECT_SOURCE_DIR}/src/render
         ${libmorton_SOURCE_DIR}/include
 )
-copy_dll_for_target(jlp_extract points_converter points_common points_render laszip_api)
+copy_dll_for_target(jlp_extract points_converter points_common points_render)
 set_tool_properties(jlp_extract)

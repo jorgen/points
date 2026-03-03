@@ -147,6 +147,7 @@ public:
   tree_walker_nodes_t m_new_nodes;
   double m_tree_offset[3];
   std::vector<tree_id_t> m_trees_to_load;
+  bool m_debug = false;
 };
 
 bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb);

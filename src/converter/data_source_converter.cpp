@@ -129,9 +129,18 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
     cached_walker_attribute_source = current_attribute_name;
   }
   frustum_tree_walker_t walker(camera.view_projection, lod_params, cached_walker_attribute_names);
+  walker.m_debug = debug_transitions;
   processor.walk_tree(walker);
   auto &walker_subsets = walker.m_new_nodes.point_subsets;
   std::sort(walker_subsets.begin(), walker_subsets.end(), less_than);
+  frame_timings.walker_node_count = int(walker_subsets.size());
+  frame_timings.walker_trees_to_load = int(walker.m_trees_to_load.size());
+  {
+    uint64_t total_pts = 0;
+    for (auto &s : walker_subsets)
+      total_pts += s.point_count.data;
+    frame_timings.walker_total_points = total_pts;
+  }
   auto t_after_tree_walk = clock::now();
 
   // Phase 1.5: Prepare fade-out retain set (before reconcile destroys buffers)
@@ -154,11 +163,11 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
 
   // Phase 4: Update registry from walker
   node_registry.update_from_walker(walker_subsets, walker.m_new_nodes.parent_child_edges, render_buffers, fade_out_retain);
+  frame_timings.registry_node_count = int(node_registry.nodes().size());
   if (debug_transitions)
   {
     fmt::print(stderr, "[transition-debug] registry: {} nodes, {} roots\n",
                node_registry.nodes().size(), node_registry.roots().size());
-    frame_timings.registry_node_count = int(node_registry.nodes().size());
   }
 
   // Phase 5: Node selection (refine strategy + point budget)
@@ -185,6 +194,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
   sel_params.point_budget = pt_budget;
   auto selection = node_selector.select(node_registry, sel_params, debug_transitions, any_transitioning);
   auto t_after_refine = clock::now();
+  frame_timings.active_set_size = int(selection.active_set.size());
 
   if (debug_transitions)
   {
@@ -207,7 +217,6 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
     fmt::print(stderr, "[transition-debug] selection: active={} memory={}/{} points={}/{} transitioning={} reconcile_destroyed={}\n",
                selection.active_set.size(), selection.total_memory, mem_budget,
                selection.total_points, pt_budget, transitioning, reconcile_destroyed);
-    frame_timings.active_set_size = int(selection.active_set.size());
     frame_timings.transitioning_count = transitioning;
 
     if (!previous_active_set.empty())
@@ -349,7 +358,8 @@ uint64_t converter_data_source_get_points_rendered(struct converter_data_source_
 void converter_data_source_get_frame_timings(struct converter_data_source_t *cds, double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms, double *refine_strategy_ms, double *frontier_scheduling_ms,
                                              double *draw_emission_ms, double *eviction_ms, double *total_ms,
                                              int *registry_node_count, int *active_set_size, int *nodes_drawn,
-                                             int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed)
+                                             int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed,
+                                             int *walker_node_count, uint64_t *walker_total_points, int *walker_trees_to_load)
 {
   auto &t = cds->frame_timings;
   *tree_walk_ms = t.tree_walk_ms;
@@ -366,6 +376,9 @@ void converter_data_source_get_frame_timings(struct converter_data_source_t *cds
   if (transitioning_count) *transitioning_count = t.transitioning_count;
   if (nodes_evicted) *nodes_evicted = t.nodes_evicted;
   if (nodes_reconcile_destroyed) *nodes_reconcile_destroyed = t.nodes_reconcile_destroyed;
+  if (walker_node_count) *walker_node_count = t.walker_node_count;
+  if (walker_total_points) *walker_total_points = t.walker_total_points;
+  if (walker_trees_to_load) *walker_trees_to_load = t.walker_trees_to_load;
 }
 
 void converter_data_source_set_debug_transitions(struct converter_data_source_t *cds, bool enabled)
