@@ -94,7 +94,6 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
     walker.m_trees_to_load.push_back(tree_id);
     return;
   }
-  std::atomic_thread_fence(std::memory_order_acquire);
   auto tree = tree_registry.get(tree_id);
   if (tree->data[0].empty() || tree->data[0][0].data.empty())
     return;
@@ -225,8 +224,6 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
               walker.m_trees_to_load.push_back(next_tree_id);
               continue;
             }
-            std::atomic_thread_fence(std::memory_order_acquire);
-
             next_tree = tree_registry.get(next_tree_id);
             next_skip = 0;
           }
