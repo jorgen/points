@@ -20,6 +20,7 @@
 #include <libmorton/morton.h>
 
 #include <assert.h>
+#include <cstring>
 
 #include <array>
 

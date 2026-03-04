@@ -30,16 +30,16 @@
 
 namespace points::converter
 {
-get_data_worker_t::get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, perf_stats_t &perf_stats, const get_points_file_t &file,
-                                     vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added,
-                                     vio::event_pipe_t<unsorted_points_event_t> &unsorted_points_queue)
-  : point_reader_file(point_reader_file)
-  , attribute_configs(attribute_configs)
-  , perf_stats(perf_stats)
-  , input_init_pipe(input_init_pipe)
-  , sub_added(sub_added)
-  , unsorted_points_queue(unsorted_points_queue)
-  , file(file)
+get_data_worker_t::get_data_worker_t(point_reader_file_t &a_point_reader_file, attributes_configs_t &a_attribute_configs, perf_stats_t &a_perf_stats, const get_points_file_t &a_file,
+                                     vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &a_input_init_pipe, vio::event_pipe_t<input_data_id_t> &a_sub_added,
+                                     vio::event_pipe_t<unsorted_points_event_t> &a_unsorted_points_queue)
+  : point_reader_file(a_point_reader_file)
+  , attribute_configs(a_attribute_configs)
+  , perf_stats(a_perf_stats)
+  , input_init_pipe(a_input_init_pipe)
+  , sub_added(a_sub_added)
+  , unsorted_points_queue(a_unsorted_points_queue)
+  , file(a_file)
   , points_read(0)
   , split(0)
 {
@@ -47,9 +47,9 @@ get_data_worker_t::get_data_worker_t(point_reader_file_t &point_reader_file, att
 
 struct callback_closer
 {
-  callback_closer(converter_file_convert_callbacks_t &callbacks, void *user_ptr)
-    : callbacks(callbacks)
-    , user_ptr(user_ptr)
+  callback_closer(converter_file_convert_callbacks_t &a_callbacks, void *a_user_ptr)
+    : callbacks(a_callbacks)
+    , user_ptr(a_user_ptr)
   {
   }
   ~callback_closer()
@@ -149,13 +149,13 @@ void get_data_worker_t::enqueue(vio::event_loop_t &event_loop, vio::thread_pool_
   });
 }
 
-sort_worker_t::sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, header_t public_header, points_t &&points)
-  : _tree_config(tree_config)
-  , reader_file(reader_file)
-  , attributes_configs(attributes_configs)
-  , perf_stats(perf_stats)
-  , public_header(public_header)
-  , points(std::move(points))
+sort_worker_t::sort_worker_t(const tree_config_t &a_tree_config, point_reader_file_t &a_reader_file, attributes_configs_t &a_attributes_configs, perf_stats_t &a_perf_stats, header_t a_public_header, points_t &&a_points)
+  : _tree_config(a_tree_config)
+  , reader_file(a_reader_file)
+  , attributes_configs(a_attributes_configs)
+  , perf_stats(a_perf_stats)
+  , public_header(a_public_header)
+  , points(std::move(a_points))
 {
 }
 

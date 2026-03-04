@@ -265,14 +265,14 @@ static void tree_get_work_items(tree_registry_t &tree_cache, storage_handler_t &
     to_lod.push_back(std::move(lod_tree_worker_data));
 }
 
-lod_worker_t::lod_worker_t(tree_lod_generator_t &lod_generator, lod_worker_batch_t &batch, storage_handler_t &cache, attributes_configs_t &attributes_configs, lod_node_worker_data_t &data,
-                           const std::vector<float> &random_offsets)
-  : lod_generator(lod_generator)
-  , batch(batch)
-  , cache(cache)
-  , attributes_configs(attributes_configs)
-  , data(data)
-  , random_offsets(random_offsets)
+lod_worker_t::lod_worker_t(tree_lod_generator_t &a_lod_generator, lod_worker_batch_t &a_batch, storage_handler_t &a_cache, attributes_configs_t &a_attributes_configs, lod_node_worker_data_t &a_data,
+                           const std::vector<float> &a_random_offsets)
+  : lod_generator(a_lod_generator)
+  , batch(a_batch)
+  , cache(a_cache)
+  , attributes_configs(a_attributes_configs)
+  , data(a_data)
+  , random_offsets(a_random_offsets)
 {
 }
 

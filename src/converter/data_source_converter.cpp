@@ -46,10 +46,10 @@ static bool less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &r
   return lhs.lod < rhs.lod;
 }
 
-converter_data_source_t::converter_data_source_t(const std::string &url, render::callback_manager_t &callbacks)
-  : url(url)
-  , processor(url, file_existence_requirement_t::exist, error)
-  , callbacks(callbacks)
+converter_data_source_t::converter_data_source_t(const std::string &a_url, render::callback_manager_t &a_callbacks)
+  : url(a_url)
+  , processor(a_url, file_existence_requirement_t::exist, error)
+  , callbacks(a_callbacks)
 {
   if (error.code != 0)
   {

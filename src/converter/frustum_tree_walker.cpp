@@ -55,12 +55,12 @@ bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb)
 struct tree_walker_possible_nodes_t
 {
   tree_walker_possible_nodes_t() = default;
-  tree_walker_possible_nodes_t(const tree_t *tree, node_id_t parent, uint16_t skip, node_aabb_t aabbs, bool is_completely_inside_frustum)
-    : tree(tree)
-    , parent(parent)
-    , skip(skip)
-    , aabbs(aabbs)
-    , is_completely_inside_frustum(is_completely_inside_frustum)
+  tree_walker_possible_nodes_t(const tree_t *a_tree, node_id_t a_parent, uint16_t a_skip, node_aabb_t a_aabbs, bool a_is_completely_inside_frustum)
+    : tree(a_tree)
+    , parent(a_parent)
+    , skip(a_skip)
+    , aabbs(a_aabbs)
+    , is_completely_inside_frustum(a_is_completely_inside_frustum)
   {
   }
   const tree_t *tree;

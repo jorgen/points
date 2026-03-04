@@ -69,8 +69,8 @@ static void add_box_edges(std::vector<glm::vec3> &vertices, std::vector<glm::u8v
   edge(3, 7);
 }
 
-node_bbox_data_source_t::node_bbox_data_source_t(render::callback_manager_t &callbacks)
-  : callbacks(callbacks)
+node_bbox_data_source_t::node_bbox_data_source_t(render::callback_manager_t &a_callbacks)
+  : callbacks(a_callbacks)
 {
   callbacks.do_create_buffer(camera_buffer, render::buffer_type_uniform);
   callbacks.do_initialize_buffer(camera_buffer, type_r32, components_4x4, sizeof(camera_matrix), &camera_matrix);
