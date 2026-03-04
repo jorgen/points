@@ -19,6 +19,8 @@
 
 #include "morton_tree_coordinate_transform.hpp"
 
+#include <mutex>
+
 namespace points::converter
 {
 static auto &get_item(input_data_id_t id, ankerl::unordered_dense::map<uint32_t, input_data_source_impl_t> &registry)
