@@ -121,11 +121,16 @@ registry_diff_t frame_node_registry_t::update_from_walker(const std::vector<tree
       children.push_back(child_id);
   }
 
-  // Find roots: nodes whose parent is not in the registry
+  // Find roots: nodes whose parent is not in the registry.
+  // Fade-out nodes are excluded from roots so they are never selected as active,
+  // which prevents the infinite re-addition cycle in prepare_fade_outs.
+  // Children of fade-out nodes become roots (parent treated as absent).
   m_roots.clear();
   for (auto &[id, node] : m_nodes)
   {
-    if (m_nodes.find(node.parent_id) == m_nodes.end())
+    if (fade_out_retain.count(id))
+      continue;
+    if (m_nodes.find(node.parent_id) == m_nodes.end() || fade_out_retain.count(node.parent_id))
       m_roots.push_back(id);
   }
 

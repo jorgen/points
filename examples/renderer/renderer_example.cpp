@@ -434,15 +434,16 @@ int main(int argc, char **argv)
     clear clear_mask = clear(int(clear::color) | int(clear::depth));
 
     points_gl_renderer.draw(clear_mask, width, height);
-    // double converter_min[3];
-    // double converter_max[3];
-    // flat_points::converter::converter_data_source_get_aabb(converter_points.get(), converter_min, converter_max);
-    //  if (converter_min[0] != aabb2.min[0] && aabb2_id == -1)
-    //  {
-    //    aabb2_id = flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), converter_min, converter_max);
-    //    memcpy(aabb2.min, converter_min, sizeof(converter_min));
-    //    memcpy(aabb2.max, converter_max, sizeof(converter_max));
-    //  }
+
+    {
+      double tight_min[3], tight_max[3];
+      points::converter::converter_data_source_get_tight_aabb(converter_points.get(), tight_min, tight_max);
+      if (tight_min[2] < ground_z)
+      {
+        ground_z = tight_min[2];
+        points::render::environment_data_source_set_ground_z(environment.get(), ground_z);
+      }
+    }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL3_NewFrame();

@@ -170,6 +170,13 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
                node_registry.nodes().size(), node_registry.roots().size());
   }
 
+  // Update tight AABB from current registry nodes
+  for (auto &[node_id, node] : node_registry.nodes())
+  {
+    tight_aabb_accumulator.min = glm::min(tight_aabb_accumulator.min, node.tight_aabb.min);
+    tight_aabb_accumulator.max = glm::max(tight_aabb_accumulator.max, node.tight_aabb.max);
+  }
+
   // Phase 5: Node selection (refine strategy + point budget)
   // Check if any node is transitioning to protect all from budget-based collapse
   bool any_transitioning = false;
@@ -250,7 +257,7 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
       loose_boxes.push_back({node->aabb.min, node->aabb.max});
       tight_boxes.push_back({node->tight_aabb.min, node->tight_aabb.max});
     }
-    bbox_data_source->update_boxes(loose_boxes, tight_boxes, to_glm(tree_config.offset));
+    bbox_data_source->update_boxes(loose_boxes, tight_boxes);
   }
 
   // Phase 6: Frontier I/O scheduling
@@ -395,6 +402,13 @@ void converter_data_source_set_show_bounding_boxes(struct converter_data_source_
 struct render::data_source_t converter_data_source_get_bbox_data_source(struct converter_data_source_t *cds)
 {
   return cds->bbox_data_source->data_source;
+}
+
+void converter_data_source_get_tight_aabb(struct converter_data_source_t *cds, double min[3], double max[3])
+{
+  auto &ta = cds->tight_aabb_accumulator;
+  memcpy(min, &ta.min, sizeof(double) * 3);
+  memcpy(max, &ta.max, sizeof(double) * 3);
 }
 
 } // namespace points::converter

@@ -97,4 +97,9 @@ struct data_source_t environment_data_source_get(struct environment_data_source_
   return env->data_source;
 }
 
+void environment_data_source_set_ground_z(struct environment_data_source_t *env, double ground_z)
+{
+  env->ground_z_d = ground_z;
+}
+
 } // namespace points::render

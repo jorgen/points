@@ -33,18 +33,18 @@ int array_size(const T (&)[SIZE])
   return SIZE;
 }
 
-static std::vector<glm::vec3> coordinates_for_aabb(const aabb_t &aabb)
+static std::vector<glm::vec3> coordinates_for_aabb(const aabb_t &aabb, const glm::dvec3 &eye)
 {
   std::vector<glm::vec3> coordinates;
   coordinates.resize(8);
-  coordinates[0] = glm::vec3(aabb.min[0], aabb.min[1], aabb.min[2]);
-  coordinates[1] = glm::vec3(aabb.min[0], aabb.min[1], aabb.max[2]);
-  coordinates[2] = glm::vec3(aabb.min[0], aabb.max[1], aabb.min[2]);
-  coordinates[3] = glm::vec3(aabb.min[0], aabb.max[1], aabb.max[2]);
-  coordinates[4] = glm::vec3(aabb.max[0], aabb.min[1], aabb.min[2]);
-  coordinates[5] = glm::vec3(aabb.max[0], aabb.min[1], aabb.max[2]);
-  coordinates[6] = glm::vec3(aabb.max[0], aabb.max[1], aabb.min[2]);
-  coordinates[7] = glm::vec3(aabb.max[0], aabb.max[1], aabb.max[2]);
+  coordinates[0] = glm::vec3(glm::dvec3(aabb.min[0], aabb.min[1], aabb.min[2]) - eye);
+  coordinates[1] = glm::vec3(glm::dvec3(aabb.min[0], aabb.min[1], aabb.max[2]) - eye);
+  coordinates[2] = glm::vec3(glm::dvec3(aabb.min[0], aabb.max[1], aabb.min[2]) - eye);
+  coordinates[3] = glm::vec3(glm::dvec3(aabb.min[0], aabb.max[1], aabb.max[2]) - eye);
+  coordinates[4] = glm::vec3(glm::dvec3(aabb.max[0], aabb.min[1], aabb.min[2]) - eye);
+  coordinates[5] = glm::vec3(glm::dvec3(aabb.max[0], aabb.min[1], aabb.max[2]) - eye);
+  coordinates[6] = glm::vec3(glm::dvec3(aabb.max[0], aabb.max[1], aabb.min[2]) - eye);
+  coordinates[7] = glm::vec3(glm::dvec3(aabb.max[0], aabb.max[1], aabb.max[2]) - eye);
   return coordinates;
 }
 
@@ -85,10 +85,9 @@ inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_
   callbacks.do_initialize_buffer(buffer, type, components, int(data_vector.size() * sizeof(data_vector[0])), data_vector.data());
 }
 
-aabb_data_source_t::aabb_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &a_offset)
+aabb_data_source_t::aabb_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &)
   : callbacks(a_callbacks)
   , project_view(1)
-  , offset(a_offset)
 {
   callbacks.do_create_buffer(project_view_buffer, buffer_type_uniform);
   callbacks.do_initialize_buffer(project_view_buffer, type_r32, components_4x4, sizeof(project_view), &project_view);
@@ -101,11 +100,20 @@ aabb_data_source_t::aabb_data_source_t(callback_manager_t &a_callbacks, const gl
 
 void aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
 {
-  //project_view = camera.view_projection;
-  project_view = camera.projection * glm::translate(camera.view, offset);
+  glm::dvec3 eye = glm::dvec3(camera.inverse_view[3]);
+
+  glm::dmat4 view_no_trans = camera.view;
+  view_no_trans[3] = glm::dvec4(0, 0, 0, 1);
+  project_view = glm::mat4(camera.projection * view_no_trans);
   callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view);
+
   for (auto &aabb_buffer : aabbs)
   {
+    aabb_buffer->vertices = coordinates_for_aabb(aabb_buffer->aabb, eye);
+    callbacks.do_modify_buffer(aabb_buffer->vertices_buffer, 0,
+                               int(aabb_buffer->vertices.size() * sizeof(aabb_buffer->vertices[0])),
+                               aabb_buffer->vertices.data());
+
     aabb_buffer->render_list[0].buffer_mapping = aabb_bm_position;
     aabb_buffer->render_list[0].user_ptr = aabb_buffer->vertices_buffer.user_ptr;
     aabb_buffer->render_list[1].buffer_mapping = aabb_bm_index;
@@ -140,7 +148,8 @@ void create_aabb_buffer(callback_manager_t &callbacks, const glm::dvec3 &min, co
 {
   memcpy(buffer->aabb.min, &min, sizeof(min));
   memcpy(buffer->aabb.max, &max, sizeof(max));
-  buffer->vertices = coordinates_for_aabb(buffer->aabb);
+  glm::dvec3 zero(0);
+  buffer->vertices = coordinates_for_aabb(buffer->aabb, zero);
   callbacks.do_create_buffer(buffer->vertices_buffer, buffer_type_vertex);
   callbacks.do_initialize_buffer(buffer->vertices_buffer, type_r32, components_3,
                                  int(buffer->vertices.size() * sizeof(buffer->vertices[0])), buffer->vertices.data());
@@ -150,9 +159,9 @@ int aabb_data_source_add_aabb(struct aabb_data_source_t *aabb_data_source, const
 {
   static uint16_t ids = 0;
   aabb_data_source->aabbs.emplace_back(new aabb_buffer_t());
-  auto min_offset = (glm::dvec3(min[0], min[1], min[2]) - aabb_data_source->offset);
-  auto max_offset = (glm::dvec3(max[0], max[1], max[2]) - aabb_data_source->offset);
-  create_aabb_buffer(aabb_data_source->callbacks, min_offset, max_offset, aabb_data_source->aabbs.back().get());
+  auto world_min = glm::dvec3(min[0], min[1], min[2]);
+  auto world_max = glm::dvec3(max[0], max[1], max[2]);
+  create_aabb_buffer(aabb_data_source->callbacks, world_min, world_max, aabb_data_source->aabbs.back().get());
   auto id = ids++;
   aabb_data_source->aabbs_ids.emplace_back(id);
   return id;
@@ -166,13 +175,10 @@ void aabb_data_source_modify_aabb(struct aabb_data_source_t *aabb_data_source, i
   auto i = it - aabb_data_source->aabbs_ids.begin();
   auto aabb_it = aabb_data_source->aabbs.begin() + i;
   auto &aabb_buffer = *aabb_it;
-  auto min_offset = (glm::dvec3(min[0], min[1], min[2]) - aabb_data_source->offset);
-  auto max_offset = (glm::dvec3(max[0], max[1], max[2]) - aabb_data_source->offset);
-  memcpy(aabb_buffer->aabb.min, &min_offset, sizeof(min_offset));
-  memcpy(aabb_buffer->aabb.max, &max_offset, sizeof(max_offset));
-  aabb_buffer->vertices = coordinates_for_aabb(aabb_buffer->aabb);
-  aabb_data_source->callbacks.do_modify_buffer(aabb_buffer->vertices_buffer, 0, int(aabb_buffer->vertices.size()),
-                                               aabb_buffer->vertices.data());
+  auto world_min = glm::dvec3(min[0], min[1], min[2]);
+  auto world_max = glm::dvec3(max[0], max[1], max[2]);
+  memcpy(aabb_buffer->aabb.min, &world_min, sizeof(world_min));
+  memcpy(aabb_buffer->aabb.max, &world_max, sizeof(world_max));
 }
 
 void aabb_data_source_remove_aabb(struct aabb_data_source_t *aabb_data_source, int id)

@@ -64,6 +64,8 @@ POINTS_CONVERTER_EXPORT void converter_data_source_set_debug_transitions(struct 
 POINTS_CONVERTER_EXPORT void converter_data_source_set_show_bounding_boxes(struct converter_data_source_t *cds, bool enabled);
 POINTS_CONVERTER_EXPORT struct render::data_source_t converter_data_source_get_bbox_data_source(struct converter_data_source_t *cds);
 
+POINTS_CONVERTER_EXPORT void converter_data_source_get_tight_aabb(struct converter_data_source_t *cds, double min[3], double max[3]);
+
 } // namespace converter
 } // namespace points
 

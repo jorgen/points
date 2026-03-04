@@ -39,8 +39,7 @@ struct node_bbox_data_source_t : public render::data_source_cpp_t
   ~node_bbox_data_source_t();
 
   void update_boxes(const std::vector<node_bbox_t> &loose_boxes,
-                    const std::vector<node_bbox_t> &tight_boxes,
-                    const glm::dvec3 &world_offset);
+                    const std::vector<node_bbox_t> &tight_boxes);
   void add_to_frame(const render::frame_camera_cpp_t &camera, render::to_render_t *to_render) override;
 
   render::callback_manager_t &callbacks;
@@ -48,7 +47,9 @@ struct node_bbox_data_source_t : public render::data_source_cpp_t
 
   render::buffer_t camera_buffer = {};
   glm::mat4 camera_matrix = glm::mat4(1);
-  glm::dvec3 world_offset = glm::dvec3(0);
+
+  std::vector<node_bbox_t> stored_loose_boxes;
+  std::vector<node_bbox_t> stored_tight_boxes;
 
   render::buffer_t vertex_buffer = {};
   render::buffer_t color_buffer = {};

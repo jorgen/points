@@ -22,12 +22,14 @@
 #include "data_source_node_bbox.hpp"
 #include "draw_emitter.hpp"
 #include "frame_node_registry.hpp"
+#include "frustum_tree_walker.hpp"
 #include "gpu_buffer_manager.hpp"
 #include "gpu_node_buffer.hpp"
 #include "node_selector.hpp"
 #include "renderer_callbacks.hpp"
 #include <points/render/data_source.h>
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -83,6 +85,8 @@ struct converter_data_source_t
   draw_emitter_t draw_emitter;
 
   std::unique_ptr<node_bbox_data_source_t> bbox_data_source;
+  node_aabb_t tight_aabb_accumulator = {{std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()},
+                                        {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()}};
   bool show_bounding_boxes = false;
   bool debug_transitions = false;
   frame_node_registry_t::node_set_t previous_active_set;

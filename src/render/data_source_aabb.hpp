@@ -53,7 +53,6 @@ struct aabb_data_source_t : public data_source_cpp_t
 
   buffer_t project_view_buffer;
   glm::mat4 project_view;
-  glm::dvec3 offset;
 
   buffer_t index_buffer;
   std::vector<uint16_t> indecies;
