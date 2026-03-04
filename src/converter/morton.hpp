@@ -410,6 +410,12 @@ inline morton_t<T, C> morton_mask_create(int lod)
   static_assert(std::is_same<T, uint32_t>::value ? C == 1 : true, "Only support one component 32 morton");
 
   int index = lod * 3 + 3;
+  if (index <= 0)
+  {
+    morton_t<T, C> a;
+    memset(&a, 0, sizeof(a));
+    return a;
+  }
   assert(index < int(sizeof(T) * 8 * C));
 
   morton_t<T, C> a;

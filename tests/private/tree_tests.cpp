@@ -407,4 +407,61 @@ TEST_CASE("lod generation updates subset count and offset")
   REQUIRE(root_collection.data[0].offset.data == 0);
 }
 
+TEST_CASE("lod generation on magnitude 0 tree does not trigger negative shift")
+{
+  tree_test_infrastructure test_util(256);
+
+  // Create a magnitude 0 tree (lod range 0-4) and force it to have children
+  // by adding overlapping points that exceed the node limit.
+  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
+  auto points = create_points(test_util, 0, morton_max, 256);
+  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+
+  uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
+  auto second_points = create_points(test_util, morton_min, morton_max, 256);
+  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+
+  {
+    auto &tree = *test_util.tree_registry.get(root_id);
+    // The tree should have children (nodes[0][0] > 0 means root has children)
+    REQUIRE(tree.nodes[0][0] > 0);
+    REQUIRE(tree.magnitude == 0);
+  }
+
+  // Run LOD generation on this magnitude 0 tree. Before the fix, this would
+  // trigger UBSan: "shift exponent -12 is negative" in morton_mask_create
+  // because maskWidth = lod - 9 went negative for lod < 9.
+  std::mutex lod_mutex;
+  std::condition_variable lod_cv;
+  bool lod_complete = false;
+
+  vio::event_pipe_t<void> lod_done(test_util.event_loop, std::function<void()>([&] {
+    std::lock_guard<std::mutex> lock(lod_mutex);
+    lod_complete = true;
+    lod_cv.notify_all();
+  }));
+
+  points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+                                                   test_util.perf_stats, lod_done);
+
+  points::converter::morton::morton192_t max_morton{};
+  max_morton.data[0] = morton_max;
+  lod_gen.generate_lods(root_id, max_morton);
+
+  {
+    std::unique_lock<std::mutex> lock(lod_mutex);
+    REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
+  }
+
+  auto &tree = *test_util.tree_registry.get(root_id);
+  auto &root_collection = tree.data[0][0];
+
+  // LOD generation should produce valid data even for magnitude 0 trees
+  REQUIRE(root_collection.data.size() == 1);
+  REQUIRE(root_collection.point_count > 0);
+  REQUIRE(root_collection.data[0].count.data > 0);
+  REQUIRE(root_collection.data[0].count.data == root_collection.point_count);
+  REQUIRE(root_collection.data[0].offset.data == 0);
+}
+
 } // namespace

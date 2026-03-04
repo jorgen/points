@@ -24,6 +24,7 @@
 #include "storage_handler.hpp"
 
 #include <fixed_size_vector.hpp>
+#include <algorithm>
 #include <numeric>
 #include <random>
 
@@ -685,7 +686,7 @@ static void quantize_subset(storage_handler_t &cache, const points_subset_t &sub
 
   assert(buffer_is_subset(subset_data.data, source_buffer));
   morton::morton192_t subset_min = morton::morton_and(morton::morton_negate(morton::morton_mask_create<uint64_t, 3>(lod - 1)), subset_data.header.morton_min);
-  find_indecies_to_quantize(subset.input_id, subset_min, subset_data.header.point_format.type, source_buffer, offset, point_count, lod - 3 * 3, random_offsets, morton_to_lod);
+  find_indecies_to_quantize(subset.input_id, subset_min, subset_data.header.point_format.type, source_buffer, offset, point_count, std::max(0, lod - 3 * 3), random_offsets, morton_to_lod);
 }
 
 template <typename T, size_t N>
@@ -724,7 +725,7 @@ static void quantize_morton_remember_indecies_t(storage_handler_t &cache, const 
                                                 morton::morton192_t &max)
 {
   std::vector<morton_to_lod_t<T, N>> morton_to_lod;
-  int maskWidth = lod - 3 * 3;
+  int maskWidth = std::max(0, lod - 3 * 3);
   {
     calculate_child_buffer_size_t child_buffer_sizes(child_data);
     morton_to_lod.reserve(child_buffer_sizes.morton_to_lod_size);
