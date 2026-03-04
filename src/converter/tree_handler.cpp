@@ -317,8 +317,7 @@ void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tre
     return;
   }
   _tree_registry.tree_id_initialized.resize(_tree_registry.data.size());
-  std::atomic_thread_fence(std::memory_order_release);
-  _tree_registry.tree_id_initialized[tree_id.data] = 1;
+  std::atomic_ref<uint8_t>(_tree_registry.tree_id_initialized[tree_id.data]).store(1, std::memory_order_release);
   if (tree_id.data == _tree_registry.root.data)
   {
     std::unique_lock<std::mutex> lock(_root_mutex);
