@@ -8,5 +8,6 @@ TEST_CASE("CreateRenderer")
   auto* renderer = points::render::renderer_create();
   auto* camera = points::render::camera_create();
   auto frame = points::render::renderer_frame(renderer, camera);
-
+  points::render::camera_destroy(camera);
+  points::render::renderer_destroy(renderer);
 }

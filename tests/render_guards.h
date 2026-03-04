@@ -2,9 +2,16 @@
 #include <memory>
 #include <camera.hpp>
 #include <points/render/camera.h>
+#include <points/render/renderer.h>
 
 namespace points::render
 {
+struct renderer_deleter
+{
+  void operator()(renderer_t *r) const { renderer_destroy(r); }
+};
+using unique_renderer = std::unique_ptr<renderer_t, renderer_deleter>;
+
 struct camera_deleter
 {
   void operator()(camera_t *c) const { camera_destroy(c); }
