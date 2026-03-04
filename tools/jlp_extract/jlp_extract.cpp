@@ -266,7 +266,7 @@ static vio::task_t<bool> load_tree(vio::event_loop_t &event_loop, vio::file_t &f
   st.data = std::move(blob);
   st.size = int(loc.size);
 
-  error_t err;
+  points::error_t err;
   co_return tree_deserialize(st, tree, err);
 }
 
@@ -688,7 +688,7 @@ static vio::task_t<void> run_extract(vio::event_loop_t &event_loop, extract_args
     serialized_tree.size = int(tree_loc.size);
 
     tree_t tree;
-    error_t tree_err;
+    points::error_t tree_err;
     if (!tree_deserialize(serialized_tree, tree, tree_err))
     {
       fmt::print(stderr, "Warning: failed to deserialize tree {}: {}, skipping\n", ti, tree_err.msg);

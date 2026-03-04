@@ -55,7 +55,7 @@ struct tree_test_infrastructure : vio::about_to_block_t
     , cache_file_handler("test_cache_file", worker_thread_pool, attributes_config, perf_stats, index_written, cache_file_error, error)
   {
     event_loop.add_about_to_block_listener(this);
-    cache_file_handler.upgrade_to_write(true);
+    (void)cache_file_handler.upgrade_to_write(true);
   }
 
   void write(const points::converter::storage_header_t &header, points::converter::attributes_id_t attribute_id, points::converter::attribute_buffers_t &&buffers)
