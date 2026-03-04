@@ -975,7 +975,7 @@ void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morto
       batch.worker_data.insert(batch.worker_data.end(), std::make_move_iterator(to_lod.begin() + batch_start), std::make_move_iterator(to_lod.end()));
     }
   }
-  iterate_workers();
+  _iterate_workers.post_event();
 }
 
 void tree_lod_generator_t::iterate_workers()
