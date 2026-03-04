@@ -7,12 +7,13 @@
 #include <points/render/aabb.h>
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
+#include "render_guards.h"
 
 TEST_CASE("Verify_Perspective")
 {
-  points::render::camera_t *camera = points::render::camera_create();
+  points::render::unique_camera camera(points::render::camera_create());
   glm::dmat4 perspective = glm::perspectiveFov(points::render::to_radians(90.0), 1024.0, 768.0, 3.3, 2345.0);
-  points::render::camera_set_perspective_matrix(camera, glm::value_ptr(perspective));
+  points::render::camera_set_perspective_matrix(camera.get(), glm::value_ptr(perspective));
 
   REQUIRE(memcmp(&perspective, &camera->projection, sizeof(perspective)) == 0);
 
@@ -20,7 +21,7 @@ TEST_CASE("Verify_Perspective")
   double aspect;
   double near;
   double far;
-  points::render::camera_perspective_properties(camera, &fov, &aspect, &near, &far);
+  points::render::camera_perspective_properties(camera.get(), &fov, &aspect, &near, &far);
 
   REQUIRE(near == doctest::Approx(3.3));
   REQUIRE(far == doctest::Approx(2345.0));
@@ -30,8 +31,8 @@ TEST_CASE("Verify_Perspective")
 
 TEST_CASE("Check_Frustum_AABB_Culling")
 {
-  points::render::camera_t *camera = points::render::camera_create();
-  points::render::camera_set_perspective(camera, points::render::to_radians(45.0), 10.0, 9.0, 0.01, 50.0);
+  points::render::unique_camera camera(points::render::camera_create());
+  points::render::camera_set_perspective(camera.get(), points::render::to_radians(45.0), 10.0, 9.0, 0.01, 50.0);
   points::render::aabb_t aabb;
   aabb.min[0] = 0.5;
   aabb.min[1] = 0.25;
@@ -44,7 +45,7 @@ TEST_CASE("Check_Frustum_AABB_Culling")
   glm::dvec3 center = points::render::aabb_center(aabb);
   center = glm::normalize(center);
   glm::dvec3 up(0.0, 1.0, 0.0);
-  points::render::camera_look_at_aabb(camera, &aabb, glm::value_ptr(center), glm::value_ptr(up));
+  points::render::camera_look_at_aabb(camera.get(), &aabb, glm::value_ptr(center), glm::value_ptr(up));
 
   points::render::frustum_t frustum{};
   frustum.update(camera->projection * camera->view);
