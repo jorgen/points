@@ -51,8 +51,8 @@ struct frame_timings_t
 struct tree_walker_with_buffer_t
 {
   tree_walker_with_buffer_t() = default;
-  explicit tree_walker_with_buffer_t(tree_walker_nodes_t &&node_data)
-    : node_data(std::move(node_data))
+  explicit tree_walker_with_buffer_t(tree_walker_nodes_t &&a_node_data)
+    : node_data(std::move(a_node_data))
   {
   }
   tree_walker_with_buffer_t(tree_walker_with_buffer_t &&) = default;

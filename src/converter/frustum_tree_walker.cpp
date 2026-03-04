@@ -127,10 +127,6 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
     fmt::print(stderr, "[walker-debug]   root subsets={}\n", root_subset_count);
   }
 
-  auto tree_lod = morton::morton_tree_level_to_lod(tree->magnitude, 0); // we skip the + 1, since we want the half
-  double aabb_width_half = double(uint64_t(1) << tree_lod) * tree_registry.tree_config.scale;
-  glm::dvec3 center = {min[0] + aabb_width_half, min[1] + aabb_width_half, min[2] + aabb_width_half};
-
   node_id_t empty_node_id = {tree_id_t(UINT32_MAX), UINT16_MAX, UINT16_MAX};
   alternating_possible_nodes[current_buffer_index].emplace_back(tree, empty_node_id, 0, aabb, false);
   render::frustum_t frustum;
@@ -186,7 +182,8 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
           continue;
         }
         auto &to_add = walker.m_new_nodes.point_subsets.emplace_back();
-        memset(to_add.locations, 0, sizeof(to_add.locations));
+        for (auto &loc : to_add.locations)
+          loc = storage_location_t();
         to_add.parent = possible_nodes.parent;
         to_add.lod = lod;
         to_add.node = node_id;

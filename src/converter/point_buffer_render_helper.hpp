@@ -31,8 +31,8 @@ namespace points::converter
 
 struct dyn_points_data_handler_t
 {
-  dyn_points_data_handler_t(const point_format_t (&point_format)[4])
-    : point_format{point_format[0], point_format[1], point_format[2], point_format[3]}
+  dyn_points_data_handler_t(const point_format_t (&a_point_format)[4])
+    : point_format{a_point_format[0], a_point_format[1], a_point_format[2], a_point_format[3]}
   {
   }
 
