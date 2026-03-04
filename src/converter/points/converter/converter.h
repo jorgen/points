@@ -45,11 +45,11 @@ POINTS_CONVERTER_EXPORT void attributes_add_attribute(struct attributes_t *attri
 
 struct attribute_t
 {
-  attribute_t(const char *name, uint32_t name_size, enum type_t format, enum components_t components)
-    : name(name)
-    , name_size(name_size)
+  attribute_t(const char *a_name, uint32_t a_name_size, enum type_t format, enum components_t a_components)
+    : name(a_name)
+    , name_size(a_name_size)
     , type(format)
-    , components(components)
+    , components(a_components)
   {
   }
 
@@ -67,9 +67,9 @@ struct buffer_t
   {
   }
 
-  buffer_t(void *data, uint32_t size)
-    : data(data)
-    , size(size)
+  buffer_t(void *a_data, uint32_t a_size)
+    : data(a_data)
+    , size(a_size)
   {
   }
 

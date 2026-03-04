@@ -48,9 +48,9 @@ static glm::vec3 get_point(laszip_point *point, double (&offset)[3], double (&sc
   return ret;
 }
 
-flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &callbacks, std::string url)
+flat_points_data_source_t::flat_points_data_source_t(callback_manager_t &a_callbacks, std::string url)
   : data_source_cpp_t()
-  , callbacks(callbacks)
+  , callbacks(a_callbacks)
 {
   laszip_POINTER laszip_reader;
   if (laszip_create(&laszip_reader))

@@ -25,6 +25,7 @@
 
 #include "glm_include.hpp"
 
+#include <string>
 #include <vector>
 
 namespace points::render

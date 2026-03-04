@@ -102,10 +102,10 @@ struct storage_location_t
   {
   }
 
-  storage_location_t(uint32_t file_id, uint32_t size, uint64_t offset)
-    : file_id(file_id)
-    , size(size)
-    , offset(offset)
+  storage_location_t(uint32_t a_file_id, uint32_t a_size, uint64_t a_offset)
+    : file_id(a_file_id)
+    , size(a_size)
+    , offset(a_offset)
   {
   }
 
@@ -128,9 +128,9 @@ struct point_format_t
 {
   point_format_t() = default;
 
-  point_format_t(type_t type, components_t components)
-    : type(type)
-    , components(components)
+  point_format_t(type_t a_type, components_t a_components)
+    : type(a_type)
+    , components(a_components)
   {
   }
 
@@ -172,8 +172,8 @@ struct tree_config_t
 
 struct offset_t
 {
-  explicit offset_t(uint64_t data)
-    : data(data)
+  explicit offset_t(uint64_t a_data)
+    : data(a_data)
   {
   }
 
@@ -187,8 +187,8 @@ struct offset_t
 
 struct offset_in_subset_t
 {
-  explicit offset_in_subset_t(uint32_t data)
-    : data(data)
+  explicit offset_in_subset_t(uint32_t a_data)
+    : data(a_data)
   {
   }
 
@@ -202,8 +202,8 @@ struct offset_in_subset_t
 
 struct index_t
 {
-  explicit index_t(uint32_t data)
-    : data(data)
+  explicit index_t(uint32_t a_data)
+    : data(a_data)
   {
   }
 
@@ -217,8 +217,8 @@ struct point_count_t
   {
   }
 
-  explicit point_count_t(uint32_t data)
-    : data(data)
+  explicit point_count_t(uint32_t a_data)
+    : data(a_data)
   {
   }
 
@@ -229,10 +229,10 @@ struct points_subset_t
 {
   points_subset_t() = default;
 
-  points_subset_t(input_data_id_t id, offset_in_subset_t offset, point_count_t count)
+  points_subset_t(input_data_id_t id, offset_in_subset_t a_offset, point_count_t a_count)
     : input_id(id)
-    , offset(offset)
-    , count(count)
+    , offset(a_offset)
+    , count(a_count)
   {
   }
 

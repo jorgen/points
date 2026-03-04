@@ -23,10 +23,10 @@
 namespace points::render
 {
 
-axis_gizmo_data_source_t::axis_gizmo_data_source_t(callback_manager_t &callbacks, const glm::dvec3 &center, double axis_length)
-  : callbacks(callbacks)
-  , center(center)
-  , axis_length(axis_length)
+axis_gizmo_data_source_t::axis_gizmo_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &a_center, double a_axis_length)
+  : callbacks(a_callbacks)
+  , center(a_center)
+  , axis_length(a_axis_length)
   , camera_matrix(1)
 {
   callbacks.do_create_buffer(camera_buffer, buffer_type_uniform);

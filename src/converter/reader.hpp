@@ -50,11 +50,11 @@ struct get_points_file_t
 struct point_reader_file_t;
 struct unsorted_points_event_t
 {
-  unsorted_points_event_t(std::vector<point_format_t> attributes_def, const header_t &public_header, points_t &&points, point_reader_file_t &reader_file)
-    : attributes_def(attributes_def)
-    , public_header(public_header)
-    , points(std::move(points))
-    , reader_file(reader_file)
+  unsorted_points_event_t(std::vector<point_format_t> a_attributes_def, const header_t &a_public_header, points_t &&a_points, point_reader_file_t &a_reader_file)
+    : attributes_def(a_attributes_def)
+    , public_header(a_public_header)
+    , points(std::move(a_points))
+    , reader_file(a_reader_file)
   {
   }
 
@@ -110,18 +110,18 @@ public:
 
 struct point_reader_file_t
 {
-  point_reader_file_t(const tree_config_t &tree_config, vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats,
+  point_reader_file_t(const tree_config_t &a_tree_config, vio::event_loop_t &a_event_loop, vio::thread_pool_t &a_thread_pool, attributes_configs_t &a_attributes_configs, perf_stats_t &a_perf_stats,
                       const get_points_file_t &file,
                       vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<unsorted_points_event_t> &unsorted_points,
-                      vio::event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe)
-    : tree_config(tree_config)
-    , event_loop(event_loop)
-    , thread_pool(thread_pool)
-    , perf_stats(perf_stats)
-    , input_reader(new get_data_worker_t(*this, attributes_configs, perf_stats, file, input_init_pipe, sub_added, unsorted_points))
-    , sorted_points_pipe(sorted_points_pipe)
+                      vio::event_pipe_t<std::pair<points_t, error_t>> &a_sorted_points_pipe)
+    : tree_config(a_tree_config)
+    , event_loop(a_event_loop)
+    , thread_pool(a_thread_pool)
+    , perf_stats(a_perf_stats)
+    , input_reader(new get_data_worker_t(*this, a_attributes_configs, a_perf_stats, file, input_init_pipe, sub_added, unsorted_points))
+    , sorted_points_pipe(a_sorted_points_pipe)
   {
-    input_reader->enqueue(event_loop, thread_pool);
+    input_reader->enqueue(a_event_loop, a_thread_pool);
   }
   ~point_reader_file_t()
   {

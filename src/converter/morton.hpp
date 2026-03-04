@@ -559,9 +559,9 @@ inline morton192_t create_min_for_downcast(const morton_t<T, C> &dummy, const mo
 
 inline void decode(const morton192_t &morton, std::array<uint64_t, 3> &decoded)
 {
-  uint32_t lower[3];
-  uint32_t mid[3];
-  uint32_t high[3];
+  uint_fast32_t lower[3];
+  uint_fast32_t mid[3];
+  uint_fast32_t high[3];
 
   libmorton::morton3D_64_decode(morton.data[0], lower[0], lower[1], lower[2]);
   libmorton::morton3D_64_decode(morton.data[1], mid[0], mid[1], mid[2]);
@@ -574,9 +574,9 @@ inline void decode(const morton192_t &morton, std::array<uint64_t, 3> &decoded)
 
 inline void decode(const morton192_t &morton, uint64_t (&decoded)[3])
 {
-  uint32_t lower[3];
-  uint32_t mid[3];
-  uint32_t high[3];
+  uint_fast32_t lower[3];
+  uint_fast32_t mid[3];
+  uint_fast32_t high[3];
 
   libmorton::morton3D_64_decode(morton.data[0], lower[0], lower[1], lower[2]);
   libmorton::morton3D_64_decode(morton.data[1], mid[0], mid[1], mid[2]);
@@ -589,8 +589,8 @@ inline void decode(const morton192_t &morton, uint64_t (&decoded)[3])
 
 inline void decode(const morton128_t &morton, std::array<uint64_t, 3> &decoded)
 {
-  uint32_t lower[3];
-  uint32_t mid[3];
+  uint_fast32_t lower[3];
+  uint_fast32_t mid[3];
 
   libmorton::morton3D_64_decode(morton.data[0], lower[0], lower[1], lower[2]);
   libmorton::morton3D_64_decode(morton.data[1], mid[0], mid[1], mid[2]);
@@ -602,8 +602,8 @@ inline void decode(const morton128_t &morton, std::array<uint64_t, 3> &decoded)
 
 inline void decode(const morton128_t &morton, uint64_t (&decoded)[3])
 {
-  uint32_t lower[3];
-  uint32_t mid[3];
+  uint_fast32_t lower[3];
+  uint_fast32_t mid[3];
 
   libmorton::morton3D_64_decode(morton.data[0], lower[0], lower[1], lower[2]);
   libmorton::morton3D_64_decode(morton.data[1], mid[0], mid[1], mid[2]);
@@ -615,14 +615,20 @@ inline void decode(const morton128_t &morton, uint64_t (&decoded)[3])
 
 inline void decode(const morton_t<uint64_t, 1> &morton, std::array<uint32_t, 3> &decoded)
 {
-  libmorton::morton3D_64_decode(morton.data[0], decoded[0], decoded[1], decoded[2]);
-  decoded[0] = uint64_t(decoded[0]) | (morton.data[0] >> 63) << 21;
+  uint_fast32_t tmp[3];
+  libmorton::morton3D_64_decode(morton.data[0], tmp[0], tmp[1], tmp[2]);
+  decoded[0] = uint32_t(uint64_t(tmp[0]) | (morton.data[0] >> 63) << 21);
+  decoded[1] = uint32_t(tmp[1]);
+  decoded[2] = uint32_t(tmp[2]);
 }
 
 inline void decode(const morton_t<uint64_t, 1> &morton, uint32_t (&decoded)[3])
 {
-  libmorton::morton3D_64_decode(morton.data[0], decoded[0], decoded[1], decoded[2]);
-  decoded[0] = uint64_t(decoded[0]) | (morton.data[0] >> 63) << 21;
+  uint_fast32_t tmp[3];
+  libmorton::morton3D_64_decode(morton.data[0], tmp[0], tmp[1], tmp[2]);
+  decoded[0] = uint32_t(uint64_t(tmp[0]) | (morton.data[0] >> 63) << 21);
+  decoded[1] = uint32_t(tmp[1]);
+  decoded[2] = uint32_t(tmp[2]);
 }
 
 inline void decode(const morton_t<uint64_t, 1> &morton, uint64_t (&decoded)[3])

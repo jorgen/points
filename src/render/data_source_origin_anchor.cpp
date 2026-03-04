@@ -119,10 +119,10 @@ static void generate_arrow(const glm::vec3 &direction, float size, const glm::u8
   }
 }
 
-origin_anchor_data_source_t::origin_anchor_data_source_t(callback_manager_t &callbacks, const glm::dvec3 &center, double arrow_size)
-  : callbacks(callbacks)
-  , center(center)
-  , arrow_size(arrow_size)
+origin_anchor_data_source_t::origin_anchor_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &a_center, double a_arrow_size)
+  : callbacks(a_callbacks)
+  , center(a_center)
+  , arrow_size(a_arrow_size)
   , camera_matrix(1)
 {
   callbacks.do_create_buffer(camera_buffer, buffer_type_uniform);

@@ -95,8 +95,8 @@ inline void points_data_add(points_collection_t &dest, const storage_header_t &t
 struct tree_id_t
 {
   tree_id_t() = default;
-  explicit tree_id_t(uint32_t data)
-    : data(data)
+  explicit tree_id_t(uint32_t a_data)
+    : data(a_data)
   {
   }
   uint32_t data;
@@ -123,13 +123,13 @@ struct tree_t
 struct tree_registry_t
 {
   tree_registry_t() = default;
-  tree_registry_t(uint32_t node_limit, tree_config_t tree_config)
-    : node_limit(node_limit)
-    , tree_config(tree_config)
+  tree_registry_t(uint32_t a_node_limit, tree_config_t a_tree_config)
+    : node_limit(a_node_limit)
+    , tree_config(a_tree_config)
   {
-    data.reserve(node_limit);
-    locations.reserve(node_limit);
-    tree_id_initialized.resize(node_limit, 0);
+    data.reserve(a_node_limit);
+    locations.reserve(a_node_limit);
+    tree_id_initialized.resize(a_node_limit, 0);
   }
   uint32_t node_limit = 0;
   uint32_t current_id = 0;

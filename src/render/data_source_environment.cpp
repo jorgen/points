@@ -23,8 +23,8 @@
 namespace points::render
 {
 
-environment_data_source_t::environment_data_source_t(callback_manager_t &callbacks, double ground_z, double grid_size)
-  : callbacks(callbacks)
+environment_data_source_t::environment_data_source_t(callback_manager_t &a_callbacks, double ground_z, double grid_size)
+  : callbacks(a_callbacks)
   , ground_z_d(ground_z)
   , grid_size_d(grid_size)
   , inverse_vp(1)

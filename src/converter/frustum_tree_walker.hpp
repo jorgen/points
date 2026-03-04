@@ -77,8 +77,8 @@ struct tree_walker_nodes_t
 class attribute_index_map_t
 {
 public:
-  attribute_index_map_t(const attributes_configs_t &m_attributes_configs, std::vector<std::string> attribute_names)
-    : m_attributes_configs(m_attributes_configs)
+  attribute_index_map_t(const attributes_configs_t &a_attributes_configs, std::vector<std::string> attribute_names)
+    : m_attributes_configs(a_attributes_configs)
     , m_attribute_names(std::move(attribute_names))
   {
   }
