@@ -107,6 +107,8 @@ private:
 
   bool _generating_lod;
   bool _has_errors;
+  morton::morton192_t _lod_done_morton = {};
+  morton::morton192_t _current_lod_target_morton = {};
 
   bool _idle;
   int _new_file_events_sent;
@@ -153,5 +155,6 @@ private:
   void handle_storage_error(error_t &&errors);
   void handle_points_written(const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations);
   void handle_tree_done_with_input(input_data_id_t &&events);
+  void maybe_start_lod();
 };
 } // namespace points::converter

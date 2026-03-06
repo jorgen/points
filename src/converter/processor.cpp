@@ -287,11 +287,14 @@ void processor_t::handle_file_reading_done(input_data_id_t &&file)
 
 void processor_t::handle_index_write_done()
 {
+  _lod_done_morton = _current_lod_target_morton;
   _generating_lod = false;
   _perf_stats.conversion_end = perf_stats_t::clock_t::now();
-  if (_runtime_callbacks.done)
+  maybe_start_lod();
+  if (!_generating_lod)
   {
-    _runtime_callbacks.done(_runtime_callback_user_ptr);
+    if (_runtime_callbacks.done)
+      _runtime_callbacks.done(_runtime_callback_user_ptr);
   }
 }
 
@@ -316,13 +319,19 @@ void processor_t::handle_points_written(const storage_header_t &header, attribut
 void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
 {
   _input_data_source_registry.handle_tree_done_with_input(event);
+  maybe_start_lod();
+}
+
+void processor_t::maybe_start_lod()
+{
   if (_generating_lod)
     return;
-  auto min = _input_data_source_registry.get_done_morton();
-  if (min)
+  auto done_morton = _input_data_source_registry.get_done_morton();
+  if (done_morton && *done_morton > _lod_done_morton)
   {
     _generating_lod = true;
-    _tree_handler.generate_lod(*min);
+    _current_lod_target_morton = *done_morton;
+    _tree_handler.generate_lod(*done_morton);
   }
 }
 
