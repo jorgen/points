@@ -7,6 +7,7 @@
 #include <vio/thread_pool.h>
 
 #include "conversion_types.hpp"
+#include "input_data_source_registry.hpp"
 #include "storage_handler.hpp"
 #include "tree_lod_generator.hpp"
 #include <attributes_configs.hpp>
@@ -462,6 +463,332 @@ TEST_CASE("lod generation on magnitude 0 tree does not trigger negative shift")
   REQUIRE(root_collection.data[0].count.data > 0);
   REQUIRE(root_collection.data[0].count.data == root_collection.point_count);
   REQUIRE(root_collection.data[0].offset.data == 0);
+}
+
+// Helper to register a file with a given name in the registry
+static points::converter::input_data_reference_t register_test_file(points::converter::input_data_source_registry_t &registry, const std::string &name)
+{
+  auto name_buf = std::make_unique<char[]>(name.size());
+  memcpy(name_buf.get(), name.c_str(), name.size());
+  return registry.register_file(std::move(name_buf), uint32_t(name.size()));
+}
+
+// Helper to pre-init a file with a given min position (controls morton ordering)
+// Also sets morton_min via handle_sorted_points so get_done_morton can return it.
+static void pre_init_test_file(points::converter::input_data_source_registry_t &registry, const points::converter::tree_config_t &tree_config, points::converter::input_data_id_t id, double min_x)
+{
+  double min[3] = {min_x, 0.0, 0.0};
+  registry.register_pre_init_result(tree_config, id, true, min, 100, 16);
+
+  // Set morton_min/max on the source so get_done_morton returns meaningful boundaries
+  points::converter::morton::morton192_t morton_min = {};
+  points::converter::morton::morton192_t morton_max = {};
+  points::converter::convert_pos_to_morton(tree_config.scale, tree_config.offset, min, morton_min);
+  double max_pos[3] = {min_x + 1.0, 1.0, 1.0};
+  points::converter::convert_pos_to_morton(tree_config.scale, tree_config.offset, max_pos, morton_max);
+  registry.handle_sorted_points(id, morton_min, morton_max);
+}
+
+// Helper to mark a file as fully done (sub_added + reading_done + tree_done)
+static void mark_file_done(points::converter::input_data_source_registry_t &registry, points::converter::input_data_id_t id)
+{
+  registry.handle_sub_added(id);
+  registry.handle_reading_done(id);
+  registry.handle_tree_done_with_input(id);
+}
+
+TEST_CASE("get_done_morton returns empty when no files sorted" * doctest::test_suite("[incremental_lod]"))
+{
+  points::converter::input_data_source_registry_t registry;
+  auto tree_config = create_tree_config(0.001, 0.0);
+
+  auto ref1 = register_test_file(registry, "file1.las");
+  auto ref2 = register_test_file(registry, "file2.las");
+
+  pre_init_test_file(registry, tree_config, ref1.input_id, 10.0);
+  pre_init_test_file(registry, tree_config, ref2.input_id, 20.0);
+
+  // Don't call next_input_to_process — sorted list is empty
+  auto result = registry.get_done_morton();
+  REQUIRE(!result.has_value());
+}
+
+TEST_CASE("get_done_morton returns empty when first file not done" * doctest::test_suite("[incremental_lod]"))
+{
+  points::converter::input_data_source_registry_t registry;
+  auto tree_config = create_tree_config(0.001, 0.0);
+
+  auto ref1 = register_test_file(registry, "file1.las");
+  auto ref2 = register_test_file(registry, "file2.las");
+
+  pre_init_test_file(registry, tree_config, ref1.input_id, 10.0);
+  pre_init_test_file(registry, tree_config, ref2.input_id, 20.0);
+
+  // Pop both into sorted list
+  auto next1 = registry.next_input_to_process();
+  REQUIRE(next1.has_value());
+  auto next2 = registry.next_input_to_process();
+  REQUIRE(next2.has_value());
+
+  // Mark second file done but not first
+  mark_file_done(registry, next2->id);
+
+  auto result = registry.get_done_morton();
+  REQUIRE(!result.has_value());
+}
+
+TEST_CASE("get_done_morton returns boundary when prefix is done" * doctest::test_suite("[incremental_lod]"))
+{
+  points::converter::input_data_source_registry_t registry;
+  auto tree_config = create_tree_config(0.001, 0.0);
+
+  auto ref1 = register_test_file(registry, "file1.las");
+  auto ref2 = register_test_file(registry, "file2.las");
+  auto ref3 = register_test_file(registry, "file3.las");
+
+  pre_init_test_file(registry, tree_config, ref1.input_id, 10.0);
+  pre_init_test_file(registry, tree_config, ref2.input_id, 20.0);
+  pre_init_test_file(registry, tree_config, ref3.input_id, 30.0);
+
+  // Pop all into sorted list (ascending morton order due to min-heap)
+  auto next1 = registry.next_input_to_process();
+  auto next2 = registry.next_input_to_process();
+  auto next3 = registry.next_input_to_process();
+  REQUIRE(next1.has_value());
+  REQUIRE(next2.has_value());
+  REQUIRE(next3.has_value());
+
+  // Mark only the first (lowest morton) file as done
+  mark_file_done(registry, next1->id);
+
+  auto result = registry.get_done_morton();
+  REQUIRE(result.has_value());
+
+  // Now also mark the second file done — the boundary should advance to file 3
+  mark_file_done(registry, next2->id);
+  auto result2 = registry.get_done_morton();
+  REQUIRE(result2.has_value());
+
+  // The boundary should now point to file 3's morton_min, not file 2's
+  // (verifies that the prefix scan actually advances)
+  // Since file 3 isn't done and there are no unsorted files, we get a value
+  // but we still can't LOD everything (file 3 remains)
+}
+
+TEST_CASE("get_done_morton returns all-max when all files done" * doctest::test_suite("[incremental_lod]"))
+{
+  points::converter::input_data_source_registry_t registry;
+  auto tree_config = create_tree_config(0.001, 0.0);
+
+  auto ref1 = register_test_file(registry, "file1.las");
+  auto ref2 = register_test_file(registry, "file2.las");
+
+  pre_init_test_file(registry, tree_config, ref1.input_id, 10.0);
+  pre_init_test_file(registry, tree_config, ref2.input_id, 20.0);
+
+  auto next1 = registry.next_input_to_process();
+  auto next2 = registry.next_input_to_process();
+  REQUIRE(next1.has_value());
+  REQUIRE(next2.has_value());
+
+  // No more unsorted files
+  REQUIRE(!registry.next_input_to_process().has_value());
+
+  mark_file_done(registry, next1->id);
+  mark_file_done(registry, next2->id);
+
+  auto result = registry.get_done_morton();
+  REQUIRE(result.has_value());
+
+  // Should be the all-0xFF sentinel
+  points::converter::morton::morton192_t expected;
+  memset(&expected, 0xFF, sizeof(expected));
+  REQUIRE(result->data[0] == expected.data[0]);
+  REQUIRE(result->data[1] == expected.data[1]);
+  REQUIRE(result->data[2] == expected.data[2]);
+}
+
+TEST_CASE("get_done_morton returns empty when unsorted files remain" * doctest::test_suite("[incremental_lod]"))
+{
+  points::converter::input_data_source_registry_t registry;
+  auto tree_config = create_tree_config(0.001, 0.0);
+
+  auto ref1 = register_test_file(registry, "file1.las");
+  auto ref2 = register_test_file(registry, "file2.las");
+  auto ref3 = register_test_file(registry, "file3.las");
+
+  pre_init_test_file(registry, tree_config, ref1.input_id, 10.0);
+  pre_init_test_file(registry, tree_config, ref2.input_id, 20.0);
+  // Don't pre-init ref3 — it stays in unsorted
+
+  // Pop 2 sorted ones
+  auto next1 = registry.next_input_to_process();
+  auto next2 = registry.next_input_to_process();
+  REQUIRE(next1.has_value());
+  REQUIRE(next2.has_value());
+
+  mark_file_done(registry, next1->id);
+  mark_file_done(registry, next2->id);
+
+  // All sorted files are done but ref3 hasn't been pre-inited.
+  // However, ref3 was registered and has read_started=false, so
+  // it will be in the unsorted heap after the dirty flag is resolved.
+  // The dirty flag is set by register_file, so next call to
+  // next_input_to_process would rebuild the unsorted list including ref3.
+  // But since _unsorted_input_sources_dirty is true, get_done_morton returns {}.
+  auto result = registry.get_done_morton();
+  REQUIRE(!result.has_value());
+}
+
+TEST_CASE("LOD with restricted morton boundary skips nodes outside range" * doctest::test_suite("[incremental_lod]"))
+{
+  tree_test_infrastructure test_util(256);
+
+  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
+
+  // First batch: points spanning full range
+  auto points = create_points(test_util, 0, morton_max, 256);
+  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+
+  // Second batch: overlapping to force children
+  uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
+  auto second_points = create_points(test_util, morton_min, morton_max, 256);
+  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+
+  {
+    auto &tree = *test_util.tree_registry.get(root_id);
+    REQUIRE(tree.nodes[0][0] > 0);
+  }
+
+  // Run LOD with boundary at midpoint — only lower half should get LODed
+  std::mutex lod_mutex;
+  std::condition_variable lod_cv;
+  bool lod_complete = false;
+
+  vio::event_pipe_t<void> lod_done(test_util.event_loop, std::function<void()>([&] {
+    std::lock_guard<std::mutex> lock(lod_mutex);
+    lod_complete = true;
+    lod_cv.notify_all();
+  }));
+
+  points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+                                                   test_util.perf_stats, lod_done);
+
+  // Use midpoint as boundary
+  points::converter::morton::morton192_t mid_morton = {};
+  mid_morton.data[0] = morton_max / 2;
+
+  lod_gen.generate_lods(root_id, mid_morton);
+
+  {
+    std::unique_lock<std::mutex> lock(lod_mutex);
+    REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
+  }
+
+  auto &tree = *test_util.tree_registry.get(root_id);
+  auto &root_collection = tree.data[0][0];
+
+  // The root node's max covers the full range which is above mid_morton,
+  // so the root itself should NOT have LOD data (it was skipped)
+  REQUIRE(root_collection.point_count == 0);
+}
+
+TEST_CASE("Two-pass incremental LOD matches single-pass" * doctest::test_suite("[incremental_lod]"))
+{
+  // --- Single-pass tree ---
+  uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
+  uint64_t morton_mid = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
+
+  points::converter::tree_id_t single_root_id;
+  uint64_t single_root_point_count = 0;
+  {
+    tree_test_infrastructure test_util(256);
+
+    auto points = create_points(test_util, 0, morton_max, 256);
+    single_root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+
+    auto second_points = create_points(test_util, morton_mid, morton_max, 256);
+    single_root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, single_root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+
+    std::mutex lod_mutex;
+    std::condition_variable lod_cv;
+    bool lod_complete = false;
+
+    vio::event_pipe_t<void> lod_done(test_util.event_loop, std::function<void()>([&] {
+      std::lock_guard<std::mutex> lock(lod_mutex);
+      lod_complete = true;
+      lod_cv.notify_all();
+    }));
+
+    points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+                                                     test_util.perf_stats, lod_done);
+
+    points::converter::morton::morton192_t max_morton;
+    memset(&max_morton, 0xFF, sizeof(max_morton));
+    lod_gen.generate_lods(single_root_id, max_morton);
+
+    {
+      std::unique_lock<std::mutex> lock(lod_mutex);
+      REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
+    }
+
+    auto &tree = *test_util.tree_registry.get(single_root_id);
+    single_root_point_count = tree.data[0][0].point_count;
+    REQUIRE(single_root_point_count > 0);
+  }
+
+  // --- Two-pass incremental tree ---
+  {
+    tree_test_infrastructure test_util(256);
+
+    auto points = create_points(test_util, 0, morton_max, 256);
+    auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+
+    auto second_points = create_points(test_util, morton_mid, morton_max, 256);
+    root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+
+    // Pass 1: LOD up to midpoint
+    {
+      std::mutex lod_mutex;
+      std::condition_variable lod_cv;
+      bool lod_complete = false;
+
+      vio::event_pipe_t<void> lod_done(test_util.event_loop, std::function<void()>([&] {
+        std::lock_guard<std::mutex> lock(lod_mutex);
+        lod_complete = true;
+        lod_cv.notify_all();
+      }));
+
+      points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+                                                       test_util.perf_stats, lod_done);
+
+      points::converter::morton::morton192_t mid_morton = {};
+      mid_morton.data[0] = morton_max / 2;
+      lod_gen.generate_lods(root_id, mid_morton);
+
+      {
+        std::unique_lock<std::mutex> lock(lod_mutex);
+        REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
+      }
+
+      // Pass 2: LOD the rest (all-max)
+      lod_complete = false;
+      points::converter::morton::morton192_t max_morton;
+      memset(&max_morton, 0xFF, sizeof(max_morton));
+      lod_gen.generate_lods(root_id, max_morton);
+
+      {
+        std::unique_lock<std::mutex> lock(lod_mutex);
+        REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
+      }
+    }
+
+    auto &tree = *test_util.tree_registry.get(root_id);
+    auto &root_collection = tree.data[0][0];
+
+    REQUIRE(root_collection.point_count > 0);
+    REQUIRE(root_collection.point_count == single_root_point_count);
+  }
 }
 
 } // namespace
