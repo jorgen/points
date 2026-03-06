@@ -136,6 +136,7 @@ private:
   std::vector<float> _random_offsets;
 
   std::deque<std::unique_ptr<lod_worker_batch_t>> _lod_batches;
+  morton::morton192_t _lod_complete_morton = {};
 };
 
 } // namespace points::converter

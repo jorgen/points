@@ -169,7 +169,8 @@ struct tree_iterator_t
   std::vector<lod_node_worker_data_t> parents;
 };
 
-static void tree_get_work_items(tree_registry_t &tree_cache, storage_handler_t &cache, tree_id_t &tree_id, lod_node_worker_data_t &parent_node, std::vector<lod_tree_worker_data_t> &to_lod)
+static void tree_get_work_items(tree_registry_t &tree_cache, storage_handler_t &cache, tree_id_t &tree_id, lod_node_worker_data_t &parent_node, std::vector<lod_tree_worker_data_t> &to_lod,
+                                const morton::morton192_t &max_morton, const morton::morton192_t &already_lod_morton)
 {
   auto tree = tree_cache.get(tree_id);
   assert(tree->morton_min >= parent_node.node_min);
@@ -209,6 +210,20 @@ static void tree_get_work_items(tree_registry_t &tree_cache, storage_handler_t &
       assert(max_from_mins == node_max);
       assert(!(parent_max < node_max));
 #endif
+      {
+        int lod = morton::morton_tree_level_to_lod(tree->magnitude, level);
+        morton::morton192_t node_max = morton::create_max(lod, node_min);
+        // Node's range is not strictly below the done boundary — skip entirely
+        if (!(node_max < max_morton))
+          continue;
+        // Node fully within already-LODed range AND has LOD data — skip but add to parent
+        if (node && node_max < already_lod_morton && data.point_count > 0 && data.data.size() == 1)
+        {
+          parent.child_data.push_back(data);
+          parent.child_trees.push_back(tree_id);
+          continue;
+        }
+      }
       if (node)
       {
         assert(data.data.size() <= 1);
@@ -259,7 +274,7 @@ static void tree_get_work_items(tree_registry_t &tree_cache, storage_handler_t &
     auto tree_skip = tree_iterator[buffer_index].skips[to_process_index];
     auto subtree_id = tree->sub_trees[tree_skip];
     auto &parent = parent_buffer[tree_iterator[buffer_index].parent_indecies[to_process_index]];
-    tree_get_work_items(tree_cache, cache, subtree_id, parent, to_lod);
+    tree_get_work_items(tree_cache, cache, subtree_id, parent, to_lod, max_morton, already_lod_morton);
   }
   lod_tree_worker_data.nodes[4] = std::move(tree_iterator[buffer_index].parents);
   if (lod_tree_worker_data.nodes[0].size())
@@ -946,12 +961,11 @@ tree_lod_generator_t::tree_lod_generator_t(vio::event_loop_t &loop, vio::thread_
 
 void tree_lod_generator_t::generate_lods(tree_id_t &tree_id, const morton::morton192_t &max)
 {
-  (void)max;
-  // auto &worker_data = batch.worker_data;
   std::vector<lod_tree_worker_data_t> to_lod;
   lod_node_worker_data_t fake_parent;
   fake_parent.node_min = _tree_cache.data[tree_id.data]->morton_min;
-  tree_get_work_items(_tree_cache, _file_cache, tree_id, fake_parent, to_lod);
+  tree_get_work_items(_tree_cache, _file_cache, tree_id, fake_parent, to_lod, max, _lod_complete_morton);
+  _lod_complete_morton = max;
   if (!to_lod.empty())
   {
     std::sort(to_lod.begin(), to_lod.end(), [](const lod_tree_worker_data_t &a, const lod_tree_worker_data_t &b) { return a.magnitude < b.magnitude; });
