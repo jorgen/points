@@ -388,8 +388,8 @@ TEST_CASE("lod generation updates subset count and offset")
   points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
                                                    test_util.perf_stats, lod_done);
 
-  points::converter::morton::morton192_t max_morton{};
-  max_morton.data[0] = morton_max;
+  points::converter::morton::morton192_t max_morton;
+  memset(&max_morton, 0xFF, sizeof(max_morton));
   lod_gen.generate_lods(root_id, max_morton);
 
   {
@@ -444,8 +444,8 @@ TEST_CASE("lod generation on magnitude 0 tree does not trigger negative shift")
   points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
                                                    test_util.perf_stats, lod_done);
 
-  points::converter::morton::morton192_t max_morton{};
-  max_morton.data[0] = morton_max;
+  points::converter::morton::morton192_t max_morton;
+  memset(&max_morton, 0xFF, sizeof(max_morton));
   lod_gen.generate_lods(root_id, max_morton);
 
   {
