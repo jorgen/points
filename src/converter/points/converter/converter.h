@@ -198,6 +198,8 @@ struct converter_perf_stats_t
   struct converter_io_stats_t lod_write;
   double tree_build_seconds;
   double lod_generation_seconds;
+  uint64_t cache_hits;
+  uint64_t cache_misses;
 };
 
 struct converter_t;

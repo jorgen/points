@@ -284,6 +284,12 @@ int main(int argc, char **argv)
           fmt::print("    LOD read IO:       avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", perf.lod_read.avg_mbps, perf.lod_read.peak_mbps, perf.lod_read.low_mbps);
         if (perf.lod_write.operation_count > 0)
           fmt::print("    LOD write IO:      avg {:.2f} MB/s, peak {:.2f} MB/s, low {:.2f} MB/s\n", perf.lod_write.avg_mbps, perf.lod_write.peak_mbps, perf.lod_write.low_mbps);
+        if (perf.cache_hits > 0 || perf.cache_misses > 0)
+        {
+          uint64_t total = perf.cache_hits + perf.cache_misses;
+          double hit_rate = total > 0 ? 100.0 * double(perf.cache_hits) / double(total) : 0.0;
+          fmt::print("    Read cache:        {} hits, {} misses ({:.1f}% hit rate)\n", perf.cache_hits, perf.cache_misses, hit_rate);
+        }
       }
     }
 

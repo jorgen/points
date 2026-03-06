@@ -102,6 +102,9 @@ struct perf_stats_t
   time_point_t lod_start;
   std::atomic<bool> lod_phase{false};
 
+  std::atomic<uint64_t> cache_hits{0};
+  std::atomic<uint64_t> cache_misses{0};
+
   double total_time_seconds() const
   {
     auto dur = std::chrono::duration_cast<std::chrono::microseconds>(conversion_end - conversion_start).count();
@@ -114,8 +117,8 @@ struct perf_stats_t
     return double(total) / 1e6;
   }
 
-  // Binary serialization: version(1) + 5*io_counter(40 each) + tree_build_us(8) + lod_gen_us(8) + total_time_us(8)
-  static constexpr uint32_t serialized_size = 1 + 5 * 40 + 8 + 8 + 8;
+  // Binary serialization: version(1) + 5*io_counter(40 each) + tree_build_us(8) + lod_gen_us(8) + total_time_us(8) + cache_hits(8) + cache_misses(8)
+  static constexpr uint32_t serialized_size = 1 + 5 * 40 + 8 + 8 + 8 + 8 + 8;
 
   std::unique_ptr<uint8_t[]> serialize(uint32_t &out_size) const
   {
@@ -158,6 +161,11 @@ struct perf_stats_t
     auto total_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(conversion_end - conversion_start).count());
     memcpy(p, &total_us, 8); p += 8;
 
+    v = cache_hits.load(std::memory_order_relaxed);
+    memcpy(p, &v, 8); p += 8;
+    v = cache_misses.load(std::memory_order_relaxed);
+    memcpy(p, &v, 8); p += 8;
+
     return buf;
   }
 
@@ -196,6 +204,8 @@ struct perf_stats_t
     counter_data_t lod_write;
     uint64_t tree_build_us;
     uint64_t lod_generation_us;
+    uint64_t cache_hits;
+    uint64_t cache_misses;
     bool valid;
   };
 
@@ -204,7 +214,8 @@ struct perf_stats_t
     deserialized_perf_stats_t result{};
     result.valid = false;
 
-    if (!data || size < serialized_size)
+    static constexpr uint32_t min_size = 1 + 5 * 40 + 8 + 8 + 8; // v1 without cache fields
+    if (!data || size < min_size)
       return result;
 
     const uint8_t *p = data;
@@ -233,6 +244,12 @@ struct perf_stats_t
     memcpy(&result.tree_build_us, p, 8); p += 8;
     memcpy(&result.lod_generation_us, p, 8); p += 8;
     memcpy(&result.total_time_us, p, 8); p += 8;
+
+    if (size >= serialized_size)
+    {
+      memcpy(&result.cache_hits, p, 8); p += 8;
+      memcpy(&result.cache_misses, p, 8); p += 8;
+    }
 
     result.total_time_seconds = double(result.total_time_us) / 1e6;
     result.valid = true;

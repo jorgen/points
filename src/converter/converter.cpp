@@ -273,6 +273,8 @@ int converter_read_file_perf_stats(const char *filename, uint64_t filename_size,
   fill_io_stats(perf_stats->lod_write, parsed.lod_write);
   perf_stats->tree_build_seconds = double(parsed.tree_build_us) / 1e6;
   perf_stats->lod_generation_seconds = double(parsed.lod_generation_us) / 1e6;
+  perf_stats->cache_hits = parsed.cache_hits;
+  perf_stats->cache_misses = parsed.cache_misses;
   return 0;
 }
 
@@ -295,6 +297,8 @@ void converter_get_live_perf_stats(struct converter_t *converter, struct convert
 
   perf_stats->tree_build_seconds = double(ps.tree_build_time_us.load(std::memory_order_relaxed)) / 1e6;
   perf_stats->lod_generation_seconds = double(ps.lod_generation_time_us.load(std::memory_order_relaxed)) / 1e6;
+  perf_stats->cache_hits = ps.cache_hits.load(std::memory_order_relaxed);
+  perf_stats->cache_misses = ps.cache_misses.load(std::memory_order_relaxed);
 }
 
 } // namespace points::converter
