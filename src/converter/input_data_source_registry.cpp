@@ -185,25 +185,29 @@ uint64_t input_data_source_registry_t::get_approximate_size(input_data_id_t id)
 std::optional<morton::morton192_t> input_data_source_registry_t::get_done_morton()
 {
   std::unique_lock<std::mutex> lock(_mutex);
-  // for (auto it = _sorted_input_sources.rbegin(); it != _sorted_input_sources.rend(); ++it)
-  //{
-  //   auto &item = _registry[*it];
-  //   if (item.read_finished && item.inserted_into_tree == item.sub_count)
-  //   {
-  //     return item.morton_min;
-  //   }
-  // }
   if (_sorted_input_sources.empty())
     return {};
-  for (auto &id : _sorted_input_sources)
+  while (_done_prefix_index < _sorted_input_sources.size())
   {
-    auto &item = _registry[id];
-    if (!item.read_finished)
-    {
-      return {};
-    }
+    auto &item = _registry[_sorted_input_sources[_done_prefix_index]];
+    if (!item.read_finished || item.inserted_into_tree < item.sub_count)
+      break;
+    _done_prefix_index++;
   }
-  return _registry[_sorted_input_sources.front()].morton_min;
+  if (_done_prefix_index == 0)
+    return {};
+  // If there are still files after the done prefix (sorted or unsorted),
+  // return morton_min of the next not-done file as the boundary
+  if (_done_prefix_index < _sorted_input_sources.size())
+    return _registry[_sorted_input_sources[_done_prefix_index]].morton_min;
+  // All sorted files are done — but if unsorted files remain, can't LOD yet
+  // (they haven't been assigned morton codes and could land anywhere)
+  if (!_unsorted_input_sources.empty() || _unsorted_input_sources_dirty)
+    return {};
+  // All files done — return max possible morton to LOD everything
+  morton::morton192_t all_max;
+  memset(&all_max, 0xFF, sizeof(all_max));
+  return all_max;
 }
 
 input_data_source_t input_data_source_registry_t::get(input_data_id_t input_id)

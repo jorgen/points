@@ -99,5 +99,6 @@ private:
   std::vector<uint32_t> _unsorted_input_sources;
   std::vector<uint32_t> _sorted_input_sources;
   bool _unsorted_input_sources_dirty;
+  uint32_t _done_prefix_index = 0;
 };
 } // namespace points::converter
