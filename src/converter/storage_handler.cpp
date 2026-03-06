@@ -129,6 +129,7 @@ storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t 
   , _write_tree_registry_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_tree_registry))
   , _write_blob_locations_and_update_header_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
   , _read_request_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
+  , _read_cache(256 * 1024 * 1024)
 {
   set_compressor(compression_method_t::blosc2);
   auto stat_result = vio::stat_file(_event_loop, _file_name);
@@ -811,9 +812,49 @@ void storage_handler_t::set_compressor(compression_method_t method)
   _compressor = create_compressor(method);
 }
 
+void storage_handler_t::set_read_cache_size(uint64_t max_bytes)
+{
+  _read_cache.clear();
+  _read_cache.set_max_bytes(max_bytes);
+}
+
 std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t location)
 {
   auto ret = std::make_shared<read_request_t>();
+
+  cache_key_t key{location.file_id, location.offset};
+  auto cached = _read_cache.get(key);
+  if (cached.has_value())
+  {
+    _perf_stats.cache_hits.fetch_add(1, std::memory_order_relaxed);
+    auto &cv = cached.value();
+    if (has_compression_magic(cv.compressed_data.get(), cv.compressed_size))
+    {
+      auto decompressed = decompress_any(cv.compressed_data.get(), cv.compressed_size);
+      if (decompressed.error.code == 0)
+      {
+        ret->buffer = std::move(decompressed.data);
+        ret->buffer_info.data = ret->buffer.get();
+        ret->buffer_info.size = decompressed.size;
+      }
+      else
+      {
+        ret->error = std::move(decompressed.error);
+      }
+    }
+    else
+    {
+      ret->buffer = cv.compressed_data;
+      ret->buffer_info.data = ret->buffer.get();
+      ret->buffer_info.size = cv.compressed_size;
+    }
+    std::unique_lock<std::mutex> lock(ret->_mutex);
+    ret->_done = true;
+    ret->_block_for_read.notify_all();
+    return ret;
+  }
+
+  _perf_stats.cache_misses.fetch_add(1, std::memory_order_relaxed);
   auto copy = ret;
   _read_request_pipe.post_event(std::move(copy), std::move(location));
   return ret;
@@ -841,6 +882,10 @@ vio::task_t<void> storage_handler_t::do_read_request(std::shared_ptr<read_reques
   }
   else
   {
+    // Cache the raw compressed data before decompression
+    cache_key_t key{location.file_id, location.offset};
+    _read_cache.put(key, cache_value_t{buffer, location.size}, location.size);
+
     read_request->buffer = buffer;
     read_request->buffer_info.size = uint32_t(result.value());
     read_request->buffer_info.data = buffer.get();

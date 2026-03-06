@@ -29,6 +29,7 @@
 #include "compressor.hpp"
 #include "conversion_types.hpp"
 #include "error.hpp"
+#include "lru_cache.hpp"
 #include "perf_stats.hpp"
 #include "tree.hpp"
 #include <ankerl/unordered_dense.h>
@@ -45,6 +46,32 @@ namespace points::converter
 {
 
 class storage_handler_t;
+
+struct cache_key_t
+{
+  uint32_t file_id;
+  uint64_t offset;
+
+  bool operator==(const cache_key_t &other) const
+  {
+    return file_id == other.file_id && offset == other.offset;
+  }
+};
+
+struct cache_key_hash_t
+{
+  uint64_t operator()(const cache_key_t &k) const
+  {
+    uint64_t h = uint64_t(k.file_id) ^ (k.offset * 0x9e3779b97f4a7c15ULL);
+    return h;
+  }
+};
+
+struct cache_value_t
+{
+  std::shared_ptr<uint8_t[]> compressed_data;
+  uint32_t compressed_size;
+};
 
 struct compressed_write_data_t
 {
@@ -95,6 +122,7 @@ public:
   std::shared_ptr<read_request_t> read(storage_location_t location);
 
   void set_compressor(compression_method_t method);
+  void set_read_cache_size(uint64_t max_bytes);
   void set_on_write_progress(std::function<void()> cb) { _on_write_progress = std::move(cb); }
 
   const compression_stats_t &get_compression_stats() const { return _compression_stats; }
@@ -151,6 +179,8 @@ private:
   vio::event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, error_t &&error)>> _write_tree_registry_pipe;
   vio::event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(error_t &&error)>> _write_blob_locations_and_update_header_pipe;
   vio::event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;
+
+  lru_cache_t<cache_key_t, cache_value_t, cache_key_hash_t> _read_cache;
 
   std::mutex _mutex;
 };
