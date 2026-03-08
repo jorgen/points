@@ -206,9 +206,9 @@ static void tree_get_work_items(tree_registry_t &tree_cache, storage_handler_t &
       auto max_from_mins = morton::create_max(morton::morton_tree_level_to_lod(tree->magnitude, level), min_from_mins);
       assert(min_from_mins == node_min);
       morton::morton192_t parent_max = morton::create_max(morton::morton_tree_level_to_lod(tree->magnitude + (level == 0), level == 0 ? 4 : level - 1), node_min);
-      morton::morton192_t node_max = morton::create_max(morton::morton_tree_level_to_lod(tree->magnitude, level), node_min);
-      assert(max_from_mins == node_max);
-      assert(!(parent_max < node_max));
+      morton::morton192_t node_max_debug = morton::create_max(morton::morton_tree_level_to_lod(tree->magnitude, level), node_min);
+      assert(max_from_mins == node_max_debug);
+      assert(!(parent_max < node_max_debug));
 #endif
       {
         int lod = morton::morton_tree_level_to_lod(tree->magnitude, level);
