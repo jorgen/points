@@ -19,12 +19,8 @@
 
 #include <string>
 
-namespace points
-{
-struct error_t
+struct points_error_t
 {
   int code = 0;
   std::string msg;
 };
-
-} // namespace points

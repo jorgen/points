@@ -72,8 +72,8 @@ static void add_box_edges(std::vector<glm::vec3> &vertices, std::vector<glm::u8v
 node_bbox_data_source_t::node_bbox_data_source_t(render::callback_manager_t &a_callbacks)
   : callbacks(a_callbacks)
 {
-  callbacks.do_create_buffer(camera_buffer, render::buffer_type_uniform);
-  callbacks.do_initialize_buffer(camera_buffer, type_r32, components_4x4, sizeof(camera_matrix), &camera_matrix);
+  callbacks.do_create_buffer(camera_buffer, points_buffer_type_uniform);
+  callbacks.do_initialize_buffer(camera_buffer, points_type_r32, points_components_4x4, sizeof(camera_matrix), &camera_matrix);
 }
 
 node_bbox_data_source_t::~node_bbox_data_source_t()
@@ -111,13 +111,13 @@ void node_bbox_data_source_t::update_boxes(const std::vector<node_bbox_t> &loose
     int initial_color_capacity = std::max(color_data_size,
         int(initial_vertex_count * sizeof(glm::u8vec3)));
 
-    callbacks.do_create_buffer(vertex_buffer, render::buffer_type_vertex);
-    callbacks.do_initialize_buffer(vertex_buffer, type_r32, components_3,
+    callbacks.do_create_buffer(vertex_buffer, points_buffer_type_vertex);
+    callbacks.do_initialize_buffer(vertex_buffer, points_type_r32, points_components_3,
                                    initial_vertex_capacity, nullptr);
     vertex_buffer_capacity = initial_vertex_capacity;
 
-    callbacks.do_create_buffer(color_buffer, render::buffer_type_vertex);
-    callbacks.do_initialize_buffer(color_buffer, type_u8, components_3,
+    callbacks.do_create_buffer(color_buffer, points_buffer_type_vertex);
+    callbacks.do_initialize_buffer(color_buffer, points_type_u8, points_components_3,
                                    initial_color_capacity, nullptr);
     color_buffer_capacity = initial_color_capacity;
 
@@ -125,16 +125,16 @@ void node_bbox_data_source_t::update_boxes(const std::vector<node_bbox_t> &loose
   }
   else if (vertex_data_size > vertex_buffer_capacity || color_data_size > color_buffer_capacity)
   {
-    callbacks.do_initialize_buffer(vertex_buffer, type_r32, components_3,
+    callbacks.do_initialize_buffer(vertex_buffer, points_type_r32, points_components_3,
                                    vertex_data_size, nullptr);
     vertex_buffer_capacity = vertex_data_size;
-    callbacks.do_initialize_buffer(color_buffer, type_u8, components_3,
+    callbacks.do_initialize_buffer(color_buffer, points_type_u8, points_components_3,
                                    color_data_size, nullptr);
     color_buffer_capacity = color_data_size;
   }
 }
 
-void node_bbox_data_source_t::add_to_frame(const render::frame_camera_cpp_t &camera, render::to_render_t *to_render)
+void node_bbox_data_source_t::add_to_frame(const render::frame_camera_cpp_t &camera, points_to_render_t *to_render)
 {
   if (!enabled || line_count <= 0)
     return;
@@ -160,19 +160,19 @@ void node_bbox_data_source_t::add_to_frame(const render::frame_camera_cpp_t &cam
   camera_matrix = glm::mat4(camera.projection * view_no_trans);
   callbacks.do_modify_buffer(camera_buffer, 0, sizeof(camera_matrix), &camera_matrix);
 
-  render_list[0].buffer_mapping = render::node_bbox_bm_camera;
+  render_list[0].buffer_mapping = points_node_bbox_bm_camera;
   render_list[0].user_ptr = camera_buffer.user_ptr;
-  render_list[1].buffer_mapping = render::node_bbox_bm_position;
+  render_list[1].buffer_mapping = points_node_bbox_bm_position;
   render_list[1].user_ptr = vertex_buffer.user_ptr;
-  render_list[2].buffer_mapping = render::node_bbox_bm_color;
+  render_list[2].buffer_mapping = points_node_bbox_bm_color;
   render_list[2].user_ptr = color_buffer.user_ptr;
 
-  render::draw_group_t draw_group = {};
+  points_draw_group_t draw_group = {};
   draw_group.buffers = render_list;
   draw_group.buffers_size = 3;
-  draw_group.draw_type = render::draw_type_t::node_bbox_lines;
+  draw_group.draw_type = points_node_bbox_lines;
   draw_group.draw_size = line_count * 2;
-  render::to_render_add_render_group(to_render, draw_group);
+  points_to_render_add_render_group(to_render, draw_group);
 }
 
 } // namespace points::converter

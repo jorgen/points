@@ -277,7 +277,7 @@ serialized_free_blob_manager_t free_blob_manager_t::serialize()
   return serialized;
 }
 
-points::error_t free_blob_manager_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+points_error_t free_blob_manager_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
   if (size < sizeof(_next_offset) + sizeof(uint32_t))
   {

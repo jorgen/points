@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2020  Jørgen Lind
+** Copyright (C) 2020  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -16,8 +16,3 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include <data_source.hpp>
-
-namespace points::render
-{
-} // namespace points::render
-

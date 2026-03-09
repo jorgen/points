@@ -23,34 +23,29 @@
 #include "renderer_callbacks.hpp"
 #include <points/render/renderer.h>
 
-namespace points::render
+struct points_origin_anchor_data_source_t : public points::render::data_source_cpp_t
 {
+  points_origin_anchor_data_source_t(points::render::callback_manager_t &callbacks, const glm::dvec3 &center, double arrow_size);
 
-struct origin_anchor_data_source_t : public data_source_cpp_t
-{
-  origin_anchor_data_source_t(callback_manager_t &callbacks, const glm::dvec3 &center, double arrow_size);
-
-  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
+  void add_to_frame(const points::render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
   void rebuild_mesh();
 
-  callback_manager_t &callbacks;
+  points::render::callback_manager_t &callbacks;
 
   glm::dvec3 center;
   double arrow_size;
 
-  buffer_t camera_buffer;
+  points_buffer_t camera_buffer;
   glm::mat4 camera_matrix;
 
-  buffer_t vertex_buffer;
+  points_buffer_t vertex_buffer;
   std::vector<glm::vec3> vertices;
 
-  buffer_t color_buffer;
+  points_buffer_t color_buffer;
   std::vector<glm::u8vec4> colors;
 
-  buffer_t index_buffer;
+  points_buffer_t index_buffer;
   std::vector<uint32_t> indices;
 
-  draw_buffer_t render_list[4];
+  points_draw_buffer_t render_list[4];
 };
-
-} // namespace points::render

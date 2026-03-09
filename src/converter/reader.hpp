@@ -44,13 +44,13 @@ struct get_points_file_t
 {
   input_data_id_t id;
   input_name_ref_t filename;
-  converter_file_convert_callbacks_t callbacks;
+  points_converter_file_convert_callbacks_t callbacks;
 };
 
 struct point_reader_file_t;
 struct unsorted_points_event_t
 {
-  unsorted_points_event_t(std::vector<point_format_t> a_attributes_def, const header_t &a_public_header, points_t &&a_points, point_reader_file_t &a_reader_file)
+  unsorted_points_event_t(std::vector<point_format_t> a_attributes_def, const points_converter_header_t &a_public_header, points_t &&a_points, point_reader_file_t &a_reader_file)
     : attributes_def(a_attributes_def)
     , public_header(a_public_header)
     , points(std::move(a_points))
@@ -59,7 +59,7 @@ struct unsorted_points_event_t
   }
 
   std::vector<point_format_t> attributes_def;
-  header_t public_header;
+  points_converter_header_t public_header;
   points_t points;
   point_reader_file_t &reader_file;
 };
@@ -68,7 +68,7 @@ class get_data_worker_t
 {
 public:
   get_data_worker_t(point_reader_file_t &point_reader_file, attributes_configs_t &attribute_configs, perf_stats_t &perf_stats, const get_points_file_t &file,
-                    vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe,
+                    vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t>> &input_init_pipe,
                     vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<unsorted_points_event_t> &unsorted_points_queue);
   void work();
   void after_work();
@@ -78,10 +78,10 @@ public:
   point_reader_file_t &point_reader_file;
   attributes_configs_t &attribute_configs;
   perf_stats_t &perf_stats;
-  vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe;
+  vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t>> &input_init_pipe;
   vio::event_pipe_t<input_data_id_t> &sub_added;
   vio::event_pipe_t<unsorted_points_event_t> &unsorted_points_queue;
-  std::unique_ptr<error_t> error;
+  std::unique_ptr<points_error_t> error;
   get_points_file_t file;
   storage_header_t storage_header;
   uint64_t points_read;
@@ -92,7 +92,7 @@ public:
 class sort_worker_t
 {
 public:
-  sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, header_t public_header, points_t &&points);
+  sort_worker_t(const tree_config_t &tree_config, point_reader_file_t &reader_file, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, points_converter_header_t public_header, points_t &&points);
   void work();
   void after_work();
   void enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool);
@@ -102,9 +102,9 @@ public:
   point_reader_file_t &reader_file;
   attributes_configs_t &attributes_configs;
   perf_stats_t &perf_stats;
-  header_t public_header;
+  points_converter_header_t public_header;
   points_t points;
-  error_t error;
+  points_error_t error;
   bool _done{false};
 };
 
@@ -112,8 +112,8 @@ struct point_reader_file_t
 {
   point_reader_file_t(const tree_config_t &a_tree_config, vio::event_loop_t &a_event_loop, vio::thread_pool_t &a_thread_pool, attributes_configs_t &a_attributes_configs, perf_stats_t &a_perf_stats,
                       const get_points_file_t &file,
-                      vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<unsorted_points_event_t> &unsorted_points,
-                      vio::event_pipe_t<std::pair<points_t, error_t>> &a_sorted_points_pipe)
+                      vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<unsorted_points_event_t> &unsorted_points,
+                      vio::event_pipe_t<std::pair<points_t, points_error_t>> &a_sorted_points_pipe)
     : tree_config(a_tree_config)
     , event_loop(a_event_loop)
     , thread_pool(a_thread_pool)
@@ -133,7 +133,7 @@ struct point_reader_file_t
   perf_stats_t &perf_stats;
   std::unique_ptr<get_data_worker_t> input_reader;
   std::vector<std::unique_ptr<sort_worker_t>> sort_workers;
-  vio::event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe;
+  vio::event_pipe_t<std::pair<points_t, points_error_t>> &sorted_points_pipe;
   uint32_t input_split = 0;
   uint32_t sort_done = 0;
 };
@@ -174,8 +174,8 @@ class point_reader_t : public vio::about_to_block_t
 {
 public:
   point_reader_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats,
-                 vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added,
-                 vio::event_pipe_t<std::pair<points_t, error_t>> &sorted_points_pipe, vio::event_pipe_t<input_data_id_t> &done_with_file, vio::event_pipe_t<file_error_t> &file_errors);
+                 vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t>> &input_init_pipe, vio::event_pipe_t<input_data_id_t> &sub_added,
+                 vio::event_pipe_t<std::pair<points_t, points_error_t>> &sorted_points_pipe, vio::event_pipe_t<input_data_id_t> &done_with_file, vio::event_pipe_t<file_error_t> &file_errors);
   void add_file(tree_config_t tree_config, get_points_file_t &&new_file);
 
   void about_to_block() override;
@@ -188,9 +188,9 @@ private:
   vio::thread_pool_t &_thread_pool;
   attributes_configs_t &_attributes_configs;
   perf_stats_t &_perf_stats;
-  vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> &_input_init_pipe;
+  vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t>> &_input_init_pipe;
   vio::event_pipe_t<input_data_id_t> &_sub_added;
-  vio::event_pipe_t<std::pair<points_t, error_t>> &_sorted_points_pipe;
+  vio::event_pipe_t<std::pair<points_t, points_error_t>> &_sorted_points_pipe;
   vio::event_pipe_t<input_data_id_t> &_done_with_file;
   vio::event_pipe_t<file_error_t> &_file_errors;
   vio::event_pipe_t<tree_config_t, get_points_file_t> _new_files_pipe;

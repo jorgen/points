@@ -27,11 +27,9 @@
 #include "glm_include.hpp"
 #include <vector>
 #include <memory>
-namespace points
-{
-namespace render
-{
 
+namespace points::render
+{
 struct skybox_texture_t
 {
   std::unique_ptr<uint8_t, decltype(&free)> image = {nullptr, &free};
@@ -39,29 +37,28 @@ struct skybox_texture_t
   int height = 0;
   int components = 0;
 };
+} // namespace points::render
 
-struct skybox_data_source_t : public data_source_cpp_t
+struct points_skybox_data_source_t : public points::render::data_source_cpp_t
 {
-  skybox_data_source_t(callback_manager_t &callbacks, skybox_data_t skybox_data);
+  points_skybox_data_source_t(points::render::callback_manager_t &callbacks, points_skybox_data_t skybox_data);
 
-  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
+  void add_to_frame(const points::render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
 
-  callback_manager_t &callbacks;
+  points::render::callback_manager_t &callbacks;
 
-  buffer_t inverse_vp_buffer;
+  points_buffer_t inverse_vp_buffer;
   glm::mat4 inverse_vp;
 
-  buffer_t camera_pos_buffer;
+  points_buffer_t camera_pos_buffer;
   glm::vec3 camera_pos;
 
-  buffer_t vertex_buffer;
+  points_buffer_t vertex_buffer;
   std::vector<glm::vec2> vertices;
 
-  buffer_t cube_texture;
+  points_buffer_t cube_texture;
 
-  skybox_texture_t textures[6];
+  points::render::skybox_texture_t textures[6];
 
-  draw_buffer_t draw_buffers[4];
+  points_draw_buffer_t draw_buffers[4];
 };
-} // namespace render
-} // namespace points

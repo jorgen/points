@@ -36,7 +36,7 @@ struct fse_compress_result_t
 {
   std::vector<uint8_t> data;
   uint32_t size;
-  error_t error;
+  points_error_t error;
 };
 
 static fse_compress_result_t fse_compress_data(const uint8_t *src, uint32_t src_size)
@@ -127,7 +127,7 @@ static fse_compress_result_t fse_compress_data(const uint8_t *src, uint32_t src_
   return r;
 }
 
-static bool fse_decompress_data(const uint8_t *src, uint32_t src_size, uint8_t *dst, uint32_t dst_size, error_t &error)
+static bool fse_decompress_data(const uint8_t *src, uint32_t src_size, uint8_t *dst, uint32_t dst_size, points_error_t &error)
 {
   unsigned workspace[FSE_DECOMPRESS_WKSP_SIZE_U32(FSE_MAX_TABLELOG, FSE_MAX_SYMBOL_VALUE)];
   size_t result = FSE_decompress_wksp_bmi2(dst, dst_size, src, src_size, FSE_MAX_TABLELOG, workspace, sizeof(workspace), 0);
@@ -275,7 +275,7 @@ compression_result_t compressor_ans_t::compress(const void *data, uint32_t size,
 {
   compression_result_t result;
 
-  bool is_r64 = (format.type == type_r64 && format.components == components_1);
+  bool is_r64 = (format.type == points_type_r64 && format.components == points_components_1);
 
   if (is_r64 && size >= 8)
   {
@@ -370,7 +370,7 @@ compression_result_t compressor_ans_t::compress(const void *data, uint32_t size,
     return result;
   }
 
-  bool is_u16x3 = (format.type == type_u16 && format.components == components_3);
+  bool is_u16x3 = (format.type == points_type_u16 && format.components == points_components_3);
   if (is_u16x3 && size >= 6)
   {
     // Path A: raw (no preprocessing)
@@ -409,9 +409,9 @@ compression_result_t compressor_ans_t::compress(const void *data, uint32_t size,
   }
 
   // Single-component integer path: try element delta
-  bool is_morton = (format.type == type_m32 || format.type == type_m64 || format.type == type_m128 || format.type == type_m192);
+  bool is_morton = (format.type == points_type_m32 || format.type == points_type_m64 || format.type == points_type_m128 || format.type == points_type_m192);
   int elem_size = size_for_format(format.type);
-  if (format.components == components_1 && !is_morton && !is_r64 && (elem_size == 1 || elem_size == 2 || elem_size == 4 || elem_size == 8))
+  if (format.components == points_components_1 && !is_morton && !is_r64 && (elem_size == 1 || elem_size == 2 || elem_size == 4 || elem_size == 8))
   {
     // Path A: standard (no delta)
     std::vector<uint8_t> working_a;
@@ -485,7 +485,7 @@ compression_result_t compressor_ans_t::decompress(const void *data, uint32_t siz
     uint32_t perm_bytes = f64_count * 2;
     permutation.resize(f64_count);
 
-    error_t perm_error;
+    points_error_t perm_error;
     if (!fse_decompress_data(src, perm_compressed_size, reinterpret_cast<uint8_t *>(permutation.data()), perm_bytes, perm_error))
     {
       result.error.code = -1;
@@ -540,7 +540,7 @@ compression_result_t compressor_ans_t::decompress(const void *data, uint32_t siz
   // Decompress
   std::vector<uint8_t> decompressed_compacted(compacted_size);
 
-  error_t decomp_error;
+  points_error_t decomp_error;
   if (!fse_decompress_data(src, compressed_payload_size, decompressed_compacted.data(), compacted_size, decomp_error))
   {
     result.error = decomp_error;

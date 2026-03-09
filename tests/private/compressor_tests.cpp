@@ -17,7 +17,6 @@
 #include <random>
 #include <vector>
 
-using namespace points;
 using namespace points::converter;
 
 static std::vector<uint8_t> make_random_buffer(uint32_t size, uint32_t seed = 42)
@@ -53,7 +52,7 @@ TEST_CASE("blosc2 round trip")
   SUBCASE("random u8x1")
   {
     auto data = make_random_buffer(1024);
-    point_format_t fmt{type_u8, components_1};
+    point_format_t fmt{points_type_u8, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -65,7 +64,7 @@ TEST_CASE("blosc2 round trip")
   SUBCASE("random u32x3")
   {
     auto data = make_random_buffer(4 * 3 * 100);
-    point_format_t fmt{type_u32, components_3};
+    point_format_t fmt{points_type_u32, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -77,7 +76,7 @@ TEST_CASE("blosc2 round trip")
   SUBCASE("random r64x3")
   {
     auto data = make_random_buffer(8 * 3 * 50);
-    point_format_t fmt{type_r64, components_3};
+    point_format_t fmt{points_type_r64, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -89,7 +88,7 @@ TEST_CASE("blosc2 round trip")
   SUBCASE("constant buffer")
   {
     auto data = make_constant_buffer(1024, 0x42);
-    point_format_t fmt{type_u8, components_1};
+    point_format_t fmt{points_type_u8, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -101,7 +100,7 @@ TEST_CASE("blosc2 round trip")
   SUBCASE("sorted u32 morton")
   {
     auto data = make_sorted_u32_buffer(200);
-    point_format_t fmt{type_m32, components_1};
+    point_format_t fmt{points_type_m32, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -113,7 +112,7 @@ TEST_CASE("blosc2 round trip")
   SUBCASE("small buffer")
   {
     auto data = make_random_buffer(32);
-    point_format_t fmt{type_u8, components_1};
+    point_format_t fmt{points_type_u8, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -132,7 +131,7 @@ TEST_CASE("zstd round trip")
   SUBCASE("random u8x1")
   {
     auto data = make_random_buffer(1024);
-    point_format_t fmt{type_u8, components_1};
+    point_format_t fmt{points_type_u8, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -144,7 +143,7 @@ TEST_CASE("zstd round trip")
   SUBCASE("random u32x3")
   {
     auto data = make_random_buffer(4 * 3 * 100);
-    point_format_t fmt{type_u32, components_3};
+    point_format_t fmt{points_type_u32, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -163,7 +162,7 @@ TEST_CASE("zstd round trip")
       uint64_t val = static_cast<uint64_t>(i * 100);
       memcpy(data + i * 24, &val, 8);
     }
-    point_format_t fmt{type_m192, components_1};
+    point_format_t fmt{points_type_m192, points_components_1};
     auto compressed = compressor.compress(data, sizeof(data), fmt, 5);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -181,7 +180,7 @@ TEST_CASE("zstd round trip")
       uint16_t val = 0x1234;
       memcpy(data.data() + i * 2, &val, 2);
     }
-    point_format_t fmt{type_u16, components_1};
+    point_format_t fmt{points_type_u16, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -202,7 +201,7 @@ TEST_CASE("zstd round trip")
       memcpy(data.data() + i * 8, &varying, 4);
       memcpy(data.data() + i * 8 + 4, &constant, 4);
     }
-    point_format_t fmt{type_u32, components_2};
+    point_format_t fmt{points_type_u32, points_components_2};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -221,7 +220,7 @@ TEST_CASE("huff0 round trip")
   SUBCASE("random u8x1")
   {
     auto data = make_random_buffer(1024);
-    point_format_t fmt{type_u8, components_1};
+    point_format_t fmt{points_type_u8, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -233,7 +232,7 @@ TEST_CASE("huff0 round trip")
   SUBCASE("random u32x3")
   {
     auto data = make_random_buffer(4 * 3 * 100);
-    point_format_t fmt{type_u32, components_3};
+    point_format_t fmt{points_type_u32, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -251,7 +250,7 @@ TEST_CASE("huff0 round trip")
       uint64_t val = static_cast<uint64_t>(i * 100);
       memcpy(data + i * 24, &val, 8);
     }
-    point_format_t fmt{type_m192, components_1};
+    point_format_t fmt{points_type_m192, points_components_1};
     auto compressed = compressor.compress(data, sizeof(data), fmt, 5);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -263,7 +262,7 @@ TEST_CASE("huff0 round trip")
   SUBCASE("constant buffer")
   {
     auto data = make_constant_buffer(1024, 0x42);
-    point_format_t fmt{type_u8, components_1};
+    point_format_t fmt{points_type_u8, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -275,7 +274,7 @@ TEST_CASE("huff0 round trip")
   SUBCASE("large buffer >128KB multi-chunk")
   {
     auto data = make_random_buffer(200000, 99);
-    point_format_t fmt{type_u8, components_1};
+    point_format_t fmt{points_type_u8, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -324,7 +323,7 @@ TEST_CASE("try_compress_constant constant buffer")
 {
   uint32_t count = 100;
   std::vector<uint32_t> data(count, 0xDEADBEEF);
-  point_format_t fmt{type_u32, components_1};
+  point_format_t fmt{points_type_u32, points_components_1};
   auto result = try_compress_constant(data.data(), uint32_t(count * 4), fmt);
   REQUIRE(result.data.get() != nullptr);
   REQUIRE(result.size > 0);
@@ -338,7 +337,7 @@ TEST_CASE("try_compress_constant constant buffer")
 TEST_CASE("try_compress_constant non-constant buffer")
 {
   uint32_t data[] = {1, 2, 3, 4};
-  point_format_t fmt{type_u32, components_1};
+  point_format_t fmt{points_type_u32, points_components_1};
   auto result = try_compress_constant(data, sizeof(data), fmt);
   REQUIRE(result.data.get() == nullptr);
 }
@@ -354,7 +353,7 @@ TEST_CASE("try_compress_constant u8x3")
     data[i * 3 + 1] = 0x22;
     data[i * 3 + 2] = 0x33;
   }
-  point_format_t fmt{type_u8, components_3};
+  point_format_t fmt{points_type_u8, points_components_3};
   auto result = try_compress_constant(data.data(), uint32_t(data.size()), fmt);
   REQUIRE(result.data.get() != nullptr);
   REQUIRE(result.size > 0);
@@ -370,7 +369,7 @@ TEST_CASE("try_compress_constant u8x3")
 TEST_CASE("decompress_any dispatches blosc2")
 {
   auto data = make_random_buffer(1024);
-  point_format_t fmt{type_u8, components_1};
+  point_format_t fmt{points_type_u8, points_components_1};
   compressor_blosc2_t compressor;
   auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
   REQUIRE(compressed.error.code == 0);
@@ -384,7 +383,7 @@ TEST_CASE("decompress_any dispatches blosc2")
 TEST_CASE("decompress_any dispatches zstd")
 {
   auto data = make_random_buffer(1024);
-  point_format_t fmt{type_u8, components_1};
+  point_format_t fmt{points_type_u8, points_components_1};
   compressor_zstd_t compressor;
   auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
   REQUIRE(compressed.error.code == 0);
@@ -398,7 +397,7 @@ TEST_CASE("decompress_any dispatches zstd")
 TEST_CASE("decompress_any dispatches huff0")
 {
   auto data = make_random_buffer(1024);
-  point_format_t fmt{type_u8, components_1};
+  point_format_t fmt{points_type_u8, points_components_1};
   compressor_huff0_t compressor;
   auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
   REQUIRE(compressed.error.code == 0);
@@ -413,7 +412,7 @@ TEST_CASE("decompress_any dispatches constant")
 {
   uint32_t count = 100;
   std::vector<uint32_t> data(count, 0xCAFEBABE);
-  point_format_t fmt{type_u32, components_1};
+  point_format_t fmt{points_type_u32, points_components_1};
   auto compressed = try_compress_constant(data.data(), uint32_t(count * 4), fmt);
   REQUIRE(compressed.data.get() != nullptr);
 
@@ -466,7 +465,7 @@ TEST_CASE("create_compressor returns correct types")
 TEST_CASE("compression_stats accumulate")
 {
   compression_stats_t stats;
-  point_format_t fmt{type_u32, components_3};
+  point_format_t fmt{points_type_u32, points_components_3};
 
   stats.accumulate("position", fmt, 1000, 500);
   REQUIRE(stats.total_buffer_count == 1);
@@ -483,7 +482,7 @@ TEST_CASE("compression_stats accumulate")
   REQUIRE(stats.per_attribute[0].uncompressed_bytes == 3000);
   REQUIRE(stats.per_attribute[0].compressed_bytes == 1300);
 
-  point_format_t color_fmt{type_u8, components_4};
+  point_format_t color_fmt{points_type_u8, points_components_4};
   stats.accumulate("color", color_fmt, 500, 200);
   REQUIRE(stats.total_buffer_count == 3);
   REQUIRE(stats.per_attribute.size() == 2);
@@ -496,8 +495,8 @@ TEST_CASE("compression_stats serialize/deserialize round trip")
   compression_stats_t stats;
   stats.input_file_count = 5;
   stats.method = compression_method_t::zstd;
-  point_format_t fmt1{type_u32, components_3};
-  point_format_t fmt2{type_u8, components_4};
+  point_format_t fmt1{points_type_u32, points_components_3};
+  point_format_t fmt2{points_type_u8, points_components_4};
   stats.accumulate("position", fmt1, 10000, 5000);
   stats.accumulate("position", fmt1, 20000, 8000);
   stats.accumulate("color", fmt2, 5000, 2000);
@@ -630,7 +629,7 @@ TEST_CASE("zstd r64 offset compression round trip")
 
   auto *data = reinterpret_cast<uint8_t *>(values.data());
   uint32_t size = count * 8;
-  point_format_t fmt{type_r64, components_1};
+  point_format_t fmt{points_type_r64, points_components_1};
 
   auto compressed = compressor.compress(data, size, fmt, 0);
   REQUIRE(compressed.error.code == 0);
@@ -651,7 +650,7 @@ TEST_CASE("zstd r64 small buffer round trip")
 
   double values[] = {1.0e9 + 0.5, 1.0e9 + 1.5, 1.0e9 + 0.1};
   uint32_t size = sizeof(values);
-  point_format_t fmt{type_r64, components_1};
+  point_format_t fmt{points_type_r64, points_components_1};
 
   auto compressed = compressor.compress(reinterpret_cast<uint8_t *>(values), size, fmt, 0);
   REQUIRE(compressed.error.code == 0);
@@ -678,7 +677,7 @@ TEST_CASE("huff0 r64 offset compression round trip")
 
   auto *data = reinterpret_cast<uint8_t *>(values.data());
   uint32_t size = count * 8;
-  point_format_t fmt{type_r64, components_1};
+  point_format_t fmt{points_type_r64, points_components_1};
 
   auto compressed = compressor.compress(data, size, fmt, 0);
   REQUIRE(compressed.error.code == 0);
@@ -697,7 +696,7 @@ TEST_CASE("huff0 r64 offset compression round trip")
 TEST_CASE("compression_stats accumulate with min/max")
 {
   compression_stats_t stats;
-  point_format_t fmt{type_r64, components_1};
+  point_format_t fmt{points_type_r64, points_components_1};
 
   stats.accumulate("gps_time", fmt, 8000, 2000, 1.0e9, 1.0e9 + 50.0);
   REQUIRE(stats.per_attribute.size() == 1);
@@ -712,14 +711,14 @@ TEST_CASE("compression_stats accumulate with min/max")
 TEST_CASE("compression_stats match by name and format")
 {
   compression_stats_t stats;
-  point_format_t fmt_m64{type_m64, components_1};
-  point_format_t fmt_m128{type_m128, components_1};
+  point_format_t fmt_m64{points_type_m64, points_components_1};
+  point_format_t fmt_m128{points_type_m128, points_components_1};
 
   stats.accumulate("xyz", fmt_m64, 1000, 500);
   stats.accumulate("xyz", fmt_m128, 2000, 800);
   REQUIRE(stats.per_attribute.size() == 2);
-  REQUIRE(stats.per_attribute[0].format.type == type_m64);
-  REQUIRE(stats.per_attribute[1].format.type == type_m128);
+  REQUIRE(stats.per_attribute[0].format.type == points_type_m64);
+  REQUIRE(stats.per_attribute[1].format.type == points_type_m128);
 }
 
 TEST_CASE("compression_stats v2 serialize/deserialize with min/max")
@@ -727,7 +726,7 @@ TEST_CASE("compression_stats v2 serialize/deserialize with min/max")
   compression_stats_t stats;
   stats.input_file_count = 10;
   stats.method = compression_method_t::zstd;
-  point_format_t fmt{type_r64, components_1};
+  point_format_t fmt{points_type_r64, points_components_1};
   stats.accumulate("gps_time", fmt, 8000, 2000, 1.0e9, 1.0e9 + 100.0);
 
   uint32_t serialized_size = 0;
@@ -827,7 +826,7 @@ TEST_CASE("zstd u16x3 decorrelated compression round trip")
   SUBCASE("correlated data")
   {
     auto data = make_correlated_u16x3_buffer(1000, 42);
-    point_format_t fmt{type_u16, components_3};
+    point_format_t fmt{points_type_u16, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -839,7 +838,7 @@ TEST_CASE("zstd u16x3 decorrelated compression round trip")
   SUBCASE("random data")
   {
     auto data = make_random_buffer(6 * 500, 99);
-    point_format_t fmt{type_u16, components_3};
+    point_format_t fmt{points_type_u16, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -851,7 +850,7 @@ TEST_CASE("zstd u16x3 decorrelated compression round trip")
   SUBCASE("small buffer")
   {
     auto data = make_correlated_u16x3_buffer(3, 11);
-    point_format_t fmt{type_u16, components_3};
+    point_format_t fmt{points_type_u16, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -868,7 +867,7 @@ TEST_CASE("huff0 u16x3 decorrelated compression round trip")
   SUBCASE("correlated data")
   {
     auto data = make_correlated_u16x3_buffer(1000, 42);
-    point_format_t fmt{type_u16, components_3};
+    point_format_t fmt{points_type_u16, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -880,7 +879,7 @@ TEST_CASE("huff0 u16x3 decorrelated compression round trip")
   SUBCASE("random data")
   {
     auto data = make_random_buffer(6 * 500, 99);
-    point_format_t fmt{type_u16, components_3};
+    point_format_t fmt{points_type_u16, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -892,7 +891,7 @@ TEST_CASE("huff0 u16x3 decorrelated compression round trip")
   SUBCASE("small buffer")
   {
     auto data = make_correlated_u16x3_buffer(3, 11);
-    point_format_t fmt{type_u16, components_3};
+    point_format_t fmt{points_type_u16, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -977,7 +976,7 @@ TEST_CASE("decorrelate + delta round trip")
 TEST_CASE("compression_stats accumulate with is_lod")
 {
   compression_stats_t stats;
-  point_format_t fmt{type_u32, components_3};
+  point_format_t fmt{points_type_u32, points_components_3};
 
   // Source buffer
   stats.accumulate("position", fmt, 1000, 500, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, false);
@@ -1000,7 +999,7 @@ TEST_CASE("compression_stats accumulate with is_lod")
   REQUIRE(stats.per_attribute[0].lod_compressed_bytes == 800);
 
   // Another LOD buffer for a new attribute
-  point_format_t color_fmt{type_u8, components_4};
+  point_format_t color_fmt{points_type_u8, points_components_4};
   stats.accumulate("color", color_fmt, 500, 200, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, true);
   REQUIRE(stats.total_buffer_count == 3);
   REQUIRE(stats.lod_buffer_count == 2);
@@ -1014,8 +1013,8 @@ TEST_CASE("compression_stats v4 serialize/deserialize with LOD fields")
   compression_stats_t stats;
   stats.input_file_count = 3;
   stats.method = compression_method_t::zstd;
-  point_format_t fmt1{type_u32, components_3};
-  point_format_t fmt2{type_u8, components_4};
+  point_format_t fmt1{points_type_u32, points_components_3};
+  point_format_t fmt2{points_type_u8, points_components_4};
 
   // Mix of source and LOD
   stats.accumulate("position", fmt1, 10000, 5000, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, false);
@@ -1125,7 +1124,7 @@ TEST_CASE("zstd element delta round trip gradually changing u16x1")
     val = static_cast<uint16_t>(val + diff(gen));
     memcpy(data.data() + i * 2, &val, 2);
   }
-  point_format_t fmt{type_u16, components_1};
+  point_format_t fmt{points_type_u16, points_components_1};
   auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
   REQUIRE(compressed.error.code == 0);
   auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1138,7 +1137,7 @@ TEST_CASE("zstd element delta round trip random u16x1")
 {
   compressor_zstd_t compressor;
   auto data = make_random_buffer(2000, 99);
-  point_format_t fmt{type_u16, components_1};
+  point_format_t fmt{points_type_u16, points_components_1};
   auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
   REQUIRE(compressed.error.code == 0);
   auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1160,7 +1159,7 @@ TEST_CASE("huff0 element delta round trip gradually changing u16x1")
     val = static_cast<uint16_t>(val + diff(gen));
     memcpy(data.data() + i * 2, &val, 2);
   }
-  point_format_t fmt{type_u16, components_1};
+  point_format_t fmt{points_type_u16, points_components_1};
   auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
   REQUIRE(compressed.error.code == 0);
   auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1176,7 +1175,7 @@ TEST_CASE("zstd element delta round trip u8x1")
   std::vector<uint8_t> data(count);
   for (uint32_t i = 0; i < count; i++)
     data[i] = static_cast<uint8_t>(100 + (i % 5));
-  point_format_t fmt{type_u8, components_1};
+  point_format_t fmt{points_type_u8, points_components_1};
   auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
   REQUIRE(compressed.error.code == 0);
   auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1195,7 +1194,7 @@ TEST_CASE("zstd element delta round trip u32x1")
     uint32_t val = 100000 + i * 10;
     memcpy(data.data() + i * 4, &val, 4);
   }
-  point_format_t fmt{type_u32, components_1};
+  point_format_t fmt{points_type_u32, points_components_1};
   auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
   REQUIRE(compressed.error.code == 0);
   auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1210,7 +1209,7 @@ TEST_CASE("compression_stats v3 backward compat deserialize has zero LOD")
   compression_stats_t stats;
   stats.input_file_count = 5;
   stats.method = compression_method_t::zstd;
-  point_format_t fmt{type_u32, components_3};
+  point_format_t fmt{points_type_u32, points_components_3};
   stats.accumulate("position", fmt, 10000, 5000);
 
   // Manually build v3 serialized blob
@@ -1237,8 +1236,8 @@ TEST_CASE("compression_stats v3 backward compat deserialize has zero LOD")
   uint32_t ns = 8;
   memcpy(ptr, &ns, 4); ptr += 4;
   memcpy(ptr, "position", 8); ptr += 8;
-  uint8_t type_val = static_cast<uint8_t>(type_u32);
-  uint8_t comp_val = static_cast<uint8_t>(components_3);
+  uint8_t type_val = static_cast<uint8_t>(points_type_u32);
+  uint8_t comp_val = static_cast<uint8_t>(points_components_3);
   memcpy(ptr, &type_val, 1); ptr += 1;
   memcpy(ptr, &comp_val, 1); ptr += 1;
   ptr += 2; // padding
@@ -1277,7 +1276,7 @@ TEST_CASE("ans round trip")
   SUBCASE("random u8x1")
   {
     auto data = make_random_buffer(1024);
-    point_format_t fmt{type_u8, components_1};
+    point_format_t fmt{points_type_u8, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1289,7 +1288,7 @@ TEST_CASE("ans round trip")
   SUBCASE("random u32x3")
   {
     auto data = make_random_buffer(4 * 3 * 100);
-    point_format_t fmt{type_u32, components_3};
+    point_format_t fmt{points_type_u32, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1307,7 +1306,7 @@ TEST_CASE("ans round trip")
       uint64_t val = static_cast<uint64_t>(i * 100);
       memcpy(data + i * 24, &val, 8);
     }
-    point_format_t fmt{type_m192, components_1};
+    point_format_t fmt{points_type_m192, points_components_1};
     auto compressed = compressor.compress(data, sizeof(data), fmt, 5);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1319,7 +1318,7 @@ TEST_CASE("ans round trip")
   SUBCASE("constant buffer")
   {
     auto data = make_constant_buffer(1024, 0x42);
-    point_format_t fmt{type_u8, components_1};
+    point_format_t fmt{points_type_u8, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1331,7 +1330,7 @@ TEST_CASE("ans round trip")
   SUBCASE("u16x3 correlated")
   {
     auto data = make_correlated_u16x3_buffer(1000, 42);
-    point_format_t fmt{type_u16, components_3};
+    point_format_t fmt{points_type_u16, points_components_3};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1352,7 +1351,7 @@ TEST_CASE("ans round trip")
       val = static_cast<uint16_t>(val + diff(gen));
       memcpy(data.data() + i * 2, &val, 2);
     }
-    point_format_t fmt{type_u16, components_1};
+    point_format_t fmt{points_type_u16, points_components_1};
     auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
     REQUIRE(compressed.error.code == 0);
     auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
@@ -1372,7 +1371,7 @@ TEST_CASE("ans round trip")
 
     auto *data = reinterpret_cast<uint8_t *>(values.data());
     uint32_t size = count * 8;
-    point_format_t fmt{type_r64, components_1};
+    point_format_t fmt{points_type_r64, points_components_1};
 
     auto compressed = compressor.compress(data, size, fmt, 0);
     REQUIRE(compressed.error.code == 0);
@@ -1390,7 +1389,7 @@ TEST_CASE("ans round trip")
 TEST_CASE("decompress_any dispatches ans")
 {
   auto data = make_random_buffer(1024);
-  point_format_t fmt{type_u8, components_1};
+  point_format_t fmt{points_type_u8, points_components_1};
   compressor_ans_t compressor;
   auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
   REQUIRE(compressed.error.code == 0);
@@ -1410,9 +1409,9 @@ TEST_CASE("create_compressor returns ans")
 
 // --- LOD attribute format excludes original_order ---
 
-static attributes_t make_test_attributes(std::initializer_list<std::tuple<const char *, type_t, components_t>> specs)
+static points_converter_attributes_t make_test_attributes(std::initializer_list<std::tuple<const char *, points_type_t, points_components_t>> specs)
 {
-  attributes_t attrs;
+  points_converter_attributes_t attrs;
   for (auto &[name, type, comp] : specs)
   {
     auto len = uint32_t(strlen(name));
@@ -1428,9 +1427,9 @@ TEST_CASE("LOD attribute format excludes original_order")
 {
   attributes_configs_t configs;
   auto attrs = make_test_attributes({
-    {POINTS_ATTRIBUTE_XYZ, type_m64, components_1},
-    {POINTS_ATTRIBUTE_RGB, type_u8, components_3},
-    {POINTS_ATTRIBUTE_ORIGINAL_ORDER, type_u32, components_1},
+    {POINTS_ATTRIBUTE_XYZ, points_type_m64, points_components_1},
+    {POINTS_ATTRIBUTE_RGB, points_type_u8, points_components_3},
+    {POINTS_ATTRIBUTE_ORIGINAL_ORDER, points_type_u32, points_components_1},
   });
   REQUIRE(attrs.attributes.size() == 3);
   REQUIRE(attrs.attribute_names.size() == 3);
@@ -1454,9 +1453,9 @@ TEST_CASE("LOD attribute format without original_order is unchanged")
 {
   attributes_configs_t configs;
   auto attrs = make_test_attributes({
-    {POINTS_ATTRIBUTE_XYZ, type_m64, components_1},
-    {POINTS_ATTRIBUTE_RGB, type_u8, components_3},
-    {POINTS_ATTRIBUTE_INTENSITY, type_u16, components_1},
+    {POINTS_ATTRIBUTE_XYZ, points_type_m64, points_components_1},
+    {POINTS_ATTRIBUTE_RGB, points_type_u8, points_components_3},
+    {POINTS_ATTRIBUTE_INTENSITY, points_type_u16, points_components_1},
   });
   auto source_id = configs.get_attribute_config_index(std::move(attrs));
   auto mapping = configs.get_lod_attribute_mapping(1, &source_id, &source_id + 1);

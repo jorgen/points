@@ -91,8 +91,8 @@ struct read_request_t
   void wait_for_read();
 
   std::shared_ptr<uint8_t[]> buffer;
-  buffer_t buffer_info;
-  error_t error;
+  points_converter_buffer_t buffer_info;
+  points_error_t error;
 
   bool _done = false;
   std::mutex _mutex;
@@ -102,22 +102,22 @@ struct read_request_t
 class storage_handler_t
 {
 public:
-  storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written, vio::event_pipe_t<error_t> &storage_error_pipe, error_t &error);
+  storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written, vio::event_pipe_t<points_error_t> &storage_error_pipe, points_error_t &error);
   ~storage_handler_t();
   [[nodiscard]] bool file_exists() const
   {
     return _file_exists;
   }
-  [[nodiscard]] error_t read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
+  [[nodiscard]] points_error_t read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
                                    std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size);
-  [[nodiscard]] error_t deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
-  [[nodiscard]] error_t upgrade_to_write(bool truncate);
+  [[nodiscard]] points_error_t deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
+  [[nodiscard]] points_error_t upgrade_to_write(bool truncate);
 
   void write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
-             std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)> done);
-  void write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)> done);
-  void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done);
-  void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> done);
+             std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const points_error_t &error)> done);
+  void write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&error)> done);
+  void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, points_error_t &&error)> done);
+  void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> done);
 
   std::shared_ptr<read_request_t> read(storage_location_t location);
 
@@ -131,23 +131,23 @@ public:
 
 private:
   void handle_write_events(
-    std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event);
-  void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)>> &&event);
-  void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, error_t &&error)> &&done);
-  void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done);
+    std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const points_error_t &error)>> &&event);
+  void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)>> &&event);
+  void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, points_error_t &&error)> &&done);
+  void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> &&done);
   void handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                          const storage_location_t &compression_stats, const storage_location_t &perf_stats, std::function<void(error_t &&error)> &&done);
+                          const storage_location_t &compression_stats, const storage_location_t &perf_stats, std::function<void(points_error_t &&error)> &&done);
   void handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location);
 
   vio::task_t<void> do_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location);
   vio::task_t<void> do_write_events(storage_header_t header, attributes_id_t attributes_id, attribute_buffers_t attribute_buffers,
-                                    std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)> done);
+                                    std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const points_error_t &error)> done);
   vio::task_t<void> do_write_trees(std::vector<tree_id_t> tree_ids, std::vector<serialized_tree_t> serialized_trees,
-                                   std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)> done);
-  vio::task_t<void> do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done);
-  vio::task_t<void> do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(error_t &&error)> done);
+                                   std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)> done);
+  vio::task_t<void> do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, points_error_t &&error)> done);
+  vio::task_t<void> do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(points_error_t &&error)> done);
   vio::task_t<void> do_write_index(free_blob_manager_t new_blob_manager, storage_location_t free_blobs, storage_location_t attribute_configs, storage_location_t tree_registry,
-                                   storage_location_t compression_stats, storage_location_t perf_stats, std::function<void(error_t &&error)> done);
+                                   storage_location_t compression_stats, storage_location_t perf_stats, std::function<void(points_error_t &&error)> done);
   vio::task_t<void> do_read_request(std::shared_ptr<read_request_t> read_request, storage_location_t location);
 
   std::string _file_name;
@@ -177,11 +177,11 @@ private:
   ankerl::unordered_dense::map<uint32_t, uint64_t> _input_file_sizes;
 
   vio::event_pipe_t<void> &_index_written;
-  vio::event_pipe_t<error_t> &_storage_error;
-  vio::event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const error_t &error)>>> _write_event_pipe;
-  vio::event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&error)>>> _write_trees_pipe;
-  vio::event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, error_t &&error)>> _write_tree_registry_pipe;
-  vio::event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(error_t &&error)>> _write_blob_locations_and_update_header_pipe;
+  vio::event_pipe_t<points_error_t> &_storage_error;
+  vio::event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const points_error_t &error)>>> _write_event_pipe;
+  vio::event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&error)>>> _write_trees_pipe;
+  vio::event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, points_error_t &&error)>> _write_tree_registry_pipe;
+  vio::event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(points_error_t &&error)>> _write_blob_locations_and_update_header_pipe;
   vio::event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;
 
   lru_cache_t<cache_key_t, cache_value_t, cache_key_hash_t> _read_cache;
@@ -189,7 +189,7 @@ private:
   std::mutex _mutex;
 };
 
-static bool deserialize_points(const buffer_t &data, storage_header_t &header, buffer_t &point_data, error_t &error)
+static bool deserialize_points(const points_converter_buffer_t &data, storage_header_t &header, points_converter_buffer_t &point_data, points_error_t &error)
 {
   if (data.size < sizeof(header))
   {
@@ -220,8 +220,8 @@ struct read_only_points_t
   storage_location_t location;
   std::shared_ptr<read_request_t> read_request;
   storage_header_t header;
-  buffer_t data;
-  error_t error;
+  points_converter_buffer_t data;
+  points_error_t error;
 };
 
 struct read_attribute_t
@@ -238,8 +238,8 @@ struct read_attribute_t
   storage_handler_t &storage_handler;
   storage_location_t location;
   std::shared_ptr<read_request_t> read_request;
-  buffer_t data;
-  error_t error;
+  points_converter_buffer_t data;
+  points_error_t error;
 };
 
 } // namespace points::converter

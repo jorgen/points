@@ -157,10 +157,10 @@ tree_id_t tree_add_points(tree_registry_t &tree_registry, storage_handler_t &cac
 
 serialized_tree_t tree_serialize(const tree_t &tree);
 
-bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, error_t &error);
+bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, points_error_t &error);
 
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry);
 
-[[nodiscard]] error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry);
+[[nodiscard]] points_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry);
 } // namespace points::converter
 

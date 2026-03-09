@@ -24,18 +24,11 @@
 extern "C" {
 #endif
 
-namespace points
-{
-namespace render
-{
-struct flat_points_data_source_t;
-POINTS_RENDER_EXPORT struct flat_points_data_source_t *flat_points_data_source_create(struct renderer_t *renderer, const char *url, int url_size);
-POINTS_RENDER_EXPORT void flat_points_data_source_destroy(struct flat_points_data_source_t *flat_points_data_source);
-POINTS_RENDER_EXPORT struct data_source_t flat_points_data_source_get(struct flat_points_data_source_t *flat_points_data_source);
-POINTS_RENDER_EXPORT void flat_points_get_aabb(struct flat_points_data_source_t *points, double aabb_min[3], double aabb_max[3]);
-}
-
-} // namespace points
+struct points_flat_points_data_source_t;
+POINTS_RENDER_EXPORT struct points_flat_points_data_source_t *points_flat_points_data_source_create(struct points_renderer_t *renderer, const char *url, int url_size);
+POINTS_RENDER_EXPORT void points_flat_points_data_source_destroy(struct points_flat_points_data_source_t *flat_points_data_source);
+POINTS_RENDER_EXPORT struct points_data_source_t points_flat_points_data_source_get(struct points_flat_points_data_source_t *flat_points_data_source);
+POINTS_RENDER_EXPORT void points_flat_points_get_aabb(struct points_flat_points_data_source_t *points, double aabb_min[3], double aabb_max[3]);
 
 #ifdef __cplusplus
 }

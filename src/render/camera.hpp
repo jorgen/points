@@ -23,15 +23,14 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-
-namespace points::render
-{
-struct camera_t
+struct points_camera_t
 {
   glm::dmat4 view;
   glm::dmat4 projection;
 };
 
+namespace points::render
+{
 template <typename R>
 inline R to_radians(R degrees)
 {
@@ -43,28 +42,23 @@ inline R to_degrees(R radians)
 {
   return radians * (R(180.0) / R(M_PI));
 }
+} // namespace points::render
 
-namespace camera_manipulator
+struct points_arcball_t
 {
-struct arcball_t
-{
-  camera_t *camera;
-  glm::dvec3 center;  // orbit point (world space)
-  glm::dvec3 up;      // world up axis (default Y-up)
-  double distance;     // eye-to-center distance
-  double yaw;          // horizontal orbit angle (radians, around up axis)
-  double pitch;        // vertical orbit angle (radians, clamped ±89°)
+  points_camera_t *camera;
+  glm::dvec3 center;
+  glm::dvec3 up;
+  double distance;
+  double yaw;
+  double pitch;
 };
 
-struct fps_t
+struct points_fps_t
 {
-  camera_t *camera;
+  points_camera_t *camera;
   glm::dmat4 inverse_view;
   double yaw;
   double pitch;
   double roll;
 };
-
-} // namespace camera_manipulator
-} // namespace points::render
-

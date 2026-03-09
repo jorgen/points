@@ -24,42 +24,34 @@
 extern "C" {
 #endif
 
-namespace points
-{
-namespace render
-{
-
-struct draw_buffer_t
+struct points_draw_buffer_t
 {
   int buffer_mapping;
   void *user_ptr;
 };
 
-enum draw_type_t
+enum points_draw_type_t
 {
-  aabb_triangle_mesh,
-  skybox_triangle,
-  flat_points,
-  dyn_points_1,
-  dyn_points_3,
-  dyn_points_crossfade,
-  axis_gizmo_lines,
-  origin_anchor_mesh,
-  environment_bg,
-  node_bbox_lines,
+  points_aabb_triangle_mesh,
+  points_skybox_triangle,
+  points_flat_points,
+  points_dyn_points_1,
+  points_dyn_points_3,
+  points_dyn_points_crossfade,
+  points_axis_gizmo_lines,
+  points_origin_anchor_mesh,
+  points_environment_bg,
+  points_node_bbox_lines,
 };
 
-struct draw_group_t
+struct points_draw_group_t
 {
-  draw_type_t draw_type;
-  struct draw_buffer_t *buffers;
+  enum points_draw_type_t draw_type;
+  struct points_draw_buffer_t *buffers;
   int buffers_size;
   int draw_size;
   int lod_level;
 };
-
-} // namespace render
-} // namespace points
 
 #ifdef __cplusplus
 }

@@ -66,14 +66,14 @@ struct tree_test_infrastructure : vio::about_to_block_t
 
     cache_file_handler.write(header, attribute_id, std::move(buffers),
                              [this](const points::converter::storage_header_t &header, points::converter::attributes_id_t attributes_id, std::vector<points::converter::storage_location_t> &&location,
-                                    const points::error_t &error) { handle_write_done(header, attributes_id, std::move(location)); });
+                                    const points_error_t &error) { handle_write_done(header, attributes_id, std::move(location)); });
   }
 
   void handle_index_written()
   {
     fmt::print("index written\n");
   }
-  void handle_file_error(const points::error_t &&error)
+  void handle_file_error(const points_error_t &&error)
   {
     fmt::print("error: {}\n", error.msg);
   }
@@ -97,7 +97,7 @@ struct tree_test_infrastructure : vio::about_to_block_t
   {
   }
 
-  points::error_t error;
+  points_error_t error;
   vio::thread_pool_t worker_thread_pool;
   vio::thread_with_event_loop_t event_loop_thread;
   vio::event_loop_t &event_loop;
@@ -106,7 +106,7 @@ struct tree_test_infrastructure : vio::about_to_block_t
   points::converter::tree_registry_t tree_registry;
   points::converter::attributes_configs_t attributes_config;
   vio::event_pipe_t<void> index_written;
-  vio::event_pipe_t<points::error_t> cache_file_error;
+  vio::event_pipe_t<points_error_t> cache_file_error;
   points::converter::perf_stats_t perf_stats;
   points::converter::storage_handler_t cache_file_handler;
 
@@ -117,16 +117,16 @@ struct tree_test_infrastructure : vio::about_to_block_t
   write_done_event_t write_done_event;
 };
 
-void attributes_add_attributecpp(points::converter::attributes_t &attr, const std::string &name, points::type_t format, points::components_t components)
+void attributes_add_attributecpp(points_converter_attributes_t &attr, const std::string &name, points_type_t format, points_components_t components)
 {
-  attributes_add_attribute(&attr, name.c_str(), uint32_t(name.size()), format, components);
+  points_converter_attributes_add_attribute(&attr, name.c_str(), uint32_t(name.size()), format, components);
 }
 
 write_done_event_t create_points(tree_test_infrastructure &test_util, uint64_t min, uint64_t max, uint64_t point_count = 256)
 {
-  points::converter::attributes_t attrs;
-  attributes_add_attributecpp(attrs, POINTS_ATTRIBUTE_XYZ, points::type_m64, points::components_1);
-  attributes_add_attributecpp(attrs, POINTS_ATTRIBUTE_INTENSITY, points::type_u8, points::components_1);
+  points_converter_attributes_t attrs;
+  attributes_add_attributecpp(attrs, POINTS_ATTRIBUTE_XYZ, points_type_m64, points_components_1);
+  attributes_add_attributecpp(attrs, POINTS_ATTRIBUTE_INTENSITY, points_type_u8, points_components_1);
   auto attr_id = test_util.attributes_config.get_attribute_config_index(std::move(attrs));
   auto attr_def = test_util.attributes_config.get_format_components(attr_id);
 
@@ -478,7 +478,7 @@ static points::converter::input_data_reference_t register_test_file(points::conv
 static void pre_init_test_file(points::converter::input_data_source_registry_t &registry, const points::converter::tree_config_t &tree_config, points::converter::input_data_id_t id, double min_x)
 {
   double min[3] = {min_x, 0.0, 0.0};
-  registry.register_pre_init_result(tree_config, id, true, min, 100, 16);
+  registry.register_pre_init_result(tree_config, id, true, min, 100, 16, 0);
 
   // Set morton_min/max on the source so get_done_morton returns meaningful boundaries
   points::converter::morton::morton192_t morton_min = {};

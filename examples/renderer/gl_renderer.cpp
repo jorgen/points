@@ -42,42 +42,42 @@ void *cast_from_uint(GLuint data)
   return reinterpret_cast<void *>(p);
 }
 
-int type_to_glformat(points::type_t type)
+int type_to_glformat(points_type_t type)
 {
   switch (type)
   {
-  case points::type_u8:
+  case points_type_u8:
     return GL_UNSIGNED_BYTE;
-  case points::type_i8:
+  case points_type_i8:
     return GL_BYTE;
-  case points::type_u16:
+  case points_type_u16:
     return GL_UNSIGNED_SHORT;
-  case points::type_i16:
+  case points_type_i16:
     return GL_SHORT;
-  case points::type_u32:
+  case points_type_u32:
     return GL_UNSIGNED_INT;
-  case points::type_i32:
+  case points_type_i32:
     return GL_INT;
-  case points::type_r32:
+  case points_type_r32:
     return GL_FLOAT;
-  case points::type_r64:
+  case points_type_r64:
     return GL_DOUBLE;
   default:
     return GL_INVALID_VALUE;
   }
 }
 
-int component_to_tex_format(points::components_t components)
+int component_to_tex_format(points_components_t components)
 {
   switch (components)
   {
-  case points::components_1:
+  case points_components_1:
     return GL_RED;
-  case points::components_2:
+  case points_components_2:
     return GL_RG;
-  case points::components_3:
+  case points_components_3:
     return GL_RGB;
-  case points::components_4:
+  case points_components_4:
     return GL_RGBA;
   default:
     break;
@@ -188,7 +188,7 @@ void gl_aabb_handler::initialize()
   glBindVertexArray(0);
 }
 
-void gl_aabb_handler::draw(points::render::draw_group_t &group)
+void gl_aabb_handler::draw(points_draw_group_t &group)
 {
   if (!is_initialized)
     initialize();
@@ -200,28 +200,28 @@ void gl_aabb_handler::draw(points::render::draw_group_t &group)
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    points::render::aabb_mesh_buffer_mapping_t buffer_mapping = points::render::aabb_mesh_buffer_mapping_t(buffer.buffer_mapping);
+    points_aabb_mesh_buffer_mapping_t buffer_mapping = points_aabb_mesh_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::aabb_bm_color: {
+    case points_aabb_bm_color: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_color, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
       break;
     }
-    case points::render::aabb_bm_position: {
+    case points_aabb_bm_position: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::aabb_bm_index: {
+    case points_aabb_bm_index: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl_buffer->id);
       index_buffer_type = type_to_glformat(gl_buffer->type);
       break;
     }
-    case points::render::aabb_bm_camera: {
+    case points_aabb_bm_camera: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(uniform_pv, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
@@ -314,7 +314,7 @@ void gl_dyn_points_handler::initialize()
   }
 }
 
-void gl_dyn_points_handler::draw(points::render::draw_group_t &group, color_components_t color_components, float point_scale)
+void gl_dyn_points_handler::draw(points_draw_group_t &group, color_components_t color_components, float point_scale)
 {
   if (!is_initialized)
     initialize();
@@ -329,28 +329,28 @@ void gl_dyn_points_handler::draw(points::render::draw_group_t &group, color_comp
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::dyn_points_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points_dyn_points_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::dyn_points_bm_vertex: {
+    case points_dyn_points_bm_vertex: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(gl_handle.vertex_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::dyn_points_bm_color: {
+    case points_dyn_points_bm_color: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(gl_handle.rgb_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
       break;
     }
-    case points::render::dyn_points_bm_camera: {
+    case points_dyn_points_bm_camera: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(gl_handle.uniform_camera, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
     }
-    case points::render::dyn_points_bm_old_color:
-    case points::render::dyn_points_bm_params:
+    case points_dyn_points_bm_old_color:
+    case points_dyn_points_bm_params:
       break;
     }
   }
@@ -359,7 +359,7 @@ void gl_dyn_points_handler::draw(points::render::draw_group_t &group, color_comp
   glBindVertexArray(0);
 }
 
-void gl_dyn_points_handler::draw_crossfade(points::render::draw_group_t &group, float point_scale)
+void gl_dyn_points_handler::draw_crossfade(points_draw_group_t &group, float point_scale)
 {
   if (!is_initialized)
     initialize();
@@ -374,27 +374,27 @@ void gl_dyn_points_handler::draw_crossfade(points::render::draw_group_t &group, 
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::dyn_points_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points_dyn_points_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::dyn_points_bm_vertex: {
+    case points_dyn_points_bm_vertex: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(crossfade_handle.vertex_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::dyn_points_bm_color: {
+    case points_dyn_points_bm_color: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(crossfade_handle.rgb_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
       break;
     }
-    case points::render::dyn_points_bm_camera: {
+    case points_dyn_points_bm_camera: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(crossfade_handle.uniform_camera, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
     }
-    case points::render::dyn_points_bm_old_color: {
+    case points_dyn_points_bm_old_color: {
       if (crossfade_handle.old_rgb_position >= 0)
       {
         gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
@@ -403,7 +403,7 @@ void gl_dyn_points_handler::draw_crossfade(points::render::draw_group_t &group, 
       }
       break;
     }
-    case points::render::dyn_points_bm_params: {
+    case points_dyn_points_bm_params: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniform4fv(crossfade_handle.uniform_params, 1, (const GLfloat *)gl_buffer->data);
       break;
@@ -458,7 +458,7 @@ void gl_flat_points_handler::initialize()
   glBindVertexArray(0);
 }
 
-void gl_flat_points_handler::draw(points::render::draw_group_t &group)
+void gl_flat_points_handler::draw(points_draw_group_t &group)
 {
   if (!is_initialized)
     initialize();
@@ -470,22 +470,22 @@ void gl_flat_points_handler::draw(points::render::draw_group_t &group)
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::points_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::points_bm_color: {
+    case points_bm_color: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_color, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
       break;
     }
-    case points::render::points_bm_vertex: {
+    case points_bm_vertex: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::points_bm_camera: {
+    case points_bm_camera: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(uniform_camera, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
@@ -536,7 +536,7 @@ void gl_skybox_handler::initialize()
   glBindVertexArray(0);
 }
 
-void gl_skybox_handler::draw(points::render::draw_group_t &group)
+void gl_skybox_handler::draw(points_draw_group_t &group)
 {
   if (!is_initialized)
     initialize();
@@ -546,26 +546,26 @@ void gl_skybox_handler::draw(points::render::draw_group_t &group)
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::skybox_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points_skybox_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::skybox_bm_vertex: {
+    case points_skybox_bm_vertex: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_vertex, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::skybox_bm_inverse_view_projection: {
+    case points_skybox_bm_inverse_view_projection: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(uniform_inverse_vp, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
     }
-    case points::render::skybox_bm_camera_pos: {
+    case points_skybox_bm_camera_pos: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniform3fv(uniform_camera_pos, 1, (const GLfloat *)gl_buffer->data);
       break;
     }
-    case points::render::skybox_bm_cube_map_texture: {
+    case points_skybox_bm_cube_map_texture: {
       gl_texture_t *gl_texture = static_cast<gl_texture_t *>(buffer.user_ptr);
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_CUBE_MAP, gl_texture->id);
@@ -623,7 +623,7 @@ void gl_environment_handler::initialize()
   glBindVertexArray(0);
 }
 
-void gl_environment_handler::draw(points::render::draw_group_t &group)
+void gl_environment_handler::draw(points_draw_group_t &group)
 {
   if (!is_initialized)
     initialize();
@@ -632,26 +632,26 @@ void gl_environment_handler::draw(points::render::draw_group_t &group)
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::environment_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points_environment_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::environment_bm_vertex: {
+    case points_environment_bm_vertex: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_vertex, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::environment_bm_inverse_view_projection: {
+    case points_environment_bm_inverse_view_projection: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(uniform_inverse_vp, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
     }
-    case points::render::environment_bm_camera_pos: {
+    case points_environment_bm_camera_pos: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniform3fv(uniform_camera_pos, 1, (const GLfloat *)gl_buffer->data);
       break;
     }
-    case points::render::environment_bm_params: {
+    case points_environment_bm_params: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniform4fv(uniform_params, 1, (const GLfloat *)gl_buffer->data);
       break;
@@ -703,7 +703,7 @@ void gl_axis_gizmo_handler::initialize()
   glBindVertexArray(0);
 }
 
-void gl_axis_gizmo_handler::draw(points::render::draw_group_t &group, int viewport_width, int viewport_height)
+void gl_axis_gizmo_handler::draw(points_draw_group_t &group, int viewport_width, int viewport_height)
 {
   (void)viewport_width;
   (void)viewport_height;
@@ -724,22 +724,22 @@ void gl_axis_gizmo_handler::draw(points::render::draw_group_t &group, int viewpo
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::axis_gizmo_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points_axis_gizmo_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::axis_gizmo_bm_color: {
+    case points_axis_gizmo_bm_color: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_color, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
       break;
     }
-    case points::render::axis_gizmo_bm_position: {
+    case points_axis_gizmo_bm_position: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::axis_gizmo_bm_camera: {
+    case points_axis_gizmo_bm_camera: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(uniform_pv, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
@@ -794,7 +794,7 @@ void gl_node_bbox_handler::initialize()
   glBindVertexArray(0);
 }
 
-void gl_node_bbox_handler::draw(points::render::draw_group_t &group)
+void gl_node_bbox_handler::draw(points_draw_group_t &group)
 {
   if (!is_initialized)
     initialize();
@@ -804,22 +804,22 @@ void gl_node_bbox_handler::draw(points::render::draw_group_t &group)
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::node_bbox_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points_node_bbox_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::node_bbox_bm_color: {
+    case points_node_bbox_bm_color: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_color, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
       break;
     }
-    case points::render::node_bbox_bm_position: {
+    case points_node_bbox_bm_position: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::node_bbox_bm_camera: {
+    case points_node_bbox_bm_camera: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(uniform_pv, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
@@ -873,7 +873,7 @@ void gl_origin_anchor_handler::initialize()
   glBindVertexArray(0);
 }
 
-void gl_origin_anchor_handler::draw(points::render::draw_group_t &group)
+void gl_origin_anchor_handler::draw(points_draw_group_t &group)
 {
   if (!is_initialized)
     initialize();
@@ -887,27 +887,27 @@ void gl_origin_anchor_handler::draw(points::render::draw_group_t &group)
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
-    auto buffer_mapping = points::render::origin_anchor_buffer_mapping_t(buffer.buffer_mapping);
+    auto buffer_mapping = points_origin_anchor_buffer_mapping_t(buffer.buffer_mapping);
     switch (buffer_mapping)
     {
-    case points::render::origin_anchor_bm_color: {
+    case points_origin_anchor_bm_color: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_color, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
       break;
     }
-    case points::render::origin_anchor_bm_position: {
+    case points_origin_anchor_bm_position: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
       glVertexAttribPointer(attrib_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_FALSE, 0, 0);
       break;
     }
-    case points::render::origin_anchor_bm_camera: {
+    case points_origin_anchor_bm_camera: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(uniform_pv, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
       break;
     }
-    case points::render::origin_anchor_bm_index: {
+    case points_origin_anchor_bm_index: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl_buffer->id);
       index_buffer_type = type_to_glformat(gl_buffer->type);
@@ -922,11 +922,11 @@ void gl_origin_anchor_handler::draw(points::render::draw_group_t &group)
   glDisable(GL_BLEND);
 }
 
-gl_renderer::gl_renderer(points::render::renderer_t *renderer, points::render::camera_t *camera)
+gl_renderer::gl_renderer(points_renderer_t *renderer, points_camera_t *camera)
   : renderer(renderer)
   , camera(camera)
 {
-  points::render::renderer_callbacks_t callbacks = {};
+  points_renderer_callbacks_t callbacks = {};
   callbacks.dirty = &static_dirty_callback;
   callbacks.create_buffer = &static_create_buffer;
   callbacks.initialize_buffer = &static_initialize_buffer;
@@ -936,7 +936,7 @@ gl_renderer::gl_renderer(points::render::renderer_t *renderer, points::render::c
   callbacks.initialize_texture = &static_initialize_texture;
   callbacks.modify_texture = &static_modify_texture;
   callbacks.destroy_texture = &static_destroy_texture;
-  points::render::renderer_set_callback(renderer, callbacks, this);
+  points_renderer_set_callback(renderer, callbacks, this);
 }
 
 static void create_index_buffer(gl_buffer_t *buffer, std::vector<gl_buffer_t *> &index_buffers)
@@ -961,7 +961,7 @@ static void initialize_index_buffer(gl_buffer_t *buffer, int data_size, void *da
   assert(data_size > 0);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer->id);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, data_size, data, GL_STATIC_DRAW);
-  points::render::buffer_release_data(buffer->buffer);
+  points_buffer_release_data(buffer->buffer);
 }
 
 static void initialize_vertex_buffer(gl_buffer_t *buffer, int data_size, void *data)
@@ -969,7 +969,7 @@ static void initialize_vertex_buffer(gl_buffer_t *buffer, int data_size, void *d
   assert(data_size > 0);
   glBindBuffer(GL_ARRAY_BUFFER, buffer->id);
   glBufferData(GL_ARRAY_BUFFER, data_size, data, GL_STATIC_DRAW);
-  points::render::buffer_release_data(buffer->buffer);
+  points_buffer_release_data(buffer->buffer);
 }
 
 static void initialize_uniform_buffer(gl_buffer_t *buffer, int data_size, void *data)
@@ -984,7 +984,7 @@ void update_index_buffer(gl_buffer_t *buffer, int offset, int data_size, void *d
   {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer->id);
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, offset, data_size, data);
-    points::render::buffer_release_data(buffer->buffer);
+    points_buffer_release_data(buffer->buffer);
   }
 }
 
@@ -994,7 +994,7 @@ void update_vertex_buffer(gl_buffer_t *buffer, int offset, int data_size, void *
   {
     glBindBuffer(GL_ARRAY_BUFFER, buffer->id);
     glBufferSubData(GL_ARRAY_BUFFER, offset, data_size, data);
-    points::render::buffer_release_data(buffer->buffer);
+    points_buffer_release_data(buffer->buffer);
   }
 }
 
@@ -1073,48 +1073,48 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
   glViewport(0, 0, viewport_width, viewport_height);
 
   double fov_rad = 0;
-  points::render::camera_perspective_properties(camera, &fov_rad, nullptr, nullptr, nullptr);
+  points_camera_perspective_properties(camera, &fov_rad, nullptr, nullptr, nullptr);
   float base_point_scale = float(point_world_size * (1.0 / tan(fov_rad / 2.0)) * viewport_height / 2.0);
 
-  auto frame = points::render::renderer_frame(renderer, camera);
+  auto frame = points_renderer_frame(renderer, camera);
   for (int i = 0; i < frame.to_render_size; i++)
   {
     auto &to_render = frame.to_render[i];
     switch (to_render.draw_type)
     {
-    case points::render::aabb_triangle_mesh:
+    case points_aabb_triangle_mesh:
       aabb_handler.draw(to_render);
       break;
-    case points::render::skybox_triangle:
+    case points_skybox_triangle:
       skybox_handler.draw(to_render);
       break;
-    case points::render::flat_points:
+    case points_flat_points:
       points_handler.draw(to_render);
       break;
-    case points::render::dyn_points_1:
-    case points::render::dyn_points_3: {
+    case points_dyn_points_1:
+    case points_dyn_points_3: {
       float lod_scale = std::pow(lod_scale_base, float(to_render.lod_level));
       float point_scale = base_point_scale * lod_scale;
-      auto color = to_render.draw_type == points::render::dyn_points_1 ? gl_dyn_points_handler::color_1 : gl_dyn_points_handler::color_3;
+      auto color = to_render.draw_type == points_dyn_points_1 ? gl_dyn_points_handler::color_1 : gl_dyn_points_handler::color_3;
       dynpoints_handler.draw(to_render, color, point_scale);
       break;
     }
-    case points::render::dyn_points_crossfade: {
+    case points_dyn_points_crossfade: {
       float lod_scale = std::pow(lod_scale_base, float(to_render.lod_level));
       float point_scale = base_point_scale * lod_scale;
       dynpoints_handler.draw_crossfade(to_render, point_scale);
       break;
     }
-    case points::render::axis_gizmo_lines:
+    case points_axis_gizmo_lines:
       axis_gizmo_handler.draw(to_render, viewport_width, viewport_height);
       break;
-    case points::render::origin_anchor_mesh:
+    case points_origin_anchor_mesh:
       origin_anchor_handler.draw(to_render);
       break;
-    case points::render::environment_bg:
+    case points_environment_bg:
       environment_handler.draw(to_render);
       break;
-    case points::render::node_bbox_lines:
+    case points_node_bbox_lines:
       node_bbox_handler.draw(to_render);
       break;
     default:
@@ -1124,50 +1124,50 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
   }
 }
 
-void gl_renderer::static_dirty_callback(struct points::render::renderer_t *renderer, void *renderer_user_ptr)
+void gl_renderer::static_dirty_callback(struct points_renderer_t *renderer, void *renderer_user_ptr)
 {
   (void)renderer;
   static_cast<gl_renderer *>(renderer_user_ptr)->dirty_callback();
 }
-void gl_renderer::static_create_buffer(struct points::render::renderer_t *renderer, void *renderer_user_ptr, enum points::render::buffer_type_t buffer_type, void **buffer_user_ptr)
+void gl_renderer::static_create_buffer(struct points_renderer_t *renderer, void *renderer_user_ptr, enum points_buffer_type_t buffer_type, void **buffer_user_ptr)
 {
   (void)renderer;
   static_cast<gl_renderer *>(renderer_user_ptr)->create_buffer(buffer_type, buffer_user_ptr);
 }
-void gl_renderer::static_initialize_buffer(struct points::render::renderer_t *renderer, void *renderer_user_ptr, struct points::render::buffer_t *buffer, void *buffer_user_ptr, enum points::type_t type,
-                                           enum points::components_t components, int buffer_size, void *data)
+void gl_renderer::static_initialize_buffer(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *buffer_user_ptr, enum points_type_t type,
+                                           enum points_components_t components, int buffer_size, void *data)
 {
   (void)renderer;
   static_cast<gl_renderer *>(renderer_user_ptr)->initialize_buffer(buffer, buffer_user_ptr, type, components, buffer_size, data);
 }
-void gl_renderer::static_modify_buffer(struct points::render::renderer_t *renderer, void *renderer_user_ptr, struct points::render::buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data)
+void gl_renderer::static_modify_buffer(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data)
 {
   (void)renderer;
   static_cast<gl_renderer *>(renderer_user_ptr)->modify_buffer(buffer, buffer_user_ptr, offset, buffer_size, data);
 }
-void gl_renderer::static_destroy_buffer(struct points::render::renderer_t *renderer, void *renderer_user_ptr, void *buffer_user_ptr)
+void gl_renderer::static_destroy_buffer(struct points_renderer_t *renderer, void *renderer_user_ptr, void *buffer_user_ptr)
 {
   (void)renderer;
   static_cast<gl_renderer *>(renderer_user_ptr)->destroy_buffer(buffer_user_ptr);
 }
-void gl_renderer::static_create_texture(struct points::render::renderer_t *renderer, void *renderer_user_ptr, enum points::render::texture_type_t buffer_texture_type, void **buffer_user_ptr)
+void gl_renderer::static_create_texture(struct points_renderer_t *renderer, void *renderer_user_ptr, enum points_texture_type_t buffer_texture_type, void **buffer_user_ptr)
 {
   (void)renderer;
   static_cast<gl_renderer *>(renderer_user_ptr)->create_texture(buffer_texture_type, buffer_user_ptr);
 }
-void gl_renderer::static_initialize_texture(struct points::render::renderer_t *renderer, void *renderer_user_ptr, struct points::render::buffer_t *buffer, void *texture_user_ptr,
-                                            enum points::render::texture_type_t buffer_texture_type, enum points::type_t type, enum points::components_t components, int size[3], void *data)
+void gl_renderer::static_initialize_texture(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *texture_user_ptr,
+                                            enum points_texture_type_t buffer_texture_type, enum points_type_t type, enum points_components_t components, int size[3], void *data)
 {
   (void)renderer;
   static_cast<gl_renderer *>(renderer_user_ptr)->initialize_texture(buffer, texture_user_ptr, buffer_texture_type, type, components, size, data);
 }
-void gl_renderer::static_modify_texture(struct points::render::renderer_t *renderer, void *renderer_user_ptr, struct points::render::buffer_t *buffer, void *texture_user_ptr,
-                                        enum points::render::texture_type_t buffer_texture_type, int offset[3], int size[3], void *data)
+void gl_renderer::static_modify_texture(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *texture_user_ptr,
+                                        enum points_texture_type_t buffer_texture_type, int offset[3], int size[3], void *data)
 {
   (void)renderer;
   static_cast<gl_renderer *>(renderer_user_ptr)->modify_texture(buffer, texture_user_ptr, buffer_texture_type, offset, size, data);
 }
-void gl_renderer::static_destroy_texture(struct points::render::renderer_t *renderer, void *renderer_user_ptr, void *texture_user_ptr)
+void gl_renderer::static_destroy_texture(struct points_renderer_t *renderer, void *renderer_user_ptr, void *texture_user_ptr)
 {
   (void)renderer;
   static_cast<gl_renderer *>(renderer_user_ptr)->destroy_texture(texture_user_ptr);
@@ -1177,20 +1177,20 @@ void gl_renderer::dirty_callback()
 {
 }
 
-void gl_renderer::create_buffer(enum points::render::buffer_type_t buffer_type, void **buffer_user_ptr)
+void gl_renderer::create_buffer(enum points_buffer_type_t buffer_type, void **buffer_user_ptr)
 {
   gl_buffer_t *buffer = new gl_buffer_t;
   buffer->buffer_type = buffer_type;
   *buffer_user_ptr = buffer;
   switch (buffer_type)
   {
-  case points::render::buffer_type_index:
+  case points_buffer_type_index:
     create_index_buffer(buffer, index_buffers);
     break;
-  case points::render::buffer_type_vertex:
+  case points_buffer_type_vertex:
     create_vertex_buffer(buffer, vertex_buffers);
     break;
-  case points::render::buffer_type_uniform:
+  case points_buffer_type_uniform:
     create_uniform_buffer(buffer, uniform_buffers);
     break;
   default:
@@ -1198,7 +1198,7 @@ void gl_renderer::create_buffer(enum points::render::buffer_type_t buffer_type, 
   }
 }
 
-void gl_renderer::initialize_buffer(struct points::render::buffer_t *buffer, void *buffer_user_ptr, enum points::type_t type, enum points::components_t components, int data_size, void *data)
+void gl_renderer::initialize_buffer(struct points_buffer_t *buffer, void *buffer_user_ptr, enum points_type_t type, enum points_components_t components, int data_size, void *data)
 {
   auto gl_buffer = static_cast<gl_buffer_t *>(buffer_user_ptr);
   gl_buffer->buffer = buffer;
@@ -1206,34 +1206,34 @@ void gl_renderer::initialize_buffer(struct points::render::buffer_t *buffer, voi
   gl_buffer->components = components;
   switch (gl_buffer->buffer_type)
   {
-  case points::render::buffer_type_index:
+  case points_buffer_type_index:
     initialize_index_buffer(gl_buffer, data_size, data);
     break;
-  case points::render::buffer_type_vertex:
+  case points_buffer_type_vertex:
     initialize_vertex_buffer(gl_buffer, data_size, data);
     break;
-  case points::render::buffer_type_uniform:
+  case points_buffer_type_uniform:
     initialize_uniform_buffer(gl_buffer, data_size, data);
     break;
   default:
-    fmt::print(stderr, "Unexpected buffer_type_t in initialize buffer\n.");
+    fmt::print(stderr, "Unexpected points_buffer_type_t in initialize buffer\n.");
   }
 }
 
-void gl_renderer::modify_buffer(struct points::render::buffer_t *buffer, void *buffer_user_ptr, int offset, int data_size, void *data)
+void gl_renderer::modify_buffer(struct points_buffer_t *buffer, void *buffer_user_ptr, int offset, int data_size, void *data)
 {
   (void)buffer;
   auto *gl_buffer = static_cast<gl_buffer_t *>(buffer_user_ptr);
 
   switch (gl_buffer->buffer_type)
   {
-  case points::render::buffer_type_index:
+  case points_buffer_type_index:
     update_index_buffer(gl_buffer, offset, data_size, data);
     break;
-  case points::render::buffer_type_vertex:
+  case points_buffer_type_vertex:
     update_vertex_buffer(gl_buffer, offset, data_size, data);
     break;
-  case points::render::buffer_type_uniform:
+  case points_buffer_type_uniform:
     update_uniform_buffer(gl_buffer, offset, data_size, data);
     break;
   default:
@@ -1246,13 +1246,13 @@ void gl_renderer::destroy_buffer(void *buffer_user_ptr)
   auto *gl_buffer = static_cast<gl_buffer_t *>(buffer_user_ptr);
   switch (gl_buffer->buffer_type)
   {
-  case points::render::buffer_type_index:
+  case points_buffer_type_index:
     destroy_index_buffer(gl_buffer, index_buffers);
     break;
-  case points::render::buffer_type_vertex:
+  case points_buffer_type_vertex:
     destroy_vertex_buffer(gl_buffer, vertex_buffers);
     break;
-  case points::render::buffer_type_uniform:
+  case points_buffer_type_uniform:
     destroy_uniform_buffer(gl_buffer, uniform_buffers);
     break;
   default:
@@ -1260,7 +1260,7 @@ void gl_renderer::destroy_buffer(void *buffer_user_ptr)
   }
   delete gl_buffer;
 }
-void gl_renderer::create_texture(enum points::render::texture_type_t buffer_texture_type, void **buffer_user_ptr)
+void gl_renderer::create_texture(enum points_texture_type_t buffer_texture_type, void **buffer_user_ptr)
 {
   auto gl_texture = new gl_texture_t();
   gl_texture->texture_type = buffer_texture_type;
@@ -1268,8 +1268,8 @@ void gl_renderer::create_texture(enum points::render::texture_type_t buffer_text
   *buffer_user_ptr = gl_texture;
 }
 
-void gl_renderer::initialize_texture(struct points::render::buffer_t *buffer, void *texture_user_ptr, enum points::render::texture_type_t buffer_texture_type, enum points::type_t type,
-                                     enum points::components_t components, int size[3], void *data)
+void gl_renderer::initialize_texture(struct points_buffer_t *buffer, void *texture_user_ptr, enum points_texture_type_t buffer_texture_type, enum points_type_t type,
+                                     enum points_components_t components, int size[3], void *data)
 {
   auto gl_texture = static_cast<gl_texture_t *>(texture_user_ptr);
   gl_texture->buffer = buffer;
@@ -1280,9 +1280,9 @@ void gl_renderer::initialize_texture(struct points::render::buffer_t *buffer, vo
   GLenum data_format = type_to_glformat(type);
   GLenum bind_target;
   GLenum image_target;
-  if (gl_texture->texture_type == points::render::texture_type_2d)
+  if (gl_texture->texture_type == points_texture_type_2d)
   {
-    if (buffer_texture_type != points::render::texture_type_2d)
+    if (buffer_texture_type != points_texture_type_2d)
     {
       fmt::print(stderr, "Illigal state, initializing a 2d texture with non 2d texture data\n.");
       return;
@@ -1290,7 +1290,7 @@ void gl_renderer::initialize_texture(struct points::render::buffer_t *buffer, vo
     bind_target = GL_TEXTURE_2D;
     image_target = GL_TEXTURE_2D;
   }
-  else if (buffer_texture_type == points::render::texture_type_cubemap)
+  else if (buffer_texture_type == points_texture_type_cubemap)
   {
     fmt::print(stderr, "Illigal state, initializing a cubemap with cubemap: must specify buffer_texture_type_t that "
                        "specifies direction.\n");
@@ -1299,7 +1299,7 @@ void gl_renderer::initialize_texture(struct points::render::buffer_t *buffer, vo
   else
   {
     bind_target = GL_TEXTURE_CUBE_MAP;
-    int diff = int(buffer_texture_type) - int(points::render::texture_type_cubemap_positive_x);
+    int diff = int(buffer_texture_type) - int(points_texture_type_cubemap_positive_x);
     image_target = GL_TEXTURE_CUBE_MAP_POSITIVE_X + diff;
   }
 
@@ -1308,10 +1308,10 @@ void gl_renderer::initialize_texture(struct points::render::buffer_t *buffer, vo
   (void)data_format;
   (void)tex_format;
   glTexImage2D(image_target, 0, GL_RGB, size[0], size[1], 0, tex_format, data_format, data);
-  points::render::buffer_release_data(buffer);
+  points_buffer_release_data(buffer);
 }
 
-void gl_renderer::modify_texture(struct points::render::buffer_t *buffer, void *texture_user_ptr, enum points::render::texture_type_t buffer_texture_type, int offset[3], int size[3], void *data)
+void gl_renderer::modify_texture(struct points_buffer_t *buffer, void *texture_user_ptr, enum points_texture_type_t buffer_texture_type, int offset[3], int size[3], void *data)
 {
   auto gl_texture = static_cast<gl_texture_t *>(texture_user_ptr);
   GLenum tex_format = component_to_tex_format(gl_texture->components);
@@ -1319,9 +1319,9 @@ void gl_renderer::modify_texture(struct points::render::buffer_t *buffer, void *
   GLenum bind_target;
   GLenum image_target;
 
-  if (gl_texture->texture_type == points::render::texture_type_2d)
+  if (gl_texture->texture_type == points_texture_type_2d)
   {
-    if (buffer_texture_type != points::render::texture_type_2d)
+    if (buffer_texture_type != points_texture_type_2d)
     {
       fmt::print(stderr, "Illigal state, modifying a 2d texture with non 2d texture data.\n");
       return;
@@ -1329,7 +1329,7 @@ void gl_renderer::modify_texture(struct points::render::buffer_t *buffer, void *
     bind_target = GL_TEXTURE_2D;
     image_target = GL_TEXTURE_2D;
   }
-  else if (buffer_texture_type == points::render::texture_type_cubemap)
+  else if (buffer_texture_type == points_texture_type_cubemap)
   {
     fmt::print(stderr, "Illigal state, initializing a cubemap with cubemap: must specify buffer_texture_type_t that "
                        "specifies direction.\n");
@@ -1338,13 +1338,13 @@ void gl_renderer::modify_texture(struct points::render::buffer_t *buffer, void *
   else
   {
     bind_target = GL_TEXTURE_CUBE_MAP;
-    int diff = int(buffer_texture_type) - int(points::render::texture_type_cubemap_positive_x);
+    int diff = int(buffer_texture_type) - int(points_texture_type_cubemap_positive_x);
     image_target = GL_TEXTURE_CUBE_MAP_POSITIVE_X + diff;
   }
 
   glBindTexture(bind_target, gl_texture->id);
   glTexSubImage2D(image_target, 0, offset[0], offset[1], size[0], size[1], tex_format, data_format, data);
-  points::render::buffer_release_data(buffer);
+  points_buffer_release_data(buffer);
 }
 
 void gl_renderer::destroy_texture(void *texture_user_ptr)

@@ -22,7 +22,7 @@ namespace points
 namespace converter
 {
 
-get_pre_init_info_worker_t::get_pre_init_info_worker_t(const tree_config_t &a_tree_config, input_data_id_t a_input_id, const input_name_ref_t &a_file_name, converter_file_convert_callbacks_t &convert_callbacks,
+get_pre_init_info_worker_t::get_pre_init_info_worker_t(const tree_config_t &a_tree_config, input_data_id_t a_input_id, const input_name_ref_t &a_file_name, points_converter_file_convert_callbacks_t &convert_callbacks,
                                                        vio::event_pipe_t<pre_init_info_file_result_t> &a_pre_init_info_file_result, vio::event_pipe_t<file_error_t> &a_file_errors)
   : tree_config(a_tree_config)
   , input_id(a_input_id)
@@ -36,11 +36,11 @@ get_pre_init_info_worker_t::get_pre_init_info_worker_t(const tree_config_t &a_tr
 void get_pre_init_info_worker_t::work()
 {
 
-  error_t *local_error = nullptr;
+  points_error_t *local_error = nullptr;
   auto pre_init_info = converter_callbacks.pre_init(file_name.name, file_name.name_length, &local_error);
   if (local_error)
   {
-    std::unique_ptr<error_t> error(local_error);
+    std::unique_ptr<points_error_t> error(local_error);
     _file_error.input_id = input_id;
     _file_error.error = std::move(*error);
   }

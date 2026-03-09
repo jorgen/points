@@ -34,17 +34,17 @@ struct loaded_node_data_t
 {
   void *vertex_data = nullptr;
   uint32_t vertex_data_size = 0;
-  type_t vertex_type = type_r32;
-  components_t vertex_components = components_3;
+  points_type_t vertex_type = points_type_r32;
+  points_components_t vertex_components = points_components_3;
 
   void *attribute_data = nullptr;
   uint32_t attribute_data_size = 0;
-  type_t attribute_type = type_u8;
-  components_t attribute_components = components_3;
+  points_type_t attribute_type = points_type_u8;
+  points_components_t attribute_components = points_components_3;
 
   uint32_t point_count = 0;
   std::array<double, 3> offset = {};
-  draw_type_t draw_type = dyn_points_1;
+  points_draw_type_t draw_type = points_dyn_points_1;
 
   std::shared_ptr<void> _impl_data;
 

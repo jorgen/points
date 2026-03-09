@@ -600,7 +600,7 @@ serialized_tree_t tree_serialize(const tree_t &tree)
   return {std::move(data), int(tree_size)};
 }
 
-bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, error_t &error)
+bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, points_error_t &error)
 {
   const uint8_t *ptr = serialized_tree.data.get();
   const uint8_t *end_ptr = ptr + serialized_tree.size;
@@ -720,7 +720,7 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   return {std::move(data), int(tree_registry_size)};
 }
 
-error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry)
+points_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry)
 {
   const uint8_t *ptr = data.get();
   const uint8_t *end_ptr = ptr + data_size;

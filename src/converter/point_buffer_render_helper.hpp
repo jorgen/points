@@ -79,7 +79,7 @@ struct dyn_points_data_handler_t
       }
       if (i == 0)
       {
-        error_t deser_error;
+        points_error_t deser_error;
         deserialize_points(req->buffer_info, header, data_info[0], deser_error);
         if (deser_error.code != 0 && error.code == 0)
           error = deser_error;
@@ -99,22 +99,22 @@ struct dyn_points_data_handler_t
   int target_count = 0;
   int done = 0;
 
-  error_t error;
+  points_error_t error;
 
   storage_header_t header{};
   point_format_t point_format[4];
-  buffer_t data_info[4];
+  points_converter_buffer_t data_info[4];
 };
 
 struct dyn_points_draw_buffer_t
 {
   tree_walker_data_t node_info;
-  render::draw_type_t draw_type;
-  render::draw_buffer_t render_list[4];
-  render::buffer_t render_buffers[3];
+  points_draw_type_t draw_type;
+  points_draw_buffer_t render_list[4];
+  points_buffer_t render_buffers[3];
   point_format_t format[3];
   std::shared_ptr<uint8_t[]> data[2];
-  buffer_t data_info[2];
+  points_converter_buffer_t data_info[2];
   uint32_t point_count;
   std::array<double, 3> offset;
   std::array<double, 3> scale;
@@ -125,7 +125,7 @@ struct dyn_points_draw_buffer_t
 };
 
 template <typename MORTON_TYPE, typename DECODED_T>
-void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const dyn_points_data_handler_t &data_handler, buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
+void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const dyn_points_data_handler_t &data_handler, points_converter_buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
                                           std::shared_ptr<uint8_t[]> &vertex_data)
 {
   assert(data_handler.read_request[0]);
@@ -136,7 +136,7 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
 
   auto buffer_size = uint32_t(point_count * sizeof(DECODED_T));
   vertex_data = std::make_shared<uint8_t[]>(buffer_size);
-  vertex_data_info = buffer_t(vertex_data.get(), buffer_size);
+  vertex_data_info = points_converter_buffer_t(vertex_data.get(), buffer_size);
   auto vertex_data_ptr = vertex_data.get();
   auto *decoded_array = reinterpret_cast<std::array<float, 3> *>(vertex_data_ptr);
 
@@ -176,43 +176,43 @@ inline void convert_points_to_vertex_data(const tree_config_t &tree_config, cons
   auto &point_request = *data_handler.read_request[0];
   switch (pformat.type)
   {
-  case type_u8:
-  case type_i8:
-  case type_u16:
-  case type_i16:
-  case type_u32:
-  case type_i32:
-  case type_r32:
-  case type_u64:
-  case type_i64:
-  case type_r64: {
+  case points_type_u8:
+  case points_type_i8:
+  case points_type_u16:
+  case points_type_i16:
+  case points_type_u32:
+  case points_type_i32:
+  case points_type_r32:
+  case points_type_u64:
+  case points_type_i64:
+  case points_type_r64: {
     draw_buffer.data[0].reset(new uint8_t[point_request.buffer_info.size]);
-    draw_buffer.data_info[0] = buffer_t(draw_buffer.data[0].get(), point_request.buffer_info.size);
+    draw_buffer.data_info[0] = points_converter_buffer_t(draw_buffer.data[0].get(), point_request.buffer_info.size);
     draw_buffer.format[0] = pformat;
     memcpy(draw_buffer.data[0].get(), point_request.buffer_info.data, point_request.buffer_info.size);
     break;
   }
-  case type_m32:
+  case points_type_m32:
     convert_points_to_vertex_data_morton<morton::morton32_t, std::array<uint16_t, 3>>(tree_config, data_handler, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
-    draw_buffer.format[0] = point_format_t(type_r32, components_3);
+    draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
     break;
-  case type_m64:
+  case points_type_m64:
     convert_points_to_vertex_data_morton<morton::morton64_t, std::array<uint32_t, 3>>(tree_config, data_handler, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
-    draw_buffer.format[0] = point_format_t(type_r32, components_3);
+    draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
     break;
-  case type_m128:
+  case points_type_m128:
     convert_points_to_vertex_data_morton<morton::morton128_t, std::array<uint64_t, 3>>(tree_config, data_handler, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
-    draw_buffer.format[0] = point_format_t(type_r32, components_3);
+    draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
     break;
-  case type_m192:
+  case points_type_m192:
     convert_points_to_vertex_data_morton<morton::morton192_t, std::array<uint64_t, 3>>(tree_config, data_handler, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
-    draw_buffer.format[0] = point_format_t(type_r32, components_3);
+    draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
     break;
   }
 }
 inline void convert_attribute_to_draw_buffer_data(const dyn_points_data_handler_t &data_handler, dyn_points_draw_buffer_t &draw_buffer, int data_slot)
 {
-  draw_buffer.draw_type = data_handler.point_format[1].components == components_3 ? render::dyn_points_3 : render::dyn_points_1;
+  draw_buffer.draw_type = data_handler.point_format[1].components == points_components_3 ? points_dyn_points_3 : points_dyn_points_1;
   draw_buffer.data[data_slot] = data_handler.read_request[1]->buffer;
   draw_buffer.data_info[data_slot] = draw_buffer.data_handler->data_info[data_slot];
   draw_buffer.format[data_slot] = draw_buffer.data_handler->point_format[data_slot];

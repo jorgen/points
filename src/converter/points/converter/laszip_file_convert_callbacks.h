@@ -25,13 +25,8 @@
 extern "C" {
 #endif
 
-namespace points
-{
-namespace converter
-{
-POINTS_CONVERTER_EXPORT struct converter_file_convert_callbacks_t laszip_callbacks();
-} // namespace converter
-} // namespace points
+POINTS_CONVERTER_EXPORT struct points_converter_file_convert_callbacks_t points_laszip_callbacks(void);
+
 #ifdef __cplusplus
 }
 #endif

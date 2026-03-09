@@ -61,12 +61,12 @@ class frustum_tree_walker_t;
 class processor_t : public vio::about_to_block_t
 {
 public:
-  processor_t(std::string url, file_existence_requirement_t existence_requirement, error_t &error);
-  error_t upgrade_to_write(bool truncate);
+  processor_t(std::string url, file_existence_requirement_t existence_requirement, points_error_t &error);
+  points_error_t upgrade_to_write(bool truncate);
   void set_pre_init_tree_config(const tree_config_t &tree_config);
   void set_pre_init_tree_node_limit(uint32_t node_limit);
-  void set_runtime_callbacks(const converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr);
-  void set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks);
+  void set_runtime_callbacks(const points_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr);
+  void set_converter_callbacks(const points_converter_file_convert_callbacks_t &convert_callbacks);
   void add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files);
   void walk_tree(frustum_tree_walker_t &walker);
   tree_config_t tree_config();
@@ -93,14 +93,14 @@ public:
     return _perf_stats;
   }
 
-  const attributes_t &get_attributes(attributes_id_t id);
+  const points_converter_attributes_t &get_attributes(attributes_id_t id);
 
 private:
   std::string _url;
   vio::thread_pool_t _thread_pool;
-  converter_runtime_callbacks_t _runtime_callbacks;
+  points_converter_runtime_callbacks_t _runtime_callbacks;
   void *_runtime_callback_user_ptr;
-  converter_file_convert_callbacks_t _convert_callbacks;
+  points_converter_file_convert_callbacks_t _convert_callbacks;
 
   vio::thread_with_event_loop_t _thread_with_event_loop;
   vio::event_loop_t &_event_loop;
@@ -124,14 +124,14 @@ private:
   vio::event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
 
 
-  vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, header_t>> _input_init;
+  vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t>> _input_init;
   vio::event_pipe_t<input_data_id_t> _sub_added;
-  vio::event_pipe_t<std::pair<points_t, error_t>> _sorted_points;
+  vio::event_pipe_t<std::pair<points_t, points_error_t>> _sorted_points;
   vio::event_pipe_t<file_error_t> _point_reader_file_errors;
   vio::event_pipe_t<input_data_id_t> _point_reader_done_with_file;
 
   vio::event_pipe_t<void> _storage_index_write_done;
-  vio::event_pipe_t<error_t> _storage_handler_error;
+  vio::event_pipe_t<points_error_t> _storage_handler_error;
   vio::event_pipe_t<input_data_id_t> _tree_done_with_input;
 
   vio::thread_with_event_loop_t _input_event_loop_thread;
@@ -146,13 +146,13 @@ private:
 
   void handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files);
   vio::task_t<void> do_handle_new_files(std::vector<std::pair<input_data_id_t, input_name_ref_t>> file_refs, tree_config_t tree_config);
-  void handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t> &&event);
+  void handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t> &&event);
   void handle_sub_added(input_data_id_t &&event);
-  void handle_sorted_points(std::pair<points_t, error_t> &&event);
+  void handle_sorted_points(std::pair<points_t, points_error_t> &&event);
   void handle_file_errors(file_error_t &&error);
   void handle_file_reading_done(input_data_id_t &&file);
   void handle_index_write_done();
-  void handle_storage_error(error_t &&errors);
+  void handle_storage_error(points_error_t &&errors);
   void handle_points_written(const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations);
   void handle_tree_done_with_input(input_data_id_t &&events);
   void maybe_start_lod();

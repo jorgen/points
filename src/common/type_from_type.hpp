@@ -22,28 +22,28 @@
 namespace points
 {
 template <typename T>
-type_t type_from_type()
+points_type_t type_from_type()
 {
   if (std::is_same<T, uint8_t>::value)
-    return type_u8;
+    return points_type_u8;
   else if (std::is_same<T, int8_t>::value)
-    return type_i8;
+    return points_type_i8;
   else if (std::is_same<T, uint16_t>::value)
-    return type_u16;
+    return points_type_u16;
   else if (std::is_same<T, int16_t>::value)
-    return type_i16;
+    return points_type_i16;
   else if (std::is_same<T, uint32_t>::value)
-    return type_u32;
+    return points_type_u32;
   else if (std::is_same<T, int32_t>::value)
-    return type_i32;
+    return points_type_i32;
   else if (std::is_same<T, uint64_t>::value)
-    return type_u64;
+    return points_type_u64;
   else if (std::is_same<T, int64_t>::value)
-    return type_i64;
+    return points_type_i64;
   else if (std::is_same<T, float>::value)
-    return type_r32;
+    return points_type_r32;
   else if (std::is_same<T, double>::value)
-    return type_r64;
+    return points_type_r64;
   else
     assert(sizeof(T) == 0 && "Unsupported type");
   {

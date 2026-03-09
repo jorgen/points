@@ -29,8 +29,8 @@
 
 #include "renderer.hpp"
 
-namespace points::converter
-{
+using namespace points;
+using namespace points::converter;
 
 static bool less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs)
 {
@@ -46,7 +46,7 @@ static bool less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &r
   return lhs.lod < rhs.lod;
 }
 
-converter_data_source_t::converter_data_source_t(const std::string &a_url, render::callback_manager_t &a_callbacks)
+points_converter_data_source_t::points_converter_data_source_t(const std::string &a_url, render::callback_manager_t &a_callbacks)
   : url(a_url)
   , processor(a_url, file_existence_requirement_t::exist, error)
   , callbacks(a_callbacks)
@@ -56,9 +56,9 @@ converter_data_source_t::converter_data_source_t(const std::string &a_url, rende
     return;
   }
   data_source.user_ptr = this;
-  data_source.add_to_frame = [](render::frame_camera_t *camera, render::to_render_t *to_render, void *user_ptr)
+  data_source.add_to_frame = [](points_frame_camera_t *camera, points_to_render_t *to_render, void *user_ptr)
   {
-    auto *thiz = static_cast<converter_data_source_t *>(user_ptr);
+    auto *thiz = static_cast<points_converter_data_source_t *>(user_ptr);
     thiz->add_to_frame(camera, to_render);
   };
 
@@ -77,7 +77,7 @@ converter_data_source_t::converter_data_source_t(const std::string &a_url, rende
   }
 }
 
-void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, render::to_render_t *to_render)
+void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camera, points_to_render_t *to_render)
 {
   using clock = std::chrono::high_resolution_clock;
   auto t_start = clock::now();
@@ -292,11 +292,11 @@ void converter_data_source_t::add_to_frame(render::frame_camera_t *c_camera, ren
 
 }
 
-struct converter_data_source_t *converter_data_source_create(const char *url, uint32_t url_len, error_t *error, struct render::renderer_t *renderer)
+struct points_converter_data_source_t *points_converter_data_source_create(const char *url, uint32_t url_len, points_error_t *error, struct points_renderer_t *renderer)
 {
   if (!error)
     return nullptr;
-  auto ret = std::make_unique<converter_data_source_t>(std::string(url, url_len), renderer->callbacks);
+  auto ret = std::make_unique<points_converter_data_source_t>(std::string(url, url_len), renderer->callbacks);
   if (ret->error.code != 0)
   {
     *error = ret->error;
@@ -305,64 +305,64 @@ struct converter_data_source_t *converter_data_source_create(const char *url, ui
   return ret.release();
 }
 
-void converter_data_source_destroy(struct converter_data_source_t *converter_data_source)
+void points_converter_data_source_destroy(struct points_converter_data_source_t *converter_data_source)
 {
   delete converter_data_source;
 }
 
-struct render::data_source_t converter_data_source_get(struct converter_data_source_t *converter_data_source)
+struct points_data_source_t points_converter_data_source_get(struct points_converter_data_source_t *converter_data_source)
 {
   return converter_data_source->data_source;
 }
 
-void converter_data_source_request_aabb(struct converter_data_source_t *converter_data_source, converter_data_source_request_aabb_callback_t callback, void *user_ptr)
+void points_converter_data_source_request_aabb(struct points_converter_data_source_t *converter_data_source, points_converter_data_source_request_aabb_callback_t callback, void *user_ptr)
 {
   auto callback_cpp = [callback, user_ptr](double aabb_min[3], double aabb_max[3]) { callback(aabb_min, aabb_max, user_ptr); };
 
   converter_data_source->processor.request_aabb(callback_cpp);
 }
 
-uint32_t converter_data_attribute_count(struct converter_data_source_t *converter_data_source)
+uint32_t points_converter_data_attribute_count(struct points_converter_data_source_t *converter_data_source)
 {
   return converter_data_source->processor.attrib_name_registry_count();
 }
 
-uint32_t converter_data_get_attribute_name(struct converter_data_source_t *converter_data_source, int index, char *name, uint32_t name_size)
+uint32_t points_converter_data_get_attribute_name(struct points_converter_data_source_t *converter_data_source, int index, char *name, uint32_t name_size)
 {
   return converter_data_source->processor.attrib_name_registry_get(index, name, name_size);
 }
 
-void converter_data_set_rendered_attribute(struct converter_data_source_t *converter_data_source, const char *name, uint32_t name_len)
+void points_converter_data_set_rendered_attribute(struct points_converter_data_source_t *converter_data_source, const char *name, uint32_t name_len)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->next_attribute_name.assign(name, name_len);
 }
 
-void converter_data_source_set_viewport(struct converter_data_source_t *converter_data_source, int width, int height)
+void points_converter_data_source_set_viewport(struct points_converter_data_source_t *converter_data_source, int width, int height)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->viewport_width = width;
   converter_data_source->viewport_height = height;
 }
 
-void converter_data_source_set_pixel_error_threshold(struct converter_data_source_t *converter_data_source, double threshold)
+void points_converter_data_source_set_pixel_error_threshold(struct points_converter_data_source_t *converter_data_source, double threshold)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->screen_fraction_threshold = threshold;
 }
 
-void converter_data_source_set_gpu_memory_budget(struct converter_data_source_t *converter_data_source, size_t budget_bytes)
+void points_converter_data_source_set_gpu_memory_budget(struct points_converter_data_source_t *converter_data_source, size_t budget_bytes)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->gpu_memory_budget = budget_bytes;
 }
 
-uint64_t converter_data_source_get_points_rendered(struct converter_data_source_t *converter_data_source)
+uint64_t points_converter_data_source_get_points_rendered(struct points_converter_data_source_t *converter_data_source)
 {
   return converter_data_source->points_rendered_last_frame;
 }
 
-void converter_data_source_get_frame_timings(struct converter_data_source_t *cds, double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms, double *refine_strategy_ms, double *frontier_scheduling_ms,
+void points_converter_data_source_get_frame_timings(struct points_converter_data_source_t *cds, double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms, double *refine_strategy_ms, double *frontier_scheduling_ms,
                                              double *draw_emission_ms, double *eviction_ms, double *total_ms,
                                              int *registry_node_count, int *active_set_size, int *nodes_drawn,
                                              int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed,
@@ -388,27 +388,25 @@ void converter_data_source_get_frame_timings(struct converter_data_source_t *cds
   if (walker_trees_to_load) *walker_trees_to_load = t.walker_trees_to_load;
 }
 
-void converter_data_source_set_debug_transitions(struct converter_data_source_t *cds, bool enabled)
+void points_converter_data_source_set_debug_transitions(struct points_converter_data_source_t *cds, uint8_t enabled)
 {
   cds->debug_transitions = enabled;
 }
 
-void converter_data_source_set_show_bounding_boxes(struct converter_data_source_t *cds, bool enabled)
+void points_converter_data_source_set_show_bounding_boxes(struct points_converter_data_source_t *cds, uint8_t enabled)
 {
   cds->show_bounding_boxes = enabled;
   cds->bbox_data_source->enabled = enabled;
 }
 
-struct render::data_source_t converter_data_source_get_bbox_data_source(struct converter_data_source_t *cds)
+struct points_data_source_t points_converter_data_source_get_bbox_data_source(struct points_converter_data_source_t *cds)
 {
   return cds->bbox_data_source->data_source;
 }
 
-void converter_data_source_get_tight_aabb(struct converter_data_source_t *cds, double min[3], double max[3])
+void points_converter_data_source_get_tight_aabb(struct points_converter_data_source_t *cds, double min[3], double max[3])
 {
   auto &ta = cds->tight_aabb_accumulator;
   memcpy(min, &ta.min, sizeof(double) * 3);
   memcpy(max, &ta.max, sizeof(double) * 3);
 }
-
-} // namespace points::converter

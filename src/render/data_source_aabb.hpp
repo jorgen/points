@@ -29,35 +29,34 @@
 
 namespace points::render
 {
-
 struct aabb_buffer_t
 {
-  aabb_t aabb;
+  points_aabb_t aabb;
   std::vector<glm::vec3> vertices;
-  buffer_t vertices_buffer;
+  points_buffer_t vertices_buffer;
 
-  draw_buffer_t render_list[4];
+  points_draw_buffer_t render_list[4];
 };
+} // namespace points::render
 
-struct aabb_data_source_t : public data_source_cpp_t
+struct points_aabb_data_source_t : public points::render::data_source_cpp_t
 {
-  aabb_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &a_offset);
+  points_aabb_data_source_t(points::render::callback_manager_t &a_callbacks, const glm::dvec3 &a_offset);
 
-  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
+  void add_to_frame(const points::render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
 
-  callback_manager_t &callbacks;
+  points::render::callback_manager_t &callbacks;
 
-  std::vector<std::unique_ptr<aabb_buffer_t>> aabbs;
+  std::vector<std::unique_ptr<points::render::aabb_buffer_t>> aabbs;
 
   std::vector<uint32_t> aabbs_ids;
 
-  buffer_t project_view_buffer;
+  points_buffer_t project_view_buffer;
   glm::mat4 project_view;
 
-  buffer_t index_buffer;
+  points_buffer_t index_buffer;
   std::vector<uint16_t> indecies;
 
-  buffer_t color_buffer;
+  points_buffer_t color_buffer;
   std::vector<glm::u8vec3> colors;
 };
-} // namespace points::render

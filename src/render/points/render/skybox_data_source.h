@@ -25,11 +25,7 @@
 extern "C" {
 #endif
 
-namespace points
-{
-namespace render
-{
-struct skybox_data_t
+struct points_skybox_data_t
 {
   void *positive_x;
   void *negative_x;
@@ -45,14 +41,10 @@ struct skybox_data_t
   int negative_z_size;
 };
 
-struct skybox_data_source_t;
-POINTS_RENDER_EXPORT struct skybox_data_source_t *skybox_data_source_create(struct renderer_t *renderer, skybox_data_t data);
-POINTS_RENDER_EXPORT void skybox_data_source_destroy(struct skybox_data_source_t *skybox_data_source);
-POINTS_RENDER_EXPORT struct data_source_t skybox_data_source_get(struct skybox_data_source_t *skybox_data_source);
-//POINTS_EXPORT void set
-}
-
-} // namespace points
+struct points_skybox_data_source_t;
+POINTS_RENDER_EXPORT struct points_skybox_data_source_t *points_skybox_data_source_create(struct points_renderer_t *renderer, struct points_skybox_data_t data);
+POINTS_RENDER_EXPORT void points_skybox_data_source_destroy(struct points_skybox_data_source_t *skybox_data_source);
+POINTS_RENDER_EXPORT struct points_data_source_t points_skybox_data_source_get(struct points_skybox_data_source_t *skybox_data_source);
 
 #ifdef __cplusplus
 }

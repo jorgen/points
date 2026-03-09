@@ -2,7 +2,6 @@
 #include <frame_node_registry.hpp>
 #include <gpu_node_buffer.hpp>
 
-using namespace points;
 using namespace points::converter;
 
 static node_id_t make_node_id(uint32_t tree, uint16_t level, uint16_t index)

@@ -184,16 +184,16 @@ inline void point_buffer_subdivide(const read_only_points_t &points, input_stora
 {
   switch (points.header.point_format.type)
   {
-  case type_m32:
+  case points_type_m32:
     point_buffer_subdivide_type<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
-  case type_m64:
+  case points_type_m64:
     point_buffer_subdivide_type<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
-  case type_m128:
+  case points_type_m128:
     point_buffer_subdivide_type<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
-  case type_m192:
+  case points_type_m192:
     point_buffer_subdivide_type<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
   default:

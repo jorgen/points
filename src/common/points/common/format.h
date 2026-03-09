@@ -22,35 +22,33 @@
 extern "C" {
 #endif
 
-namespace points
+enum points_type_t
 {
-enum type_t
-{
-  type_u8,
-  type_i8,
-  type_u16,
-  type_i16,
-  type_u32,
-  type_i32,
-  type_m32,
-  type_r32,
-  type_u64,
-  type_i64,
-  type_m64,
-  type_r64,
-  type_m128,
-  type_m192,
+  points_type_u8,
+  points_type_i8,
+  points_type_u16,
+  points_type_i16,
+  points_type_u32,
+  points_type_i32,
+  points_type_m32,
+  points_type_r32,
+  points_type_u64,
+  points_type_i64,
+  points_type_m64,
+  points_type_r64,
+  points_type_m128,
+  points_type_m192,
 };
 
-enum components_t
+enum points_components_t
 {
-  components_1 = 1,
-  components_2 = 2,
-  components_3 = 3,
-  components_4 = 4,
-  components_4x4 = 5
+  points_components_1 = 1,
+  points_components_2 = 2,
+  points_components_3 = 3,
+  points_components_4 = 4,
+  points_components_4x4 = 5
 };
-}
+
 #ifdef __cplusplus
 }
 #endif

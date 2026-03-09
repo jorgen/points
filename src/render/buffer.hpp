@@ -15,21 +15,14 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#pragma once 
+#pragma once
 #include <functional>
 
 #include <points/render/buffer.h>
 
-namespace points
-{
-namespace render
-{
-
-struct buffer_t
+struct points_buffer_t
 {
   bool rendered = false;
   void *user_ptr = nullptr;
   std::function<void()> releaseBuffer;
 };
-} // namespace render
-} // namespace points

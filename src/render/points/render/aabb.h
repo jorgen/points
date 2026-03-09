@@ -22,16 +22,11 @@
 extern "C" {
 #endif
 
-
-namespace points::render
-{
-struct aabb_t
+struct points_aabb_t
 {
   double min[3];
   double max[3];
 };
-} // namespace points::render
-
 
 #ifdef __cplusplus
 }

@@ -22,7 +22,7 @@
 
 namespace points::render
 {
-inline glm::dvec3 aabb_center(const aabb_t &aabb)
+inline glm::dvec3 aabb_center(const points_aabb_t &aabb)
 {
   double half_x = aabb.max[0] - aabb.min[0];
   double half_y = aabb.max[1] - aabb.min[1];

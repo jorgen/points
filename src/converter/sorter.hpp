@@ -24,6 +24,6 @@
 
 namespace points::converter
 {
-void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error);
+void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error);
 }
 

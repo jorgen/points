@@ -23,33 +23,28 @@
 #include "renderer_callbacks.hpp"
 #include <points/render/renderer.h>
 
-namespace points::render
+struct points_environment_data_source_t : public points::render::data_source_cpp_t
 {
+  points_environment_data_source_t(points::render::callback_manager_t &callbacks, double ground_z, double grid_size);
 
-struct environment_data_source_t : public data_source_cpp_t
-{
-  environment_data_source_t(callback_manager_t &callbacks, double ground_z, double grid_size);
+  void add_to_frame(const points::render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
 
-  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
-
-  callback_manager_t &callbacks;
+  points::render::callback_manager_t &callbacks;
 
   double ground_z_d;
   double grid_size_d;
 
-  buffer_t inverse_vp_buffer;
+  points_buffer_t inverse_vp_buffer;
   glm::mat4 inverse_vp;
 
-  buffer_t camera_pos_buffer;
-  glm::vec3 camera_pos; // xy = camera_pos mod grid_size, z = height above ground
+  points_buffer_t camera_pos_buffer;
+  glm::vec3 camera_pos;
 
-  buffer_t params_buffer;
-  glm::vec4 params; // x=grid_size
+  points_buffer_t params_buffer;
+  glm::vec4 params;
 
-  buffer_t vertex_buffer;
+  points_buffer_t vertex_buffer;
   std::vector<glm::vec2> vertices;
 
-  draw_buffer_t draw_buffers[4];
+  points_draw_buffer_t draw_buffers[4];
 };
-
-} // namespace points::render

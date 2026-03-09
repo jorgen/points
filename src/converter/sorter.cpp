@@ -177,153 +177,153 @@ void reorder_buffer_two_into(uint32_t count, const INDEX_T *indecies_begin, cons
 }
 
 template <typename INDEX_T, size_t C>
-void reorder_buffer_one(uint32_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void *source, std::unique_ptr<uint8_t[]> &target, uint32_t &target_size)
+void reorder_buffer_one(uint32_t count, const INDEX_T *indecies_begin, std::pair<points_type_t, points_components_t> format, const void *source, std::unique_ptr<uint8_t[]> &target, uint32_t &target_size)
 {
   switch (format.first)
   {
-  case type_u8:
+  case points_type_u8:
     reorder_buffer_two<INDEX_T, C, uint8_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_i8:
+  case points_type_i8:
     reorder_buffer_two<INDEX_T, C, int8_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_u16:
+  case points_type_u16:
     reorder_buffer_two<INDEX_T, C, uint16_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_i16:
+  case points_type_i16:
     reorder_buffer_two<INDEX_T, C, int16_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_u32:
+  case points_type_u32:
     reorder_buffer_two<INDEX_T, C, uint32_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_i32:
+  case points_type_i32:
     reorder_buffer_two<INDEX_T, C, int32_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_m32:
+  case points_type_m32:
     reorder_buffer_two<INDEX_T, C, morton::morton32_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_r32:
+  case points_type_r32:
     reorder_buffer_two<INDEX_T, C, float>(count, indecies_begin, source, target, target_size);
     break;
-  case type_u64:
+  case points_type_u64:
     reorder_buffer_two<INDEX_T, C, uint64_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_i64:
+  case points_type_i64:
     reorder_buffer_two<INDEX_T, C, int64_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_m64:
+  case points_type_m64:
     reorder_buffer_two<INDEX_T, C, morton::morton64_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_r64:
+  case points_type_r64:
     reorder_buffer_two<INDEX_T, C, double>(count, indecies_begin, source, target, target_size);
     break;
-  case type_m128:
+  case points_type_m128:
     reorder_buffer_two<INDEX_T, C, morton::morton128_t>(count, indecies_begin, source, target, target_size);
     break;
-  case type_m192:
+  case points_type_m192:
     reorder_buffer_two<INDEX_T, C, morton::morton192_t>(count, indecies_begin, source, target, target_size);
     break;
   }
 }
 
 template <typename INDEX_T, size_t C>
-void reorder_buffer_one_into(uint32_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void *source, uint8_t *target)
+void reorder_buffer_one_into(uint32_t count, const INDEX_T *indecies_begin, std::pair<points_type_t, points_components_t> format, const void *source, uint8_t *target)
 {
   switch (format.first)
   {
-  case type_u8:
+  case points_type_u8:
     reorder_buffer_two_into<INDEX_T, C, uint8_t>(count, indecies_begin, source, target);
     break;
-  case type_i8:
+  case points_type_i8:
     reorder_buffer_two_into<INDEX_T, C, int8_t>(count, indecies_begin, source, target);
     break;
-  case type_u16:
+  case points_type_u16:
     reorder_buffer_two_into<INDEX_T, C, uint16_t>(count, indecies_begin, source, target);
     break;
-  case type_i16:
+  case points_type_i16:
     reorder_buffer_two_into<INDEX_T, C, int16_t>(count, indecies_begin, source, target);
     break;
-  case type_u32:
+  case points_type_u32:
     reorder_buffer_two_into<INDEX_T, C, uint32_t>(count, indecies_begin, source, target);
     break;
-  case type_i32:
+  case points_type_i32:
     reorder_buffer_two_into<INDEX_T, C, int32_t>(count, indecies_begin, source, target);
     break;
-  case type_m32:
+  case points_type_m32:
     reorder_buffer_two_into<INDEX_T, C, morton::morton32_t>(count, indecies_begin, source, target);
     break;
-  case type_r32:
+  case points_type_r32:
     reorder_buffer_two_into<INDEX_T, C, float>(count, indecies_begin, source, target);
     break;
-  case type_u64:
+  case points_type_u64:
     reorder_buffer_two_into<INDEX_T, C, uint64_t>(count, indecies_begin, source, target);
     break;
-  case type_i64:
+  case points_type_i64:
     reorder_buffer_two_into<INDEX_T, C, int64_t>(count, indecies_begin, source, target);
     break;
-  case type_m64:
+  case points_type_m64:
     reorder_buffer_two_into<INDEX_T, C, morton::morton64_t>(count, indecies_begin, source, target);
     break;
-  case type_r64:
+  case points_type_r64:
     reorder_buffer_two_into<INDEX_T, C, double>(count, indecies_begin, source, target);
     break;
-  case type_m128:
+  case points_type_m128:
     reorder_buffer_two_into<INDEX_T, C, morton::morton128_t>(count, indecies_begin, source, target);
     break;
-  case type_m192:
+  case points_type_m192:
     reorder_buffer_two_into<INDEX_T, C, morton::morton192_t>(count, indecies_begin, source, target);
     break;
   }
 }
 
 template <typename INDEX_T>
-static void reorder_buffer(uint32_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void *source, std::unique_ptr<uint8_t[]> &target, uint32_t &target_size)
+static void reorder_buffer(uint32_t count, const INDEX_T *indecies_begin, std::pair<points_type_t, points_components_t> format, const void *source, std::unique_ptr<uint8_t[]> &target, uint32_t &target_size)
 {
   switch (format.second)
   {
-  case components_1:
+  case points_components_1:
     reorder_buffer_one<INDEX_T, 1>(count, indecies_begin, format, source, target, target_size);
     break;
-  case components_2:
+  case points_components_2:
     reorder_buffer_one<INDEX_T, 2>(count, indecies_begin, format, source, target, target_size);
     break;
-  case components_3:
+  case points_components_3:
     reorder_buffer_one<INDEX_T, 3>(count, indecies_begin, format, source, target, target_size);
     break;
-  case components_4:
+  case points_components_4:
     reorder_buffer_one<INDEX_T, 4>(count, indecies_begin, format, source, target, target_size);
     break;
-  case components_4x4:
+  case points_components_4x4:
     reorder_buffer_one<INDEX_T, 16>(count, indecies_begin, format, source, target, target_size);
     break;
   }
 }
 
 template <typename INDEX_T>
-static void reorder_buffer_into(uint32_t count, const INDEX_T *indecies_begin, std::pair<type_t, components_t> format, const void *source, uint8_t *target)
+static void reorder_buffer_into(uint32_t count, const INDEX_T *indecies_begin, std::pair<points_type_t, points_components_t> format, const void *source, uint8_t *target)
 {
   switch (format.second)
   {
-  case components_1:
+  case points_components_1:
     reorder_buffer_one_into<INDEX_T, 1>(count, indecies_begin, format, source, target);
     break;
-  case components_2:
+  case points_components_2:
     reorder_buffer_one_into<INDEX_T, 2>(count, indecies_begin, format, source, target);
     break;
-  case components_3:
+  case points_components_3:
     reorder_buffer_one_into<INDEX_T, 3>(count, indecies_begin, format, source, target);
     break;
-  case components_4:
+  case points_components_4:
     reorder_buffer_one_into<INDEX_T, 4>(count, indecies_begin, format, source, target);
     break;
-  case components_4x4:
+  case points_components_4x4:
     reorder_buffer_one_into<INDEX_T, 16>(count, indecies_begin, format, source, target);
     break;
   }
 }
 
 template <typename T, typename INDEX_T, typename MT, size_t C>
-void convert_and_sort_morton(const tree_config_t &tree_config, attributes_configs_t &attributes_config, const header_t &public_header, points_t &points, double smallest_scale, type_t type, error_t &error)
+void convert_and_sort_morton(const tree_config_t &tree_config, attributes_configs_t &attributes_config, const points_converter_header_t &public_header, points_t &points, double smallest_scale, points_type_t type, points_error_t &error)
 {
   (void)error;
   auto &header = points.header;
@@ -380,19 +380,19 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   morton::morton_t<MT, C> last = morton_begin[indecies_begin[count - 1]];
   assert(first < last);
   points.header.lod_span = morton::morton_lod(first, last);
-  type_t new_type = morton_type_from_lod(points.header.lod_span);
+  points_type_t new_type = morton_type_from_lod(points.header.lod_span);
   std::unique_ptr<uint8_t[]> new_data;
   uint32_t new_buffer_size = 0;
-  if (new_type == type_m32 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton32_t))
+  if (new_type == points_type_m32 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton32_t))
     downcast_point_buffer<INDEX_T, MT, C, uint32_t, 1>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
-  else if (new_type == type_m64 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton64_t))
+  else if (new_type == points_type_m64 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton64_t))
     downcast_point_buffer<INDEX_T, MT, C, uint64_t, 1>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
-  else if (new_type == type_m128 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton128_t))
+  else if (new_type == points_type_m128 && sizeof(morton::morton_t<MT, C>) > sizeof(morton::morton128_t))
     downcast_point_buffer<INDEX_T, MT, C, uint64_t, 2>(indecies_begin, world_morton_unique_ptr, buffer_size, new_data, new_buffer_size);
   else
   {
     assert(type == new_type);
-    reorder_buffer<INDEX_T>(count, indecies_begin, std::make_pair(new_type, components_1), world_morton_unique_ptr.get(), new_data, new_buffer_size);
+    reorder_buffer<INDEX_T>(count, indecies_begin, std::make_pair(new_type, points_components_1), world_morton_unique_ptr.get(), new_data, new_buffer_size);
   }
 
   world_morton_unique_ptr = std::move(new_data);
@@ -404,13 +404,13 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   points.buffers.buffers[0].size = buffer_size;
 
   auto &orig_attributes = attributes_config.get(points.attributes_id);
-  attributes_t attributes;
+  points_converter_attributes_t attributes;
   attributes_copy(orig_attributes, attributes);
   attributes.attributes[0].type = type;
   attributes.attribute_names.push_back(std::unique_ptr<char[]>(new char[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER) + 1]));
   memcpy(attributes.attribute_names.back().get(), POINTS_ATTRIBUTE_ORIGINAL_ORDER, sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER));
   attributes.attribute_names.back().get()[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)] = 0;
-  attributes.attributes.emplace_back(attributes.attribute_names.back().get(), uint32_t(sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)), type_from_type<INDEX_T>(), components_1);
+  attributes.attributes.emplace_back(attributes.attribute_names.back().get(), uint32_t(sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)), type_from_type<INDEX_T>(), points_components_1);
   int reorder_attr_count = int(attributes.attributes.size()) - 2;
   if (reorder_attr_count > 0)
   {
@@ -439,14 +439,14 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   points.buffers.buffers.emplace_back(points.buffers.data.back().get(), uint32_t(sizeof(INDEX_T)) * count);
 
   points.attributes_id = attributes_config.get_attribute_config_index(std::move(attributes));
-  points.header.point_format = {type, components_1};
+  points.header.point_format = {type, points_components_1};
   morton::morton_upcast(first, base_morton, points.header.morton_min);
   morton::morton_upcast(last, base_morton, points.header.morton_max);
   assert(points.header.lod_span == morton::morton_lod(points.header.morton_min, points.header.morton_max));
 }
 
 template <typename T, typename INDEX_T>
-void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
+void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error)
 {
   auto &header = points.header;
 
@@ -460,11 +460,11 @@ void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &at
   convert_morton_to_pos(smallest_scale, tree_config.offset, global_min, global_min_pos);
   convert_morton_to_pos(smallest_scale, tree_config.offset, global_max, global_max_pos);
 
-  type_t target_format;
+  points_type_t target_format;
   if (public_header.min[0] == -std::numeric_limits<double>::max() && public_header.min[1] == -std::numeric_limits<double>::max() && public_header.min[2] == -std::numeric_limits<double>::max() &&
       public_header.max[0] == std::numeric_limits<double>::max() && public_header.min[1] == std::numeric_limits<double>::max() && public_header.min[2] == std::numeric_limits<double>::max())
   {
-    target_format = type_t::type_m192;
+    target_format = points_type_t::points_type_m192;
   }
   else if (public_header.min[0] < global_min_pos[0] || public_header.min[1] < global_min_pos[1] || public_header.min[2] < global_min_pos[2] || global_max_pos[0] < public_header.max[0] ||
            global_max_pos[1] < public_header.max[1] || global_max_pos[2] < public_header.max[2])
@@ -483,16 +483,16 @@ void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &at
 
   switch (target_format)
   {
-  case type_m32:
+  case points_type_m32:
     convert_and_sort_morton<T, INDEX_T, uint32_t, 1>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error);
     break;
-  case type_m64:
+  case points_type_m64:
     convert_and_sort_morton<T, INDEX_T, uint64_t, 1>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error);
     break;
-  case type_m128:
+  case points_type_m128:
     convert_and_sort_morton<T, INDEX_T, uint64_t, 2>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error);
     break;
-  case type_m192:
+  case points_type_m192:
     convert_and_sort_morton<T, INDEX_T, uint64_t, 3>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error);
     break;
   default:
@@ -502,7 +502,7 @@ void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &at
 }
 
 template <typename T>
-void convert_and_sort_resolve_index_t(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
+void convert_and_sort_resolve_index_t(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error)
 {
   if (points.header.point_count < std::numeric_limits<uint16_t>::max())
   {
@@ -518,12 +518,12 @@ void convert_and_sort_resolve_index_t(const tree_config_t &tree_config, attribut
   }
 }
 
-void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const header_t &public_header, points_t &points, error_t &error)
+void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error)
 {
   auto point_format = attributes_configs.get_point_format(points.attributes_id);
   switch (point_format.type)
   {
-  case type_i32:
+  case points_type_i32:
     convert_and_sort_resolve_index_t<int32_t>(tree_config, attributes_configs, public_header, points, error);
     break;
   default:

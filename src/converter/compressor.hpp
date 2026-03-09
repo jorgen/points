@@ -64,7 +64,7 @@ struct compression_result_t
 {
   std::shared_ptr<uint8_t[]> data;
   uint32_t size = 0;
-  error_t error;
+  points_error_t error;
 };
 
 class compressor_t

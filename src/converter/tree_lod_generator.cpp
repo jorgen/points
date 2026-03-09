@@ -359,7 +359,7 @@ struct morton_to_lod_t
 };
 
 template <typename S_M, typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, const buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, const points_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
                                       const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
@@ -391,28 +391,28 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
 }
 
 template <typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, type_t source_type, const buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, points_type_t source_type, const points_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
                                       const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
-  assert(source_type == type_m32 || source_type == type_m64 || source_type == type_m128 || source_type == type_m192);
+  assert(source_type == points_type_m32 || source_type == points_type_m64 || source_type == points_type_m128 || source_type == points_type_m192);
 
   switch (source_type)
   {
-  case type_m32:
+  case points_type_m32:
     return find_indecies_to_quantize<morton::morton32_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
-  case type_m64:
+  case points_type_m64:
     return find_indecies_to_quantize<morton::morton64_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
-  case type_m128:
+  case points_type_m128:
     return find_indecies_to_quantize<morton::morton128_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
-  case type_m192:
+  case points_type_m192:
     return find_indecies_to_quantize<morton::morton192_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
   default:
     break;
   }
 }
 template <typename S_M, typename D_M>
-static void quantize_morton_two(const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, type_t source_type, const std::vector<uint32_t> &indecies_to_quantize, const buffer_t &source,
-                                type_t destination_type, buffer_t &destination)
+static void quantize_morton_two(const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, points_type_t source_type, const std::vector<uint32_t> &indecies_to_quantize, const points_converter_buffer_t &source,
+                                points_type_t destination_type, points_converter_buffer_t &destination)
 {
   (void)source_type;
   (void)destination_type;
@@ -428,22 +428,22 @@ static void quantize_morton_two(const morton::morton192_t &morton_min, const mor
 }
 
 template <typename S_M>
-static void quantize_morton_one(const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, type_t source_type, const std::vector<uint32_t> &indecies_to_quantize, const buffer_t &source,
-                                type_t destination_type, buffer_t &destination)
+static void quantize_morton_one(const morton::morton192_t &morton_min, const morton::morton192_t &morton_max, points_type_t source_type, const std::vector<uint32_t> &indecies_to_quantize, const points_converter_buffer_t &source,
+                                points_type_t destination_type, points_converter_buffer_t &destination)
 {
-  assert(destination_type == type_m32 || destination_type == type_m64 || destination_type == type_m128 || destination_type == type_m192);
+  assert(destination_type == points_type_m32 || destination_type == points_type_m64 || destination_type == points_type_m128 || destination_type == points_type_m192);
   switch (destination_type)
   {
-  case type_m32:
+  case points_type_m32:
     quantize_morton_two<S_M, morton::morton32_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination);
     break;
-  case type_m64:
+  case points_type_m64:
     quantize_morton_two<S_M, morton::morton64_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination);
     break;
-  case type_m128:
+  case points_type_m128:
     quantize_morton_two<S_M, morton::morton128_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination);
     break;
-  case type_m192:
+  case points_type_m192:
     quantize_morton_two<S_M, morton::morton192_t>(morton_min, morton_max, source_type, indecies_to_quantize, source, destination_type, destination);
     break;
   default:
@@ -451,10 +451,10 @@ static void quantize_morton_one(const morton::morton192_t &morton_min, const mor
   }
 }
 
-static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, offset_in_subset_t offset, point_count_t count)
+static points_converter_buffer_t morton_buffer_for_subset(const points_converter_buffer_t &buffer, points_type_t format, offset_in_subset_t offset, point_count_t count)
 {
   auto format_byte_size = size_for_format(format);
-  buffer_t ret;
+  points_converter_buffer_t ret;
   auto offset_bytes = offset.data * format_byte_size;
   ret.data = ((uint8_t *)buffer.data) + offset_bytes;
   ret.size = count.data * format_byte_size;
@@ -463,11 +463,11 @@ static buffer_t morton_buffer_for_subset(const buffer_t &buffer, type_t format, 
 }
 
 #ifndef NDEBUG
-static const void *buffer_end(const buffer_t &buffer)
+static const void *buffer_end(const points_converter_buffer_t &buffer)
 {
   return ((const uint8_t *)buffer.data) + buffer.size;
 }
-static bool buffer_is_subset(const buffer_t &super, const buffer_t &sub)
+static bool buffer_is_subset(const points_converter_buffer_t &super, const points_converter_buffer_t &sub)
 {
   return super.data <= sub.data && buffer_end(sub) <= buffer_end(super);
 }
@@ -480,8 +480,8 @@ struct structured_data_t
 };
 
 template <size_t S_S, typename S, size_t D_S, typename D>
-void convert_points_impl(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source, const point_format_t &destination_format,
-                         buffer_t &destination)
+void convert_points_impl(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const points_converter_buffer_t &source, const point_format_t &destination_format,
+                         points_converter_buffer_t &destination)
 {
   (void)source_format;
   (void)destination_format;
@@ -514,148 +514,148 @@ void convert_points_impl(input_data_id_t input_id, const std::vector<std::pair<i
 }
 
 template <size_t S_S, typename S, size_t D_S>
-void convert_points_three(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source,
-                          const point_format_t &destination_format, buffer_t &destination)
+void convert_points_three(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const points_converter_buffer_t &source,
+                          const point_format_t &destination_format, points_converter_buffer_t &destination)
 {
   switch (destination_format.type)
   {
-  case type_u8:
+  case points_type_u8:
     convert_points_impl<S_S, S, D_S, uint8_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_i8:
+  case points_type_i8:
     convert_points_impl<S_S, S, D_S, int8_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_u16:
+  case points_type_u16:
     convert_points_impl<S_S, S, D_S, uint16_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_i16:
+  case points_type_i16:
     convert_points_impl<S_S, S, D_S, int16_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_u32:
+  case points_type_u32:
     convert_points_impl<S_S, S, D_S, uint32_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_i32:
+  case points_type_i32:
     convert_points_impl<S_S, S, D_S, int32_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_r32:
+  case points_type_r32:
     convert_points_impl<S_S, S, D_S, float>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_u64:
+  case points_type_u64:
     convert_points_impl<S_S, S, D_S, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_i64:
+  case points_type_i64:
     convert_points_impl<S_S, S, D_S, int64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_r64:
+  case points_type_r64:
     convert_points_impl<S_S, S, D_S, double>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_m32:
+  case points_type_m32:
     convert_points_impl<S_S, S, 1, uint32_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_m64:
+  case points_type_m64:
     convert_points_impl<S_S, S, 1, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_m128:
+  case points_type_m128:
     convert_points_impl<S_S, S, 2, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_m192:
+  case points_type_m192:
     convert_points_impl<S_S, S, 3, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
   }
 }
 
 template <size_t S_S, typename S>
-void convert_points_two(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source, const point_format_t &destination_format,
-                        buffer_t &destination)
+void convert_points_two(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const points_converter_buffer_t &source, const point_format_t &destination_format,
+                        points_converter_buffer_t &destination)
 {
   switch (destination_format.components)
   {
-  case components_1:
+  case points_components_1:
     convert_points_three<S_S, S, 1>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case components_2:
+  case points_components_2:
     convert_points_three<S_S, S, 2>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case components_3:
+  case points_components_3:
     convert_points_three<S_S, S, 3>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case components_4:
+  case points_components_4:
     convert_points_three<S_S, S, 4>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case components_4x4:
+  case points_components_4x4:
     convert_points_three<S_S, S, 4 * 4>(input_id, indecies, source_format, source, destination_format, destination);
     break;
   }
 }
 template <size_t S_S>
-void convert_points_one(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source, const point_format_t &destination_format,
-                        buffer_t &destination)
+void convert_points_one(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const points_converter_buffer_t &source, const point_format_t &destination_format,
+                        points_converter_buffer_t &destination)
 {
   switch (source_format.type)
   {
-  case type_u8:
+  case points_type_u8:
     convert_points_two<S_S, uint8_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_i8:
+  case points_type_i8:
     convert_points_two<S_S, int8_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_u16:
+  case points_type_u16:
     convert_points_two<S_S, uint16_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_i16:
+  case points_type_i16:
     convert_points_two<S_S, int16_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_u32:
+  case points_type_u32:
     convert_points_two<S_S, uint32_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_i32:
+  case points_type_i32:
     convert_points_two<S_S, int32_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_r32:
+  case points_type_r32:
     convert_points_two<S_S, float>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_u64:
+  case points_type_u64:
     convert_points_two<S_S, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_i64:
+  case points_type_i64:
     convert_points_two<S_S, int64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_r64:
+  case points_type_r64:
     convert_points_two<S_S, double>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_m32:
+  case points_type_m32:
     convert_points_two<1, uint32_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_m64:
+  case points_type_m64:
     convert_points_two<1, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_m128:
+  case points_type_m128:
     convert_points_two<2, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
-  case type_m192:
+  case points_type_m192:
     convert_points_two<3, uint64_t>(input_id, indecies, source_format, source, destination_format, destination);
     break;
   }
 }
 
-static void copy_attribute_for_input(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const buffer_t &source_buffer,
-                                     const point_format_t &target_format, buffer_t &target_buffer)
+static void copy_attribute_for_input(input_data_id_t input_id, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies, const point_format_t &source_format, const points_converter_buffer_t &source_buffer,
+                                     const point_format_t &target_format, points_converter_buffer_t &target_buffer)
 {
   switch (source_format.components)
   {
-  case components_1:
+  case points_components_1:
     convert_points_one<1>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
     break;
-  case components_2:
+  case points_components_2:
     convert_points_one<2>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
     break;
-  case components_3:
+  case points_components_3:
     convert_points_one<3>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
     break;
-  case components_4:
+  case points_components_4:
     convert_points_one<4>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
     break;
-  case components_4x4:
+  case points_components_4x4:
     convert_points_one<4 * 4>(input_id, indecies, source_format, source_buffer, target_format, target_buffer);
     break;
   }
@@ -697,7 +697,7 @@ static void quantize_subset(storage_handler_t &cache, const points_subset_t &sub
     offset = subset.offset;
     point_count = subset.count;
   }
-  const buffer_t source_buffer = morton_buffer_for_subset(subset_data.data, subset_data.header.point_format.type, offset, point_count);
+  const points_converter_buffer_t source_buffer = morton_buffer_for_subset(subset_data.data, subset_data.header.point_format.type, offset, point_count);
 
   assert(buffer_is_subset(subset_data.data, source_buffer));
   morton::morton192_t subset_min = morton::morton_and(morton::morton_negate(morton::morton_mask_create<uint64_t, 3>(lod - 1)), subset_data.header.morton_min);
@@ -786,16 +786,16 @@ static void quantize_morton_remember_indecies(storage_handler_t &cache, const mo
   auto lod_format = morton_type_from_lod(lod);
   switch (lod_format)
   {
-  case type_m32:
+  case points_type_m32:
     quantize_morton_remember_indecies_t<uint32_t, 1>(cache, node_min, child_data, child_storage_map, lod, random_offsets, morton_data, indecies, min, max);
     break;
-  case type_m64:
+  case points_type_m64:
     quantize_morton_remember_indecies_t<uint64_t, 1>(cache, node_min, child_data, child_storage_map, lod, random_offsets, morton_data, indecies, min, max);
     break;
-  case type_m128:
+  case points_type_m128:
     quantize_morton_remember_indecies_t<uint64_t, 2>(cache, node_min, child_data, child_storage_map, lod, random_offsets, morton_data, indecies, min, max);
     break;
-  case type_m192:
+  case points_type_m192:
     quantize_morton_remember_indecies_t<uint64_t, 3>(cache, node_min, child_data, child_storage_map, lod, random_offsets, morton_data, indecies, min, max);
     break;
   default:
@@ -805,7 +805,7 @@ static void quantize_morton_remember_indecies(storage_handler_t &cache, const mo
 
 void lod_worker_t::work()
 {
-  attributes_t attributes;
+  points_converter_attributes_t attributes;
   std::unique_ptr<attributes_id_t[]> attribute_ids(new attributes_id_t[data.child_storage_info.size()]);
   int child_data_count = 0;
   for (auto const &storage_info : data.child_storage_info)
@@ -835,10 +835,10 @@ void lod_worker_t::work()
 
   attribute_buffers_adjust_buffers_to_size(lod_attrib_mapping.destination, buffers, uint32_t(indecies.size()));
   destination_header.point_count = uint32_t(indecies.size());
-  destination_header.point_format = {lod_format, components_1};
+  destination_header.point_format = {lod_format, points_components_1};
   destination_header.lod_span = data.lod;
   cache.write(destination_header, lod_attrib_mapping.destination_id, std::move(buffers),
-              [this](const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)
+              [this](const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const points_error_t &error)
               {
                 (void)storageheader;
                 (void)error;

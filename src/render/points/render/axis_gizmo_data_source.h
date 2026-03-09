@@ -25,15 +25,12 @@
 extern "C" {
 #endif
 
-namespace points::render
-{
-struct axis_gizmo_data_source_t;
-POINTS_RENDER_EXPORT struct axis_gizmo_data_source_t *axis_gizmo_data_source_create(struct renderer_t *renderer, const double center[3], double axis_length);
-POINTS_RENDER_EXPORT void axis_gizmo_data_source_destroy(struct axis_gizmo_data_source_t *gizmo);
-POINTS_RENDER_EXPORT struct data_source_t axis_gizmo_data_source_get(struct axis_gizmo_data_source_t *gizmo);
-POINTS_RENDER_EXPORT void axis_gizmo_data_source_set_center(struct axis_gizmo_data_source_t *gizmo, const double center[3]);
-POINTS_RENDER_EXPORT void axis_gizmo_data_source_set_axis_length(struct axis_gizmo_data_source_t *gizmo, double axis_length);
-}
+struct points_axis_gizmo_data_source_t;
+POINTS_RENDER_EXPORT struct points_axis_gizmo_data_source_t *points_axis_gizmo_data_source_create(struct points_renderer_t *renderer, const double center[3], double axis_length);
+POINTS_RENDER_EXPORT void points_axis_gizmo_data_source_destroy(struct points_axis_gizmo_data_source_t *gizmo);
+POINTS_RENDER_EXPORT struct points_data_source_t points_axis_gizmo_data_source_get(struct points_axis_gizmo_data_source_t *gizmo);
+POINTS_RENDER_EXPORT void points_axis_gizmo_data_source_set_center(struct points_axis_gizmo_data_source_t *gizmo, const double center[3]);
+POINTS_RENDER_EXPORT void points_axis_gizmo_data_source_set_axis_length(struct points_axis_gizmo_data_source_t *gizmo, double axis_length);
 
 #ifdef __cplusplus
 }

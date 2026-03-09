@@ -29,7 +29,7 @@ struct input_data_source_t
   input_data_id_t input_id;
   attributes_id_t attribute_id;
   input_name_ref_t name;
-  header_t public_header;
+  points_converter_header_t public_header;
 };
 
 struct input_data_source_impl_t
@@ -38,7 +38,7 @@ struct input_data_source_impl_t
   attributes_id_t attribute_id;
   std::unique_ptr<char[]> name;
   uint32_t name_length;
-  header_t public_header;
+  points_converter_header_t public_header;
   morton::morton192_t morton_min;
   morton::morton192_t morton_max;
   morton::morton192_t input_order;
@@ -75,7 +75,7 @@ public:
 
   input_data_reference_t register_file(std::unique_ptr<char[]> &&name, uint32_t name_length);
   void register_pre_init_result(const tree_config_t &tree_config, input_data_id_t id, bool found_min, double (&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes, uint64_t input_file_size_bytes);
-  void handle_input_init(input_data_id_t id, attributes_id_t attributes_id, header_t public_header);
+  void handle_input_init(input_data_id_t id, attributes_id_t attributes_id, points_converter_header_t public_header);
   void handle_sub_added(input_data_id_t id);
   void handle_sorted_points(input_data_id_t id, const morton::morton192_t &min, const morton::morton192_t &max);
   void handle_points_written(input_data_id_t id, std::vector<storage_location_t> &&location);

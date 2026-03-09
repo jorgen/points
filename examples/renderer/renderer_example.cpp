@@ -36,12 +36,12 @@ std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
   return std::unique_ptr<T, Deleter>(t, d);
 }
 
-static double halfway(const points::render::aabb_t &aabb, int dimension)
+static double halfway(const points_aabb_t &aabb, int dimension)
 {
   double aabb_width = aabb.max[dimension] - aabb.min[dimension];
   return aabb.min[dimension] + (aabb_width / 2);
 }
-static void get_aabb_center(const points::render::aabb_t &aabb, double (&center)[3])
+static void get_aabb_center(const points_aabb_t &aabb, double (&center)[3])
 {
   center[0] = halfway(aabb, 0);
   center[1] = halfway(aabb, 1);
@@ -49,7 +49,7 @@ static void get_aabb_center(const points::render::aabb_t &aabb, double (&center)
 }
 
 template <size_t N>
-points::converter::str_buffer make_str_buffer(const char (&data)[N])
+points_converter_str_buffer make_str_buffer(const char (&data)[N])
 {
   return {data, N};
 }
@@ -132,8 +132,8 @@ int main(int argc, char **argv)
   io.Fonts->AddFontFromMemoryTTF((void *)proggy.begin(), (int)proggy.size(), 10.0f);
 
   // std::string file = "test.las";
-  auto renderer = create_unique_ptr(points::render::renderer_create(), &points::render::renderer_destroy);
-  auto camera = create_unique_ptr(points::render::camera_create(), &points::render::camera_destroy);
+  auto renderer = create_unique_ptr(points_renderer_create(), &points_renderer_destroy);
+  auto camera = create_unique_ptr(points_camera_create(), &points_camera_destroy);
   gl_renderer points_gl_renderer(renderer.get(), camera.get());
 
   std::string cache_path;
@@ -173,29 +173,29 @@ int main(int argc, char **argv)
     cache_path = state.result;
   }
 
-  points::render::aabb_t aabb;
+  points_aabb_t aabb;
 
-  auto error = create_unique_ptr(points::error_create(), &points::error_destroy);
+  auto error = create_unique_ptr(points_error_create(), &points_error_destroy);
   bool render_converter_points = true;
-  auto converter_points = create_unique_ptr(points::converter::converter_data_source_create(cache_path.c_str(), uint32_t(cache_path.size()), error.get(), renderer.get()), &points::converter::converter_data_source_destroy);
+  auto converter_points = create_unique_ptr(points_converter_data_source_create(cache_path.c_str(), uint32_t(cache_path.size()), error.get(), renderer.get()), &points_converter_data_source_destroy);
   if (!converter_points)
   {
     int code;
     const char *str;
     size_t str_len;
-    points::error_get_info(error.get(), &code, &str, &str_len);
+    points_error_get_info(error.get(), &code, &str, &str_len);
     fprintf(stderr, "Failed to create converter_data_source: %d - %s\n", code, str);
     exit(1);
   }
 
-  uint32_t attribute_count = points::converter::converter_data_attribute_count(converter_points.get());
+  uint32_t attribute_count = points_converter_data_attribute_count(converter_points.get());
   std::vector<std::string> attribute_names;
   attribute_names.resize(attribute_count);
   {
     char buffer[256];
     for (uint32_t i = 0; i < attribute_count; i++)
     {
-      auto str_size = points::converter::converter_data_get_attribute_name(converter_points.get(), i, buffer, sizeof(buffer));
+      auto str_size = points_converter_data_get_attribute_name(converter_points.get(), i, buffer, sizeof(buffer));
       attribute_names[i].assign(buffer, str_size);
     }
   }
@@ -218,7 +218,7 @@ int main(int argc, char **argv)
       memcpy(state->aabb_max, aabb_max, sizeof(state->aabb_max));
       state->cv.notify_one();
     };
-    points::converter::converter_data_source_request_aabb(converter_points.get(), callback, &state);
+    points_converter_data_source_request_aabb(converter_points.get(), callback, &state);
     state.cv.wait(lock);
     memcpy(aabb.min, state.aabb_min, sizeof(state.aabb_min));
     memcpy(aabb.max, state.aabb_max, sizeof(state.aabb_max));
@@ -227,45 +227,45 @@ int main(int argc, char **argv)
   double ground_z = aabb.min[2];
   double grid_size = std::max({aabb.max[0] - aabb.min[0], aabb.max[1] - aabb.min[1]}) / 10.0;
   auto environment = create_unique_ptr(
-    points::render::environment_data_source_create(renderer.get(), ground_z, grid_size),
-    &points::render::environment_data_source_destroy);
-  points::render::renderer_add_data_source(renderer.get(), points::render::environment_data_source_get(environment.get()));
+    points_environment_data_source_create(renderer.get(), ground_z, grid_size),
+    &points_environment_data_source_destroy);
+  points_renderer_add_data_source(renderer.get(), points_environment_data_source_get(environment.get()));
 
   float screen_fraction_threshold = 0.5f;
   int gpu_memory_budget_mb = 64;
   bool show_bounding_boxes = false;
   bool debug_transitions = false;
 
-  points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
-  points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get_bbox_data_source(converter_points.get()));
-  points::converter::converter_data_source_set_viewport(converter_points.get(), width, height);
-  points::converter::converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
+  points_renderer_add_data_source(renderer.get(), points_converter_data_source_get(converter_points.get()));
+  points_renderer_add_data_source(renderer.get(), points_converter_data_source_get_bbox_data_source(converter_points.get()));
+  points_converter_data_source_set_viewport(converter_points.get(), width, height);
+  points_converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
 
   std::vector<uint32_t> storage_ids;
   std::vector<uint32_t> storage_subs;
   std::vector<std::string> storage_strings;
-  // auto aabb_ds = create_unique_ptr(flat_points::render::aabb_data_source_create(renderer.get(), aabb.min),
-  //                                  &flat_points::render::aabb_data_source_destroy);
-  // flat_points::render::renderer_add_data_source(renderer.get(), flat_points::render::aabb_data_source_get(aabb_ds.get()));
-  // flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
-  // flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
-  //(void)flat_points;
+  // auto aabb_ds = create_unique_ptr(points_flat_points_aabb_data_source_create(renderer.get(), aabb.min),
+  //                                  &points_flat_points_aabb_data_source_destroy);
+  // flat_points_renderer_add_data_source(renderer.get(), points_flat_points_aabb_data_source_get(aabb_ds.get()));
+  // points_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  // points_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  //(void)points_flat_points;
 
   double view_direction[3] = {0.0, -1.0, 0.0};
   double up[3] = {0.0, 0.0, 1.0};
   double z_up[3] = {0.0, 0.0, 1.0};
 
-  points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
-  points::render::camera_look_at_aabb(camera.get(), &aabb, view_direction, up);
+  points_camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
+  points_camera_look_at_aabb(camera.get(), &aabb, view_direction, up);
 
-  points::render::aabb_t aabb2;
+  points_aabb_t aabb2;
   aabb2.min[0] = 0.0;
   aabb2.min[1] = 0.0;
   aabb2.min[2] = 0.0;
   aabb2.max[0] = 0.0;
   aabb2.max[1] = 0.0;
   aabb2.max[2] = 0.0;
-  // int aabb2_id =  -1; //flat_points::render::aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  // int aabb2_id =  -1; //points_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
 
   bool loop = true;
   bool left_pressed = false;
@@ -276,17 +276,17 @@ int main(int argc, char **argv)
 
   double arcball_center[3];
   get_aabb_center(aabb, arcball_center);
-  auto arcball = create_unique_ptr(points::render::camera_manipulator::arcball_create(camera.get(), arcball_center), &points::render::camera_manipulator::arcball_destroy);
-  points::render::camera_manipulator::arcball_set_up_axis(arcball.get(), z_up);
-  auto fps = create_unique_ptr((points::render::camera_manipulator::fps_t *)nullptr, &points::render::camera_manipulator::fps_destroy);
+  auto arcball = create_unique_ptr(points_arcball_create(camera.get(), arcball_center), &points_arcball_destroy);
+  points_arcball_set_up_axis(arcball.get(), z_up);
+  auto fps = create_unique_ptr((points_fps_t *)nullptr, &points_fps_destroy);
 
   double dx_aabb = aabb.max[0] - aabb.min[0], dy_aabb = aabb.max[1] - aabb.min[1], dz_aabb = aabb.max[2] - aabb.min[2];
   double gizmo_length = std::sqrt(dx_aabb * dx_aabb + dy_aabb * dy_aabb + dz_aabb * dz_aabb) * 0.05;
-  auto axis_gizmo = create_unique_ptr(points::render::axis_gizmo_data_source_create(renderer.get(), arcball_center, gizmo_length), &points::render::axis_gizmo_data_source_destroy);
-  points::render::renderer_add_data_source(renderer.get(), points::render::axis_gizmo_data_source_get(axis_gizmo.get()));
+  auto axis_gizmo = create_unique_ptr(points_axis_gizmo_data_source_create(renderer.get(), arcball_center, gizmo_length), &points_axis_gizmo_data_source_destroy);
+  points_renderer_add_data_source(renderer.get(), points_axis_gizmo_data_source_get(axis_gizmo.get()));
 
-  auto origin_anchor = create_unique_ptr(points::render::origin_anchor_data_source_create(renderer.get(), arcball_center, 1.0), &points::render::origin_anchor_data_source_destroy);
-  points::render::renderer_add_data_source(renderer.get(), points::render::origin_anchor_data_source_get(origin_anchor.get()));
+  auto origin_anchor = create_unique_ptr(points_origin_anchor_data_source_create(renderer.get(), arcball_center, 1.0), &points_origin_anchor_data_source_destroy);
+  points_renderer_add_data_source(renderer.get(), points_origin_anchor_data_source_get(origin_anchor.get()));
 
   while (loop)
   {
@@ -306,17 +306,17 @@ int main(int argc, char **argv)
           if (fps)
           {
             if (event.key.key == SDLK_W || event.key.key == SDLK_UP)
-              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, -1.3f);
+              points_fps_move(fps.get(), 0.0f, 0.0f, -1.3f);
             if (event.key.key == SDLK_S || event.key.key == SDLK_DOWN)
-              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 0.0f, 1.3f);
+              points_fps_move(fps.get(), 0.0f, 0.0f, 1.3f);
             if (event.key.key == SDLK_A || event.key.key == SDLK_LEFT)
-              points::render::camera_manipulator::fps_move(fps.get(), -1.3f, 0.0f, 0.0f);
+              points_fps_move(fps.get(), -1.3f, 0.0f, 0.0f);
             if (event.key.key == SDLK_D || event.key.key == SDLK_RIGHT)
-              points::render::camera_manipulator::fps_move(fps.get(), 1.3f, 0.0f, 0.0f);
+              points_fps_move(fps.get(), 1.3f, 0.0f, 0.0f);
             if (event.key.key == SDLK_Q)
-              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, -1.3f, 0.0f);
+              points_fps_move(fps.get(), 0.0f, -1.3f, 0.0f);
             if (event.key.key == SDLK_E)
-              points::render::camera_manipulator::fps_move(fps.get(), 0.0f, 1.3f, 0.0f);
+              points_fps_move(fps.get(), 0.0f, 1.3f, 0.0f);
           }
 
           if (event.key.key == SDLK_LCTRL || event.key.key == SDLK_RCTRL)
@@ -351,21 +351,21 @@ int main(int argc, char **argv)
           {
             float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
-              points::render::camera_manipulator::arcball_dolly(arcball.get(), dy);
+              points_arcball_dolly(arcball.get(), dy);
           }
           else if (right_pressed && !left_pressed && ctrl_modifier)
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
-              points::render::camera_manipulator::arcball_pan_ground(arcball.get(), dx, dy);
+              points_arcball_pan_ground(arcball.get(), dx, dy);
           }
           else if (middle_pressed || (right_pressed && !left_pressed))
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
-              points::render::camera_manipulator::arcball_pan(arcball.get(), dx, dy);
+              points_arcball_pan(arcball.get(), dx, dy);
           }
           else if (left_pressed && ctrl_modifier)
           {
@@ -373,18 +373,18 @@ int main(int argc, char **argv)
             float dy = -(float(event.motion.yrel) / float(height));
             float avg = (dx + dy) / 2;
             if (arcball)
-              points::render::camera_manipulator::arcball_rotate(arcball.get(), 0.0f, 0.0f, avg);
+              points_arcball_rotate(arcball.get(), 0.0f, 0.0f, avg);
             else if (fps)
-              points::render::camera_manipulator::fps_rotate(fps.get(), 0.0f, 0.0f, avg);
+              points_fps_rotate(fps.get(), 0.0f, 0.0f, avg);
           }
           else if (left_pressed)
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
-              points::render::camera_manipulator::arcball_rotate(arcball.get(), dx, dy, 0.0f);
+              points_arcball_rotate(arcball.get(), dx, dy, 0.0f);
             else
-              points::render::camera_manipulator::fps_rotate(fps.get(), dx, dy, 0.0f);
+              points_fps_rotate(fps.get(), dx, dy, 0.0f);
           }
           break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -404,15 +404,15 @@ int main(int argc, char **argv)
         case SDL_EVENT_MOUSE_WHEEL:
           if (arcball && event.wheel.y)
           {
-            points::render::camera_manipulator::arcball_zoom(arcball.get(), -float(event.wheel.y) / 30);
+            points_arcball_zoom(arcball.get(), -float(event.wheel.y) / 30);
           }
           break;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
           SDL_GetWindowSizeInPixels(window, &width, &height);
           glViewport(0, 0, width, height);
-          points::render::camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
+          points_camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
           if (converter_points)
-            points::converter::converter_data_source_set_viewport(converter_points.get(), width, height);
+            points_converter_data_source_set_viewport(converter_points.get(), width, height);
           break;
         }
         default:
@@ -424,11 +424,11 @@ int main(int argc, char **argv)
     if (arcball)
     {
       double gizmo_center[3];
-      points::render::camera_manipulator::arcball_get_center(arcball.get(), gizmo_center);
+      points_arcball_get_center(arcball.get(), gizmo_center);
       if (axis_gizmo)
-        points::render::axis_gizmo_data_source_set_center(axis_gizmo.get(), gizmo_center);
+        points_axis_gizmo_data_source_set_center(axis_gizmo.get(), gizmo_center);
       if (origin_anchor)
-        points::render::origin_anchor_data_source_set_center(origin_anchor.get(), gizmo_center);
+        points_origin_anchor_data_source_set_center(origin_anchor.get(), gizmo_center);
     }
 
     clear clear_mask = clear(int(clear::color) | int(clear::depth));
@@ -437,11 +437,11 @@ int main(int argc, char **argv)
 
     {
       double tight_min[3], tight_max[3];
-      points::converter::converter_data_source_get_tight_aabb(converter_points.get(), tight_min, tight_max);
+      points_converter_data_source_get_tight_aabb(converter_points.get(), tight_min, tight_max);
       if (tight_min[2] < ground_z)
       {
         ground_z = tight_min[2];
-        points::render::environment_data_source_set_ground_z(environment.get(), ground_z);
+        points_environment_data_source_set_ground_z(environment.get(), ground_z);
       }
     }
 
@@ -457,13 +457,13 @@ int main(int argc, char **argv)
       {
         fps.reset();
         double eye[3], fwd[3];
-        points::render::camera_get_eye(camera.get(), eye);
-        points::render::camera_get_forward(camera.get(), fwd);
+        points_camera_get_eye(camera.get(), eye);
+        points_camera_get_forward(camera.get(), fwd);
         double dx = aabb.max[0] - aabb.min[0], dy = aabb.max[1] - aabb.min[1], dz = aabb.max[2] - aabb.min[2];
         double orbit_dist = std::sqrt(dx * dx + dy * dy + dz * dz) * 0.5;
         double new_center[3] = {eye[0] + fwd[0] * orbit_dist, eye[1] + fwd[1] * orbit_dist, eye[2] + fwd[2] * orbit_dist};
-        arcball.reset(points::render::camera_manipulator::arcball_create(camera.get(), new_center));
-        points::render::camera_manipulator::arcball_set_up_axis(arcball.get(), z_up);
+        arcball.reset(points_arcball_create(camera.get(), new_center));
+        points_arcball_set_up_axis(arcball.get(), z_up);
       }
     }
     if (ImGui::RadioButton("FPS", fps.get()))
@@ -471,29 +471,29 @@ int main(int argc, char **argv)
       if (!fps)
       {
         arcball.reset();
-        fps.reset(points::render::camera_manipulator::fps_create(camera.get()));
+        fps.reset(points_fps_create(camera.get()));
       }
     }
     // if (ImGui::Checkbox("Render flat", &render_flat_points))
     //{
     //   if (render_flat_points)
     //   {
-    //     points::render::renderer_add_data_source(renderer.get(), points::render::flat_points_data_source_get(flat_points.get()));
+    //     points_renderer_add_data_source(renderer.get(), points_flat_points_data_source_get(points_flat_points.get()));
     //   }
     //   else
     //   {
-    //     points::render::renderer_remove_data_source(renderer.get(), points::render::flat_points_data_source_get(flat_points.get()));
+    //     points_renderer_remove_data_source(renderer.get(), points_flat_points_data_source_get(points_flat_points.get()));
     //   }
     // }
     if (ImGui::Checkbox("Render converter", &render_converter_points))
     {
       if (render_converter_points)
       {
-        points::render::renderer_add_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+        points_renderer_add_data_source(renderer.get(), points_converter_data_source_get(converter_points.get()));
       }
       else
       {
-        points::render::renderer_remove_data_source(renderer.get(), points::converter::converter_data_source_get(converter_points.get()));
+        points_renderer_remove_data_source(renderer.get(), points_converter_data_source_get(converter_points.get()));
       }
     }
     if (ImGui::BeginCombo("Attribute", attribute_names[selected_attribute].c_str()))
@@ -505,7 +505,7 @@ int main(int argc, char **argv)
         {
           selected_attribute = i;
           auto &name = attribute_names[selected_attribute];
-          points::converter::converter_data_set_rendered_attribute(converter_points.get(), name.c_str(), uint32_t(name.size()));
+          points_converter_data_set_rendered_attribute(converter_points.get(), name.c_str(), uint32_t(name.size()));
         }
         if (is_selected)
         {
@@ -516,24 +516,24 @@ int main(int argc, char **argv)
     }
     if (ImGui::SliderFloat("Screen Fraction Threshold", &screen_fraction_threshold, 0.01f, 1.0f, "%.2f", ImGuiSliderFlags_Logarithmic))
     {
-      points::converter::converter_data_source_set_pixel_error_threshold(converter_points.get(), double(screen_fraction_threshold));
+      points_converter_data_source_set_pixel_error_threshold(converter_points.get(), double(screen_fraction_threshold));
     }
     if (ImGui::SliderInt("GPU Memory Budget (MB)", &gpu_memory_budget_mb, 64, 4096))
     {
-      points::converter::converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
+      points_converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
     }
     if (ImGui::Checkbox("Show Bounding Boxes", &show_bounding_boxes))
     {
-      points::converter::converter_data_source_set_show_bounding_boxes(converter_points.get(), show_bounding_boxes);
+      points_converter_data_source_set_show_bounding_boxes(converter_points.get(), show_bounding_boxes);
     }
     if (ImGui::Checkbox("Debug Transitions", &debug_transitions))
     {
-      points::converter::converter_data_source_set_debug_transitions(converter_points.get(), debug_transitions);
+      points_converter_data_source_set_debug_transitions(converter_points.get(), debug_transitions);
     }
     ImGui::SliderFloat("Point World Size", &points_gl_renderer.point_world_size, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("LOD Scale Base", &points_gl_renderer.lod_scale_base, 1.0f, 5.0f, "%.1f");
     {
-      uint64_t points_rendered = points::converter::converter_data_source_get_points_rendered(converter_points.get());
+      uint64_t points_rendered = points_converter_data_source_get_points_rendered(converter_points.get());
       if (points_rendered >= 1000000)
         ImGui::Text("Points Rendered: %.2f M", double(points_rendered) / 1000000.0);
       else if (points_rendered >= 1000)
@@ -547,7 +547,7 @@ int main(int argc, char **argv)
       int registry_nodes, active_set, nodes_drawn, transitioning, evicted, reconcile_destroyed;
       int walker_nodes, walker_trees_pending;
       uint64_t walker_total_pts;
-      points::converter::converter_data_source_get_frame_timings(converter_points.get(), &tree_walk, &reconciliation, &upload, &refine, &frontier, &draw, &eviction, &total,
+      points_converter_data_source_get_frame_timings(converter_points.get(), &tree_walk, &reconciliation, &upload, &refine, &frontier, &draw, &eviction, &total,
                                                                   &registry_nodes, &active_set, &nodes_drawn, &transitioning, &evicted, &reconcile_destroyed,
                                                                   &walker_nodes, &walker_total_pts, &walker_trees_pending);
       ImGui::Text("Total:          %.2f ms", total);

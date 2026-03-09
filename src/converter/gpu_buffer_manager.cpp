@@ -74,7 +74,7 @@ static void destroy_gpu_buffer(gpu_node_buffer_t &buf, render::callback_manager_
   buf.crossfade_frame = 0;
 }
 
-static std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data, uint32_t data_size, type_t type, components_t components,
+static std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data, uint32_t data_size, points_type_t type, points_components_t components,
                                                                 uint32_t point_count, double global_min, double global_max,
                                                                 uint32_t &out_size)
 {
@@ -92,10 +92,10 @@ static std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data,
   int type_size = 0;
   switch (type)
   {
-  case type_u8: case type_i8: type_size = 1; break;
-  case type_u16: case type_i16: type_size = 2; break;
-  case type_u32: case type_i32: case type_r32: type_size = 4; break;
-  case type_u64: case type_i64: case type_r64: type_size = 8; break;
+  case points_type_u8: case points_type_i8: type_size = 1; break;
+  case points_type_u16: case points_type_i16: type_size = 2; break;
+  case points_type_u32: case points_type_i32: case points_type_r32: type_size = 4; break;
+  case points_type_u64: case points_type_i64: case points_type_r64: type_size = 8; break;
   default: type_size = 1; break;
   }
 
@@ -110,16 +110,16 @@ static std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data,
       double val = 0.0;
       switch (type)
       {
-      case type_u8:  { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-      case type_i8:  { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-      case type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-      case type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-      case type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-      case type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-      case type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
-      case type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-      case type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-      case type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
+      case points_type_u8:  { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+      case points_type_i8:  { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+      case points_type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+      case points_type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+      case points_type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+      case points_type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+      case points_type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
+      case points_type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+      case points_type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+      case points_type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
       default: break;
       }
       float normalized = static_cast<float>((val - global_min) * inv_range);
@@ -253,9 +253,9 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
 
   auto upload_color = [&](gpu_node_buffer_t &rb, const render::loaded_node_data_t &ld)
   {
-    callbacks.do_create_buffer(rb.render_buffers[1], points::render::buffer_type_vertex);
+    callbacks.do_create_buffer(rb.render_buffers[1], points_buffer_type_vertex);
     bool should_normalize = (attr_min < attr_max) &&
-                           !(ld.attribute_type == type_u16 && ld.attribute_components == components_3);
+                           !(ld.attribute_type == points_type_u16 && ld.attribute_components == points_components_3);
     if (should_normalize)
     {
       uint32_t normalized_size = 0;
@@ -263,7 +263,7 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
                                                           ld.attribute_type, ld.attribute_components,
                                                           ld.point_count, attr_min, attr_max,
                                                           normalized_size);
-      callbacks.do_initialize_buffer(rb.render_buffers[1], type_r32, ld.attribute_components, int(normalized_size), normalized_data.get());
+      callbacks.do_initialize_buffer(rb.render_buffers[1], points_type_r32, ld.attribute_components, int(normalized_size), normalized_data.get());
     }
     else
     {
@@ -288,12 +288,12 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
       render_buffer.draw_type = loaded.draw_type;
       upload_color(render_buffer, loaded);
 
-      bool new_is_mono = (loaded.draw_type == render::dyn_points_1);
+      bool new_is_mono = (loaded.draw_type == points_dyn_points_1);
       render_buffer.params_data = glm::vec4(1.0f, 0.0f, render_buffer.old_color_is_mono ? 1.0f : 0.0f, new_is_mono ? 1.0f : 0.0f);
       if (!render_buffer.params_buffer.user_ptr)
       {
-        callbacks.do_create_buffer(render_buffer.params_buffer, points::render::buffer_type_uniform);
-        callbacks.do_initialize_buffer(render_buffer.params_buffer, type_r32, points::components_4, sizeof(render_buffer.params_data), &render_buffer.params_data);
+        callbacks.do_create_buffer(render_buffer.params_buffer, points_buffer_type_uniform);
+        callbacks.do_initialize_buffer(render_buffer.params_buffer, points_type_r32, points_components_4, sizeof(render_buffer.params_data), &render_buffer.params_data);
       }
       else
       {
@@ -317,27 +317,27 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
       render_buffer.offset = loaded.offset;
       render_buffer.draw_type = loaded.draw_type;
 
-      callbacks.do_create_buffer(render_buffer.render_buffers[0], points::render::buffer_type_vertex);
+      callbacks.do_create_buffer(render_buffer.render_buffers[0], points_buffer_type_vertex);
       callbacks.do_initialize_buffer(render_buffer.render_buffers[0], loaded.vertex_type, loaded.vertex_components, int(loaded.vertex_data_size), loaded.vertex_data);
 
       upload_color(render_buffer, loaded);
 
       render_buffer.camera_view = camera.projection * glm::translate(camera.view, to_glm(render_buffer.offset));
 
-      callbacks.do_create_buffer(render_buffer.render_buffers[2], points::render::buffer_type_uniform);
-      callbacks.do_initialize_buffer(render_buffer.render_buffers[2], type_r32, points::components_4x4, sizeof(render_buffer.camera_view), &render_buffer.camera_view);
+      callbacks.do_create_buffer(render_buffer.render_buffers[2], points_buffer_type_uniform);
+      callbacks.do_initialize_buffer(render_buffer.render_buffers[2], points_type_r32, points_components_4x4, sizeof(render_buffer.camera_view), &render_buffer.camera_view);
 
-      render_buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;
+      render_buffer.render_list[0].buffer_mapping = points_dyn_points_bm_vertex;
       render_buffer.render_list[0].user_ptr = render_buffer.render_buffers[0].user_ptr;
-      render_buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;
+      render_buffer.render_list[1].buffer_mapping = points_dyn_points_bm_color;
       render_buffer.render_list[1].user_ptr = render_buffer.render_buffers[1].user_ptr;
-      render_buffer.render_list[2].buffer_mapping = render::dyn_points_bm_camera;
+      render_buffer.render_list[2].buffer_mapping = points_dyn_points_bm_camera;
       render_buffer.render_list[2].user_ptr = render_buffer.render_buffers[2].user_ptr;
 
-      bool is_mono = (loaded.draw_type == render::dyn_points_1);
+      bool is_mono = (loaded.draw_type == points_dyn_points_1);
       render_buffer.params_data = glm::vec4(0.0f, 1.0f, 0.0f, is_mono ? 1.0f : 0.0f);
-      callbacks.do_create_buffer(render_buffer.params_buffer, points::render::buffer_type_uniform);
-      callbacks.do_initialize_buffer(render_buffer.params_buffer, type_r32, points::components_4, sizeof(render_buffer.params_data), &render_buffer.params_data);
+      callbacks.do_create_buffer(render_buffer.params_buffer, points_buffer_type_uniform);
+      callbacks.do_initialize_buffer(render_buffer.params_buffer, points_type_r32, points_components_4, sizeof(render_buffer.params_data), &render_buffer.params_data);
       render_buffer.fade_frame = 0;
 
       size_t buf_mem = loaded.vertex_data_size + loaded.attribute_data_size + sizeof(render_buffer.camera_view);
@@ -545,7 +545,7 @@ void gpu_buffer_manager_t::handle_attribute_change(std::vector<std::unique_ptr<g
         buf.old_color_buffer = buf.render_buffers[1];
         buf.render_buffers[1] = {};
         buf.old_color_valid = true;
-        buf.old_color_is_mono = (buf.draw_type == render::dyn_points_1);
+        buf.old_color_is_mono = (buf.draw_type == points_dyn_points_1);
         buf.old_color_memory = buf.attribute_data_size;
         buf.awaiting_new_color = true;
         buf.crossfade_frame = 0;

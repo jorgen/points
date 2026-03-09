@@ -28,7 +28,7 @@
 
 namespace points::converter
 {
-processor_t::processor_t(std::string url, file_existence_requirement_t existence_requirement, error_t &error)
+processor_t::processor_t(std::string url, file_existence_requirement_t existence_requirement, points_error_t &error)
   : _url(std::move(url))
   , _thread_pool(int(std::thread::hardware_concurrency()))
   , _runtime_callbacks({})
@@ -162,7 +162,7 @@ void processor_t::about_to_block()
   }
 }
 
-const attributes_t &processor_t::get_attributes(attributes_id_t id)
+const points_converter_attributes_t &processor_t::get_attributes(attributes_id_t id)
 {
   return _attributes_configs.get(id);
 }
@@ -210,11 +210,11 @@ vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_d
       pre_init_work_result_t result;
       result.input_id = input_id;
 
-      error_t *local_error = nullptr;
+      points_error_t *local_error = nullptr;
       auto pre_init_info = callbacks->pre_init(file_name.name, file_name.name_length, &local_error);
       if (local_error)
       {
-        std::unique_ptr<error_t> error(local_error);
+        std::unique_ptr<points_error_t> error(local_error);
         result.has_error = true;
         result.file_error.input_id = input_id;
         result.file_error.error = std::move(*error);
@@ -256,7 +256,7 @@ vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_d
   }
 }
 
-void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, header_t> &&event)
+void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t> &&event)
 {
   _input_data_source_registry.handle_input_init(std::get<0>(event), std::get<1>(event), std::get<2>(event));
 }
@@ -266,12 +266,12 @@ void processor_t::handle_sub_added(input_data_id_t &&event)
   _input_data_source_registry.handle_sub_added(event);
 }
 
-void processor_t::handle_sorted_points(std::pair<points_t, error_t> &&event)
+void processor_t::handle_sorted_points(std::pair<points_t, points_error_t> &&event)
 {
   _input_data_source_registry.handle_sorted_points(event.first.header.input_id, event.first.header.morton_min, event.first.header.morton_max);
   _storage_handler.write(
     event.first.header, event.first.attributes_id, std::move(event.first.buffers),
-    [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> locations, const error_t &) { this->handle_points_written(header, attributes, std::move(locations)); });
+    [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> locations, const points_error_t &) { this->handle_points_written(header, attributes, std::move(locations)); });
 }
 
 void processor_t::handle_file_errors(file_error_t &&error)
@@ -300,7 +300,7 @@ void processor_t::handle_index_write_done()
   }
 }
 
-void processor_t::handle_storage_error(error_t &&error)
+void processor_t::handle_storage_error(points_error_t &&error)
 {
   _has_errors = true;
   if (_runtime_callbacks.error)
@@ -337,7 +337,7 @@ void processor_t::maybe_start_lod()
   }
 }
 
-error_t processor_t::upgrade_to_write(bool truncate)
+points_error_t processor_t::upgrade_to_write(bool truncate)
 {
   auto ret = _storage_handler.upgrade_to_write(truncate);
   if (truncate)
@@ -364,7 +364,7 @@ void processor_t::set_pre_init_tree_node_limit(uint32_t node_limit)
   _tree_handler.set_tree_initialization_node_limit(node_limit);
 }
 
-void processor_t::set_runtime_callbacks(const converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr)
+void processor_t::set_runtime_callbacks(const points_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr)
 {
   _runtime_callbacks = runtime_callbacks;
   _runtime_callback_user_ptr = user_ptr;
@@ -374,7 +374,7 @@ void processor_t::set_runtime_callbacks(const converter_runtime_callbacks_t &run
   });
 }
 
-void processor_t::set_converter_callbacks(const converter_file_convert_callbacks_t &convert_callbacks)
+void processor_t::set_converter_callbacks(const points_converter_file_convert_callbacks_t &convert_callbacks)
 {
   _convert_callbacks = convert_callbacks;
 }

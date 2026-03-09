@@ -65,7 +65,7 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
                                    render::callback_manager_t &callbacks,
                                    const render::frame_camera_cpp_t &camera,
                                    const tree_config_t &tree_config,
-                                   render::to_render_t *to_render,
+                                   points_to_render_t *to_render,
                                    bool debug)
 {
   draw_result_t result;
@@ -142,15 +142,15 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
       if (render_buffer.params_buffer.user_ptr)
         callbacks.do_destroy_buffer(render_buffer.params_buffer);
 
-      render_buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;
+      render_buffer.render_list[0].buffer_mapping = points_dyn_points_bm_vertex;
       render_buffer.render_list[0].user_ptr = render_buffer.render_buffers[0].user_ptr;
-      render_buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;
+      render_buffer.render_list[1].buffer_mapping = points_dyn_points_bm_color;
       render_buffer.render_list[1].user_ptr = render_buffer.render_buffers[1].user_ptr;
-      render_buffer.render_list[2].buffer_mapping = render::dyn_points_bm_camera;
+      render_buffer.render_list[2].buffer_mapping = points_dyn_points_bm_camera;
       render_buffer.render_list[2].user_ptr = render_buffer.render_buffers[2].user_ptr;
 
-      render::draw_group_t draw_group = {render_buffer.draw_type, render_buffer.render_list, 3, int(render_buffer.point_count), render_buffer.node_info.lod};
-      to_render_add_render_group(to_render, draw_group);
+      points_draw_group_t draw_group = {render_buffer.draw_type, render_buffer.render_list, 3, int(render_buffer.point_count), render_buffer.node_info.lod};
+      points_to_render_add_render_group(to_render, draw_group);
 
       dbg_emitted++;
       result.points_rendered += render_buffer.point_count;
@@ -216,7 +216,7 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
 
       float blend = 1.0f;
       bool old_is_mono = false;
-      bool new_is_mono = (render_buffer.draw_type == render::dyn_points_1);
+      bool new_is_mono = (render_buffer.draw_type == points_dyn_points_1);
 
       if (is_awaiting)
       {
@@ -263,46 +263,46 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
 
       if (!render_buffer.params_buffer.user_ptr)
       {
-        callbacks.do_create_buffer(render_buffer.params_buffer, points::render::buffer_type_uniform);
-        callbacks.do_initialize_buffer(render_buffer.params_buffer, type_r32, points::components_4, sizeof(render_buffer.params_data), &render_buffer.params_data);
+        callbacks.do_create_buffer(render_buffer.params_buffer, points_buffer_type_uniform);
+        callbacks.do_initialize_buffer(render_buffer.params_buffer, points_type_r32, points_components_4, sizeof(render_buffer.params_data), &render_buffer.params_data);
       }
       else
       {
         callbacks.do_modify_buffer(render_buffer.params_buffer, 0, sizeof(render_buffer.params_data), &render_buffer.params_data);
       }
 
-      render_buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;
+      render_buffer.render_list[0].buffer_mapping = points_dyn_points_bm_vertex;
       render_buffer.render_list[0].user_ptr = render_buffer.render_buffers[0].user_ptr;
-      render_buffer.render_list[2].buffer_mapping = render::dyn_points_bm_camera;
+      render_buffer.render_list[2].buffer_mapping = points_dyn_points_bm_camera;
       render_buffer.render_list[2].user_ptr = render_buffer.render_buffers[2].user_ptr;
 
       if (is_awaiting)
       {
-        render_buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;
+        render_buffer.render_list[1].buffer_mapping = points_dyn_points_bm_color;
         render_buffer.render_list[1].user_ptr = render_buffer.old_color_buffer.user_ptr;
-        render_buffer.render_list[3].buffer_mapping = render::dyn_points_bm_old_color;
+        render_buffer.render_list[3].buffer_mapping = points_dyn_points_bm_old_color;
         render_buffer.render_list[3].user_ptr = render_buffer.old_color_buffer.user_ptr;
       }
       else if (is_crossfading)
       {
-        render_buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;
+        render_buffer.render_list[1].buffer_mapping = points_dyn_points_bm_color;
         render_buffer.render_list[1].user_ptr = render_buffer.render_buffers[1].user_ptr;
-        render_buffer.render_list[3].buffer_mapping = render::dyn_points_bm_old_color;
+        render_buffer.render_list[3].buffer_mapping = points_dyn_points_bm_old_color;
         render_buffer.render_list[3].user_ptr = render_buffer.old_color_buffer.user_ptr;
       }
       else
       {
-        render_buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;
+        render_buffer.render_list[1].buffer_mapping = points_dyn_points_bm_color;
         render_buffer.render_list[1].user_ptr = render_buffer.render_buffers[1].user_ptr;
-        render_buffer.render_list[3].buffer_mapping = render::dyn_points_bm_old_color;
+        render_buffer.render_list[3].buffer_mapping = points_dyn_points_bm_old_color;
         render_buffer.render_list[3].user_ptr = render_buffer.render_buffers[1].user_ptr;
       }
 
-      render_buffer.render_list[4].buffer_mapping = render::dyn_points_bm_params;
+      render_buffer.render_list[4].buffer_mapping = points_dyn_points_bm_params;
       render_buffer.render_list[4].user_ptr = render_buffer.params_buffer.user_ptr;
 
-      render::draw_group_t draw_group = {render::dyn_points_crossfade, render_buffer.render_list, 5, int(render_buffer.point_count), render_buffer.node_info.lod};
-      to_render_add_render_group(to_render, draw_group);
+      points_draw_group_t draw_group = {points_dyn_points_crossfade, render_buffer.render_list, 5, int(render_buffer.point_count), render_buffer.node_info.lod};
+      points_to_render_add_render_group(to_render, draw_group);
 
       dbg_emitted++;
       result.points_rendered += render_buffer.point_count;
@@ -337,32 +337,32 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
         render_buffer.camera_view = camera.projection * glm::translate(camera.view, offset);
         callbacks.do_modify_buffer(render_buffer.render_buffers[2], 0, sizeof(render_buffer.camera_view), &render_buffer.camera_view);
 
-        bool new_is_mono = (render_buffer.draw_type == render::dyn_points_1);
+        bool new_is_mono = (render_buffer.draw_type == points_dyn_points_1);
         render_buffer.params_data = glm::vec4(fade_alpha, 1.0f, 0.0f, new_is_mono ? 1.0f : 0.0f);
 
         if (!render_buffer.params_buffer.user_ptr)
         {
-          callbacks.do_create_buffer(render_buffer.params_buffer, points::render::buffer_type_uniform);
-          callbacks.do_initialize_buffer(render_buffer.params_buffer, type_r32, points::components_4, sizeof(render_buffer.params_data), &render_buffer.params_data);
+          callbacks.do_create_buffer(render_buffer.params_buffer, points_buffer_type_uniform);
+          callbacks.do_initialize_buffer(render_buffer.params_buffer, points_type_r32, points_components_4, sizeof(render_buffer.params_data), &render_buffer.params_data);
         }
         else
         {
           callbacks.do_modify_buffer(render_buffer.params_buffer, 0, sizeof(render_buffer.params_data), &render_buffer.params_data);
         }
 
-        render_buffer.render_list[0].buffer_mapping = render::dyn_points_bm_vertex;
+        render_buffer.render_list[0].buffer_mapping = points_dyn_points_bm_vertex;
         render_buffer.render_list[0].user_ptr = render_buffer.render_buffers[0].user_ptr;
-        render_buffer.render_list[1].buffer_mapping = render::dyn_points_bm_color;
+        render_buffer.render_list[1].buffer_mapping = points_dyn_points_bm_color;
         render_buffer.render_list[1].user_ptr = render_buffer.render_buffers[1].user_ptr;
-        render_buffer.render_list[2].buffer_mapping = render::dyn_points_bm_camera;
+        render_buffer.render_list[2].buffer_mapping = points_dyn_points_bm_camera;
         render_buffer.render_list[2].user_ptr = render_buffer.render_buffers[2].user_ptr;
-        render_buffer.render_list[3].buffer_mapping = render::dyn_points_bm_old_color;
+        render_buffer.render_list[3].buffer_mapping = points_dyn_points_bm_old_color;
         render_buffer.render_list[3].user_ptr = render_buffer.render_buffers[1].user_ptr;
-        render_buffer.render_list[4].buffer_mapping = render::dyn_points_bm_params;
+        render_buffer.render_list[4].buffer_mapping = points_dyn_points_bm_params;
         render_buffer.render_list[4].user_ptr = render_buffer.params_buffer.user_ptr;
 
-        render::draw_group_t draw_group = {render::dyn_points_crossfade, render_buffer.render_list, 5, int(render_buffer.point_count), render_buffer.node_info.lod};
-        to_render_add_render_group(to_render, draw_group);
+        points_draw_group_t draw_group = {points_dyn_points_crossfade, render_buffer.render_list, 5, int(render_buffer.point_count), render_buffer.node_info.lod};
+        points_to_render_add_render_group(to_render, draw_group);
 
         dbg_emitted++;
         dbg_fade_out++;

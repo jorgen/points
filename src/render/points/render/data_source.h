@@ -24,11 +24,7 @@
 extern "C" {
 #endif
 
-namespace points
-{
-namespace render
-{
-struct frame_camera_t
+struct points_frame_camera_t
 {
   double view[4][4];
   double projection[4][4];
@@ -38,17 +34,15 @@ struct frame_camera_t
   double inverse_view_projection[4][4];
 };
 
-struct to_render_t;
-typedef void (*add_to_frame_t)(frame_camera_t *camera, to_render_t *to_render, void *data);
+struct points_to_render_t;
+typedef void (*points_add_to_frame_t)(struct points_frame_camera_t *camera, struct points_to_render_t *to_render, void *data);
 
-struct data_source_t
+struct points_data_source_t
 {
   void *user_ptr;
-  add_to_frame_t add_to_frame;
+  points_add_to_frame_t add_to_frame;
 };
 
-}
-}
 #ifdef __cplusplus
 }
 #endif

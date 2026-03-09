@@ -22,21 +22,14 @@
 
 #include "renderer_callbacks.hpp"
 #include "camera.hpp"
-namespace points
-{
-namespace render
-{
 
-struct renderer_t
+struct points_renderer_t
 {
-  renderer_t()
+  points_renderer_t()
     : callbacks(this)
   {}
-  std::vector<camera_t*> cameras;
-  std::vector<data_source_t> data_sources;
-  std::vector<draw_group_t> to_render;
-  callback_manager_t callbacks;
+  std::vector<points_camera_t*> cameras;
+  std::vector<points_data_source_t> data_sources;
+  std::vector<points_draw_group_t> to_render;
+  points::render::callback_manager_t callbacks;
 };
-
-}
-}

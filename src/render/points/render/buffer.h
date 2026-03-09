@@ -24,15 +24,9 @@
 extern "C" {
 #endif
 
-namespace points
-{
-namespace render
-{
-struct buffer_t;
-POINTS_RENDER_EXPORT void buffer_set_rendered(struct buffer_t *buffer);
-POINTS_RENDER_EXPORT void buffer_release_data(struct buffer_t *buffer);
-}
-}
+struct points_buffer_t;
+POINTS_RENDER_EXPORT void points_buffer_set_rendered(struct points_buffer_t *buffer);
+POINTS_RENDER_EXPORT void points_buffer_release_data(struct points_buffer_t *buffer);
 
 #ifdef __cplusplus
 }

@@ -27,43 +27,40 @@
 extern "C" {
 #endif
 
-
-namespace points::render
+enum points_buffer_type_t
 {
-enum buffer_type_t
-{
-  buffer_type_vertex,
-  buffer_type_index,
-  buffer_type_uniform
+  points_buffer_type_vertex,
+  points_buffer_type_index,
+  points_buffer_type_uniform
 };
 
-enum texture_type_t
+enum points_texture_type_t
 {
-  texture_type_2d,
-  texture_type_3d,
-  texture_type_cubemap,
-  texture_type_cubemap_positive_x,
-  texture_type_cubemap_negative_x,
-  texture_type_cubemap_positive_y,
-  texture_type_cubemap_negative_y,
-  texture_type_cubemap_positive_z,
-  texture_type_cubemap_negative_z
+  points_texture_type_2d,
+  points_texture_type_3d,
+  points_texture_type_cubemap,
+  points_texture_type_cubemap_positive_x,
+  points_texture_type_cubemap_negative_x,
+  points_texture_type_cubemap_positive_y,
+  points_texture_type_cubemap_negative_y,
+  points_texture_type_cubemap_positive_z,
+  points_texture_type_cubemap_negative_z
 };
 
-enum aabb_mesh_buffer_mapping_t
+enum points_aabb_mesh_buffer_mapping_t
 {
-  aabb_bm_camera,
-  aabb_bm_color,
-  aabb_bm_position,
-  aabb_bm_index
+  points_aabb_bm_camera,
+  points_aabb_bm_color,
+  points_aabb_bm_position,
+  points_aabb_bm_index
 };
 
-enum skybox_buffer_mapping_t
+enum points_skybox_buffer_mapping_t
 {
-  skybox_bm_inverse_view_projection,
-  skybox_bm_camera_pos,
-  skybox_bm_vertex,
-  skybox_bm_cube_map_texture
+  points_skybox_bm_inverse_view_projection,
+  points_skybox_bm_camera_pos,
+  points_skybox_bm_vertex,
+  points_skybox_bm_cube_map_texture
 };
 
 enum points_buffer_mapping_t
@@ -73,91 +70,89 @@ enum points_buffer_mapping_t
   points_bm_color
 };
 
-enum dyn_points_buffer_mapping_t
+enum points_dyn_points_buffer_mapping_t
 {
-  dyn_points_bm_vertex,
-  dyn_points_bm_color,
-  dyn_points_bm_camera,
-  dyn_points_bm_old_color,
-  dyn_points_bm_params
+  points_dyn_points_bm_vertex,
+  points_dyn_points_bm_color,
+  points_dyn_points_bm_camera,
+  points_dyn_points_bm_old_color,
+  points_dyn_points_bm_params
 };
 
-enum axis_gizmo_buffer_mapping_t
+enum points_axis_gizmo_buffer_mapping_t
 {
-  axis_gizmo_bm_camera,
-  axis_gizmo_bm_color,
-  axis_gizmo_bm_position
+  points_axis_gizmo_bm_camera,
+  points_axis_gizmo_bm_color,
+  points_axis_gizmo_bm_position
 };
 
-enum origin_anchor_buffer_mapping_t
+enum points_origin_anchor_buffer_mapping_t
 {
-  origin_anchor_bm_camera,
-  origin_anchor_bm_color,
-  origin_anchor_bm_position,
-  origin_anchor_bm_index
+  points_origin_anchor_bm_camera,
+  points_origin_anchor_bm_color,
+  points_origin_anchor_bm_position,
+  points_origin_anchor_bm_index
 };
 
-enum environment_buffer_mapping_t
+enum points_environment_buffer_mapping_t
 {
-  environment_bm_inverse_view_projection,
-  environment_bm_camera_pos,
-  environment_bm_vertex,
-  environment_bm_params
+  points_environment_bm_inverse_view_projection,
+  points_environment_bm_camera_pos,
+  points_environment_bm_vertex,
+  points_environment_bm_params
 };
 
-enum node_bbox_buffer_mapping_t
+enum points_node_bbox_buffer_mapping_t
 {
-  node_bbox_bm_camera,
-  node_bbox_bm_position,
-  node_bbox_bm_color
+  points_node_bbox_bm_camera,
+  points_node_bbox_bm_position,
+  points_node_bbox_bm_color
 };
 
-struct frame_t
+struct points_frame_t
 {
-  struct draw_group_t* to_render;
+  struct points_draw_group_t* to_render;
   int to_render_size;
 };
 
-struct renderer_t;
-typedef void (*renderer_dirty_callback_t)(struct renderer_t* renderer, void *renderer_user_ptr);
+struct points_renderer_t;
+typedef void (*points_renderer_dirty_callback_t)(struct points_renderer_t* renderer, void *renderer_user_ptr);
 
-typedef void (*renderer_create_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, enum buffer_type_t buffer_type, void **buffer_user_ptr);
-typedef void (*renderer_initialize_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *buffer_user_ptr, enum type_t type, enum components_t components, int buffer_size, void *data);
-typedef void (*renderer_modify_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
-typedef void (*renderer_destroy_buffer_t)(struct renderer_t *renderer, void *renderer_user_ptr, void *buffer_user_ptr);
+typedef void (*points_renderer_create_buffer_t)(struct points_renderer_t *renderer, void *renderer_user_ptr, enum points_buffer_type_t buffer_type, void **buffer_user_ptr);
+typedef void (*points_renderer_initialize_buffer_t)(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *buffer_user_ptr, enum points_type_t type, enum points_components_t components, int buffer_size, void *data);
+typedef void (*points_renderer_modify_buffer_t)(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
+typedef void (*points_renderer_destroy_buffer_t)(struct points_renderer_t *renderer, void *renderer_user_ptr, void *buffer_user_ptr);
 
-typedef void (*renderer_create_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, enum texture_type_t buffer_texture_type, void **buffer_user_ptr);
-typedef void (*renderer_initialize_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *texture_user_ptr, enum texture_type_t buffer_texture_type, enum type_t type, enum components_t components, int size[3], void *data);
-typedef void (*renderer_modify_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, struct buffer_t *buffer, void *texture_user_ptr, enum texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
-typedef void (*renderer_destroy_texture_t)(struct renderer_t *renderer, void *renderer_user_ptr, void *texture_user_ptr);
+typedef void (*points_renderer_create_texture_t)(struct points_renderer_t *renderer, void *renderer_user_ptr, enum points_texture_type_t buffer_texture_type, void **buffer_user_ptr);
+typedef void (*points_renderer_initialize_texture_t)(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *texture_user_ptr, enum points_texture_type_t buffer_texture_type, enum points_type_t type, enum points_components_t components, int size[3], void *data);
+typedef void (*points_renderer_modify_texture_t)(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *texture_user_ptr, enum points_texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
+typedef void (*points_renderer_destroy_texture_t)(struct points_renderer_t *renderer, void *renderer_user_ptr, void *texture_user_ptr);
 
-struct renderer_callbacks_t
+struct points_renderer_callbacks_t
 {
-  renderer_dirty_callback_t dirty;
+  points_renderer_dirty_callback_t dirty;
 
-  renderer_create_buffer_t create_buffer;
-  renderer_initialize_buffer_t initialize_buffer;
-  renderer_modify_buffer_t modify_buffer;
-  renderer_destroy_buffer_t destroy_buffer;
+  points_renderer_create_buffer_t create_buffer;
+  points_renderer_initialize_buffer_t initialize_buffer;
+  points_renderer_modify_buffer_t modify_buffer;
+  points_renderer_destroy_buffer_t destroy_buffer;
 
-  renderer_create_texture_t create_texture;
-  renderer_initialize_texture_t initialize_texture;
-  renderer_modify_texture_t modify_texture;
-  renderer_destroy_texture_t destroy_texture;
+  points_renderer_create_texture_t create_texture;
+  points_renderer_initialize_texture_t initialize_texture;
+  points_renderer_modify_texture_t modify_texture;
+  points_renderer_destroy_texture_t destroy_texture;
 };
 
-POINTS_RENDER_EXPORT struct renderer_t* renderer_create();
-POINTS_RENDER_EXPORT void renderer_destroy(struct renderer_t *renderer);
-POINTS_RENDER_EXPORT void renderer_add_camera(struct renderer_t* renderer, struct camera_t* camera);
-POINTS_RENDER_EXPORT void renderer_remove_camera(struct renderer_t* renderer, struct camera_t* camera);
-POINTS_RENDER_EXPORT struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* camera);
-POINTS_RENDER_EXPORT void renderer_set_callback(struct renderer_t* renderer, renderer_callbacks_t callbacks, void *user_ptr);
-POINTS_RENDER_EXPORT void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t data_source);
-POINTS_RENDER_EXPORT void renderer_remove_data_source(struct renderer_t *renderer, struct data_source_t data_source);
+POINTS_RENDER_EXPORT struct points_renderer_t* points_renderer_create(void);
+POINTS_RENDER_EXPORT void points_renderer_destroy(struct points_renderer_t *renderer);
+POINTS_RENDER_EXPORT void points_renderer_add_camera(struct points_renderer_t* renderer, struct points_camera_t* camera);
+POINTS_RENDER_EXPORT void points_renderer_remove_camera(struct points_renderer_t* renderer, struct points_camera_t* camera);
+POINTS_RENDER_EXPORT struct points_frame_t points_renderer_frame(struct points_renderer_t* renderer, struct points_camera_t* camera);
+POINTS_RENDER_EXPORT void points_renderer_set_callback(struct points_renderer_t* renderer, struct points_renderer_callbacks_t callbacks, void *user_ptr);
+POINTS_RENDER_EXPORT void points_renderer_add_data_source(struct points_renderer_t *renderer, struct points_data_source_t data_source);
+POINTS_RENDER_EXPORT void points_renderer_remove_data_source(struct points_renderer_t *renderer, struct points_data_source_t data_source);
 
-POINTS_RENDER_EXPORT void to_render_add_render_group(struct to_render_t *to_render, draw_group_t draw_group);
-}
-
+POINTS_RENDER_EXPORT void points_to_render_add_render_group(struct points_to_render_t *to_render, struct points_draw_group_t draw_group);
 
 #ifdef __cplusplus
 }

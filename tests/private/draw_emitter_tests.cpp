@@ -10,30 +10,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
-using namespace points;
 using namespace points::converter;
-
-using render::callback_manager_t;
-using render::node_data_loader_t;
-using render::loaded_node_data_t;
-using render::load_handle_t;
-using render::invalid_load_handle;
-using render::to_render_t;
-using render::frame_camera_cpp_t;
-using render::draw_group_t;
-using render::draw_type_t;
-using render::dyn_points_1;
-using render::dyn_points_3;
-using render::dyn_points_crossfade;
-using render::dyn_points_bm_vertex;
-using render::dyn_points_bm_color;
-using render::dyn_points_bm_camera;
-using render::dyn_points_bm_old_color;
-using render::dyn_points_bm_params;
-using render::buffer_type_t;
-using render::buffer_type_vertex;
-using render::buffer_type_uniform;
-using render::renderer_callbacks_t;
+using namespace points::render;
 
 // ---------------------------------------------------------------------------
 // Mock callback infrastructure
@@ -48,22 +26,22 @@ struct test_callback_context_t
 
 static test_callback_context_t *g_test_ctx = nullptr;
 
-static void test_create_buffer(render::renderer_t *, void *, buffer_type_t, void **buffer_user_ptr)
+static void test_create_buffer(points_renderer_t *, void *, points_buffer_type_t, void **buffer_user_ptr)
 {
   g_test_ctx->counter++;
   *buffer_user_ptr = reinterpret_cast<void *>(g_test_ctx->counter);
 }
 
-static void test_initialize_buffer(render::renderer_t *, void *, render::buffer_t *, void *, type_t, components_t, int, void *)
+static void test_initialize_buffer(points_renderer_t *, void *, points_buffer_t *, void *, points_type_t, points_components_t, int, void *)
 {
 }
 
-static void test_modify_buffer(render::renderer_t *, void *, render::buffer_t *, void *, int, int, void *)
+static void test_modify_buffer(points_renderer_t *, void *, points_buffer_t *, void *, int, int, void *)
 {
   g_test_ctx->modify_count++;
 }
 
-static void test_destroy_buffer(render::renderer_t *, void *, void *buffer_user_ptr)
+static void test_destroy_buffer(points_renderer_t *, void *, void *buffer_user_ptr)
 {
   g_test_ctx->destroyed_buffers.push_back(buffer_user_ptr);
 }
@@ -72,7 +50,7 @@ static std::unique_ptr<callback_manager_t> make_test_callbacks(test_callback_con
 {
   g_test_ctx = &ctx;
   auto cbm = std::make_unique<callback_manager_t>(nullptr);
-  renderer_callbacks_t cbs = {};
+  points_renderer_callbacks_t cbs = {};
   cbs.create_buffer = test_create_buffer;
   cbs.initialize_buffer = test_initialize_buffer;
   cbs.modify_buffer = test_modify_buffer;
@@ -147,25 +125,25 @@ static frame_camera_cpp_t make_identity_camera()
   return cam;
 }
 
-static to_render_t *to_render_ptr(std::vector<draw_group_t> &vec)
+static points_to_render_t *to_render_ptr(std::vector<points_draw_group_t> &vec)
 {
-  return reinterpret_cast<to_render_t *>(&vec);
+  return reinterpret_cast<points_to_render_t *>(&vec);
 }
 
 static void make_rendered_steady(gpu_node_buffer_t &buf, test_callback_context_t &ctx)
 {
   buf.rendered = true;
   buf.fade_frame = gpu_node_buffer_t::FADE_FRAMES;
-  buf.draw_type = dyn_points_3;
+  buf.draw_type = points_dyn_points_3;
   buf.point_count = 100;
 
   buf.render_buffers[0].user_ptr = reinterpret_cast<void *>(++ctx.counter); // vertex
   buf.render_buffers[1].user_ptr = reinterpret_cast<void *>(++ctx.counter); // color
   buf.render_buffers[2].user_ptr = reinterpret_cast<void *>(++ctx.counter); // camera
 
-  buf.render_list[0] = {dyn_points_bm_vertex, buf.render_buffers[0].user_ptr};
-  buf.render_list[1] = {dyn_points_bm_color, buf.render_buffers[1].user_ptr};
-  buf.render_list[2] = {dyn_points_bm_camera, buf.render_buffers[2].user_ptr};
+  buf.render_list[0] = {points_dyn_points_bm_vertex, buf.render_buffers[0].user_ptr};
+  buf.render_list[1] = {points_dyn_points_bm_color, buf.render_buffers[1].user_ptr};
+  buf.render_list[2] = {points_dyn_points_bm_camera, buf.render_buffers[2].user_ptr};
 
   buf.old_color_valid = false;
   buf.awaiting_new_color = false;
@@ -333,18 +311,18 @@ TEST_CASE("draw_emitter steady state emits 3-buffer draw group")
   selection_result_t selection;
   selection.active_set.insert(root);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(to_render.size() == 1);
-  REQUIRE(to_render[0].draw_type == dyn_points_3);
+  REQUIRE(to_render[0].draw_type == points_dyn_points_3);
   REQUIRE(to_render[0].buffers_size == 3);
   REQUIRE(to_render[0].draw_size == 100);
-  REQUIRE(to_render[0].buffers[0].buffer_mapping == dyn_points_bm_vertex);
+  REQUIRE(to_render[0].buffers[0].buffer_mapping == points_dyn_points_bm_vertex);
   REQUIRE(to_render[0].buffers[0].user_ptr == vertex_ptr);
-  REQUIRE(to_render[0].buffers[1].buffer_mapping == dyn_points_bm_color);
+  REQUIRE(to_render[0].buffers[1].buffer_mapping == points_dyn_points_bm_color);
   REQUIRE(to_render[0].buffers[1].user_ptr == color_ptr);
-  REQUIRE(to_render[0].buffers[2].buffer_mapping == dyn_points_bm_camera);
+  REQUIRE(to_render[0].buffers[2].buffer_mapping == points_dyn_points_bm_camera);
   REQUIRE(to_render[0].buffers[2].user_ptr == camera_ptr);
   REQUIRE(result.any_animating == false);
 }
@@ -374,11 +352,11 @@ TEST_CASE("draw_emitter fade-in emits crossfade with incrementing alpha")
   selection.active_set.insert(root);
 
   // First emit: fade_frame goes 0 -> 1, alpha = 0.1
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(to_render.size() == 1);
-  REQUIRE(to_render[0].draw_type == dyn_points_crossfade);
+  REQUIRE(to_render[0].draw_type == points_dyn_points_crossfade);
   REQUIRE(to_render[0].buffers_size == 5);
   REQUIRE(result.any_animating == true);
   REQUIRE(bufs[0]->fade_frame == 1);
@@ -395,7 +373,7 @@ TEST_CASE("draw_emitter fade-in emits crossfade with incrementing alpha")
   to_render.clear();
   result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
   REQUIRE(to_render.size() == 1);
-  REQUIRE(to_render[0].draw_type == dyn_points_3);
+  REQUIRE(to_render[0].draw_type == points_dyn_points_3);
   REQUIRE(to_render[0].buffers_size == 3);
   REQUIRE(result.any_animating == false);
 }
@@ -431,18 +409,18 @@ TEST_CASE("draw_emitter awaiting state uses old_color_buffer for both color slot
   selection_result_t selection;
   selection.active_set.insert(root);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(to_render.size() == 1);
-  REQUIRE(to_render[0].draw_type == dyn_points_crossfade);
+  REQUIRE(to_render[0].draw_type == points_dyn_points_crossfade);
   REQUIRE(to_render[0].buffers_size == 5);
   REQUIRE(result.any_animating == true);
 
   // Both color and old_color should point to old_color_buffer
-  REQUIRE(to_render[0].buffers[1].buffer_mapping == dyn_points_bm_color);
+  REQUIRE(to_render[0].buffers[1].buffer_mapping == points_dyn_points_bm_color);
   REQUIRE(to_render[0].buffers[1].user_ptr == old_color_ptr);
-  REQUIRE(to_render[0].buffers[3].buffer_mapping == dyn_points_bm_old_color);
+  REQUIRE(to_render[0].buffers[3].buffer_mapping == points_dyn_points_bm_old_color);
   REQUIRE(to_render[0].buffers[3].user_ptr == old_color_ptr);
 
   // blend should be 1.0 (params_data.y)
@@ -493,7 +471,7 @@ TEST_CASE("draw_emitter crossfade progresses when parent is not transitioning")
   // Emit multiple frames - crossfade should progress
   for (int i = 0; i < 10; i++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
   }
 
@@ -547,7 +525,7 @@ TEST_CASE("draw_emitter crossfade blocked when parent is transitioning")
   selection.active_set.insert(child);
 
   // Emit once: child's crossfade should be blocked (blend=0.0), parent should advance
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(bufs[1]->crossfade_frame == 0);
@@ -597,7 +575,7 @@ TEST_CASE("draw_emitter skips non-visible and non-rendered nodes")
     selection_result_t selection;
     selection.active_set.insert(root);
 
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     REQUIRE(to_render.empty());
@@ -617,7 +595,7 @@ TEST_CASE("draw_emitter skips non-visible and non-rendered nodes")
     selection_result_t selection;
     selection.active_set.insert(root);
 
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     REQUIRE(to_render.empty());
@@ -658,9 +636,9 @@ TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -
 
   // Phase 1: steady state
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
-    REQUIRE(to_render[0].draw_type == dyn_points_3);
+    REQUIRE(to_render[0].draw_type == points_dyn_points_3);
     REQUIRE(result.any_animating == false);
   }
 
@@ -675,9 +653,9 @@ TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -
 
   // Phase 3: emit while awaiting (old color shown for both slots)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
-    REQUIRE(to_render[0].draw_type == dyn_points_crossfade);
+    REQUIRE(to_render[0].draw_type == points_dyn_points_crossfade);
     REQUIRE(result.any_animating == true);
     REQUIRE(to_render[0].buffers[1].user_ptr == original_color);
     REQUIRE(to_render[0].buffers[3].user_ptr == original_color);
@@ -703,9 +681,9 @@ TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -
   size_t total_freed = 0;
   for (int i = 0; i < 10; i++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
-    REQUIRE(to_render[0].draw_type == dyn_points_crossfade);
+    REQUIRE(to_render[0].draw_type == points_dyn_points_crossfade);
     REQUIRE(result.any_animating == true);
     total_freed += result.freed_gpu_memory;
     gpu_mem -= result.freed_gpu_memory;
@@ -719,9 +697,9 @@ TEST_CASE("full lifecycle: steady -> attribute change -> awaiting -> crossfade -
   // Phase 6: next emit should be back to steady state
   REQUIRE(bufs[0]->old_color_valid == false);
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
-    REQUIRE(to_render[0].draw_type == dyn_points_3);
+    REQUIRE(to_render[0].draw_type == points_dyn_points_3);
     REQUIRE(to_render[0].buffers_size == 3);
     REQUIRE(result.any_animating == false);
     REQUIRE(to_render[0].buffers[1].user_ptr == new_color);
@@ -770,7 +748,7 @@ TEST_CASE("rapid double attribute change preserves old_color")
 
   // Emitting should still show old color correctly
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     REQUIRE(to_render[0].buffers[1].user_ptr == color_a);
     REQUIRE(to_render[0].buffers[3].user_ptr == color_a);
@@ -892,7 +870,7 @@ TEST_CASE("child crossfade not blocked by non-active parent")
   selection.active_set.insert(child);
 
   // Child's crossfade must progress even though parent is still transitioning
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(bufs[1]->crossfade_frame == 1);
@@ -951,10 +929,10 @@ TEST_CASE("upload_ready processes root node whose parent equals empty_node_id")
   loaded_node_data_t root_data;
   root_data.attribute_data = dummy_attr;
   root_data.attribute_data_size = sizeof(dummy_attr);
-  root_data.attribute_type = type_u16;
-  root_data.attribute_components = components_3;
+  root_data.attribute_type = points_type_u16;
+  root_data.attribute_components = points_components_3;
   root_data.point_count = 1;
-  root_data.draw_type = dyn_points_3;
+  root_data.draw_type = points_dyn_points_3;
   mock_loader->loaded_data[root_handle] = root_data;
 
   gpu_mem = root_buf->gpu_memory_size;
@@ -977,10 +955,10 @@ TEST_CASE("upload_ready processes root node whose parent equals empty_node_id")
   loaded_node_data_t child_data;
   child_data.attribute_data = dummy_attr;
   child_data.attribute_data_size = sizeof(dummy_attr);
-  child_data.attribute_type = type_u16;
-  child_data.attribute_components = components_3;
+  child_data.attribute_type = points_type_u16;
+  child_data.attribute_components = points_components_3;
   child_data.point_count = 1;
-  child_data.draw_type = dyn_points_3;
+  child_data.draw_type = points_dyn_points_3;
   mock_loader->loaded_data[child_handle] = child_data;
 
   gpu_mem += child_buf->gpu_memory_size;
@@ -993,9 +971,9 @@ TEST_CASE("upload_ready processes root node whose parent equals empty_node_id")
 
   REQUIRE(uploads == 2);
   REQUIRE(bufs[0]->awaiting_new_color == false);
-  REQUIRE(bufs[0]->load_handle == render::invalid_load_handle);
+  REQUIRE(bufs[0]->load_handle == invalid_load_handle);
   REQUIRE(bufs[1]->awaiting_new_color == false);
-  REQUIRE(bufs[1]->load_handle == render::invalid_load_handle);
+  REQUIRE(bufs[1]->load_handle == invalid_load_handle);
 }
 
 TEST_CASE("upload_ready awaiting uploads bypass memory budget")
@@ -1031,10 +1009,10 @@ TEST_CASE("upload_ready awaiting uploads bypass memory budget")
   loaded_node_data_t awaiting_data;
   awaiting_data.attribute_data = dummy_attr;
   awaiting_data.attribute_data_size = sizeof(dummy_attr);
-  awaiting_data.attribute_type = type_u16;
-  awaiting_data.attribute_components = components_3;
+  awaiting_data.attribute_type = points_type_u16;
+  awaiting_data.attribute_components = points_components_3;
   awaiting_data.point_count = 1;
-  awaiting_data.draw_type = dyn_points_3;
+  awaiting_data.draw_type = points_dyn_points_3;
   mock_loader->loaded_data[awaiting_handle] = awaiting_data;
 
   bufs.push_back(std::move(awaiting_buf));
@@ -1053,14 +1031,14 @@ TEST_CASE("upload_ready awaiting uploads bypass memory budget")
   loaded_node_data_t normal_data;
   normal_data.vertex_data = dummy_verts;
   normal_data.vertex_data_size = sizeof(dummy_verts);
-  normal_data.vertex_type = type_r32;
-  normal_data.vertex_components = components_3;
+  normal_data.vertex_type = points_type_r32;
+  normal_data.vertex_components = points_components_3;
   normal_data.attribute_data = dummy_attr;
   normal_data.attribute_data_size = sizeof(dummy_attr);
-  normal_data.attribute_type = type_u16;
-  normal_data.attribute_components = components_3;
+  normal_data.attribute_type = points_type_u16;
+  normal_data.attribute_components = points_components_3;
   normal_data.point_count = 1;
-  normal_data.draw_type = dyn_points_3;
+  normal_data.draw_type = points_dyn_points_3;
   mock_loader->loaded_data[normal_handle] = normal_data;
 
   bufs.push_back(std::move(normal_buf));
@@ -1075,7 +1053,7 @@ TEST_CASE("upload_ready awaiting uploads bypass memory budget")
 
   // Awaiting buffer should have been uploaded (bypasses budget)
   REQUIRE(bufs[0]->awaiting_new_color == false);
-  REQUIRE(bufs[0]->load_handle == render::invalid_load_handle);
+  REQUIRE(bufs[0]->load_handle == invalid_load_handle);
 
   // Normal buffer should NOT have been uploaded (blocked by budget)
   REQUIRE(bufs[1]->rendered == false);
@@ -1120,7 +1098,7 @@ TEST_CASE("frustum-culled crossfading node is force-completed")
   selection_result_t selection;
   selection.active_set.insert(root);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(to_render.empty());
@@ -1161,7 +1139,7 @@ TEST_CASE("frustum-culled awaiting node is NOT force-completed")
   selection_result_t selection;
   selection.active_set.insert(root);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(bufs[0]->old_color_valid == true);
@@ -1202,7 +1180,7 @@ TEST_CASE("node transitions from visible crossfading to frustum-culled mid-cross
   // Emit 3 frames while visible — crossfade advances
   for (int i = 0; i < 3; i++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
   }
   REQUIRE(bufs[0]->crossfade_frame == 3);
@@ -1212,7 +1190,7 @@ TEST_CASE("node transitions from visible crossfading to frustum-culled mid-cross
   bufs[0]->node_info = subsets[0];
   setup_single_node_registry(registry, subsets, {}, bufs);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(to_render.empty());
@@ -1269,7 +1247,7 @@ TEST_CASE("multiple frustum-culled nodes at different stages get force-completed
   selection.active_set.insert(node_a);
   selection.active_set.insert(node_b);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(to_render.empty());
@@ -1321,7 +1299,7 @@ TEST_CASE("awaiting state params: blend=1, new_is_mono copies old_color_is_mono"
     selection_result_t selection;
     selection.active_set.insert(root);
 
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     // params: {fade_alpha, blend=1.0, old_is_mono=0.0, new_is_mono=old_color_is_mono}
@@ -1338,7 +1316,7 @@ TEST_CASE("awaiting state params: blend=1, new_is_mono copies old_color_is_mono"
     selection_result_t selection;
     selection.active_set.insert(root);
 
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     REQUIRE(bufs[0]->params_data.y == doctest::Approx(1.0f));
@@ -1368,7 +1346,7 @@ TEST_CASE("crossfading state params: blend ramps, mono flags from old_color_is_m
   b->old_color_is_mono = true;
   b->awaiting_new_color = false;
   b->crossfade_frame = 0;
-  b->draw_type = dyn_points_3; // new is RGB
+  b->draw_type = points_dyn_points_3; // new is RGB
   bufs.push_back(std::move(b));
 
   setup_single_node_registry(registry, subsets, {}, bufs);
@@ -1378,7 +1356,7 @@ TEST_CASE("crossfading state params: blend ramps, mono flags from old_color_is_m
 
   for (int frame = 1; frame <= 10; frame++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     if (frame < 10)
@@ -1412,7 +1390,7 @@ TEST_CASE("fade-only state params: fade_alpha ramps, blend=1.0")
   b->node_info = subsets[0];
   make_rendered_steady(*b, ctx);
   b->fade_frame = 0; // trigger fade-in
-  b->draw_type = dyn_points_1; // mono
+  b->draw_type = points_dyn_points_1; // mono
   bufs.push_back(std::move(b));
 
   setup_single_node_registry(registry, subsets, {}, bufs);
@@ -1422,14 +1400,14 @@ TEST_CASE("fade-only state params: fade_alpha ramps, blend=1.0")
 
   for (int frame = 1; frame <= 10; frame++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     float expected_alpha = float(frame) / 10.0f;
     REQUIRE(bufs[0]->params_data.x == doctest::Approx(expected_alpha));
     REQUIRE(bufs[0]->params_data.y == doctest::Approx(1.0f));  // blend (no crossfade)
     REQUIRE(bufs[0]->params_data.z == doctest::Approx(0.0f));  // old_is_mono (always 0 in fade-only)
-    REQUIRE(bufs[0]->params_data.w == doctest::Approx(1.0f));  // new_is_mono (dyn_points_1)
+    REQUIRE(bufs[0]->params_data.w == doctest::Approx(1.0f));  // new_is_mono (points_dyn_points_1)
   }
 }
 
@@ -1477,7 +1455,7 @@ TEST_CASE("parent-blocked crossfade params: blend stays 0.0, crossfade_frame sta
   selection.active_set.insert(parent_id);
   selection.active_set.insert(child_id);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   // Child blocked: blend=0.0, crossfade_frame stays 0
@@ -1525,14 +1503,14 @@ TEST_CASE("natural crossfade completion frees memory on completion frame only")
   // Frames 1-9: no memory freed
   for (int i = 0; i < 9; i++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     REQUIRE(result.freed_gpu_memory == 0);
   }
 
   // Frame 10: crossfade completes, memory freed
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     REQUIRE(result.freed_gpu_memory == 768);
   }
@@ -1572,7 +1550,7 @@ TEST_CASE("frustum-cull force-completion frees memory correctly")
   selection_result_t selection;
   selection.active_set.insert(root);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(result.freed_gpu_memory == 1024);
@@ -1628,7 +1606,7 @@ TEST_CASE("cumulative freed_gpu_memory across visible completion and frustum-cul
   selection.active_set.insert(node_a);
   selection.active_set.insert(node_b);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(result.freed_gpu_memory == 400);
@@ -1699,7 +1677,7 @@ TEST_CASE("three-level hierarchy: grandparent blocks parent blocks child")
   // Phase 1: grandparent completes in 10 frames, parent and child blocked
   for (int i = 0; i < 10; i++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
   }
 
@@ -1710,7 +1688,7 @@ TEST_CASE("three-level hierarchy: grandparent blocks parent blocks child")
   // Phase 2: parent completes in 10 frames, child still blocked
   for (int i = 0; i < 10; i++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
   }
 
@@ -1720,7 +1698,7 @@ TEST_CASE("three-level hierarchy: grandparent blocks parent blocks child")
   // Phase 3: child completes in 10 frames
   for (int i = 0; i < 10; i++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
   }
 
@@ -1787,7 +1765,7 @@ TEST_CASE("sibling nodes crossfade independently when parent is steady")
   // Both siblings should advance in parallel
   for (int i = 0; i < 10; i++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     REQUIRE(bufs[1]->crossfade_frame == i + 1);
     REQUIRE(bufs[2]->crossfade_frame == i + 1);
@@ -1832,7 +1810,7 @@ TEST_CASE("concurrent fade-in and crossfade (both active simultaneously)")
   // Both fade and crossfade should progress simultaneously
   for (int i = 0; i < 10; i++)
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     REQUIRE(result.any_animating == true);
     REQUIRE(bufs[0]->fade_frame == i + 1);
@@ -1846,9 +1824,9 @@ TEST_CASE("concurrent fade-in and crossfade (both active simultaneously)")
 
   // Frame 11: steady state
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
-    REQUIRE(to_render[0].draw_type == dyn_points_3);
+    REQUIRE(to_render[0].draw_type == points_dyn_points_3);
     REQUIRE(result.any_animating == false);
   }
 }
@@ -1874,7 +1852,7 @@ TEST_CASE("mono to RGB crossfade sets correct is_mono flags")
   b->old_color_is_mono = true;
   b->awaiting_new_color = false;
   b->crossfade_frame = 0;
-  b->draw_type = dyn_points_3; // new is RGB
+  b->draw_type = points_dyn_points_3; // new is RGB
   bufs.push_back(std::move(b));
 
   setup_single_node_registry(registry, subsets, {}, bufs);
@@ -1882,7 +1860,7 @@ TEST_CASE("mono to RGB crossfade sets correct is_mono flags")
   selection_result_t selection;
   selection.active_set.insert(root);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(bufs[0]->params_data.z == doctest::Approx(1.0f)); // old mono
@@ -1910,7 +1888,7 @@ TEST_CASE("RGB to mono crossfade sets correct is_mono flags")
   b->old_color_is_mono = false;
   b->awaiting_new_color = false;
   b->crossfade_frame = 0;
-  b->draw_type = dyn_points_1; // new is mono
+  b->draw_type = points_dyn_points_1; // new is mono
   bufs.push_back(std::move(b));
 
   setup_single_node_registry(registry, subsets, {}, bufs);
@@ -1918,7 +1896,7 @@ TEST_CASE("RGB to mono crossfade sets correct is_mono flags")
   selection_result_t selection;
   selection.active_set.insert(root);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   REQUIRE(bufs[0]->params_data.z == doctest::Approx(0.0f)); // old RGB
@@ -1973,7 +1951,7 @@ TEST_CASE("mixed visible and culled nodes in same emit")
   selection.active_set.insert(node_a);
   selection.active_set.insert(node_b);
 
-  std::vector<draw_group_t> to_render;
+  std::vector<points_draw_group_t> to_render;
   auto result = emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
   // A produces a draw group and advances
@@ -2020,11 +1998,11 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition")
 
   SUBCASE("params_buffer created lazily on first animating frame")
   {
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     REQUIRE(bufs[0]->params_buffer.user_ptr != nullptr);
-    REQUIRE(to_render[0].buffers[4].buffer_mapping == dyn_points_bm_params);
+    REQUIRE(to_render[0].buffers[4].buffer_mapping == points_dyn_points_bm_params);
     REQUIRE(to_render[0].buffers[4].user_ptr == bufs[0]->params_buffer.user_ptr);
   }
 
@@ -2033,7 +2011,7 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition")
     // Complete the crossfade
     for (int i = 0; i < 10; i++)
     {
-      std::vector<draw_group_t> to_render;
+      std::vector<points_draw_group_t> to_render;
       emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     }
 
@@ -2048,11 +2026,11 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition")
 
     // Emit one more frame — should be steady and destroy params_buffer
     ctx.destroyed_buffers.clear();
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     REQUIRE(to_render.size() == 1);
-    REQUIRE(to_render[0].draw_type == dyn_points_3);
+    REQUIRE(to_render[0].draw_type == points_dyn_points_3);
     REQUIRE(to_render[0].buffers_size == 3);
     // params_buffer should have been destroyed (user_ptr nulled by do_destroy_buffer)
     REQUIRE(bufs[0]->params_buffer.user_ptr == nullptr);
@@ -2063,13 +2041,13 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition")
     // Complete the crossfade
     for (int i = 0; i < 10; i++)
     {
-      std::vector<draw_group_t> to_render;
+      std::vector<points_draw_group_t> to_render;
       emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     }
 
     // First steady frame — destroys params_buffer
     {
-      std::vector<draw_group_t> to_render;
+      std::vector<points_draw_group_t> to_render;
       emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     }
 
@@ -2077,7 +2055,7 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition")
 
     // Second steady frame — should NOT call destroy again (user_ptr is null)
     {
-      std::vector<draw_group_t> to_render;
+      std::vector<points_draw_group_t> to_render;
       emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     }
 
@@ -2085,7 +2063,7 @@ TEST_CASE("params_buffer lifecycle across crossfade to steady transition")
 
     // Third steady frame — same
     {
-      std::vector<draw_group_t> to_render;
+      std::vector<points_draw_group_t> to_render;
       emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
     }
 
@@ -2136,7 +2114,7 @@ TEST_CASE("prepare_fade_outs detects nodes leaving active set")
     auto &retain1 = emitter.prepare_fade_outs(frame1_subsets);
     REQUIRE(retain1.empty()); // nothing fading yet
 
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
   }
 
@@ -2185,7 +2163,7 @@ TEST_CASE("prepare_fade_outs removes reappearing nodes from fading set")
     selection.active_set.insert(child);
 
     emitter.prepare_fade_outs(subsets);
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     emitter.emit(bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
   }
 
@@ -2527,7 +2505,7 @@ TEST_CASE("full fade-out lifecycle: node leaves walker, fades out, completes")
     selection.active_set.insert(root);
     selection.active_set.insert(child);
 
-    std::vector<draw_group_t> to_render;
+    std::vector<points_draw_group_t> to_render;
     auto result = emitter.emit(empty_bufs, registry, selection, *callbacks, make_identity_camera(), tree_config, to_render_ptr(to_render));
 
     REQUIRE(to_render.size() == 2); // both nodes drawn steady
@@ -2569,7 +2547,7 @@ TEST_CASE("full fade-out lifecycle: node leaves walker, fades out, completes")
   sel1.active_set.insert(root);
   sel1.active_set.insert(child);
 
-  std::vector<draw_group_t> to_render1;
+  std::vector<points_draw_group_t> to_render1;
   emitter2.emit(bufs, registry2, sel1, *callbacks2, make_identity_camera(), tree_config, to_render_ptr(to_render1));
   REQUIRE(to_render1.size() == 2);
 
@@ -2594,7 +2572,7 @@ TEST_CASE("full fade-out lifecycle: node leaves walker, fades out, completes")
   sel2.active_set.insert(root);
 
   // Emit: pass 1 draws root steady, pass 3 draws child fading
-  std::vector<draw_group_t> to_render2;
+  std::vector<points_draw_group_t> to_render2;
   auto result2 = emitter2.emit(bufs, registry2, sel2, *callbacks2, make_identity_camera(), tree_config, to_render_ptr(to_render2));
   REQUIRE(to_render2.size() == 2); // root + fading child
   REQUIRE(result2.any_animating == true);
@@ -2613,7 +2591,7 @@ TEST_CASE("full fade-out lifecycle: node leaves walker, fades out, completes")
     selection_result_t sel_n;
     sel_n.active_set.insert(root);
 
-    std::vector<draw_group_t> to_render_n;
+    std::vector<points_draw_group_t> to_render_n;
     emitter2.emit(bufs, registry2, sel_n, *callbacks2, make_identity_camera(), tree_config, to_render_ptr(to_render_n));
   }
 

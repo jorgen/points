@@ -28,7 +28,7 @@
 namespace points::converter
 {
 
-static bool compare_attribute(const attribute_t &a, const attribute_t &b)
+static bool compare_attribute(const points_converter_attribute_t &a, const points_converter_attribute_t &b)
 {
   if (a.name_size != b.name_size)
     return false;
@@ -38,7 +38,7 @@ static bool compare_attribute(const attribute_t &a, const attribute_t &b)
     return false;
   return memcmp(a.name, b.name, a.name_size) == 0;
 }
-static bool compare_attributes(const attributes_t &a, const attributes_t &b)
+static bool compare_attributes(const points_converter_attributes_t &a, const points_converter_attributes_t &b)
 {
   if (a.attributes.size() != b.attributes.size())
     return false;
@@ -50,7 +50,7 @@ static bool compare_attributes(const attributes_t &a, const attributes_t &b)
   return true;
 }
 
-bool attributes_name_in_registry(const attribute_t &attribute, const std::vector<std::string> &registry)
+bool attributes_name_in_registry(const points_converter_attribute_t &attribute, const std::vector<std::string> &registry)
 {
   for (auto &name : registry)
   {
@@ -62,7 +62,7 @@ bool attributes_name_in_registry(const attribute_t &attribute, const std::vector
   return false;
 }
 
-static void insert_new_names(const attributes_t &source, std::vector<std::string> &target)
+static void insert_new_names(const points_converter_attributes_t &source, std::vector<std::string> &target)
 {
   for (auto &attrib : source.attributes)
   {
@@ -73,7 +73,7 @@ static void insert_new_names(const attributes_t &source, std::vector<std::string
   }
 }
 
-attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&attr)
+attributes_id_t attributes_configs_t::get_attribute_config_index(points_converter_attributes_t &&attr)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   for (int i = 0; i < int(_attributes_configs.size()); i++)
@@ -91,7 +91,7 @@ attributes_id_t attributes_configs_t::get_attribute_config_index(attributes_t &&
   return {uint32_t(ret)};
 }
 
-static bool contains_attribute(const attributes_t &attributes, const attribute_t &attribute)
+static bool contains_attribute(const points_converter_attributes_t &attributes, const points_converter_attribute_t &attribute)
 {
   for (auto &to_check_attrib : attributes.attributes)
   {
@@ -103,7 +103,7 @@ static bool contains_attribute(const attributes_t &attributes, const attribute_t
   return false;
 }
 
-static void add_missing_attributes(const attributes_t &source, attributes_t &target)
+static void add_missing_attributes(const points_converter_attributes_t &source, points_converter_attributes_t &target)
 {
   for (auto &source_attrib : source.attributes)
   {
@@ -130,7 +130,7 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
   attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
 
   auto lod_type = morton_type_from_lod(lod);
-  attributes_t target;
+  points_converter_attributes_t target;
   {
     std::unique_lock<std::mutex> lock(_mutex);
     attributes_copy(_attributes_configs[attrib_begin->data].attributes, target);
@@ -154,13 +154,13 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
       }
     }
     target.attributes.front().type = lod_type;
-    target.attributes.front().components = components_1;
+    target.attributes.front().components = points_components_1;
   }
   auto id = get_attribute_config_index(std::move(target));
   return get_lod_attribute_mapping(lod_type, id, attrib_begin, attrib_end);
 }
 
-const attributes_t &attributes_configs_t::get(attributes_id_t id)
+const points_converter_attributes_t &attributes_configs_t::get(attributes_id_t id)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   return _attributes_configs[id.data].attributes;
@@ -185,14 +185,14 @@ static bool attributes_ids_increase(const attributes_id_t *begin, const attribut
 }
 #endif
 
-static bool is_attribute_names_equal(const attribute_t &a, const attribute_t &b)
+static bool is_attribute_names_equal(const points_converter_attribute_t &a, const points_converter_attribute_t &b)
 {
   if (a.name_size != b.name_size)
     return false;
   return memcmp(a.name, b.name, a.name_size) == 0;
 }
 
-attribute_source_lod_into_t create_attribute_source_lod_into(const attribute_t &attr, const attributes_t &attributes)
+attribute_source_lod_into_t create_attribute_source_lod_into(const points_converter_attribute_t &attr, const points_converter_attributes_t &attributes)
 {
   for (int i = 0; i < int(attributes.attributes.size()); i++)
   {
@@ -205,7 +205,7 @@ attribute_source_lod_into_t create_attribute_source_lod_into(const attribute_t &
   return {-1, {}};
 }
 
-attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const
+attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const points_type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const
 {
   (void)point_type;
   assert(begin < end);
@@ -324,7 +324,7 @@ serialized_attributes_t attributes_configs_t::serialize() const
   return ret;
 }
 
-points::error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+points_error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
   auto input_bytes = data.get();
   auto end = input_bytes + size;
@@ -345,14 +345,14 @@ points::error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[
     memcpy(&attrib_count, input_bytes, sizeof(attrib_count));
     input_bytes += sizeof(uint32_t);
 
-    attributes_t attributes;
+    points_converter_attributes_t attributes;
     for (uint32_t j = 0; j < attrib_count; j++)
     {
-      if (input_bytes + sizeof(type_t) + sizeof(components_t) + sizeof(uint32_t) > end)
+      if (input_bytes + sizeof(points_type_t) + sizeof(points_components_t) + sizeof(uint32_t) > end)
         return {3, "Invalid input size for attribute details"};
 
-      type_t format;
-      components_t components;
+      points_type_t format;
+      points_components_t components;
       uint32_t name_size;
 
       memcpy(&format, input_bytes, sizeof(format));

@@ -25,17 +25,16 @@
 #include <memory>
 #include <vector>
 
+using namespace points::converter;
 
-namespace points::converter
+struct points_converter_t *points_converter_create(const char *url, uint64_t url_size, enum points_converter_open_file_semantics_t semantics, points_error_t **error)
 {
-struct converter_t *converter_create(const char *url, uint64_t url_size, enum converter_open_file_semantics_t semantics, error_t **error)
-{
-  auto *converter = new converter_t(url, url_size, semantics);
+  auto *converter = new points_converter_t(url, url_size, semantics);
   if (converter->error.code != 0)
   {
     if (error)
     {
-      *error = new error_t();
+      *error = new points_error_t();
       (*error)->code = converter->error.code;
       (*error)->msg = converter->error.msg;
     }
@@ -45,27 +44,27 @@ struct converter_t *converter_create(const char *url, uint64_t url_size, enum co
   return converter;
 }
 
-void converter_destroy(converter_t *destroy)
+void points_converter_destroy(points_converter_t *destroy)
 {
   delete destroy;
 }
 
-void converter_set_file_converter_callbacks(converter_t *converter, converter_file_convert_callbacks_t callbacks)
+void points_converter_set_file_converter_callbacks(points_converter_t *converter, points_converter_file_convert_callbacks_t callbacks)
 {
   converter->processor.set_converter_callbacks(callbacks);
 }
 
-void converter_set_runtime_callbacks(converter_t *converter, converter_runtime_callbacks_t callbacks, void *user_ptr)
+void points_converter_set_runtime_callbacks(points_converter_t *converter, points_converter_runtime_callbacks_t callbacks, void *user_ptr)
 {
   converter->processor.set_runtime_callbacks(callbacks, user_ptr);
 }
 
-void converter_set_compression(converter_t *converter, enum converter_compression_t compression)
+void points_converter_set_compression(points_converter_t *converter, enum points_converter_compression_t compression)
 {
   converter->processor.storage_handler().set_compressor(static_cast<compression_method_t>(compression));
 }
 
-void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32_t buffer_count)
+void points_converter_add_data_file(points_converter_t *converter, points_converter_str_buffer *buffers, uint32_t buffer_count)
 {
   std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> input_files;
   input_files.reserve(buffer_count);
@@ -81,19 +80,19 @@ void converter_add_data_file(converter_t *converter, str_buffer *buffers, uint32
   converter->processor.add_files(std::move(input_files));
 }
 
-void converter_wait_idle(converter_t *converter)
+void points_converter_wait_idle(points_converter_t *converter)
 {
   converter->processor.wait_idle();
 }
 
-converter_conversion_status_t converter_status(converter_t *converter)
+points_converter_conversion_status_t points_converter_status(points_converter_t *converter)
 {
   if (converter->processor.has_errors())
-    return conversion_status_error;
+    return points_conversion_status_error;
   return converter->status;
 }
 
-static void fill_converter_stats(const compression_stats_t &src, converter_stats_t *dst)
+static void fill_converter_stats(const compression_stats_t &src, points_converter_stats_t *dst)
 {
   memset(dst, 0, sizeof(*dst));
   dst->input_file_count = src.input_file_count;
@@ -122,13 +121,16 @@ static void fill_converter_stats(const compression_stats_t &src, converter_stats
   }
 }
 
-void converter_get_compression_stats(struct converter_t *converter, struct converter_stats_t *stats)
+bool points_converter_get_compression_stats(struct points_converter_t *converter, struct points_converter_stats_t *stats)
 {
+  if (!converter)
+    return false;
   auto &src = converter->processor.storage_handler().get_compression_stats();
   fill_converter_stats(src, stats);
+  return true;
 }
 
-static void fill_live_io_stats(converter_io_stats_t &dst, const io_counter_t &src)
+static void fill_live_io_stats(points_converter_io_stats_t &dst, const io_counter_t &src)
 {
   dst.total_bytes = src.total_bytes.load(std::memory_order_relaxed);
   dst.total_time_us = src.total_time_us.load(std::memory_order_relaxed);
@@ -138,7 +140,7 @@ static void fill_live_io_stats(converter_io_stats_t &dst, const io_counter_t &sr
   dst.low_mbps = src.low_mbps();
 }
 
-static void fill_io_stats(converter_io_stats_t &dst, const perf_stats_t::deserialized_perf_stats_t::counter_data_t &src)
+static void fill_io_stats(points_converter_io_stats_t &dst, const perf_stats_t::deserialized_perf_stats_t::counter_data_t &src)
 {
   dst.total_bytes = src.total_bytes;
   dst.total_time_us = src.total_time_us;
@@ -148,13 +150,15 @@ static void fill_io_stats(converter_io_stats_t &dst, const perf_stats_t::deseria
   dst.low_mbps = src.low_mbps();
 }
 
-void converter_get_perf_stats(converter_t *converter, converter_perf_stats_t *perf_stats)
+bool points_converter_get_perf_stats(points_converter_t *converter, points_converter_perf_stats_t *perf_stats)
 {
+  if (!converter)
+    return false;
   auto &parsed = converter->processor.storage_handler().get_deserialized_perf_stats();
   if (!parsed.valid)
   {
     memset(perf_stats, 0, sizeof(*perf_stats));
-    return;
+    return false;
   }
 
   perf_stats->total_time_seconds = parsed.total_time_seconds;
@@ -170,10 +174,13 @@ void converter_get_perf_stats(converter_t *converter, converter_perf_stats_t *pe
   perf_stats->lod_generation_seconds = double(parsed.lod_generation_us) / 1e6;
   perf_stats->cache_hits = parsed.cache_hits;
   perf_stats->cache_misses = parsed.cache_misses;
+  return true;
 }
 
-void converter_get_live_perf_stats(struct converter_t *converter, struct converter_perf_stats_t *perf_stats)
+bool points_converter_get_live_perf_stats(struct points_converter_t *converter, struct points_converter_perf_stats_t *perf_stats)
 {
+  if (!converter)
+    return false;
   auto &ps = converter->processor.perf_stats();
   auto now = perf_stats_t::clock_t::now();
   double elapsed = double(std::chrono::duration_cast<std::chrono::microseconds>(now - ps.conversion_start).count()) / 1e6;
@@ -193,7 +200,6 @@ void converter_get_live_perf_stats(struct converter_t *converter, struct convert
   perf_stats->lod_generation_seconds = double(ps.lod_generation_time_us.load(std::memory_order_relaxed)) / 1e6;
   perf_stats->cache_hits = ps.cache_hits.load(std::memory_order_relaxed);
   perf_stats->cache_misses = ps.cache_misses.load(std::memory_order_relaxed);
+  return true;
 }
-
-} // namespace points::converter
 

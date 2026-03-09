@@ -74,7 +74,7 @@ void input_data_source_registry_t::register_pre_init_result(const tree_config_t 
   _unsorted_input_sources_dirty = true;
 }
 
-void input_data_source_registry_t::handle_input_init(input_data_id_t id, attributes_id_t attributes_id, header_t public_header)
+void input_data_source_registry_t::handle_input_init(input_data_id_t id, attributes_id_t attributes_id, points_converter_header_t public_header)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = get_item(id, _registry);

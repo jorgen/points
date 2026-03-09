@@ -34,20 +34,17 @@
 #include <string>
 #include <vector>
 
-namespace points::converter
+struct points_converter_data_source_t
 {
+  points_converter_data_source_t(const std::string &url, points::render::callback_manager_t &callback_manager);
 
-struct converter_data_source_t
-{
-  converter_data_source_t(const std::string &url, render::callback_manager_t &callback_manager);
-
-  void add_to_frame(render::frame_camera_t *camera, render::to_render_t *to_render);
+  void add_to_frame(points_frame_camera_t *camera, points_to_render_t *to_render);
 
   const std::string url;
-  error_t error;
-  processor_t processor;
-  render::callback_manager_t &callbacks;
-  render::data_source_t data_source;
+  points_error_t error;
+  points::converter::processor_t processor;
+  points::render::callback_manager_t &callbacks;
+  points_data_source_t data_source;
 
   std::mutex mutex;
   std::string current_attribute_name;
@@ -60,35 +57,32 @@ struct converter_data_source_t
   size_t gpu_memory_used = 0;
   uint64_t point_budget = 10'000'000;
 
-  render::buffer_t index_buffer;
-  std::vector<tree_walker_with_buffer_t> current_tree_nodes[2];
+  points_buffer_t index_buffer;
+  std::vector<points::converter::tree_walker_with_buffer_t> current_tree_nodes[2];
   bool current_tree_nodes_index = false;
 
-  std::unique_ptr<render::node_data_loader_t> node_loader;
-  std::vector<std::unique_ptr<gpu_node_buffer_t>> render_buffers;
+  std::unique_ptr<points::render::node_data_loader_t> node_loader;
+  std::vector<std::unique_ptr<points::converter::gpu_node_buffer_t>> render_buffers;
 
   uint64_t points_rendered_last_frame = 0;
-  frame_timings_t frame_timings;
+  points::converter::frame_timings_t frame_timings;
 
-  compression_stats_t attribute_stats;
+  points::converter::compression_stats_t attribute_stats;
   double current_attr_min = 0.0;
   double current_attr_max = 1.0;
 
-  // Cached walker attribute names (rebuilt only on attribute change)
   std::vector<std::string> cached_walker_attribute_names;
   std::string cached_walker_attribute_source;
 
-  // Refactored components
-  frame_node_registry_t node_registry;
-  node_selector_t node_selector;
-  gpu_buffer_manager_t buffer_manager;
-  draw_emitter_t draw_emitter;
+  points::converter::frame_node_registry_t node_registry;
+  points::converter::node_selector_t node_selector;
+  points::converter::gpu_buffer_manager_t buffer_manager;
+  points::converter::draw_emitter_t draw_emitter;
 
-  std::unique_ptr<node_bbox_data_source_t> bbox_data_source;
-  node_aabb_t tight_aabb_accumulator = {{std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()},
+  std::unique_ptr<points::converter::node_bbox_data_source_t> bbox_data_source;
+  points::converter::node_aabb_t tight_aabb_accumulator = {{std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()},
                                         {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()}};
   bool show_bounding_boxes = false;
   bool debug_transitions = false;
-  frame_node_registry_t::node_set_t previous_active_set;
+  points::converter::frame_node_registry_t::node_set_t previous_active_set;
 };
-} // namespace points::converter

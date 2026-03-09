@@ -64,18 +64,18 @@ struct write_trees_result_t
 {
   std::vector<tree_id_t> tree_ids;
   std::vector<storage_location_t> locations;
-  error_t error;
+  points_error_t error;
 };
 
 struct write_tree_registry_result_t
 {
   storage_location_t location;
-  error_t error;
+  points_error_t error;
 };
 
 struct write_blob_result_t
 {
-  error_t error;
+  points_error_t error;
 };
 
 tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<input_data_id_t> &done_with_input)
@@ -102,7 +102,7 @@ tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_
   _event_loop.add_about_to_block_listener(this);
 }
 
-error_t tree_handler_t::deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size)
+points_error_t tree_handler_t::deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size)
 {
   auto ret = tree_registry_deserialize(tree_registry_buffer, tree_registry_blobs_size, _tree_registry);
   if (ret.code == 0)
@@ -248,7 +248,7 @@ vio::task_t<void> tree_handler_t::do_serialize_trees()
   {
     auto state = write_trees_awaitable._state;
     _file_cache.write_trees(std::move(tree_ids), std::move(serialized_trees),
-      [state](std::vector<tree_id_t> &&ids, std::vector<storage_location_t> &&locs, error_t &&err)
+      [state](std::vector<tree_id_t> &&ids, std::vector<storage_location_t> &&locs, points_error_t &&err)
       {
         state->result.tree_ids = std::move(ids);
         state->result.locations = std::move(locs);
@@ -277,7 +277,7 @@ vio::task_t<void> tree_handler_t::do_serialize_trees()
   {
     auto state = write_registry_awaitable._state;
     _file_cache.write_tree_registry(std::move(serialized_registry),
-      [state](storage_location_t loc, error_t &&err)
+      [state](storage_location_t loc, points_error_t &&err)
       {
         state->result.location = loc;
         state->result.error = std::move(err);
@@ -291,7 +291,7 @@ vio::task_t<void> tree_handler_t::do_serialize_trees()
   {
     auto state = write_blob_awaitable._state;
     _file_cache.write_blob_locations_and_update_header(registry_result.location, std::move(old_locations),
-      [state](error_t &&err)
+      [state](points_error_t &&err)
       {
         state->result.error = std::move(err);
         state->caller_loop.run_in_loop([state] { state->continuation.resume(); });
@@ -308,7 +308,7 @@ void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tre
   _tree_registry.data[tree_id.data] = std::make_unique<tree_t>();
   auto tree = _tree_registry.get(tree_id);
   assert(tree);
-  error_t error;
+  points_error_t error;
   fmt::print(stderr, "Deserializing tree {}\n", tree_id.data);
   auto ret = tree_deserialize(data, *tree, error);
   if (!ret)

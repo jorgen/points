@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2024  Jørgen Lind
+** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -26,8 +26,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-namespace points::render
-{
+using namespace points::render;
 
 static void generate_arrow(const glm::vec3 &direction, float size, const glm::u8vec4 &color,
                            std::vector<glm::vec3> &vertices, std::vector<glm::u8vec4> &colors, std::vector<uint32_t> &indices)
@@ -119,28 +118,28 @@ static void generate_arrow(const glm::vec3 &direction, float size, const glm::u8
   }
 }
 
-origin_anchor_data_source_t::origin_anchor_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &a_center, double a_arrow_size)
+points_origin_anchor_data_source_t::points_origin_anchor_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &a_center, double a_arrow_size)
   : callbacks(a_callbacks)
   , center(a_center)
   , arrow_size(a_arrow_size)
   , camera_matrix(1)
 {
-  callbacks.do_create_buffer(camera_buffer, buffer_type_uniform);
-  callbacks.do_initialize_buffer(camera_buffer, type_r32, components_4x4, sizeof(camera_matrix), &camera_matrix);
+  callbacks.do_create_buffer(camera_buffer, points_buffer_type_uniform);
+  callbacks.do_initialize_buffer(camera_buffer, points_type_r32, points_components_4x4, sizeof(camera_matrix), &camera_matrix);
 
   rebuild_mesh();
 
-  callbacks.do_create_buffer(vertex_buffer, buffer_type_vertex);
-  callbacks.do_initialize_buffer(vertex_buffer, type_r32, components_3, int(vertices.size() * sizeof(vertices[0])), vertices.data());
+  callbacks.do_create_buffer(vertex_buffer, points_buffer_type_vertex);
+  callbacks.do_initialize_buffer(vertex_buffer, points_type_r32, points_components_3, int(vertices.size() * sizeof(vertices[0])), vertices.data());
 
-  callbacks.do_create_buffer(color_buffer, buffer_type_vertex);
-  callbacks.do_initialize_buffer(color_buffer, type_u8, components_4, int(colors.size() * sizeof(colors[0])), colors.data());
+  callbacks.do_create_buffer(color_buffer, points_buffer_type_vertex);
+  callbacks.do_initialize_buffer(color_buffer, points_type_u8, points_components_4, int(colors.size() * sizeof(colors[0])), colors.data());
 
-  callbacks.do_create_buffer(index_buffer, buffer_type_index);
-  callbacks.do_initialize_buffer(index_buffer, type_u32, components_1, int(indices.size() * sizeof(indices[0])), indices.data());
+  callbacks.do_create_buffer(index_buffer, points_buffer_type_index);
+  callbacks.do_initialize_buffer(index_buffer, points_type_u32, points_components_1, int(indices.size() * sizeof(indices[0])), indices.data());
 }
 
-void origin_anchor_data_source_t::rebuild_mesh()
+void points_origin_anchor_data_source_t::rebuild_mesh()
 {
   vertices.clear();
   colors.clear();
@@ -157,7 +156,7 @@ void origin_anchor_data_source_t::rebuild_mesh()
   generate_arrow(glm::vec3(0, 0, -1), size, color, vertices, colors, indices);
 }
 
-void origin_anchor_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
+void points_origin_anchor_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, points_to_render_t *to_render)
 {
   // Compute scale to maintain constant screen size regardless of distance
   glm::dvec3 eye = glm::dvec3(camera.inverse_view[3]);
@@ -169,44 +168,44 @@ void origin_anchor_data_source_t::add_to_frame(const frame_camera_cpp_t &camera,
   camera_matrix = glm::mat4(camera.projection * camera.view * model);
   callbacks.do_modify_buffer(camera_buffer, 0, sizeof(camera_matrix), &camera_matrix);
 
-  render_list[0].buffer_mapping = origin_anchor_bm_position;
+  render_list[0].buffer_mapping = points_origin_anchor_bm_position;
   render_list[0].user_ptr = vertex_buffer.user_ptr;
-  render_list[1].buffer_mapping = origin_anchor_bm_color;
+  render_list[1].buffer_mapping = points_origin_anchor_bm_color;
   render_list[1].user_ptr = color_buffer.user_ptr;
-  render_list[2].buffer_mapping = origin_anchor_bm_camera;
+  render_list[2].buffer_mapping = points_origin_anchor_bm_camera;
   render_list[2].user_ptr = camera_buffer.user_ptr;
-  render_list[3].buffer_mapping = origin_anchor_bm_index;
+  render_list[3].buffer_mapping = points_origin_anchor_bm_index;
   render_list[3].user_ptr = index_buffer.user_ptr;
 
-  draw_group_t draw_group = {};
+  points_draw_group_t draw_group = {};
   draw_group.buffers = render_list;
   draw_group.buffers_size = 4;
-  draw_group.draw_type = draw_type_t::origin_anchor_mesh;
+  draw_group.draw_type = points_draw_type_t::points_origin_anchor_mesh;
   draw_group.draw_size = int(indices.size());
-  to_render_add_render_group(to_render, draw_group);
+  points_to_render_add_render_group(to_render, draw_group);
 }
 
-struct origin_anchor_data_source_t *origin_anchor_data_source_create(struct renderer_t *renderer, const double center[3], double arrow_size)
+struct points_origin_anchor_data_source_t *points_origin_anchor_data_source_create(struct points_renderer_t *renderer, const double center[3], double arrow_size)
 {
-  return new origin_anchor_data_source_t(renderer->callbacks, glm::dvec3(center[0], center[1], center[2]), arrow_size);
+  return new points_origin_anchor_data_source_t(renderer->callbacks, glm::dvec3(center[0], center[1], center[2]), arrow_size);
 }
 
-void origin_anchor_data_source_destroy(struct origin_anchor_data_source_t *anchor)
+void points_origin_anchor_data_source_destroy(struct points_origin_anchor_data_source_t *anchor)
 {
   delete anchor;
 }
 
-struct data_source_t origin_anchor_data_source_get(struct origin_anchor_data_source_t *anchor)
+struct points_data_source_t points_origin_anchor_data_source_get(struct points_origin_anchor_data_source_t *anchor)
 {
   return anchor->data_source;
 }
 
-void origin_anchor_data_source_set_center(struct origin_anchor_data_source_t *anchor, const double center[3])
+void points_origin_anchor_data_source_set_center(struct points_origin_anchor_data_source_t *anchor, const double center[3])
 {
   anchor->center = glm::dvec3(center[0], center[1], center[2]);
 }
 
-void origin_anchor_data_source_set_arrow_size(struct origin_anchor_data_source_t *anchor, double arrow_size)
+void points_origin_anchor_data_source_set_arrow_size(struct points_origin_anchor_data_source_t *anchor, double arrow_size)
 {
   anchor->arrow_size = arrow_size;
   anchor->rebuild_mesh();
@@ -214,5 +213,3 @@ void origin_anchor_data_source_set_arrow_size(struct origin_anchor_data_source_t
   anchor->callbacks.do_modify_buffer(anchor->color_buffer, 0, int(anchor->colors.size() * sizeof(anchor->colors[0])), anchor->colors.data());
   anchor->callbacks.do_modify_buffer(anchor->index_buffer, 0, int(anchor->indices.size() * sizeof(anchor->indices[0])), anchor->indices.data());
 }
-
-} // namespace points::render

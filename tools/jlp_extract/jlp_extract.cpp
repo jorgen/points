@@ -18,8 +18,8 @@
 #include <string>
 #include <vector>
 
-using namespace points;
 using namespace points::converter;
+
 
 struct extract_args_t
 {
@@ -42,24 +42,24 @@ struct extract_args_t
   uint32_t node_index = 0;
 };
 
-static const char *type_name(type_t type)
+static const char *type_name(points_type_t type)
 {
   switch (type)
   {
-  case type_u8:   return "u8";
-  case type_i8:   return "i8";
-  case type_u16:  return "u16";
-  case type_i16:  return "i16";
-  case type_u32:  return "u32";
-  case type_i32:  return "i32";
-  case type_m32:  return "m32";
-  case type_r32:  return "r32";
-  case type_u64:  return "u64";
-  case type_i64:  return "i64";
-  case type_m64:  return "m64";
-  case type_r64:  return "r64";
-  case type_m128: return "m128";
-  case type_m192: return "m192";
+  case points_type_u8:   return "u8";
+  case points_type_i8:   return "i8";
+  case points_type_u16:  return "u16";
+  case points_type_i16:  return "i16";
+  case points_type_u32:  return "u32";
+  case points_type_i32:  return "i32";
+  case points_type_m32:  return "m32";
+  case points_type_r32:  return "r32";
+  case points_type_u64:  return "u64";
+  case points_type_i64:  return "i64";
+  case points_type_m64:  return "m64";
+  case points_type_r64:  return "r64";
+  case points_type_m128: return "m128";
+  case points_type_m192: return "m192";
   default:        return "?";
   }
 }
@@ -266,7 +266,7 @@ static vio::task_t<bool> load_tree(vio::event_loop_t &event_loop, vio::file_t &f
   st.data = std::move(blob);
   st.size = int(loc.size);
 
-  points::error_t err;
+  points_error_t err;
   co_return tree_deserialize(st, tree, err);
 }
 
@@ -688,7 +688,7 @@ static vio::task_t<void> run_extract(vio::event_loop_t &event_loop, extract_args
     serialized_tree.size = int(tree_loc.size);
 
     tree_t tree;
-    points::error_t tree_err;
+    points_error_t tree_err;
     if (!tree_deserialize(serialized_tree, tree, tree_err))
     {
       fmt::print(stderr, "Warning: failed to deserialize tree {}: {}, skipping\n", ti, tree_err.msg);

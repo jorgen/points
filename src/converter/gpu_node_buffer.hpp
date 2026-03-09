@@ -63,9 +63,9 @@ struct tree_walker_with_buffer_t
 struct gpu_node_buffer_t
 {
   tree_walker_data_t node_info;
-  render::draw_type_t draw_type = render::dyn_points_1;
-  render::draw_buffer_t render_list[6] = {};
-  render::buffer_t render_buffers[3] = {};
+  points_draw_type_t draw_type = points_dyn_points_1;
+  points_draw_buffer_t render_list[6] = {};
+  points_buffer_t render_buffers[3] = {};
   uint32_t point_count = 0;
   std::array<double, 3> offset = {};
   glm::mat4 camera_view = {};
@@ -81,14 +81,14 @@ struct gpu_node_buffer_t
 
   // Crossfade
   static constexpr int CROSSFADE_FRAMES = 10;
-  render::buffer_t old_color_buffer = {};
+  points_buffer_t old_color_buffer = {};
   bool old_color_valid = false;
   bool old_color_is_mono = false;
   bool awaiting_new_color = false;
   int crossfade_frame = 0;
 
   // Params uniform
-  render::buffer_t params_buffer = {};
+  points_buffer_t params_buffer = {};
   glm::vec4 params_data = {1.0f, 1.0f, 0.0f, 0.0f};
 };
 

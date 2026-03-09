@@ -242,7 +242,7 @@ TEST_CASE("detect then restore round trip")
 TEST_CASE("detect_constant_bands >32 bands graceful degradation")
 {
   // typesize=8, components=5 would be 40 bands — exceeds 32-bit mask
-  // Use components_4x4 = 5 but manually set up data
+  // Use points_components_4x4 = 5 but manually set up data
   uint32_t element_count = 4;
   uint32_t typesize = 8;
   uint32_t components = 5;

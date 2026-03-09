@@ -49,7 +49,7 @@ public:
                      render::callback_manager_t &callbacks,
                      const render::frame_camera_cpp_t &camera,
                      const tree_config_t &tree_config,
-                     render::to_render_t *to_render,
+                     points_to_render_t *to_render,
                      bool debug = false);
 
 private:

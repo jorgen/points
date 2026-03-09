@@ -23,15 +23,12 @@
 extern "C" {
 #endif
 
-namespace points
-{
+struct points_error_t;
+POINTS_COMMON_EXPORT struct points_error_t *points_error_create(void);
+POINTS_COMMON_EXPORT void points_error_destroy(struct points_error_t *error);
+POINTS_COMMON_EXPORT void points_error_set_info(struct points_error_t *error, int code, const char *str, size_t str_len);
+POINTS_COMMON_EXPORT void points_error_get_info(const struct points_error_t *error, int *code, const char **str, size_t *str_len);
 
-struct error_t;
-POINTS_COMMON_EXPORT error_t *error_create();
-POINTS_COMMON_EXPORT void error_destroy(error_t *error);
-POINTS_COMMON_EXPORT void error_set_info(error_t *error, int code, const char *str, size_t str_len);
-POINTS_COMMON_EXPORT void error_get_info(const error_t *error, int *code, const char **str, size_t *str_len);
-} // namespace points
 #ifdef __cplusplus
 }
 #endif

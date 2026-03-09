@@ -28,29 +28,25 @@
 #include <string>
 #include <vector>
 
-namespace points::render
+struct points_flat_points_data_source_t : public points::render::data_source_cpp_t
 {
-struct flat_points_data_source_t : public data_source_cpp_t
-{
-  flat_points_data_source_t(callback_manager_t &callbacks, std::string url);
+  points_flat_points_data_source_t(points::render::callback_manager_t &callbacks, std::string url);
 
-  void add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render) override;
+  void add_to_frame(const points::render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
 
-  callback_manager_t &callbacks;
+  points::render::callback_manager_t &callbacks;
 
   std::vector<glm::vec3> vertices;
-  buffer_t vertex_buffer;
+  points_buffer_t vertex_buffer;
 
   std::vector<glm::u8vec3> colors;
-  buffer_t color_buffer;
+  points_buffer_t color_buffer;
 
-  aabb_t aabb;
+  points_aabb_t aabb;
 
-  buffer_t project_view_buffer;
+  points_buffer_t project_view_buffer;
   glm::mat4 project_view;
   double offset[3];
 
-  draw_buffer_t render_list[3];
+  points_draw_buffer_t render_list[3];
 };
-
-} // namespace points::render

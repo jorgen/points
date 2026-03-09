@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2020  Jørgen Lind
+** Copyright (C) 2020  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -18,18 +18,13 @@
 #include <points/render/buffer.h>
 #include "buffer.hpp"
 
-
-namespace points::render
-{
-void buffer_set_rendered(struct buffer_t *buffer)
+void points_buffer_set_rendered(struct points_buffer_t *buffer)
 {
   buffer->rendered = true;
 }
 
-void buffer_release_data(struct buffer_t *buffer)
+void points_buffer_release_data(struct points_buffer_t *buffer)
 {
   if (buffer->releaseBuffer)
     buffer->releaseBuffer();
 }
-}
-

@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2020  Jørgen Lind
+** Copyright (C) 2020  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -24,8 +24,7 @@
 
 #include <fmt/printf.h>
 
-namespace points::render
-{
+using namespace points::render;
 
 template<typename T, int SIZE>
 int array_size(const T (&)[SIZE])
@@ -33,7 +32,7 @@ int array_size(const T (&)[SIZE])
   return SIZE;
 }
 
-static std::vector<glm::vec3> coordinates_for_aabb(const aabb_t &aabb, const glm::dvec3 &eye)
+static std::vector<glm::vec3> coordinates_for_aabb(const points_aabb_t &aabb, const glm::dvec3 &eye)
 {
   std::vector<glm::vec3> coordinates;
   coordinates.resize(8);
@@ -77,7 +76,7 @@ static std::vector<uint16_t> indecies_for_aabb()
 }
 
 template<typename buffer_data_t>
-inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, buffer_type_t buffer_type, type_t type, components_t components, buffer_t &buffer)
+inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, points_buffer_type_t buffer_type, points_type_t type, points_components_t components, points_buffer_t &buffer)
 {
   assert(data_vector.size());
   buffer.releaseBuffer = [&data_vector]() { data_vector = std::vector<buffer_data_t>(); };
@@ -85,20 +84,20 @@ inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_
   callbacks.do_initialize_buffer(buffer, type, components, int(data_vector.size() * sizeof(data_vector[0])), data_vector.data());
 }
 
-aabb_data_source_t::aabb_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &)
+points_aabb_data_source_t::points_aabb_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &)
   : callbacks(a_callbacks)
   , project_view(1)
 {
-  callbacks.do_create_buffer(project_view_buffer, buffer_type_uniform);
-  callbacks.do_initialize_buffer(project_view_buffer, type_r32, components_4x4, sizeof(project_view), &project_view);
+  callbacks.do_create_buffer(project_view_buffer, points_buffer_type_uniform);
+  callbacks.do_initialize_buffer(project_view_buffer, points_type_r32, points_components_4x4, sizeof(project_view), &project_view);
 
   indecies = indecies_for_aabb();
-  initialize_buffer(callbacks, indecies, buffer_type_index, type_u16, components_1, index_buffer);
+  initialize_buffer(callbacks, indecies, points_buffer_type_index, points_type_u16, points_components_1, index_buffer);
   colors = colors_for_aabb();
-  initialize_buffer(callbacks, colors, buffer_type_vertex, type_u8, components_3, color_buffer);
+  initialize_buffer(callbacks, colors, points_buffer_type_vertex, points_type_u8, points_components_3, color_buffer);
 }
 
-void aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_render_t *to_render)
+void points_aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, points_to_render_t *to_render)
 {
   glm::dvec3 eye = glm::dvec3(camera.inverse_view[3]);
 
@@ -114,32 +113,32 @@ void aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, to_rende
                                int(aabb_buffer->vertices.size() * sizeof(aabb_buffer->vertices[0])),
                                aabb_buffer->vertices.data());
 
-    aabb_buffer->render_list[0].buffer_mapping = aabb_bm_position;
+    aabb_buffer->render_list[0].buffer_mapping = points_aabb_bm_position;
     aabb_buffer->render_list[0].user_ptr = aabb_buffer->vertices_buffer.user_ptr;
-    aabb_buffer->render_list[1].buffer_mapping = aabb_bm_index;
+    aabb_buffer->render_list[1].buffer_mapping = points_aabb_bm_index;
     aabb_buffer->render_list[1].user_ptr = index_buffer.user_ptr;
-    aabb_buffer->render_list[2].buffer_mapping = aabb_bm_color;
+    aabb_buffer->render_list[2].buffer_mapping = points_aabb_bm_color;
     aabb_buffer->render_list[2].user_ptr = color_buffer.user_ptr;
-    aabb_buffer->render_list[3].buffer_mapping = aabb_bm_camera;
+    aabb_buffer->render_list[3].buffer_mapping = points_aabb_bm_camera;
     aabb_buffer->render_list[3].user_ptr= project_view_buffer.user_ptr;
-    draw_group_t draw_group = {};
+    points_draw_group_t draw_group = {};
     draw_group.buffers = aabb_buffer->render_list;
     draw_group.buffers_size = array_size(aabb_buffer->render_list);
-    draw_group.draw_type = draw_type_t::aabb_triangle_mesh;
+    draw_group.draw_type = points_draw_type_t::points_aabb_triangle_mesh;
     draw_group.draw_size = 36;
-    to_render_add_render_group(to_render, draw_group);
+    points_to_render_add_render_group(to_render, draw_group);
   }
 }
 
-struct aabb_data_source_t *aabb_data_source_create(struct renderer_t *renderer, const double offset[3])
+struct points_aabb_data_source_t *points_aabb_data_source_create(struct points_renderer_t *renderer, const double offset[3])
 {
-  return new aabb_data_source_t(renderer->callbacks, glm::dvec3(offset[0], offset[1], offset[2]));
+  return new points_aabb_data_source_t(renderer->callbacks, glm::dvec3(offset[0], offset[1], offset[2]));
 }
-void aabb_data_source_destroy(struct aabb_data_source_t *aabb_data_source)
+void points_aabb_data_source_destroy(struct points_aabb_data_source_t *aabb_data_source)
 {
   delete aabb_data_source;
 }
-struct data_source_t aabb_data_source_get(struct aabb_data_source_t *aabb_data_source)
+struct points_data_source_t points_aabb_data_source_get(struct points_aabb_data_source_t *aabb_data_source)
 {
   return aabb_data_source->data_source;
 }
@@ -150,12 +149,12 @@ void create_aabb_buffer(callback_manager_t &callbacks, const glm::dvec3 &min, co
   memcpy(buffer->aabb.max, &max, sizeof(max));
   glm::dvec3 zero(0);
   buffer->vertices = coordinates_for_aabb(buffer->aabb, zero);
-  callbacks.do_create_buffer(buffer->vertices_buffer, buffer_type_vertex);
-  callbacks.do_initialize_buffer(buffer->vertices_buffer, type_r32, components_3,
+  callbacks.do_create_buffer(buffer->vertices_buffer, points_buffer_type_vertex);
+  callbacks.do_initialize_buffer(buffer->vertices_buffer, points_type_r32, points_components_3,
                                  int(buffer->vertices.size() * sizeof(buffer->vertices[0])), buffer->vertices.data());
 }
 
-int aabb_data_source_add_aabb(struct aabb_data_source_t *aabb_data_source, const double min[3], const double max[3])
+int points_aabb_data_source_add_aabb(struct points_aabb_data_source_t *aabb_data_source, const double min[3], const double max[3])
 {
   static uint16_t ids = 0;
   aabb_data_source->aabbs.emplace_back(new aabb_buffer_t());
@@ -167,7 +166,7 @@ int aabb_data_source_add_aabb(struct aabb_data_source_t *aabb_data_source, const
   return id;
 }
 
-void aabb_data_source_modify_aabb(struct aabb_data_source_t *aabb_data_source, int id, const double min[3], const double max[3])
+void points_aabb_data_source_modify_aabb(struct points_aabb_data_source_t *aabb_data_source, int id, const double min[3], const double max[3])
 {
   auto it = std::find(aabb_data_source->aabbs_ids.begin(), aabb_data_source->aabbs_ids.end(), uint16_t(id));
   if (it == aabb_data_source->aabbs_ids.end())
@@ -181,7 +180,7 @@ void aabb_data_source_modify_aabb(struct aabb_data_source_t *aabb_data_source, i
   memcpy(aabb_buffer->aabb.max, &world_max, sizeof(world_max));
 }
 
-void aabb_data_source_remove_aabb(struct aabb_data_source_t *aabb_data_source, int id)
+void points_aabb_data_source_remove_aabb(struct points_aabb_data_source_t *aabb_data_source, int id)
 {
   auto it = std::find(aabb_data_source->aabbs_ids.begin(), aabb_data_source->aabbs_ids.end(), uint16_t(id));
   if (it == aabb_data_source->aabbs_ids.end())
@@ -193,7 +192,7 @@ void aabb_data_source_remove_aabb(struct aabb_data_source_t *aabb_data_source, i
   aabb_data_source->aabbs.erase(aabb_it);
 }
 
-void aabb_data_source_get_center(struct aabb_data_source_t *aabb_data_source, int id, double center[3])
+void points_aabb_data_source_get_center(struct points_aabb_data_source_t *aabb_data_source, int id, double center[3])
 {
   auto it = std::find(aabb_data_source->aabbs_ids.begin(), aabb_data_source->aabbs_ids.end(), uint16_t(id));
   if (it == aabb_data_source->aabbs_ids.end())
@@ -209,6 +208,3 @@ void aabb_data_source_get_center(struct aabb_data_source_t *aabb_data_source, in
   center[1] = aabb.min[1] + ((aabb.max[1] - aabb.min[1]) / 2);
   center[2] = aabb.min[2] + ((aabb.max[2] - aabb.min[2]) / 2);
 }
-
-}
-

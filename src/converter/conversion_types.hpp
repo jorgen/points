@@ -57,7 +57,7 @@ inline bool input_data_id_is_leaf(input_data_id_t input)
 struct file_error_t
 {
   input_data_id_t input_id;
-  error_t error;
+  points_error_t error;
 };
 
 struct attributes_id_t
@@ -81,15 +81,19 @@ struct input_name_ref_t
   uint32_t name_length;
 };
 
-struct attributes_t
+} // namespace points::converter (temporarily close for public type)
+
+struct points_converter_attributes_t
 {
-  std::vector<attribute_t> attributes;
+  std::vector<points_converter_attribute_t> attributes;
   std::vector<std::unique_ptr<char[]>> attribute_names;
 };
 
+namespace points::converter
+{
 struct attribute_buffers_t
 {
-  std::vector<buffer_t> buffers;
+  std::vector<points_converter_buffer_t> buffers;
   std::vector<std::unique_ptr<uint8_t[]>> data;
 };
 
@@ -128,14 +132,14 @@ struct point_format_t
 {
   point_format_t() = default;
 
-  point_format_t(type_t a_type, components_t a_components)
+  point_format_t(points_type_t a_type, points_components_t a_components)
     : type(a_type)
     , components(a_components)
   {
   }
 
-  type_t type;
-  components_t components;
+  points_type_t type;
+  points_components_t components;
 };
 
 struct storage_header_t

@@ -54,7 +54,7 @@ struct attribute_lod_mapping_t
 
 struct attribute_config_t
 {
-  attributes_t attributes;
+  points_converter_attributes_t attributes;
 };
 
 struct serialized_attributes_t
@@ -72,11 +72,11 @@ struct attribute_index_t
 class attributes_configs_t
 {
 public:
-  attributes_id_t get_attribute_config_index(attributes_t &&attr);
+  attributes_id_t get_attribute_config_index(points_converter_attributes_t &&attr);
   attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end);
-  attribute_lod_mapping_t get_lod_attribute_mapping(type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const;
+  attribute_lod_mapping_t get_lod_attribute_mapping(points_type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const;
 
-  const attributes_t &get(attributes_id_t id);
+  const points_converter_attributes_t &get(attributes_id_t id);
 
   std::vector<point_format_t> get_format_components(attributes_id_t id);
   point_format_t get_point_format(attributes_id_t id);
@@ -84,7 +84,7 @@ public:
   attribute_index_t get_attribute_index(attributes_id_t id, const std::string &name) const;
 
   serialized_attributes_t serialize() const;
-  [[nodiscard]] points::error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
+  [[nodiscard]] points_error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
 
   uint32_t attrib_name_registry_count() const;
   uint32_t attrib_name_registry_get(uint32_t index, char *name, uint32_t buffer_size) const;

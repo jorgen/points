@@ -25,15 +25,12 @@
 extern "C" {
 #endif
 
-namespace points::render
-{
-struct origin_anchor_data_source_t;
-POINTS_RENDER_EXPORT struct origin_anchor_data_source_t *origin_anchor_data_source_create(struct renderer_t *renderer, const double center[3], double arrow_size);
-POINTS_RENDER_EXPORT void origin_anchor_data_source_destroy(struct origin_anchor_data_source_t *anchor);
-POINTS_RENDER_EXPORT struct data_source_t origin_anchor_data_source_get(struct origin_anchor_data_source_t *anchor);
-POINTS_RENDER_EXPORT void origin_anchor_data_source_set_center(struct origin_anchor_data_source_t *anchor, const double center[3]);
-POINTS_RENDER_EXPORT void origin_anchor_data_source_set_arrow_size(struct origin_anchor_data_source_t *anchor, double arrow_size);
-}
+struct points_origin_anchor_data_source_t;
+POINTS_RENDER_EXPORT struct points_origin_anchor_data_source_t *points_origin_anchor_data_source_create(struct points_renderer_t *renderer, const double center[3], double arrow_size);
+POINTS_RENDER_EXPORT void points_origin_anchor_data_source_destroy(struct points_origin_anchor_data_source_t *anchor);
+POINTS_RENDER_EXPORT struct points_data_source_t points_origin_anchor_data_source_get(struct points_origin_anchor_data_source_t *anchor);
+POINTS_RENDER_EXPORT void points_origin_anchor_data_source_set_center(struct points_origin_anchor_data_source_t *anchor, const double center[3]);
+POINTS_RENDER_EXPORT void points_origin_anchor_data_source_set_arrow_size(struct points_origin_anchor_data_source_t *anchor, double arrow_size);
 
 #ifdef __cplusplus
 }

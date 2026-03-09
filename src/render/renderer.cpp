@@ -1,6 +1,6 @@
 /************************************************************************
 ** Points - point cloud management software.
-** Copyright (C) 2024  Jørgen Lind
+** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -27,37 +27,36 @@
 #include "data_source.hpp"
 #include "renderer_callbacks.hpp"
 
+using namespace points::render;
 
-namespace points::render
+struct points_renderer_t* points_renderer_create()
 {
-struct renderer_t* renderer_create()
-{
-  auto renderer = new struct renderer_t();
+  auto renderer = new struct points_renderer_t();
   return renderer;
 }
-void renderer_destroy(struct renderer_t *renderer)
+void points_renderer_destroy(struct points_renderer_t *renderer)
 {
   delete renderer;
 }
-void renderer_add_camera(struct renderer_t* renderer, struct camera_t* camera)
+void points_renderer_add_camera(struct points_renderer_t* renderer, struct points_camera_t* camera)
 {
   renderer->cameras.push_back(camera);
 }
-void renderer_remove_camera(struct renderer_t* renderer, struct camera_t* camera)
+void points_renderer_remove_camera(struct points_renderer_t* renderer, struct points_camera_t* camera)
 {
   auto& cams = renderer->cameras;
   cams.erase(std::remove(cams.begin(), cams.end(), camera), cams.end());
 }
 
-void copy_to_array(double (&arr)[4][4], const glm::dmat4 &mat)
+static void copy_to_array(double (&arr)[4][4], const glm::dmat4 &mat)
 {
   static_assert(sizeof(mat) == sizeof(arr), "matrix sizes not the same");
   memcpy(&arr, &mat, sizeof(arr));
 }
 
-struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* camera)
+struct points_frame_t points_renderer_frame(struct points_renderer_t* renderer, struct points_camera_t* camera)
 {
-  frame_camera_t frame_camera;
+  points_frame_camera_t frame_camera;
   copy_to_array(frame_camera.view, camera->view);
   copy_to_array(frame_camera.projection, camera->projection);
   auto view_projection = camera->projection * camera->view;
@@ -68,22 +67,22 @@ struct frame_t renderer_frame(struct renderer_t* renderer, struct camera_t* came
   renderer->to_render.clear();
   for (auto &data_source : renderer->data_sources)
   {
-    data_source.add_to_frame(&frame_camera, reinterpret_cast<to_render_t *>(&renderer->to_render), data_source.user_ptr);
+    data_source.add_to_frame(&frame_camera, reinterpret_cast<points_to_render_t *>(&renderer->to_render), data_source.user_ptr);
   }
-  frame_t ret;
+  points_frame_t ret;
   ret.to_render = renderer->to_render.data();
   ret.to_render_size = int(renderer->to_render.size());
   return ret;
 }
 
-void renderer_set_callback(struct renderer_t* renderer, renderer_callbacks_t callbacks, void *user_ptr)
+void points_renderer_set_callback(struct points_renderer_t* renderer, points_renderer_callbacks_t callbacks, void *user_ptr)
 {
   renderer->callbacks.set_callbacks(callbacks, user_ptr);
 }
 
-void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t data_source)
+void points_renderer_add_data_source(struct points_renderer_t *renderer, struct points_data_source_t data_source)
 {
-  auto it = std::find_if(renderer->data_sources.begin(), renderer->data_sources.end(), [&data_source](data_source_t &a)
+  auto it = std::find_if(renderer->data_sources.begin(), renderer->data_sources.end(), [&data_source](points_data_source_t &a)
   {
       return data_source.add_to_frame == a.add_to_frame && data_source.user_ptr == a.user_ptr;
   });
@@ -91,20 +90,17 @@ void renderer_add_data_source(struct renderer_t *renderer, struct data_source_t 
     renderer->data_sources.push_back(data_source);
 }
 
-void renderer_remove_data_source(struct renderer_t* renderer, struct data_source_t data_source)
+void points_renderer_remove_data_source(struct points_renderer_t* renderer, struct points_data_source_t data_source)
 {
-  auto it = std::find_if(renderer->data_sources.begin(), renderer->data_sources.end(), [&data_source](data_source_t &a)
+  auto it = std::find_if(renderer->data_sources.begin(), renderer->data_sources.end(), [&data_source](points_data_source_t &a)
   {
       return data_source.add_to_frame == a.add_to_frame && data_source.user_ptr == a.user_ptr;
   });
   if (it != renderer->data_sources.end())
     renderer->data_sources.erase(it);
 }
-void to_render_add_render_group(struct to_render_t *to_render, draw_group_t draw_group)
+void points_to_render_add_render_group(struct points_to_render_t *to_render, points_draw_group_t draw_group)
 {
-  auto *to_render_vec = reinterpret_cast<std::vector<draw_group_t> *>(to_render);
+  auto *to_render_vec = reinterpret_cast<std::vector<points_draw_group_t> *>(to_render);
   to_render_vec->push_back(draw_group);
 }
-
-}
-

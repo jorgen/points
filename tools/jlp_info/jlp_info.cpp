@@ -4,38 +4,36 @@
 #include <cstring>
 #include <string>
 
-using namespace points;
-using namespace points::converter;
 
 struct converter_handle_t
 {
-  converter_t *ptr = nullptr;
-  converter_handle_t(converter_t *p) : ptr(p) {}
-  ~converter_handle_t() { if (ptr) converter_destroy(ptr); }
+  points_converter_t *ptr = nullptr;
+  converter_handle_t(points_converter_t *p) : ptr(p) {}
+  ~converter_handle_t() { if (ptr) points_converter_destroy(ptr); }
   converter_handle_t(const converter_handle_t &) = delete;
   converter_handle_t &operator=(const converter_handle_t &) = delete;
-  operator converter_t *() const { return ptr; }
+  operator points_converter_t *() const { return ptr; }
   explicit operator bool() const { return ptr != nullptr; }
 };
 
-static const char *type_name(type_t type)
+static const char *type_name(points_type_t type)
 {
   switch (type)
   {
-  case type_u8:   return "u8";
-  case type_i8:   return "i8";
-  case type_u16:  return "u16";
-  case type_i16:  return "i16";
-  case type_u32:  return "u32";
-  case type_i32:  return "i32";
-  case type_m32:  return "m32";
-  case type_r32:  return "r32";
-  case type_u64:  return "u64";
-  case type_i64:  return "i64";
-  case type_m64:  return "m64";
-  case type_r64:  return "r64";
-  case type_m128: return "m128";
-  case type_m192: return "m192";
+  case points_type_u8:   return "u8";
+  case points_type_i8:   return "i8";
+  case points_type_u16:  return "u16";
+  case points_type_i16:  return "i16";
+  case points_type_u32:  return "u32";
+  case points_type_i32:  return "i32";
+  case points_type_m32:  return "m32";
+  case points_type_r32:  return "r32";
+  case points_type_u64:  return "u64";
+  case points_type_i64:  return "i64";
+  case points_type_m64:  return "m64";
+  case points_type_r64:  return "r64";
+  case points_type_m128: return "m128";
+  case points_type_m192: return "m192";
   default:        return "?";
   }
 }
@@ -85,8 +83,8 @@ struct table_row_t
   uint64_t compressed_bytes;
 };
 
-static void print_attribute_table(const char *title, const converter_stats_t &stats,
-                                  table_row_t (*get_row)(const converter_attribute_stats_t &))
+static void print_attribute_table(const char *title, const points_converter_stats_t &stats,
+                                  table_row_t (*get_row)(const points_converter_attribute_stats_t &))
 {
   fmt::print("{}:\n", title);
   fmt::print("{:<20s} {:<10s} {:>8s} {:>14s} {:>14s} {:>7s}\n",
@@ -147,23 +145,23 @@ int main(int argc, char **argv)
     if (argc > 2)
       fmt::print("=== {} ===\n", filename);
 
-    error_t *err = nullptr;
-    converter_handle_t conv(converter_create(filename, len, open_file_semantics_read_only, &err));
+    points_error_t *err = nullptr;
+    converter_handle_t conv(points_converter_create(filename, len, points_open_file_semantics_read_only, &err));
     if (!conv)
     {
       const char *err_str = "unknown";
       size_t err_len = 0;
       if (err)
-        error_get_info(err, nullptr, &err_str, &err_len);
+        points_error_get_info(err, nullptr, &err_str, &err_len);
       fmt::print(stderr, "Error: failed to read '{}': {}\n", filename, err_str);
       if (err)
-        error_destroy(err);
+        points_error_destroy(err);
       exit_code = 1;
       continue;
     }
 
-    converter_stats_t stats;
-    converter_get_compression_stats(conv, &stats);
+    points_converter_stats_t stats;
+    points_converter_get_compression_stats(conv, &stats);
 
     if (stats.attribute_count == 0 && stats.total_buffer_count == 0)
     {
@@ -191,7 +189,7 @@ int main(int argc, char **argv)
     if (has_lod)
     {
       // Source data table
-      print_attribute_table("Source data", stats, [](const converter_attribute_stats_t &a) -> table_row_t {
+      print_attribute_table("Source data", stats, [](const points_converter_attribute_stats_t &a) -> table_row_t {
         return {a.buffer_count - a.lod_buffer_count,
                 a.uncompressed_bytes - a.lod_uncompressed_bytes,
                 a.compressed_bytes - a.lod_compressed_bytes};
@@ -200,14 +198,14 @@ int main(int argc, char **argv)
       fmt::print("\n");
 
       // LOD data table
-      print_attribute_table("LOD data", stats, [](const converter_attribute_stats_t &a) -> table_row_t {
+      print_attribute_table("LOD data", stats, [](const points_converter_attribute_stats_t &a) -> table_row_t {
         return {a.lod_buffer_count, a.lod_uncompressed_bytes, a.lod_compressed_bytes};
       });
 
       fmt::print("\n");
 
       // Combined total
-      print_attribute_table("Combined", stats, [](const converter_attribute_stats_t &a) -> table_row_t {
+      print_attribute_table("Combined", stats, [](const points_converter_attribute_stats_t &a) -> table_row_t {
         return {a.buffer_count, a.uncompressed_bytes, a.compressed_bytes};
       });
     }
@@ -296,8 +294,8 @@ int main(int argc, char **argv)
     }
 
     // Performance stats
-    converter_perf_stats_t perf;
-    converter_get_perf_stats(conv, &perf);
+    points_converter_perf_stats_t perf;
+    points_converter_get_perf_stats(conv, &perf);
     if (perf.total_time_seconds > 0)
     {
       fmt::print("\nPerformance stats:\n");

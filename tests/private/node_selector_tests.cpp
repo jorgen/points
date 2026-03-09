@@ -3,7 +3,6 @@
 #include <gpu_node_buffer.hpp>
 #include <node_selector.hpp>
 
-using namespace points;
 using namespace points::converter;
 
 static node_id_t make_nid(uint32_t tree, uint16_t level, uint16_t index)

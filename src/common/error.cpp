@@ -20,26 +20,23 @@
 
 #include "points/common/error.h"
 
-namespace points
+struct points_error_t *points_error_create()
 {
-error_t *error_create()
-{
-  return new error_t();
+  return new points_error_t();
 }
 
-void error_destroy(error_t *error)
+void points_error_destroy(points_error_t *error)
 {
   delete error;
 }
-void error_set_info(error_t *error, int code, const char *str, size_t str_len)
+void points_error_set_info(points_error_t *error, int code, const char *str, size_t str_len)
 {
   error->code = code;
   error->msg = std::string(str, str_len);
 }
-void error_get_info(const error_t *error, int *code, const char **str, size_t *str_len)
+void points_error_get_info(const points_error_t *error, int *code, const char **str, size_t *str_len)
 {
   *code = error->code;
   *str = error->msg.c_str();
   *str_len = error->msg.size();
 }
-} // namespace points

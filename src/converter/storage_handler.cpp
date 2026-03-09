@@ -58,14 +58,14 @@ static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
 
   return serialized_index;
 }
-[[nodiscard]] static error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry,
+[[nodiscard]] static points_error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry,
                                                storage_location_t &compression_stats, storage_location_t &perf_stats)
 {
   (void)buffer_size; // buffer size is validated by the caller
   uint8_t magic[] = {'J', 'L', 'P', 0};
   if (memcmp(buffer, magic, sizeof(magic)) != 0)
   {
-    error_t ret;
+    points_error_t ret;
     ret.code = 1;
     ret.msg = "Wrong magic.";
     return ret;
@@ -93,7 +93,7 @@ void read_request_t::wait_for_read()
   _block_for_read.wait(lock, [this] { return this->_done; });
 }
 
-static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, error_t &error)
+static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, points_error_t &error)
 {
   assert(error.code == 0);
   auto buffer = std::make_unique<uint8_t[]>(location.size);
@@ -111,7 +111,7 @@ static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop
 }
 
 storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written,
-                                     vio::event_pipe_t<error_t> &storage_error_pipe, error_t &error)
+                                     vio::event_pipe_t<points_error_t> &storage_error_pipe, points_error_t &error)
   : _file_name(url)
   , _thread_pool(thread_pool)
   , _event_loop_thread()
@@ -156,16 +156,16 @@ storage_handler_t::~storage_handler_t()
   _file.reset();
 }
 
-error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
+points_error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
                                       std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size)
 {
-  error_t error;
+  points_error_t error;
   uv_fs_t request = {};
   // On error, close the file
   struct close_on_error_t
   {
     std::optional<vio::auto_close_file_t> &file;
-    error_t &error;
+    points_error_t &error;
     ~close_on_error_t()
     {
       if (error.code != 0)
@@ -251,12 +251,12 @@ error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buf
   return error;
 }
 
-error_t storage_handler_t::deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+points_error_t storage_handler_t::deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
   return _blob_manager.deserialize(data, size);
 }
 
-error_t storage_handler_t::upgrade_to_write(bool truncate)
+points_error_t storage_handler_t::upgrade_to_write(bool truncate)
 {
   vio::file_open_flags_t open_flags(vio::file_open_flag_t::rdwr);
   if (!_file_exists)
@@ -275,7 +275,7 @@ error_t storage_handler_t::upgrade_to_write(bool truncate)
   auto open_result = vio::open_file(_event_loop, _file_name, open_flags, open_mode);
   if (!open_result.has_value())
   {
-    error_t error;
+    points_error_t error;
     error.code = open_result.error().code;
     error.msg = open_result.error().msg;
     auto error_copy = error;
@@ -294,23 +294,23 @@ error_t storage_handler_t::upgrade_to_write(bool truncate)
 }
 
 void storage_handler_t::write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
-                              std::function<void(const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const error_t &error)> done)
+                              std::function<void(const storage_header_t &storageheader, attributes_id_t attrib_id, std::vector<storage_location_t> locations, const points_error_t &error)> done)
 {
   _write_event_pipe.post_event(std::make_tuple(header, attributes_id, std::move(buffers), done));
 }
 
 void storage_handler_t::write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees,
-                                    std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)> done)
+                                    std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)> done)
 {
   _write_trees_pipe.post_event(std::make_tuple(std::move(tree_ids), std::move(serialized_trees), done));
 }
 
-void storage_handler_t::write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done)
+void storage_handler_t::write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, points_error_t &&error)> done)
 {
   _write_tree_registry_pipe.post_event(std::move(serialized_tree_registry), std::move(done));
 }
 
-void storage_handler_t::write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> done)
+void storage_handler_t::write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> done)
 {
   _write_blob_locations_and_update_header_pipe.post_event(std::move(location), std::move(old_locations), std::move(done));
 }
@@ -331,16 +331,16 @@ static void compute_attribute_min_max(const uint8_t *data, uint32_t size, const 
     double val = 0.0;
     switch (format.type)
     {
-    case type_u8: { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-    case type_i8: { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-    case type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-    case type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-    case type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-    case type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-    case type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
-    case type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-    case type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-    case type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
+    case points_type_u8: { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+    case points_type_i8: { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+    case points_type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+    case points_type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+    case points_type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+    case points_type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+    case points_type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
+    case points_type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+    case points_type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+    case points_type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
     default: continue;
     }
     if (val < out_min) out_min = val;
@@ -348,7 +348,7 @@ static void compute_attribute_min_max(const uint8_t *data, uint32_t size, const 
   }
 }
 
-static bool serialize_points(const storage_header_t &header, const buffer_t &points, buffer_t &serialize_data, std::shared_ptr<uint8_t[]> &data_owner)
+static bool serialize_points(const storage_header_t &header, const points_converter_buffer_t &points, points_converter_buffer_t &serialize_data, std::shared_ptr<uint8_t[]> &data_owner)
 {
   serialize_data.size = sizeof(header) + points.size;
   data_owner = std::make_shared<uint8_t[]>(serialize_data.size);
@@ -367,7 +367,7 @@ vio::task_t<void> storage_handler_t::do_write(const std::shared_ptr<uint8_t[]> &
   auto result = co_await vio::write_file(_event_loop, file, data.get(), location.size, int64_t(location.offset));
   if (!result.has_value())
   {
-    error_t error;
+    points_error_t error;
     error.code = result.error().code;
     error.msg = result.error().msg;
     _storage_error.post_event(std::move(error));
@@ -375,7 +375,7 @@ vio::task_t<void> storage_handler_t::do_write(const std::shared_ptr<uint8_t[]> &
 }
 
 vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, attributes_id_t attributes_id, attribute_buffers_t attribute_buffers,
-                                                     std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)> done)
+                                                     std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const points_error_t &error)> done)
 {
   auto write_start = std::chrono::steady_clock::now();
   std::unique_lock<std::mutex> lock(_mutex);
@@ -411,7 +411,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
     auto &info = buffer_infos[i];
     if (i == 0)
     {
-      buffer_t buffer_data;
+      points_converter_buffer_t buffer_data;
       serialize_points(header, attribute_buffers.buffers[i], buffer_data, info.data_owner);
       info.raw = static_cast<uint8_t *>(buffer_data.data);
       info.size = buffer_data.size;
@@ -425,7 +425,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
       if (i < int(formats.size()))
         info.format = formats[i];
       else
-        info.format = {type_u8, components_1};
+        info.format = {points_type_u8, points_components_1};
     }
 
     if (i < int(attributes.attributes.size()))
@@ -438,7 +438,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
   lock.unlock();
 
   std::vector<storage_location_t> locations(buffer_count);
-  error_t error;
+  points_error_t error;
 
   if (_compressor)
   {
@@ -552,22 +552,22 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
 }
 
 void storage_handler_t::handle_write_events(
-  std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)>> &&event)
+  std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const points_error_t &error)>> &&event)
 {
   auto &&[storage_header, attributes_id, attribute_buffers, done] = std::move(event);
   [](storage_handler_t *self, storage_header_t header, attributes_id_t attrib_id, attribute_buffers_t buffers,
-     std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const error_t &error)> done_cb) -> vio::detached_task_t
+     std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const points_error_t &error)> done_cb) -> vio::detached_task_t
   {
     co_await self->do_write_events(std::move(header), std::move(attrib_id), std::move(buffers), std::move(done_cb));
   }(this, std::move(storage_header), std::move(attributes_id), std::move(attribute_buffers), std::move(done));
 }
 
 vio::task_t<void> storage_handler_t::do_write_trees(std::vector<tree_id_t> tree_ids, std::vector<serialized_tree_t> serialized_trees,
-                                                    std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)> done)
+                                                    std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)> done)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   std::vector<storage_location_t> locations(tree_ids.size());
-  error_t error;
+  points_error_t error;
 
   for (int i = 0; i < int(tree_ids.size()); i++)
   {
@@ -596,17 +596,17 @@ vio::task_t<void> storage_handler_t::do_write_trees(std::vector<tree_id_t> tree_
   }
 }
 
-void storage_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)>> &&event)
+void storage_handler_t::handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)>> &&event)
 {
   auto &&[tree_ids, serialized_trees, done] = std::move(event);
   [](storage_handler_t *self, std::vector<tree_id_t> ids, std::vector<serialized_tree_t> trees,
-     std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, error_t &&)> done_cb) -> vio::detached_task_t
+     std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)> done_cb) -> vio::detached_task_t
   {
     co_await self->do_write_trees(std::move(ids), std::move(trees), std::move(done_cb));
   }(this, std::move(tree_ids), std::move(serialized_trees), std::move(done));
 }
 
-vio::task_t<void> storage_handler_t::do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, error_t &&error)> done)
+vio::task_t<void> storage_handler_t::do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, points_error_t &&error)> done)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   storage_location_t location;
@@ -617,7 +617,7 @@ vio::task_t<void> storage_handler_t::do_write_tree_registry(serialized_tree_regi
   lock.unlock();
 
   auto &file = **_file;
-  error_t error;
+  points_error_t error;
   auto result = co_await vio::write_file(_event_loop, file, reinterpret_cast<const uint8_t *>(serialized_tree_registry.data.get()), location.size, int64_t(location.offset));
   if (!result.has_value())
   {
@@ -631,15 +631,15 @@ vio::task_t<void> storage_handler_t::do_write_tree_registry(serialized_tree_regi
   }
 }
 
-void storage_handler_t::handle_write_tree_registry(serialized_tree_registry_t &&serialized_tree, std::function<void(storage_location_t, error_t &&error)> &&done)
+void storage_handler_t::handle_write_tree_registry(serialized_tree_registry_t &&serialized_tree, std::function<void(storage_location_t, points_error_t &&error)> &&done)
 {
-  [](storage_handler_t *self, serialized_tree_registry_t reg, std::function<void(storage_location_t, error_t &&error)> done_cb) -> vio::detached_task_t
+  [](storage_handler_t *self, serialized_tree_registry_t reg, std::function<void(storage_location_t, points_error_t &&error)> done_cb) -> vio::detached_task_t
   {
     co_await self->do_write_tree_registry(std::move(reg), std::move(done_cb));
   }(this, std::move(serialized_tree), std::move(done));
 }
 
-vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(error_t &&error)> done)
+vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(points_error_t &&error)> done)
 {
   auto new_blob_manager = _blob_manager;
   for (auto &location : old_locations)
@@ -647,7 +647,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
     auto removed = new_blob_manager.unregister_blob({location.offset}, {location.size});
     if (!removed)
     {
-      error_t error;
+      points_error_t error;
       error.code = -1;
       error.msg = "Failed to remove blob";
       done(std::move(error));
@@ -659,7 +659,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
     auto removed = new_blob_manager.unregister_blob({_attributes_location.offset}, {_attributes_location.size});
     if (!removed)
     {
-      error_t error;
+      points_error_t error;
       error.code = -1;
       error.msg = "Failed to remove attributes config location";
       done(std::move(error));
@@ -672,7 +672,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
     auto removed = new_blob_manager.unregister_blob({_blobs_location.offset}, {_blobs_location.size});
     if (!removed)
     {
-      error_t error;
+      points_error_t error;
       error.code = -1;
       error.msg = "Failed to remove blobs location";
       done(std::move(error));
@@ -685,7 +685,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
     auto removed = new_blob_manager.unregister_blob({_stats_location.offset}, {_stats_location.size});
     if (!removed)
     {
-      error_t error;
+      points_error_t error;
       error.code = -1;
       error.msg = "Failed to remove stats location";
       done(std::move(error));
@@ -698,7 +698,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
     auto removed = new_blob_manager.unregister_blob({_perf_stats_location.offset}, {_perf_stats_location.size});
     if (!removed)
     {
-      error_t error;
+      points_error_t error;
       error.code = -1;
       error.msg = "Failed to remove perf stats location";
       done(std::move(error));
@@ -739,7 +739,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
   auto result1 = co_await vio::write_file(_event_loop, file, reinterpret_cast<const uint8_t *>(serialized_blob.data.get()), serialized_blob.size, int64_t(serialized_blob.offset));
   if (!result1.has_value())
   {
-    error_t error;
+    points_error_t error;
     error.code = result1.error().code;
     error.msg = result1.error().msg;
     done(std::move(error));
@@ -749,7 +749,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
   auto result2 = co_await vio::write_file(_event_loop, file, reinterpret_cast<const uint8_t *>(serialized_attributes_configs.data.get()), serialized_attributes_configs_location.size, int64_t(serialized_attributes_configs_location.offset));
   if (!result2.has_value())
   {
-    error_t error;
+    points_error_t error;
     error.code = result2.error().code;
     error.msg = result2.error().msg;
     done(std::move(error));
@@ -759,7 +759,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
   auto result3 = co_await vio::write_file(_event_loop, file, serialized_stats_data.get(), serialized_stats_location.size, int64_t(serialized_stats_location.offset));
   if (!result3.has_value())
   {
-    error_t error;
+    points_error_t error;
     error.code = result3.error().code;
     error.msg = result3.error().msg;
     done(std::move(error));
@@ -769,7 +769,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
   auto result4 = co_await vio::write_file(_event_loop, file, serialized_perf_data.get(), serialized_perf_location.size, int64_t(serialized_perf_location.offset));
   if (!result4.has_value())
   {
-    error_t error;
+    points_error_t error;
     error.code = result4.error().code;
     error.msg = result4.error().msg;
     done(std::move(error));
@@ -780,24 +780,24 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
                           serialized_stats_location, serialized_perf_location, std::move(done));
 }
 
-void storage_handler_t::handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(error_t &&error)> &&done)
+void storage_handler_t::handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> &&done)
 {
   [](storage_handler_t *self, storage_location_t loc, std::vector<storage_location_t> old_locs,
-     std::function<void(error_t &&error)> done_cb) -> vio::detached_task_t
+     std::function<void(points_error_t &&error)> done_cb) -> vio::detached_task_t
   {
     co_await self->do_write_blob_locations_and_update_header(std::move(loc), std::move(old_locs), std::move(done_cb));
   }(this, std::move(new_tree_registry_location), std::move(old_locations), std::move(done));
 }
 
 vio::task_t<void> storage_handler_t::do_write_index(free_blob_manager_t new_blob_manager, storage_location_t free_blobs, storage_location_t attribute_configs, storage_location_t tree_registry,
-                                                    storage_location_t compression_stats, storage_location_t perf_stats, std::function<void(error_t &&error)> done)
+                                                    storage_location_t compression_stats, storage_location_t perf_stats, std::function<void(points_error_t &&error)> done)
 {
   auto serialized_index = serialize_index(_serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats);
 
   auto &file = **_file;
   auto result = co_await vio::write_file(_event_loop, file, serialized_index.get(), _serialized_index_size, 0);
 
-  error_t error;
+  points_error_t error;
   if (!result.has_value())
   {
     error.code = result.error().code;
@@ -819,10 +819,10 @@ vio::task_t<void> storage_handler_t::do_write_index(free_blob_manager_t new_blob
 }
 
 void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                                           const storage_location_t &compression_stats, const storage_location_t &perf_stats, std::function<void(error_t &&error)> &&done)
+                                           const storage_location_t &compression_stats, const storage_location_t &perf_stats, std::function<void(points_error_t &&error)> &&done)
 {
   [](storage_handler_t *self, free_blob_manager_t bm, storage_location_t fb, storage_location_t ac, storage_location_t tr,
-     storage_location_t cs, storage_location_t ps, std::function<void(error_t &&error)> done_cb) -> vio::detached_task_t
+     storage_location_t cs, storage_location_t ps, std::function<void(points_error_t &&error)> done_cb) -> vio::detached_task_t
   {
     co_await self->do_write_index(std::move(bm), fb, ac, tr, cs, ps, std::move(done_cb));
   }(this, std::move(new_blob_manager), free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats, std::move(done));

@@ -27,9 +27,6 @@
 #include <assert.h>
 #include <filesystem>
 
-namespace points::converter
-{
-
 struct laszip_handle_t
 {
   std::string filename;
@@ -50,104 +47,104 @@ struct laszip_handle_t
 };
 
 template <size_t N>
-void add_attribute(attributes_t *attributes, const char (&name)[N], type_t format, components_t components)
+void add_attribute(points_converter_attributes_t *attributes, const char (&name)[N], points_type_t format, points_components_t components)
 {
-  attributes_add_attribute(attributes, name, N - 1, format, components);
+  points_converter_attributes_add_attribute(attributes, name, N - 1, format, components);
 }
 
-static void add_attributes_format_0(attributes_t *attributes)
+static void add_attributes_format_0(points_converter_attributes_t *attributes)
 {
-  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ, type_i32, components_3);
-  add_attribute(attributes, POINTS_ATTRIBUTE_INTENSITY, type_u16, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_0, type_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_CLASSIFICATION, type_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_SCAN_ANGLE_RANK, type_i8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_USER_DATA, type_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_POINT_SOURCE_ID, type_u16, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ, points_type_i32, points_components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_INTENSITY, points_type_u16, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_0, points_type_u8, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_CLASSIFICATION, points_type_u8, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_SCAN_ANGLE_RANK, points_type_i8, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_USER_DATA, points_type_u8, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_POINT_SOURCE_ID, points_type_u16, points_components_1);
 }
 
-static void add_attributes_format_1(attributes_t *attributes)
-{
-  add_attributes_format_0(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_GPS_TIME, type_r64, components_1);
-}
-
-static void add_attributes_format_2(attributes_t *attributes)
+static void add_attributes_format_1(points_converter_attributes_t *attributes)
 {
   add_attributes_format_0(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, type_u16, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_GPS_TIME, points_type_r64, points_components_1);
 }
 
-static void add_attributes_format_3(attributes_t *attributes)
+static void add_attributes_format_2(points_converter_attributes_t *attributes)
+{
+  add_attributes_format_0(attributes);
+  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, points_type_u16, points_components_3);
+}
+
+static void add_attributes_format_3(points_converter_attributes_t *attributes)
 {
   add_attributes_format_1(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, type_u16, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, points_type_u16, points_components_3);
 }
 
-static void add_wave_packets(attributes_t *attributes)
+static void add_wave_packets(points_converter_attributes_t *attributes)
 {
-  add_attribute(attributes, POINTS_ATTRIBUTE_WAVE_PACKET_DESCRIPTOR_INDEX, type_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_BYTE_OFFSET_TO_WAVEFORM_DATA, type_r64, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_WAVEFORM_PACKET_SIZE_BYTES, type_u32, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_RETURN_POINT_WAVEFORM_LOCATION, type_r64, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ_T, type_r64, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_WAVE_PACKET_DESCRIPTOR_INDEX, points_type_u8, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_BYTE_OFFSET_TO_WAVEFORM_DATA, points_type_r64, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_WAVEFORM_PACKET_SIZE_BYTES, points_type_u32, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_RETURN_POINT_WAVEFORM_LOCATION, points_type_r64, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ_T, points_type_r64, points_components_3);
 }
 
-static void add_attributes_format_4(attributes_t *attributes)
+static void add_attributes_format_4(points_converter_attributes_t *attributes)
 {
   add_attributes_format_1(attributes);
   add_wave_packets(attributes);
 }
 
-static void add_attributes_format_5(attributes_t *attributes)
+static void add_attributes_format_5(points_converter_attributes_t *attributes)
 {
   add_attributes_format_3(attributes);
   add_wave_packets(attributes);
 }
 
-static void add_attributes_format_6(attributes_t *attributes)
+static void add_attributes_format_6(points_converter_attributes_t *attributes)
 {
-  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ, type_i32, components_3);
-  add_attribute(attributes, POINTS_ATTRIBUTE_INTENSITY, type_u16, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_1, type_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_2, type_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_CLASSIFICATION, type_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_USER_DATA, type_u8, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_SCAN_ANGLE, type_i16, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_POINT_SOURCE_ID, type_u16, components_1);
-  add_attribute(attributes, POINTS_ATTRIBUTE_GPS_TIME, type_r64, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_XYZ, points_type_i32, points_components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_INTENSITY, points_type_u16, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_1, points_type_u8, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_LAS_COMPOSITE_2, points_type_u8, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_CLASSIFICATION, points_type_u8, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_USER_DATA, points_type_u8, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_SCAN_ANGLE, points_type_i16, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_POINT_SOURCE_ID, points_type_u16, points_components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_GPS_TIME, points_type_r64, points_components_1);
 }
 
-static void add_attributes_format_7(attributes_t *attributes)
+static void add_attributes_format_7(points_converter_attributes_t *attributes)
 {
   add_attributes_format_6(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, type_u16, components_3);
+  add_attribute(attributes, POINTS_ATTRIBUTE_RGB, points_type_u16, points_components_3);
 }
 
-static void add_attributes_format_8(attributes_t *attributes)
+static void add_attributes_format_8(points_converter_attributes_t *attributes)
 {
   add_attributes_format_7(attributes);
-  add_attribute(attributes, POINTS_ATTRIBUTE_NEAR_INFRARED, type_u16, components_1);
+  add_attribute(attributes, POINTS_ATTRIBUTE_NEAR_INFRARED, points_type_u16, points_components_1);
 }
 
-static void add_attributes_format_9(attributes_t *attributes)
+static void add_attributes_format_9(points_converter_attributes_t *attributes)
 {
   add_attributes_format_6(attributes);
   add_wave_packets(attributes);
 }
 
-static void add_attributes_format_10(attributes_t *attributes)
+static void add_attributes_format_10(points_converter_attributes_t *attributes)
 {
   add_attributes_format_7(attributes);
   add_wave_packets(attributes);
 }
 
-static converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(const char *filename, size_t filename_size, struct error_t **error)
+static points_converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(const char *filename, size_t filename_size, struct points_error_t **error)
 {
   (void)filename;
   (void)filename_size;
   (void)error;
-  converter_file_pre_init_info_t ret;
+  points_converter_file_pre_init_info_t ret;
   ret.found_aabb_min = false;
   ret.found_point_count = false;
   ret.input_file_size_bytes = 0;
@@ -161,7 +158,7 @@ static converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(const c
   std::unique_ptr<laszip_handle_t> laszip_handle(new laszip_handle_t());
   if (laszip_create(&laszip_handle->reader))
   {
-    *error = new error_t();
+    *error = new points_error_t();
     auto e = *error;
     e->code = -1;
     e->msg = "Failed to create laszip reader.";
@@ -173,7 +170,7 @@ static converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(const c
   laszip_handle->filename = filename_str;
   if (laszip_open_reader(laszip_handle->reader, filename_str.c_str(), &is_compressed))
   {
-    *error = new error_t();
+    *error = new points_error_t();
     auto e = *error;
     e->code = -1;
     e->msg = fmt::format("Failed opening laszip reader for '{}'.", filename_str);
@@ -183,7 +180,7 @@ static converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(const c
   laszip_header_struct *lasheader;
   if (laszip_get_header_pointer(laszip_handle->reader, &lasheader))
   {
-    *error = new error_t();
+    *error = new points_error_t();
     auto e = *error;
     e->code = -1;
     e->msg = fmt::format("Failed to read laszip header for '{}'.", filename_str);
@@ -202,12 +199,12 @@ static converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(const c
   return ret;
 }
 
-static void laszip_converter_file_init(const char *filename, size_t filename_size, header_t *header, attributes_t *attributes, void **user_ptr, struct error_t **error)
+static void laszip_converter_file_init(const char *filename, size_t filename_size, points_converter_header_t *header, points_converter_attributes_t *attributes, void **user_ptr, struct points_error_t **error)
 {
   std::unique_ptr<laszip_handle_t> laszip_handle(new laszip_handle_t());
   if (laszip_create(&laszip_handle->reader))
   {
-    *error = new error_t();
+    *error = new points_error_t();
     auto e = *error;
     e->code = -1;
     e->msg = "Failed to create laszip reader.";
@@ -219,7 +216,7 @@ static void laszip_converter_file_init(const char *filename, size_t filename_siz
   laszip_handle->filename = filename_str;
   if (laszip_open_reader(laszip_handle->reader, filename_str.c_str(), &is_compressed))
   {
-    *error = new error_t();
+    *error = new points_error_t();
     auto e = *error;
     e->code = -1;
     e->msg = fmt::format("Failed opening laszip reader for '{}'.", filename_str);
@@ -229,7 +226,7 @@ static void laszip_converter_file_init(const char *filename, size_t filename_siz
   laszip_header_struct *lasheader;
   if (laszip_get_header_pointer(laszip_handle->reader, &lasheader))
   {
-    *error = new error_t();
+    *error = new points_error_t();
     auto e = *error;
     e->code = -1;
     e->msg = fmt::format("Failed to read laszip header for '{}'.", filename_str);
@@ -238,7 +235,7 @@ static void laszip_converter_file_init(const char *filename, size_t filename_siz
 
   if (laszip_get_point_pointer(laszip_handle->reader, &laszip_handle->point))
   {
-    *error = new error_t();
+    *error = new points_error_t();
     auto e = *error;
     e->code = -1;
     e->msg = fmt::format("Failed to getting point pointer from laszip reader '{}'.", filename_str);
@@ -326,7 +323,7 @@ static uint8_t make_classification(laszip_point *point)
 }
 
 template <size_t FORMAT>
-static void copy_point_for_format(buffer_t *buffers, uint64_t i, laszip_point *point)
+static void copy_point_for_format(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert(false);
   (void)buffers;
@@ -335,7 +332,7 @@ static void copy_point_for_format(buffer_t *buffers, uint64_t i, laszip_point *p
   // default should never be instansiated
 }
 
-void assert_copy(buffer_t &buffer, uint64_t i, size_t size, void *source)
+void assert_copy(points_converter_buffer_t &buffer, uint64_t i, size_t size, void *source)
 {
   assert(static_cast<uint8_t *>(buffer.data) + i * size < static_cast<uint8_t *>(buffer.data) + buffer.size);
   assert(static_cast<uint8_t *>(buffer.data) + i * size + size <= static_cast<uint8_t *>(buffer.data) + buffer.size);
@@ -343,7 +340,7 @@ void assert_copy(buffer_t &buffer, uint64_t i, size_t size, void *source)
 }
 
 template <>
-inline void copy_point_for_format<0>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<0>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert_copy(buffers[0], i, sizeof(uint32_t[3]), &point->X);
   assert_copy(buffers[1], i, sizeof(uint16_t), &point->intensity);
@@ -355,28 +352,28 @@ inline void copy_point_for_format<0>(buffer_t *buffers, uint64_t i, laszip_point
 }
 
 template <>
-inline void copy_point_for_format<1>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<1>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<0>(buffers, i, point);
   assert_copy(buffers[7], i, sizeof(double), &point->gps_time);
 }
 
 template <>
-inline void copy_point_for_format<2>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<2>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<0>(buffers, i, point);
   assert_copy(buffers[7], i, sizeof(uint16_t[3]), point->rgb);
 }
 
 template <>
-inline void copy_point_for_format<3>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<3>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<1>(buffers, i, point);
   assert_copy(buffers[8], i, sizeof(uint16_t[3]), &point->rgb);
 }
 
 template <size_t OFFSET>
-inline void copy_wave_packet(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_wave_packet(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert_copy(buffers[OFFSET], i, sizeof(uint8_t), &point->wave_packet);
   assert_copy(buffers[OFFSET + 1], i, sizeof(uint64_t), &point->wave_packet + sizeof(uint8_t));
@@ -386,21 +383,21 @@ inline void copy_wave_packet(buffer_t *buffers, uint64_t i, laszip_point *point)
 }
 
 template <>
-inline void copy_point_for_format<4>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<4>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<1>(buffers, i, point);
   copy_wave_packet<8>(buffers, i, point);
 }
 
 template <>
-inline void copy_point_for_format<5>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<5>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<3>(buffers, i, point);
   copy_wave_packet<9>(buffers, i, point);
 }
 
 template <>
-inline void copy_point_for_format<6>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<6>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   assert_copy(buffers[0], i, sizeof(uint32_t[3]), &point->X);
   assert_copy(buffers[1], i, sizeof(uint16_t), &point->intensity);
@@ -414,35 +411,35 @@ inline void copy_point_for_format<6>(buffer_t *buffers, uint64_t i, laszip_point
 }
 
 template <>
-inline void copy_point_for_format<7>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<7>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<6>(buffers, i, point);
   assert_copy(buffers[9], i, sizeof(uint16_t[3]), &point->rgb);
 }
 
 template <>
-inline void copy_point_for_format<8>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<8>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<7>(buffers, i, point);
   assert_copy(buffers[10], i, sizeof(uint16_t[3]), &point->rgb);
 }
 
 template <>
-inline void copy_point_for_format<9>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<9>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<6>(buffers, i, point);
   copy_wave_packet<9>(buffers, i, point);
 }
 
 template <>
-inline void copy_point_for_format<10>(buffer_t *buffers, uint64_t i, laszip_point *point)
+inline void copy_point_for_format<10>(points_converter_buffer_t *buffers, uint64_t i, laszip_point *point)
 {
   copy_point_for_format<7>(buffers, i, point);
   copy_wave_packet<10>(buffers, i, point);
 }
 
 template <size_t FORMAT>
-void copy_points_for_format(laszip_handle_t *laszip_handle, uint64_t point_count_to_stop_at, buffer_t *buffers, uint64_t buffers_size, struct error_t **error)
+void copy_points_for_format(laszip_handle_t *laszip_handle, uint64_t point_count_to_stop_at, points_converter_buffer_t *buffers, uint64_t buffers_size, struct points_error_t **error)
 {
   (void)buffers_size;
   (void)buffers;
@@ -452,7 +449,7 @@ void copy_points_for_format(laszip_handle_t *laszip_handle, uint64_t point_count
   {
     if (laszip_read_point(laszip_handle->reader))
     {
-      *error = new error_t();
+      *error = new points_error_t();
       auto e = *error;
       e->code = -1;
       e->msg = fmt::format("Failed to read point from laszip reader '{}'.", laszip_handle->filename);
@@ -462,8 +459,8 @@ void copy_points_for_format(laszip_handle_t *laszip_handle, uint64_t point_count
   }
 }
 
-static void laszip_converter_file_convert_data(void *user_ptr, const header_t *header, const attribute_t *attributes, uint32_t attributes_size, uint32_t max_points_to_convert, buffer_t *buffers, uint32_t buffers_size,
-                                               uint32_t *points_read, uint8_t *done, struct error_t **error)
+static void laszip_converter_file_convert_data(void *user_ptr, const points_converter_header_t *header, const points_converter_attribute_t *attributes, uint32_t attributes_size, uint32_t max_points_to_convert, points_converter_buffer_t *buffers, uint32_t buffers_size,
+                                               uint32_t *points_read, uint8_t *done, struct points_error_t **error)
 {
   (void)header;
   (void)attributes;
@@ -529,13 +526,12 @@ static void laszip_converter_file_destroy_user_ptr(void *user_ptr)
   delete laszip_handle;
 }
 
-struct converter_file_convert_callbacks_t laszip_callbacks()
+struct points_converter_file_convert_callbacks_t points_laszip_callbacks()
 {
-  converter_file_convert_callbacks_t ret;
+  points_converter_file_convert_callbacks_t ret;
   ret.pre_init = &laszip_converter_file_get_aabb_min;
   ret.init = &laszip_converter_file_init;
   ret.convert_data = &laszip_converter_file_convert_data;
   ret.destroy_user_ptr = &laszip_converter_file_destroy_user_ptr;
   return ret;
 }
-} // namespace points::converter
