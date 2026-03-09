@@ -121,6 +121,7 @@ public:
 
   std::shared_ptr<read_request_t> read(storage_location_t location);
 
+  void register_input_file_size(uint32_t file_id, uint64_t size_bytes);
   void set_compressor(compression_method_t method);
   void set_read_cache_size(uint64_t max_bytes);
   void set_on_write_progress(std::function<void()> cb) { _on_write_progress = std::move(cb); }
@@ -171,6 +172,7 @@ private:
   std::function<void()> _on_write_progress;
   compression_stats_t _compression_stats;
   std::set<uint32_t> _seen_input_files;
+  ankerl::unordered_dense::map<uint32_t, uint64_t> _input_file_sizes;
 
   vio::event_pipe_t<void> &_index_written;
   vio::event_pipe_t<error_t> &_storage_error;

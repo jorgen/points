@@ -694,6 +694,9 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
   serialized_attributes_configs_location.size = serialized_attributes_configs.size;
 
   _compression_stats.input_file_count = static_cast<uint32_t>(_seen_input_files.size());
+  _compression_stats.input_file_size_bytes = 0;
+  for (auto &[id, size] : _input_file_sizes)
+    _compression_stats.input_file_size_bytes += size;
   if (_compressor)
     _compression_stats.method = _compressor->method();
 
@@ -805,6 +808,12 @@ void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manage
   {
     co_await self->do_write_index(std::move(bm), fb, ac, tr, cs, ps, std::move(done_cb));
   }(this, std::move(new_blob_manager), free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats, std::move(done));
+}
+
+void storage_handler_t::register_input_file_size(uint32_t file_id, uint64_t size_bytes)
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  _input_file_sizes[file_id] = size_bytes;
 }
 
 void storage_handler_t::set_compressor(compression_method_t method)

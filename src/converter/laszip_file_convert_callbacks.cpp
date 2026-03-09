@@ -25,6 +25,7 @@
 #include <laszip_api.h>
 
 #include <assert.h>
+#include <filesystem>
 
 namespace points::converter
 {
@@ -149,6 +150,14 @@ static converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(const c
   converter_file_pre_init_info_t ret;
   ret.found_aabb_min = false;
   ret.found_point_count = false;
+  ret.input_file_size_bytes = 0;
+
+  {
+    std::error_code ec;
+    auto fsize = std::filesystem::file_size(std::filesystem::path(std::string(filename, filename_size)), ec);
+    if (!ec)
+      ret.input_file_size_bytes = fsize;
+  }
   std::unique_ptr<laszip_handle_t> laszip_handle(new laszip_handle_t());
   if (laszip_create(&laszip_handle->reader))
   {

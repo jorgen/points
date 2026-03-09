@@ -81,6 +81,7 @@ struct converter_file_pre_init_info_t
 {
   double aabb_min[3];
   uint64_t approximate_point_count;
+  uint64_t input_file_size_bytes;
   uint8_t found_aabb_min;
   uint8_t approximate_point_size_bytes;
   bool found_point_count;
@@ -172,6 +173,7 @@ struct converter_stats_t
   uint32_t total_buffer_count;
   uint32_t lod_buffer_count;
   uint32_t compression_method;
+  uint64_t input_file_size_bytes;
   uint32_t attribute_count;
   struct converter_attribute_stats_t attributes[32];
 };

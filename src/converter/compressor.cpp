@@ -218,7 +218,7 @@ void compression_stats_t::accumulate(const std::string &name, const point_format
 std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) const
 {
   // compute total size
-  uint32_t size = 4 + 4 + 4 + 4 + 1 + 3 + 4; // version, input_file_count, total_buffer_count, lod_buffer_count, method, padding, attribute_count
+  uint32_t size = 4 + 4 + 4 + 4 + 1 + 3 + 8 + 4; // version, input_file_count, total_buffer_count, lod_buffer_count, method, padding, input_file_size_bytes, attribute_count
   for (auto &attr : per_attribute)
   {
     size += 4;                                  // name_size
@@ -234,7 +234,7 @@ std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) co
   auto *ptr = data.get();
   memset(ptr, 0, size);
 
-  uint32_t version = 4;
+  uint32_t version = 5;
   memcpy(ptr, &version, 4); ptr += 4;
   memcpy(ptr, &input_file_count, 4); ptr += 4;
   memcpy(ptr, &total_buffer_count, 4); ptr += 4;
@@ -242,6 +242,7 @@ std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) co
   auto m = static_cast<uint8_t>(method);
   memcpy(ptr, &m, 1); ptr += 1;
   ptr += 3; // padding
+  memcpy(ptr, &input_file_size_bytes, 8); ptr += 8;
   uint32_t attr_count = static_cast<uint32_t>(per_attribute.size());
   memcpy(ptr, &attr_count, 4); ptr += 4;
 
@@ -279,7 +280,7 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
   auto *ptr = data;
   uint32_t version;
   memcpy(&version, ptr, 4); ptr += 4;
-  if (version < 1 || version > 4)
+  if (version < 1 || version > 5)
     return stats;
 
   memcpy(&stats.input_file_count, ptr, 4); ptr += 4;
@@ -292,6 +293,11 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
   memcpy(&m, ptr, 1); ptr += 1;
   stats.method = static_cast<compression_method_t>(m);
   ptr += 3; // padding
+
+  if (version >= 5)
+  {
+    memcpy(&stats.input_file_size_bytes, ptr, 8); ptr += 8;
+  }
 
   uint32_t attr_count;
   memcpy(&attr_count, ptr, 4); ptr += 4;

@@ -105,6 +105,7 @@ struct compression_stats_t
   uint32_t total_buffer_count = 0;
   uint32_t lod_buffer_count = 0;
   compression_method_t method = compression_method_t::none;
+  uint64_t input_file_size_bytes = 0;
   std::vector<attribute_compression_stats_t> per_attribute;
 
   void accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed, double min_val = std::numeric_limits<double>::max(), double max_val = std::numeric_limits<double>::lowest(), uint8_t flags = 0, bool is_lod = false);

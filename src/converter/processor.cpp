@@ -226,6 +226,7 @@ vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_d
         memcpy(result.pre_init_result.min, pre_init_info.aabb_min, sizeof(result.pre_init_result.min));
         result.pre_init_result.approximate_point_count = pre_init_info.approximate_point_count;
         result.pre_init_result.approximate_point_size_bytes = pre_init_info.approximate_point_size_bytes;
+        result.pre_init_result.input_file_size_bytes = pre_init_info.input_file_size_bytes;
       }
       return result;
     });
@@ -249,7 +250,8 @@ vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_d
     else
     {
       _input_data_source_registry.register_pre_init_result(_tree_handler.tree_config(), r.pre_init_result.id, r.pre_init_result.found_min, r.pre_init_result.min,
-                                                           r.pre_init_result.approximate_point_count, r.pre_init_result.approximate_point_size_bytes);
+                                                           r.pre_init_result.approximate_point_count, r.pre_init_result.approximate_point_size_bytes, r.pre_init_result.input_file_size_bytes);
+      _storage_handler.register_input_file_size(r.pre_init_result.id.data, r.pre_init_result.input_file_size_bytes);
     }
   }
 }
