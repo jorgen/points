@@ -748,39 +748,37 @@ TEST_CASE("Two-pass incremental LOD matches single-pass" * doctest::test_suite("
     root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
 
     // Pass 1: LOD up to midpoint
+    std::mutex lod_mutex;
+    std::condition_variable lod_cv;
+    bool lod_complete = false;
+
+    vio::event_pipe_t<void> lod_done(test_util.event_loop, std::function<void()>([&] {
+      std::lock_guard<std::mutex> lock(lod_mutex);
+      lod_complete = true;
+      lod_cv.notify_all();
+    }));
+
+    points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+                                                     test_util.perf_stats, lod_done);
+
+    points::converter::morton::morton192_t mid_morton = {};
+    mid_morton.data[0] = morton_max / 2;
+    lod_gen.generate_lods(root_id, mid_morton);
+
     {
-      std::mutex lod_mutex;
-      std::condition_variable lod_cv;
-      bool lod_complete = false;
+      std::unique_lock<std::mutex> lock(lod_mutex);
+      REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
+    }
 
-      vio::event_pipe_t<void> lod_done(test_util.event_loop, std::function<void()>([&] {
-        std::lock_guard<std::mutex> lock(lod_mutex);
-        lod_complete = true;
-        lod_cv.notify_all();
-      }));
+    // Pass 2: LOD the rest (all-max)
+    lod_complete = false;
+    points::converter::morton::morton192_t max_morton;
+    memset(&max_morton, 0xFF, sizeof(max_morton));
+    lod_gen.generate_lods(root_id, max_morton);
 
-      points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
-                                                       test_util.perf_stats, lod_done);
-
-      points::converter::morton::morton192_t mid_morton = {};
-      mid_morton.data[0] = morton_max / 2;
-      lod_gen.generate_lods(root_id, mid_morton);
-
-      {
-        std::unique_lock<std::mutex> lock(lod_mutex);
-        REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
-      }
-
-      // Pass 2: LOD the rest (all-max)
-      lod_complete = false;
-      points::converter::morton::morton192_t max_morton;
-      memset(&max_morton, 0xFF, sizeof(max_morton));
-      lod_gen.generate_lods(root_id, max_morton);
-
-      {
-        std::unique_lock<std::mutex> lock(lod_mutex);
-        REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
-      }
+    {
+      std::unique_lock<std::mutex> lock(lod_mutex);
+      REQUIRE(lod_cv.wait_for(lock, std::chrono::seconds(10), [&] { return lod_complete; }));
     }
 
     auto &tree = *test_util.tree_registry.get(root_id);
