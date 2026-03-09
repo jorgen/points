@@ -33,6 +33,8 @@ struct converter_t
   converter_t(const char *url, uint64_t url_size, enum converter_open_file_semantics_t semantics)
     : processor(std::string(url, url_size), file_existence_requirement_t::can_exist, error)
   {
+    if (semantics == open_file_semantics_read_only)
+      return;
     processor.set_converter_callbacks(laszip_callbacks());
     if (error.code != 0)
       return;

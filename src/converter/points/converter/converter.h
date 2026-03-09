@@ -141,7 +141,8 @@ enum converter_conversion_status_t
 enum converter_open_file_semantics_t
 {
   open_file_semantics_open_existing,
-  open_file_semantics_truncate
+  open_file_semantics_truncate,
+  open_file_semantics_read_only
 };
 
 enum converter_compression_t
@@ -223,9 +224,7 @@ POINTS_CONVERTER_EXPORT converter_conversion_status_t converter_status(converter
 
 POINTS_CONVERTER_EXPORT void converter_get_compression_stats(struct converter_t *converter, struct converter_stats_t *stats);
 
-POINTS_CONVERTER_EXPORT int converter_read_file_stats(const char *filename, uint64_t filename_size, struct converter_stats_t *stats);
-
-POINTS_CONVERTER_EXPORT int converter_read_file_perf_stats(const char *filename, uint64_t filename_size, struct converter_perf_stats_t *perf_stats);
+POINTS_CONVERTER_EXPORT void converter_get_perf_stats(struct converter_t *converter, struct converter_perf_stats_t *perf_stats);
 
 POINTS_CONVERTER_EXPORT void converter_get_live_perf_stats(struct converter_t *converter, struct converter_perf_stats_t *perf_stats);
 } // namespace converter

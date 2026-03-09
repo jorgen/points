@@ -230,6 +230,24 @@ error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buf
     error.msg = "Failed to read tree_registry: " + error.msg;
     return error;
   }
+
+  _stats_location = compression_stats;
+  _perf_stats_location = perf_stats;
+
+  if (compression_stats.size > 0)
+  {
+    auto stats_buffer = read_into_buffer(_event_loop, file.handle, request, compression_stats, error);
+    if (stats_buffer)
+      _compression_stats = compression_stats_t::deserialize(stats_buffer.get(), compression_stats.size);
+  }
+
+  if (perf_stats.size > 0)
+  {
+    auto perf_buffer = read_into_buffer(_event_loop, file.handle, request, perf_stats, error);
+    if (perf_buffer)
+      _deserialized_perf_stats = perf_stats_t::deserialize(perf_buffer.get(), perf_stats.size);
+  }
+
   return error;
 }
 

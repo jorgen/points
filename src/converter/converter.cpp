@@ -22,7 +22,6 @@
 #include "perf_stats.hpp"
 #include "processor.hpp"
 
-#include <cstdio>
 #include <memory>
 #include <vector>
 
@@ -129,63 +128,6 @@ void converter_get_compression_stats(struct converter_t *converter, struct conve
   fill_converter_stats(src, stats);
 }
 
-int converter_read_file_stats(const char *filename, uint64_t filename_size, struct converter_stats_t *stats)
-{
-  std::string path(filename, filename_size);
-  FILE *f = nullptr;
-#ifdef _MSC_VER
-  fopen_s(&f, path.c_str(), "rb");
-#else
-  f = fopen(path.c_str(), "rb");
-#endif
-  if (!f)
-    return -1;
-
-  uint8_t index_buf[128];
-  memset(index_buf, 0, sizeof(index_buf));
-  if (fread(index_buf, 1, 128, f) != 128)
-  {
-    fclose(f);
-    return -1;
-  }
-
-  // Check magic
-  if (index_buf[0] != 'J' || index_buf[1] != 'L' || index_buf[2] != 'P' || index_buf[3] != 0)
-  {
-    fclose(f);
-    return -1;
-  }
-
-  // Parse stats location: 4th storage_location_t at offset 4 + 3*16 = 52
-  storage_location_t stats_loc;
-  memcpy(&stats_loc, index_buf + 52, sizeof(stats_loc));
-
-  if (stats_loc.size == 0 || stats_loc.offset == 0)
-  {
-    // No stats in this file
-    fclose(f);
-    memset(stats, 0, sizeof(*stats));
-    return 0;
-  }
-
-  auto blob = std::make_unique<uint8_t[]>(stats_loc.size);
-  if (fseek(f, static_cast<long>(stats_loc.offset), SEEK_SET) != 0)
-  {
-    fclose(f);
-    return -1;
-  }
-  if (fread(blob.get(), 1, stats_loc.size, f) != stats_loc.size)
-  {
-    fclose(f);
-    return -1;
-  }
-  fclose(f);
-
-  auto parsed = compression_stats_t::deserialize(blob.get(), stats_loc.size);
-  fill_converter_stats(parsed, stats);
-  return 0;
-}
-
 static void fill_live_io_stats(converter_io_stats_t &dst, const io_counter_t &src)
 {
   dst.total_bytes = src.total_bytes.load(std::memory_order_relaxed);
@@ -206,61 +148,13 @@ static void fill_io_stats(converter_io_stats_t &dst, const perf_stats_t::deseria
   dst.low_mbps = src.low_mbps();
 }
 
-int converter_read_file_perf_stats(const char *filename, uint64_t filename_size, struct converter_perf_stats_t *perf_stats)
+void converter_get_perf_stats(converter_t *converter, converter_perf_stats_t *perf_stats)
 {
-  std::string path(filename, filename_size);
-  FILE *f = nullptr;
-#ifdef _MSC_VER
-  fopen_s(&f, path.c_str(), "rb");
-#else
-  f = fopen(path.c_str(), "rb");
-#endif
-  if (!f)
-    return -1;
-
-  uint8_t index_buf[128];
-  memset(index_buf, 0, sizeof(index_buf));
-  if (fread(index_buf, 1, 128, f) != 128)
-  {
-    fclose(f);
-    return -1;
-  }
-
-  if (index_buf[0] != 'J' || index_buf[1] != 'L' || index_buf[2] != 'P' || index_buf[3] != 0)
-  {
-    fclose(f);
-    return -1;
-  }
-
-  // perf_stats location is the 5th storage_location_t at offset 4 + 4*16 = 68
-  storage_location_t perf_loc;
-  memcpy(&perf_loc, index_buf + 68, sizeof(perf_loc));
-
-  if (perf_loc.size == 0 || perf_loc.offset == 0)
-  {
-    fclose(f);
-    memset(perf_stats, 0, sizeof(*perf_stats));
-    return 0;
-  }
-
-  auto blob = std::make_unique<uint8_t[]>(perf_loc.size);
-  if (fseek(f, static_cast<long>(perf_loc.offset), SEEK_SET) != 0)
-  {
-    fclose(f);
-    return -1;
-  }
-  if (fread(blob.get(), 1, perf_loc.size, f) != perf_loc.size)
-  {
-    fclose(f);
-    return -1;
-  }
-  fclose(f);
-
-  auto parsed = perf_stats_t::deserialize(blob.get(), perf_loc.size);
+  auto &parsed = converter->processor.storage_handler().get_deserialized_perf_stats();
   if (!parsed.valid)
   {
     memset(perf_stats, 0, sizeof(*perf_stats));
-    return 0;
+    return;
   }
 
   perf_stats->total_time_seconds = parsed.total_time_seconds;
@@ -276,7 +170,6 @@ int converter_read_file_perf_stats(const char *filename, uint64_t filename_size,
   perf_stats->lod_generation_seconds = double(parsed.lod_generation_us) / 1e6;
   perf_stats->cache_hits = parsed.cache_hits;
   perf_stats->cache_misses = parsed.cache_misses;
-  return 0;
 }
 
 void converter_get_live_perf_stats(struct converter_t *converter, struct converter_perf_stats_t *perf_stats)

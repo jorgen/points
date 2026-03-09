@@ -1,12 +1,22 @@
 #include <fmt/format.h>
 #include <points/converter/converter.h>
 
-#include <cstdio>
 #include <cstring>
 #include <string>
 
 using namespace points;
 using namespace points::converter;
+
+struct converter_handle_t
+{
+  converter_t *ptr = nullptr;
+  converter_handle_t(converter_t *p) : ptr(p) {}
+  ~converter_handle_t() { if (ptr) converter_destroy(ptr); }
+  converter_handle_t(const converter_handle_t &) = delete;
+  converter_handle_t &operator=(const converter_handle_t &) = delete;
+  operator converter_t *() const { return ptr; }
+  explicit operator bool() const { return ptr != nullptr; }
+};
 
 static const char *type_name(type_t type)
 {
@@ -137,13 +147,23 @@ int main(int argc, char **argv)
     if (argc > 2)
       fmt::print("=== {} ===\n", filename);
 
-    converter_stats_t stats;
-    if (converter_read_file_stats(filename, len, &stats) != 0)
+    error_t *err = nullptr;
+    converter_handle_t conv(converter_create(filename, len, open_file_semantics_read_only, &err));
+    if (!conv)
     {
-      fmt::print(stderr, "Error: failed to read '{}'\n", filename);
+      const char *err_str = "unknown";
+      size_t err_len = 0;
+      if (err)
+        error_get_info(err, nullptr, &err_str, &err_len);
+      fmt::print(stderr, "Error: failed to read '{}': {}\n", filename, err_str);
+      if (err)
+        error_destroy(err);
       exit_code = 1;
       continue;
     }
+
+    converter_stats_t stats;
+    converter_get_compression_stats(conv, &stats);
 
     if (stats.attribute_count == 0 && stats.total_buffer_count == 0)
     {

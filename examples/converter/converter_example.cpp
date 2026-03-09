@@ -135,6 +135,11 @@ static void print_compression_stats(const points::converter::converter_stats_t &
 {
   fmt::print("\nCompression Statistics:\n");
   fmt::print("  Input files:    {}\n", format_number(stats.input_file_count));
+  if (stats.input_file_size_bytes > 0)
+  {
+    double size_gb = double(stats.input_file_size_bytes) / (1024.0 * 1024.0 * 1024.0);
+    fmt::print("  Source size:    {:.2f} GB\n", size_gb);
+  }
   fmt::print("  Total buffers:  {}\n", format_number(stats.total_buffer_count));
   fmt::print("  Method:         {}\n", method_name(stats.compression_method));
   fmt::print("\n");
@@ -249,13 +254,23 @@ int main(int argc, char **argv)
       return 1;
     }
     auto &filename = args.input[0];
-    points::converter::converter_stats_t stats;
-    if (points::converter::converter_read_file_stats(filename.c_str(), filename.size(), &stats) != 0)
+    points::error_t *err = nullptr;
+    auto *conv = points::converter::converter_create(filename.c_str(), filename.size(), points::converter::open_file_semantics_read_only, &err);
+    if (!conv)
     {
-      fmt::print(stderr, "Failed to read stats from '{}'\n", filename);
+      const char *err_str = "unknown";
+      size_t err_len = 0;
+      if (err)
+        points::error_get_info(err, nullptr, &err_str, &err_len);
+      fmt::print(stderr, "Failed to read stats from '{}': {}\n", filename, err_str);
+      if (err)
+        points::error_destroy(err);
       return 1;
     }
+    points::converter::converter_stats_t stats;
+    points::converter::converter_get_compression_stats(conv, &stats);
     print_compression_stats(stats);
+    points::converter::converter_destroy(conv);
     return 0;
   }
 

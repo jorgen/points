@@ -127,6 +127,7 @@ public:
   void set_on_write_progress(std::function<void()> cb) { _on_write_progress = std::move(cb); }
 
   const compression_stats_t &get_compression_stats() const { return _compression_stats; }
+  const perf_stats_t::deserialized_perf_stats_t &get_deserialized_perf_stats() const { return _deserialized_perf_stats; }
 
 private:
   void handle_write_events(
@@ -171,6 +172,7 @@ private:
   perf_stats_t &_perf_stats;
   std::function<void()> _on_write_progress;
   compression_stats_t _compression_stats;
+  perf_stats_t::deserialized_perf_stats_t _deserialized_perf_stats{};
   std::set<uint32_t> _seen_input_files;
   ankerl::unordered_dense::map<uint32_t, uint64_t> _input_file_sizes;
 
