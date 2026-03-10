@@ -150,7 +150,6 @@ enum points_converter_open_file_semantics_t
 enum points_converter_compression_t
 {
   points_converter_compression_none = 0,
-  points_converter_compression_blosc2 = 1,
   points_converter_compression_zstd = 2,
   points_converter_compression_huff0 = 3
 };

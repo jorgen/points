@@ -67,14 +67,12 @@ static points_converter_compression_t parse_compression(const char *str)
 {
   if (std::strcmp(str, "none") == 0)
     return points_converter_compression_none;
-  if (std::strcmp(str, "blosc2") == 0)
-    return points_converter_compression_blosc2;
   if (std::strcmp(str, "zstd") == 0)
     return points_converter_compression_zstd;
   if (std::strcmp(str, "huff0") == 0)
     return points_converter_compression_huff0;
-  fmt::print(stderr, "Unknown compression '{}', using blosc2\n", str);
-  return points_converter_compression_blosc2;
+  fmt::print(stderr, "Unknown compression '{}', using zstd\n", str);
+  return points_converter_compression_zstd;
 }
 
 static const char *type_name(points_type_t type)
@@ -212,7 +210,7 @@ struct args_t
 
 args_t parse_arguments(int argc, char *argv[])
 {
-  args_t args = {{}, "out.jlp", points_converter_compression_blosc2, false};
+  args_t args = {{}, "out.jlp", points_converter_compression_zstd, false};
   for (int i = 1; i < argc; ++i)
   {
     if (std::strcmp(argv[i], "-o") == 0 || std::strcmp(argv[i], "--out") == 0)

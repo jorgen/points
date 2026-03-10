@@ -1,7 +1,6 @@
 #include <doctest/doctest.h>
 #include <attributes_configs.hpp>
 #include <compressor.hpp>
-#include <compressor_blosc2.hpp>
 #include <compressor_zstd.hpp>
 #include <compressor_fse.hpp>
 #include <compressor_ans.hpp>
@@ -41,85 +40,6 @@ static std::vector<uint8_t> make_sorted_u32_buffer(uint32_t count)
   for (uint32_t i = 0; i < count; i++)
     values[i] = i * 10;
   return buf;
-}
-
-// --- blosc2 round trip ---
-
-TEST_CASE("blosc2 round trip")
-{
-  compressor_blosc2_t compressor;
-
-  SUBCASE("random u8x1")
-  {
-    auto data = make_random_buffer(1024);
-    point_format_t fmt{points_type_u8, points_components_1};
-    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
-    REQUIRE(compressed.error.code == 0);
-    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
-    REQUIRE(decompressed.error.code == 0);
-    REQUIRE(decompressed.size == data.size());
-    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
-  }
-
-  SUBCASE("random u32x3")
-  {
-    auto data = make_random_buffer(4 * 3 * 100);
-    point_format_t fmt{points_type_u32, points_components_3};
-    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
-    REQUIRE(compressed.error.code == 0);
-    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
-    REQUIRE(decompressed.error.code == 0);
-    REQUIRE(decompressed.size == data.size());
-    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
-  }
-
-  SUBCASE("random r64x3")
-  {
-    auto data = make_random_buffer(8 * 3 * 50);
-    point_format_t fmt{points_type_r64, points_components_3};
-    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
-    REQUIRE(compressed.error.code == 0);
-    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
-    REQUIRE(decompressed.error.code == 0);
-    REQUIRE(decompressed.size == data.size());
-    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
-  }
-
-  SUBCASE("constant buffer")
-  {
-    auto data = make_constant_buffer(1024, 0x42);
-    point_format_t fmt{points_type_u8, points_components_1};
-    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
-    REQUIRE(compressed.error.code == 0);
-    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
-    REQUIRE(decompressed.error.code == 0);
-    REQUIRE(decompressed.size == data.size());
-    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
-  }
-
-  SUBCASE("sorted u32 morton")
-  {
-    auto data = make_sorted_u32_buffer(200);
-    point_format_t fmt{points_type_m32, points_components_1};
-    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
-    REQUIRE(compressed.error.code == 0);
-    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
-    REQUIRE(decompressed.error.code == 0);
-    REQUIRE(decompressed.size == data.size());
-    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
-  }
-
-  SUBCASE("small buffer")
-  {
-    auto data = make_random_buffer(32);
-    point_format_t fmt{points_type_u8, points_components_1};
-    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
-    REQUIRE(compressed.error.code == 0);
-    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
-    REQUIRE(decompressed.error.code == 0);
-    REQUIRE(decompressed.size == data.size());
-    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
-  }
 }
 
 // --- zstd round trip ---
@@ -295,7 +215,7 @@ TEST_CASE("has_compression_magic")
     header.magic[1] = 'C';
     header.magic[2] = 'M';
     header.magic[3] = 1;
-    header.method = compression_method_t::blosc2;
+    header.method = compression_method_t::zstd;
     header.type_size = 4;
     header.component_count = 1;
     header.flags = 0;
@@ -366,20 +286,6 @@ TEST_CASE("try_compress_constant u8x3")
 
 // --- decompress_any dispatches ---
 
-TEST_CASE("decompress_any dispatches blosc2")
-{
-  auto data = make_random_buffer(1024);
-  point_format_t fmt{points_type_u8, points_components_1};
-  compressor_blosc2_t compressor;
-  auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
-  REQUIRE(compressed.error.code == 0);
-
-  auto decompressed = decompress_any(compressed.data.get(), compressed.size);
-  REQUIRE(decompressed.error.code == 0);
-  REQUIRE(decompressed.size == data.size());
-  REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
-}
-
 TEST_CASE("decompress_any dispatches zstd")
 {
   auto data = make_random_buffer(1024);
@@ -441,10 +347,6 @@ TEST_CASE("decompress_any rejects too-small buffer")
 
 TEST_CASE("create_compressor returns correct types")
 {
-  auto blosc2 = create_compressor(compression_method_t::blosc2);
-  REQUIRE(blosc2 != nullptr);
-  REQUIRE(blosc2->method() == compression_method_t::blosc2);
-
   auto zstd = create_compressor(compression_method_t::zstd);
   REQUIRE(zstd != nullptr);
   REQUIRE(zstd->method() == compression_method_t::zstd);

@@ -27,7 +27,7 @@ add_executable(private_interface_unit_tests
         private/draw_emitter_tests.cpp
         private/memory_writer_tests.cpp
 )
-target_link_libraries(private_interface_unit_tests PRIVATE vio blosc2_static)
+target_link_libraries(private_interface_unit_tests PRIVATE vio libzstd_static)
 target_link_libraries(private_interface_unit_tests PRIVATE doctest_main doctest fmt glm unordered_dense laszip)
 target_include_directories(private_interface_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
 copy_dll_for_target(public_interface_unit_tests points_render points_converter)

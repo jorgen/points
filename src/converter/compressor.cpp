@@ -16,7 +16,6 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "compressor.hpp"
-#include "compressor_blosc2.hpp"
 #include "compressor_zstd.hpp"
 #include "compressor_fse.hpp"
 #include "compressor_ans.hpp"
@@ -31,8 +30,6 @@ std::unique_ptr<compressor_t> create_compressor(compression_method_t method)
 {
   switch (method)
   {
-  case compression_method_t::blosc2:
-    return std::make_unique<compressor_blosc2_t>();
   case compression_method_t::zstd:
     return std::make_unique<compressor_zstd_t>();
   case compression_method_t::huff0:
@@ -117,11 +114,6 @@ compression_result_t decompress_any(const void *data, uint32_t size)
     result.data = std::move(output);
     result.size = header.uncompressed_size;
     return result;
-  }
-  case compression_method_t::blosc2:
-  {
-    compressor_blosc2_t decompressor;
-    return decompressor.decompress(data, size);
   }
   case compression_method_t::zstd:
   {

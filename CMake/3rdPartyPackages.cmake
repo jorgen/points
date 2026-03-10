@@ -13,5 +13,5 @@ CmDepFetchPackage(laszip 3.5.0 https://github.com/LASzip/LASzip/archive/refs/tag
 CmDepFetchPackage(libmorton 0.2.10 https://github.com/Forceflow/libmorton/archive/v0.2.10.tar.gz SHA256=5f4a8dbf350222b0bec35ad1bee6b76fa22e16ea364e1e80ca47d8f5a7210d6f)
 CmDepFetchPackage(argh 431bf323ac https://github.com/adishavit/argh/archive/431bf323acd3bb805483491ff277dac5d85772ad.tar.gz SHA256=af6579d9143b9e2445354796645648c2bbbecdbe3705ba825221861a95f936ea)
 CmDepFetchPackage(unordered_dense 4.1.2 https://github.com/martinus/unordered_dense/archive/refs/tags/v4.1.2.tar.gz SHA256=300410dbcd32800f83b2113dfecbdfe8cd256caa4cfeb117d646021d6e3209ae)
-CmDepFetchPackage(blosc2 2.23.0 https://github.com/Blosc/c-blosc2/archive/refs/tags/v2.23.0.tar.gz SHA256=125e0ac2fac3d81239c1de036cb335bc8eca86b19216e97e0b23de3283d3274b)
+CmDepFetchPackage(zstd 1.5.7 https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz SHA256=37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3)
 CmDepFetchFile(stbimage b42009b https://raw.githubusercontent.com/nothings/stb/8b5f1f37b5b75829fc72d38e7b5d4bcbf8a26d55/stb_image.h stb_image.h SHA256=91f435e0fc6a620018b878b9859c74dff60d28046f87e649191ad6f35a98c722)

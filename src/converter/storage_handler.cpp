@@ -131,7 +131,7 @@ storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t 
   , _read_request_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
   , _read_cache(256 * 1024 * 1024)
 {
-  set_compressor(compression_method_t::blosc2);
+  set_compressor(compression_method_t::zstd);
   auto stat_result = vio::stat_file(_event_loop, _file_name);
   if (!stat_result.has_value())
   {

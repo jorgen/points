@@ -33,7 +33,6 @@ namespace points::converter
 enum class compression_method_t : uint8_t
 {
   none = 0,
-  blosc2 = 1,
   zstd = 2,
   huff0 = 3,
   constant = 4,

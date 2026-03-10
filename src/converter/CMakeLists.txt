@@ -36,7 +36,6 @@ set(private_headers
         native_node_data_loader.hpp
         compressor.hpp
         perf_stats.hpp
-        compressor_blosc2.hpp
         byte_shuffle.hpp
         compressor_zstd.hpp
         compressor_fse.hpp
@@ -68,7 +67,6 @@ set(sources
         blob_manager.cpp
         input_data_source_registry.cpp
         input_storage_map.cpp
-        compressor_blosc2.cpp
         compressor.cpp
         byte_shuffle.cpp
         compressor_zstd.cpp
@@ -78,7 +76,7 @@ set(sources
 )
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio blosc2_static)
+target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio libzstd_static)
 target_link_libraries(points_converter_objects PRIVATE laszip)
 target_include_directories(points_converter_objects
         PUBLIC
@@ -89,8 +87,8 @@ target_include_directories(points_converter_objects
 target_include_directories(points_converter_objects
         PRIVATE
         ${libmorton_SOURCE_DIR}/include
-        ${blosc2_SOURCE_DIR}/internal-complibs/zstd-1.5.7
-        ${blosc2_SOURCE_DIR}/internal-complibs/zstd-1.5.7/common
+        ${zstd_SOURCE_DIR}/lib
+        ${zstd_SOURCE_DIR}/lib/common
 )
 setWarningflagsForTarget(points_converter_objects)
 
