@@ -19,31 +19,12 @@
 
 #include "frustum_tree_walker.hpp"
 
-#include <cstring>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 namespace points::converter
 {
-
-struct node_id_hash
-{
-  size_t operator()(const node_id_t &id) const
-  {
-    uint64_t v;
-    memcpy(&v, &id, sizeof(v));
-    return std::hash<uint64_t>()(v);
-  }
-};
-
-struct node_id_equal
-{
-  bool operator()(const node_id_t &a, const node_id_t &b) const
-  {
-    return (a <=> b) == std::strong_ordering::equal;
-  }
-};
 
 enum class coverage_state_t
 {

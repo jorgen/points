@@ -46,7 +46,7 @@ public:
                    std::unique_ptr<render::node_data_loader_t> &node_loader,
                    size_t &gpu_memory_used,
                    size_t upload_limit,
-                   int max_uploads,
+                   size_t frame_upload_budget,
                    const render::frame_camera_cpp_t &camera,
                    const std::string &current_attribute_name,
                    double attr_min, double attr_max);
@@ -56,6 +56,7 @@ public:
                    const selection_result_t &selection,
                    const tree_config_t &tree_config,
                    std::unique_ptr<render::node_data_loader_t> &node_loader,
+                   const glm::dvec3 &camera_position,
                    int max_requests);
 
   void evict(std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers,
@@ -81,6 +82,7 @@ private:
     int index;
     int lod;
     bool awaiting;
+    double distance;
   };
   std::vector<frontier_candidate_t> m_frontier;
 

@@ -21,6 +21,9 @@
 #include <glm_include.hpp>
 #include "tree.hpp"
 
+#include <cstring>
+#include <unordered_set>
+
 
 namespace points::converter
 {
@@ -44,6 +47,24 @@ inline std::strong_ordering operator<=>(const node_id_t &a, const node_id_t &b)
   }
   return a.index < b.index ? std::strong_ordering::less : (a.index == b.index ? std::strong_ordering::equal : std::strong_ordering::greater);
 }
+
+struct node_id_hash
+{
+  size_t operator()(const node_id_t &id) const
+  {
+    uint64_t v;
+    memcpy(&v, &id, sizeof(v));
+    return std::hash<uint64_t>()(v);
+  }
+};
+
+struct node_id_equal
+{
+  bool operator()(const node_id_t &a, const node_id_t &b) const
+  {
+    return (a <=> b) == std::strong_ordering::equal;
+  }
+};
 
 struct node_aabb_t
 {
@@ -134,7 +155,10 @@ struct lod_params_t
   glm::dvec3 camera_position;
   glm::dmat4 projection;
   double screen_fraction_threshold;
+  double hysteresis = 0.15;
 };
+
+using node_set_t = std::unordered_set<node_id_t, node_id_hash, node_id_equal>;
 
 class frustum_tree_walker_t
 {
@@ -147,10 +171,11 @@ public:
   tree_walker_nodes_t m_new_nodes;
   double m_tree_offset[3];
   std::vector<tree_id_t> m_trees_to_load;
+  node_set_t m_previously_subdivided;
   bool m_debug = false;
 };
 
-bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb);
+bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb, bool was_subdivided = false);
 
 void walk_tree_direct(const tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker);
 

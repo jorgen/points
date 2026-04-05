@@ -87,6 +87,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   double frac_threshold;
   size_t mem_budget;
   uint64_t pt_budget;
+  size_t frame_upload_budget;
   {
     std::unique_lock<std::mutex> lock(mutex);
     new_attribute = current_attribute_name != next_attribute_name;
@@ -94,6 +95,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     frac_threshold = screen_fraction_threshold;
     mem_budget = gpu_memory_budget;
     pt_budget = point_budget;
+    frame_upload_budget = upload_budget_per_frame;
   }
 
   // Handle attribute change
@@ -129,8 +131,13 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     cached_walker_attribute_source = current_attribute_name;
   }
   frustum_tree_walker_t walker(camera.view_projection, lod_params, cached_walker_attribute_names);
+  walker.m_previously_subdivided = std::move(previously_subdivided);
   walker.m_debug = debug_transitions;
   processor.walk_tree(walker);
+  // Save this frame's subdivided set for next frame's hysteresis
+  previously_subdivided.clear();
+  for (auto &[parent, child] : walker.m_new_nodes.parent_child_edges)
+    previously_subdivided.insert(parent);
   auto &walker_subsets = walker.m_new_nodes.point_subsets;
   std::sort(walker_subsets.begin(), walker_subsets.end(), less_than);
   frame_timings.walker_node_count = int(walker_subsets.size());
@@ -157,7 +164,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   auto tree_config = processor.tree_config();
   size_t upload_limit = mem_budget + mem_budget / 5;
   buffer_manager.upload_ready(render_buffers, callbacks, node_loader, gpu_memory_used,
-                              upload_limit, 4, camera, current_attribute_name,
+                              upload_limit, frame_upload_budget, camera, current_attribute_name,
                               current_attr_min, current_attr_max);
   auto t_after_upload = clock::now();
 
@@ -261,7 +268,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   }
 
   // Phase 6: Frontier I/O scheduling
-  buffer_manager.schedule_io(render_buffers, node_registry, selection, tree_config, node_loader, 20);
+  buffer_manager.schedule_io(render_buffers, node_registry, selection, tree_config, node_loader, camera_position, 20);
   auto t_after_frontier = clock::now();
 
   // Phase 7: Draw emission
@@ -355,6 +362,12 @@ void points_converter_data_source_set_gpu_memory_budget(struct points_converter_
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->gpu_memory_budget = budget_bytes;
+}
+
+void points_converter_data_source_set_upload_budget_per_frame(struct points_converter_data_source_t *converter_data_source, size_t budget_bytes)
+{
+  std::unique_lock<std::mutex> lock(converter_data_source->mutex);
+  converter_data_source->upload_budget_per_frame = budget_bytes;
 }
 
 uint64_t points_converter_data_source_get_points_rendered(struct points_converter_data_source_t *converter_data_source)

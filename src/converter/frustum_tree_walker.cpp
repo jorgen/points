@@ -32,7 +32,7 @@ frustum_tree_walker_t::frustum_tree_walker_t(const glm::dmat4 view_perspective, 
 {
 }
 
-bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb)
+bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb, bool was_subdivided)
 {
   glm::dvec3 center = (aabb.min + aabb.max) * 0.5;
   glm::dvec3 extent = aabb.max - aabb.min;
@@ -44,7 +44,13 @@ bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb)
 
   // projected_fraction: fraction of screen height covered by this node (0..1+)
   double projected_fraction = params.projection[1][1] * 0.5 * node_size / distance;
-  return projected_fraction > params.screen_fraction_threshold;
+
+  // Hysteresis: if the node was subdivided last frame, use a lower threshold
+  // to prevent flickering when the camera is near the LOD boundary.
+  double threshold = was_subdivided
+    ? params.screen_fraction_threshold * (1.0 - params.hysteresis)
+    : params.screen_fraction_threshold;
+  return projected_fraction > threshold;
 }
 
 // static node_id_t create_node_id(tree_id_t tree_id, int level, int index)
@@ -202,7 +208,8 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
         }
       }
 
-      if (!visible || !should_subdivide(walker.m_lod_params, possible_nodes.aabbs))
+      bool was_subdivided = walker.m_previously_subdivided.count(node_id) > 0;
+      if (!visible || !should_subdivide(walker.m_lod_params, possible_nodes.aabbs, was_subdivided))
         continue;
 
       auto children = current_tree->nodes[current_depth_in_tree][possible_nodes.skip];

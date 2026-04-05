@@ -220,18 +220,21 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
                                        std::unique_ptr<render::node_data_loader_t> &node_loader,
                                        size_t &gpu_memory_used,
                                        size_t upload_limit,
-                                       int max_uploads,
+                                       size_t frame_upload_budget,
                                        const render::frame_camera_cpp_t &camera,
                                        const std::string &current_attribute_name,
                                        double attr_min, double attr_max)
 {
   (void)current_attribute_name;
 
+  glm::dvec3 camera_position = glm::dvec3(camera.inverse_view[3]);
+
   struct upload_candidate_t
   {
     int index;
     int lod;
     bool awaiting;
+    double distance;
   };
   std::vector<upload_candidate_t> upload_candidates;
   for (int idx = 0; idx < int(render_buffers.size()); idx++)
@@ -239,16 +242,17 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
     auto &rb = *render_buffers[idx];
     if (rb.load_handle != render::invalid_load_handle && node_loader->is_ready(rb.load_handle))
     {
-      upload_candidates.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
+      glm::dvec3 center = (rb.node_info.aabb.min + rb.node_info.aabb.max) * 0.5;
+      double dist = glm::length(center - camera_position);
+      upload_candidates.push_back({idx, rb.node_info.lod, rb.awaiting_new_color, dist});
     }
   }
 
+  // Awaiting-color uploads first (crossfade completion), then closest-first by distance.
   std::sort(upload_candidates.begin(), upload_candidates.end(), [](const auto &a, const auto &b) {
     if (a.awaiting != b.awaiting)
       return a.awaiting > b.awaiting;
-    if (a.awaiting)
-      return a.lod > b.lod;
-    return a.lod > b.lod;
+    return a.distance < b.distance;
   });
 
   auto upload_color = [&](gpu_node_buffer_t &rb, const render::loaded_node_data_t &ld)
@@ -272,11 +276,12 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
   };
 
   int uploads_done = 0;
+  size_t frame_bytes_uploaded = 0;
   for (auto &candidate : upload_candidates)
   {
-    if (uploads_done >= max_uploads)
-      break;
     if (gpu_memory_used >= upload_limit && !candidate.awaiting)
+      break;
+    if (frame_bytes_uploaded >= frame_upload_budget && !candidate.awaiting)
       break;
     auto &render_buffer = *render_buffers[candidate.index];
 
@@ -308,6 +313,7 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
       render_buffer.awaiting_new_color = false;
 
       gpu_memory_used += loaded.attribute_data_size;
+      frame_bytes_uploaded += loaded.attribute_data_size;
       loaded.release();
       uploads_done++;
     }
@@ -344,6 +350,7 @@ int gpu_buffer_manager_t::upload_ready(std::vector<std::unique_ptr<gpu_node_buff
       render_buffer.gpu_memory_size = buf_mem;
       render_buffer.attribute_data_size = loaded.attribute_data_size;
       gpu_memory_used += buf_mem;
+      frame_bytes_uploaded += buf_mem;
 
       render_buffer.rendered = true;
       loaded.release();
@@ -358,12 +365,18 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
                                        const selection_result_t &selection,
                                        const tree_config_t &tree_config,
                                        std::unique_ptr<render::node_data_loader_t> &node_loader,
+                                       const glm::dvec3 &camera_position,
                                        int max_requests)
 {
   m_frontier.clear();
 
   auto needs_load = [](const gpu_node_buffer_t &rb) {
     return rb.load_handle == render::invalid_load_handle && (!rb.rendered || rb.awaiting_new_color);
+  };
+
+  auto compute_distance = [&camera_position](const gpu_node_buffer_t &rb) {
+    glm::dvec3 center = (rb.node_info.aabb.min + rb.node_info.aabb.max) * 0.5;
+    return glm::length(center - camera_position);
   };
 
   // Active nodes
@@ -376,7 +389,7 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
     {
       auto &rb = *render_buffers[idx];
       if (needs_load(rb))
-        m_frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
+        m_frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color, compute_distance(rb)});
     }
     // One-level lookahead: children of active nodes
     for (auto &child_id : node->children)
@@ -388,7 +401,7 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
       {
         auto &rb = *render_buffers[idx];
         if (needs_load(rb))
-          m_frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color});
+          m_frontier.push_back({idx, rb.node_info.lod, rb.awaiting_new_color, compute_distance(rb)});
       }
     }
   }
@@ -399,16 +412,14 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
   {
     auto &rb = *render_buffers[idx];
     if (rb.awaiting_new_color && needs_load(rb))
-      m_frontier.push_back({idx, rb.node_info.lod, true});
+      m_frontier.push_back({idx, rb.node_info.lod, true, compute_distance(rb)});
   }
 
-  // Awaiting nodes first (root-to-leaf), then normal frontier nodes (deepest-first)
+  // Awaiting nodes first, then closest-first by distance.
   std::sort(m_frontier.begin(), m_frontier.end(), [](const auto &a, const auto &b) {
     if (a.awaiting != b.awaiting)
       return a.awaiting > b.awaiting;
-    if (a.awaiting)
-      return a.lod > b.lod;
-    return a.lod > b.lod;
+    return a.distance < b.distance;
   });
 
   std::unordered_set<int> started;
