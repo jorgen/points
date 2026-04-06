@@ -1,0 +1,293 @@
+# Points
+
+Point cloud processing library. Converts arbitrary point cloud input into a morton-ordered
+octree with LOD (level of detail) stored in a compressed, random-accessible buffer format
+(JLP files). Includes a graphics-API-agnostic rendering framework with callback-driven
+buffer management and an OpenGL example implementation.
+
+C++23, no RTTI, no exceptions. Public API is pure C (C99/C11 compatible).
+
+## Building
+
+```bash
+cd /c/Users/jorge/dev/points
+cmake --build build --target <target>
+```
+
+Key targets:
+- `points_converter` — converter library
+- `points_render` — rendering library
+- `points_common` — shared types library
+- `private_interface_unit_tests` — internal unit tests
+- `public_interface_unit_tests` — public API unit tests
+- `jlp_info` — JLP file compression stats tool
+- `jlp_extract` — JLP attribute buffer extraction and tree inspection tool
+- `converter_example` — converter usage example
+- `renderer_example` — OpenGL renderer example
+
+Build presets (from CMakePresets.json):
+- `debug` / `release` — Unix/cross-platform (Ninja)
+- `msvc-debug` / `msvc-release` — Windows MSVC
+- `static-debug` / `static-release` — static library variants
+
+Build options:
+- `POINTS_BUILD_TESTS` (ON) — build unit tests
+- `POINTS_BUILD_EXAMPLES` (ON) — build examples
+- `BUILD_SHARED_LIBS` (ON) — shared vs static libraries
+
+## Running Tests
+
+Test framework is doctest. The MSVC test executable lives at `build/tests/Debug/private_interface_unit_tests.exe`.
+
+**DLL dependency:** `laszip_api3d.dll` is not automatically copied to the test directory. If tests fail with exit code 127, copy it:
+```bash
+cp build/laszip_build_3.5.0_install/bin/laszip_api3d.dll build/tests/Debug/
+```
+
+**Running from MINGW64 bash:**
+```bash
+# Run all tests
+/c/Users/jorge/dev/points/build/tests/Debug/private_interface_unit_tests.exe
+
+# Run tests matching a tag
+/c/Users/jorge/dev/points/build/tests/Debug/private_interface_unit_tests.exe "[converter]"
+```
+
+Exit code 127 from bash means a DLL is missing — check with `ldd <exe> | grep "not found"`.
+
+## Project Structure
+
+```
+src/
+  converter/           Converter pipeline (reader → sorter → tree → LOD → storage)
+    points/converter/    Public C headers (converter.h, converter_data_source.h, ...)
+  render/              Graphics-agnostic renderer (callbacks, data sources, frustum)
+    points/render/       Public C headers (renderer.h, camera.h, draw_group.h, ...)
+  common/              Shared types (error, format, containers)
+    points/common/       Public C headers (error.h, format.h)
+examples/
+  converter/           Converter usage example (converter_example.cpp)
+  renderer/            OpenGL renderer example (gl_renderer.cpp, renderer_example.cpp)
+tools/
+  jlp_info/            CLI: JLP compression stats
+  jlp_extract/         CLI: attribute buffer extraction and tree introspection
+tests/
+  private/             Internal unit tests (doctest)
+  public/              Public API tests
+CMake/                 Build modules and dependency definitions (3rdPartyPackages.cmake)
+```
+
+## Architecture: Converter Pipeline
+
+```
+Input Files → Reader (chunks ~50K pts) → Sorter (XYZ → Morton, sort, reorder buffers)
+  → Tree Builder (octree subdivision) → LOD Generator (bottom-up sampling)
+  → Storage Handler (preprocess + compress + write to disk)
+```
+
+### Key Components
+
+| File | Role |
+|------|------|
+| `processor.hpp/cpp` | Central orchestrator. Event-driven threading with event pipes, thread pool, and 1GB read/sort memory budget for backpressure. |
+| `reader.hpp/cpp` | `get_data_worker_t` calls user's `convert_data` callback in ~50K-point chunks. `sort_worker_t` takes unsorted output and feeds it to the sorter. |
+| `sorter.hpp/cpp` | Transforms XYZ coordinates to Morton192 codes (Z-order curve), sorts index array by morton value, reorders all attribute buffers to match. Determines LOD span from morton min/max. |
+| `morton.hpp` | Morton code types (32/64/128/192-bit), encode/decode, LOD calculation, bitwise ops. |
+| `tree.hpp/cpp` | Sparse octree. Each `tree_t` has 5 LOD levels with child bitmasks, skip arrays, and node IDs. Points routed to children by morton code. `tree_registry_t` manages all trees. Serialize/deserialize for persistence. |
+| `tree_handler.hpp/cpp` | Manages tree lifecycle. `tree_initialize()` creates root, `tree_add_points()` subdivides recursively. |
+| `tree_lod_generator.hpp/cpp` | Bottom-up LOD generation. `lod_worker_t` reads child nodes, samples/aggregates, writes lower-resolution buffers. Batched for parallel execution. |
+| `storage_handler.hpp/cpp` | File I/O with compression. `blob_manager_t` tracks free space (100MB pages). `lru_cache_t` for read caching. Async read with condition variable. |
+| `compression_preprocess.hpp/cpp` | Pre-compression transforms: delta encoding (morton/element/component/xor), constant band detection, offset subtraction (f64), decorrelation (u16x3 RGB → G,R-G,B-G), sort with permutation. |
+| `compressor_zstd.hpp/cpp` | Zstandard compression backend (configurable level, default 9). |
+| `compressor_fse.hpp/cpp` | Finite State Entropy (Huffman) compression. |
+| `compressor_ans.hpp/cpp` | ANS (Asymmetric Numeral System) compression. |
+| `byte_shuffle.hpp/cpp` | Byte transposition for better compression ratios. |
+| `attributes_configs.hpp/cpp` | Attribute schema registry. Maps `attributes_id_t` to attribute sets and LOD downsampling rules. |
+| `conversion_types.hpp` | Core types: `input_data_id_t` (data+sub composite ID), `storage_location_t` (file_id/size/offset), `storage_header_t` (point count, morton bounds, lod_span), `points_t` (header + attribute buffers), `tree_config_t` (scale/offset). |
+| `perf_stats.hpp` | Per-phase I/O counters (bytes, time, mbps) for source read/write, sort, LOD read/write. Cache hit/miss tracking. |
+
+### Public C API (converter)
+
+Header: `src/converter/points/converter/converter.h`
+
+```c
+// Create converter with cache file path
+points_converter_t *points_converter_create(cache_filename, open_file_semantics, &error);
+
+// Configure
+points_converter_set_compression(converter, method);         // none, zstd
+points_converter_set_compression_level(converter, level);
+points_converter_set_store_original_order(converter, flag);
+
+// Set callbacks for file conversion and progress/error/done notifications
+points_converter_set_file_converter_callbacks(converter, callbacks);
+points_converter_set_runtime_callbacks(converter, callbacks);
+
+// Add input and process
+points_converter_add_data_file(converter, filename, user_ptr);
+points_converter_wait_idle(converter, &error);
+
+// Query results
+points_converter_status(converter);          // idle, converting, done, error
+points_converter_get_compression_stats(converter, &stats);
+points_converter_get_perf_stats(converter, &stats);
+```
+
+File conversion callbacks (`points_converter_file_convert_callbacks_t`):
+- `pre_init` — estimate file size/point count
+- `init` — open file, return header with offset/scale/min/max and attribute definitions
+- `convert_data` — stream point chunks into provided buffers
+- `destroy_user_ptr` — cleanup
+
+## Architecture: Rendering System
+
+Graphics-API-agnostic, callback-driven design. The renderer knows nothing about OpenGL/Vulkan — it produces draw groups that the consumer dispatches.
+
+```
+Consumer calls points_renderer_frame(camera)
+  → renderer iterates registered data sources
+    → each data source's add_to_frame() produces draw groups
+      → draw groups returned to consumer as array
+        → consumer dispatches each group by draw_type to its own handlers
+```
+
+### Key Components
+
+| File | Role |
+|------|------|
+| `renderer.h` | Public C API: create renderer, add/remove cameras, add/remove data sources, call `points_renderer_frame()` to get draw groups for a frame. |
+| `renderer_callbacks.hpp` | `callback_manager_t` — thread-safe dispatch of buffer/texture lifecycle callbacks (create, initialize, modify, destroy). Consumer implements these for their graphics API. |
+| `data_source.h` | Data source interface: function pointer `points_add_to_frame_t(camera, to_render, user_data)`. Each source decides what to draw based on camera. |
+| `draw_group.h` | `points_draw_group_t`: draw_type enum, array of `points_draw_buffer_t` (buffer_mapping semantic + user_ptr handle), draw_size, lod_level. |
+| `camera.h` | Camera control: view/projection matrices, arcball and FPS controllers, `points_camera_look_at_aabb()`. |
+| `frustum.hpp` | 6-plane frustum from view-projection matrix. AABB intersection test (outside/intersects/inside). |
+| `buffer.hpp` | Buffer wrapper with rendered flag and async release callback. |
+
+### Draw Types
+
+`points_draw_type_t` enum: `points_flat_points`, `points_dyn_points_1`, `points_dyn_points_3`, `points_dyn_points_crossfade`, `points_aabb_triangle_mesh`, `points_skybox_triangle`, `points_axis_gizmo_lines`, `points_origin_anchor_mesh`, `points_environment_bg`, `points_node_bbox_lines`.
+
+Each draw type has its own `buffer_mapping` enum defining the semantic meaning of each buffer slot (position, color, camera matrix, index, etc.).
+
+### Built-in Data Sources
+
+| File | What it renders |
+|------|-----------------|
+| `data_source_flat_points` | Entire LAS/LAZ file as flat point cloud |
+| `data_source_aabb` | Bounding box wireframes |
+| `data_source_skybox` | Skybox cube |
+| `data_source_axis_gizmo` | 3D axis indicator |
+| `data_source_origin_anchor` | World origin marker |
+| `data_source_environment` | Environment background |
+
+### Converter-integrated rendering
+
+Files in `src/converter/` that bridge converter and renderer:
+- `data_source_converter.hpp/cpp` — data source wrapping the converter's tree, with pixel-error LOD selection and GPU memory budgeting
+- `frustum_tree_walker.hpp/cpp` — walks the octree with frustum culling
+- `draw_emitter.hpp/cpp` — emits draw groups from visible tree nodes
+- `gpu_buffer_manager.hpp/cpp` — manages GPU buffer allocation for tree node data
+- `frame_node_registry.hpp/cpp` — tracks which nodes are loaded per frame
+- `node_selector.hpp/cpp` — selects which nodes to load/unload based on camera
+- `native_node_data_loader.hpp/cpp` — async node data loading from disk
+
+### OpenGL Example
+
+`examples/renderer/` contains a full OpenGL implementation:
+- `gl_renderer.h/cpp` — implements all renderer callbacks (create/init/modify/destroy buffer), dispatches draw groups to per-type handler classes (gl_aabb_handler, gl_flat_points_handler, gl_dyn_points_handler, etc.)
+- `renderer_example.cpp` — SDL window setup, main loop calling `points_renderer_frame()` and `gl_renderer::draw()`
+
+Pattern for implementing a custom renderer:
+1. Create `points_renderer_callbacks_t` with your graphics API's buffer/texture lifecycle functions
+2. Call `points_renderer_set_callback(renderer, callbacks, user_ptr)`
+3. Each frame: call `points_renderer_frame(renderer, camera)` → get array of `points_draw_group_t`
+4. For each draw group: dispatch by `draw_type`, iterate `buffers`, bind by `buffer_mapping` semantic, issue draw call with `draw_size`
+
+## JLP File Format
+
+**Compression header** (16 bytes, magic `PCM\1`):
+```
+magic[4]  method  type_size  component_count  flags  uncompressed_size[4]  compressed_size[4]
+```
+
+Compression methods: none (0), zstd (2), huff0 (3), constant (4), ans (5).
+
+Preprocessing flags (bitfield):
+- `0x01` delta encoded, `0x02` constant bands, `0x04` offset subtracted, `0x08` sort permutation
+- `0x10` decorrelated, `0x20` component delta, `0x40` element delta, `0x80` xor delta
+
+Point data types (`points_type_t`): u8, i8, u16, i16, u32, i32, m32, r32, u64, i64, m64, r64, m128, m192.
+Components: 1, 2, 3, 4, 4x4.
+
+## Dependencies
+
+Managed via cmake-dep (CMake/3rdPartyPackages.cmake):
+
+| Library | Version | Purpose |
+|---------|---------|---------|
+| zstd | 1.5.7 | Zstandard compression |
+| laszip | 3.5.0 | LAS/LAZ point cloud format |
+| libmorton | 0.2.10 | Morton/Z-order curve encoding |
+| SDL | 3.1.6 | Window/input for examples |
+| glm | 1.0.1 | Math library |
+| imgui | 1.91.6 | UI for examples |
+| fmt | 10.1.1 | String formatting |
+| doctest | 2.4.12 | Unit testing |
+| argh | 431bf32 | Argument parsing |
+| unordered_dense | 4.1.2 | Fast hash map/set (ankerl) |
+| vio | 6c23f54 | Async I/O / event loop library |
+| curl | 7.74.0 | HTTP |
+| libuv | 1.51.0 | Cross-platform async I/O |
+| stbimage | b42009b | Image loading |
+| cmakerc | 952ff | CMake resource compiler |
+
+## Debugging JLP Files with jlp_extract
+
+`jlp_extract` is the primary tool for inspecting JLP files without a renderer.
+
+```bash
+JLP=path/to/file.jlp
+EXE=cmake-build-msvc-debug/tools/jlp_extract/jlp_extract.exe
+```
+
+### List available attributes
+```bash
+$EXE $JLP
+```
+
+### Tree introspection
+
+```bash
+# High-level overview: root tree ID, scale, offset, tree count
+$EXE $JLP --summary
+
+# List all trees with per-level node counts and sub-tree refs
+$EXE $JLP --trees
+
+# Full dump of tree 0: every node, subsets, storage map
+$EXE $JLP --tree 0
+
+# Single node detail (tree 0, level 1, index 2) with storage locations
+$EXE $JLP --node 0:1:2
+```
+
+Key things to look for when debugging:
+- **Zero point counts on interior nodes** — LOD nodes (marked `[lod]`) should have non-zero counts. Leaf subsets have `input_id=N.M` where the high bit of `sub` is clear; LOD subsets have the high bit set (shows as `input_id=N.2147483648`).
+- **Sub-tree connectivity** — `--trees` shows which child trees each tree references. The root tree (shown in `--summary`) should be the entry point; all other trees should be reachable through sub-tree refs.
+- **Storage map entries** — `--tree N` dumps the full storage map. Each `input_data_id` maps to an `attrib_id` and a list of storage locations (offset/size/file_id) for each attribute buffer.
+
+### Attribute buffer extraction
+
+```bash
+# Hex dump of first buffer for attribute "xyz"
+$EXE $JLP xyz
+
+# Select a specific buffer index, print 10 elements starting at offset 100
+$EXE $JLP xyz --index 5 --offset 100 -n 10
+
+# Extract buffers 0-3 as binary to a file
+$EXE $JLP intensity --range 0-3 -o out.bin
+
+# Extract 10 random buffers
+$EXE $JLP rgb --random 10 --seed 42
+```
