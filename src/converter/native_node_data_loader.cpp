@@ -109,7 +109,12 @@ render::loaded_node_data_t native_node_data_loader_t::get_data(render::load_hand
 void native_node_data_loader_t::cancel(render::load_handle_t handle)
 {
   std::lock_guard<std::mutex> lock(_mutex);
-  _pending.erase(handle);
+  auto it = _pending.find(handle);
+  if (it != _pending.end())
+  {
+    it->second.data_handler->cancel_requests();
+    _pending.erase(it);
+  }
 }
 
 } // namespace points::converter

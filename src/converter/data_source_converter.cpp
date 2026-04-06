@@ -88,6 +88,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   size_t mem_budget;
   uint64_t pt_budget;
   size_t frame_upload_budget;
+  int max_io_in_flight;
   {
     std::unique_lock<std::mutex> lock(mutex);
     new_attribute = current_attribute_name != next_attribute_name;
@@ -96,6 +97,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     mem_budget = gpu_memory_budget;
     pt_budget = point_budget;
     frame_upload_budget = upload_budget_per_frame;
+    max_io_in_flight = max_in_flight_io;
   }
 
   // Handle attribute change
@@ -268,7 +270,14 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   }
 
   // Phase 6: Frontier I/O scheduling
-  buffer_manager.schedule_io(render_buffers, node_registry, selection, tree_config, node_loader, camera_position, 20);
+  buffer_manager.schedule_io(render_buffers, node_registry, selection, tree_config, node_loader, camera_position, 20, max_io_in_flight);
+  {
+    int in_flight = 0;
+    for (auto &rb : render_buffers)
+      if (rb->load_handle != render::invalid_load_handle)
+        in_flight++;
+    frame_timings.io_in_flight = in_flight;
+  }
   auto t_after_frontier = clock::now();
 
   // Phase 7: Draw emission
@@ -370,6 +379,12 @@ void points_converter_data_source_set_upload_budget_per_frame(struct points_conv
   converter_data_source->upload_budget_per_frame = budget_bytes;
 }
 
+void points_converter_data_source_set_max_in_flight_io(struct points_converter_data_source_t *converter_data_source, int max_requests)
+{
+  std::unique_lock<std::mutex> lock(converter_data_source->mutex);
+  converter_data_source->max_in_flight_io = max_requests;
+}
+
 uint64_t points_converter_data_source_get_points_rendered(struct points_converter_data_source_t *converter_data_source)
 {
   return converter_data_source->points_rendered_last_frame;
@@ -379,7 +394,8 @@ void points_converter_data_source_get_frame_timings(struct points_converter_data
                                              double *draw_emission_ms, double *eviction_ms, double *total_ms,
                                              int *registry_node_count, int *active_set_size, int *nodes_drawn,
                                              int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed,
-                                             int *walker_node_count, uint64_t *walker_total_points, int *walker_trees_to_load)
+                                             int *walker_node_count, uint64_t *walker_total_points, int *walker_trees_to_load,
+                                             int *io_in_flight)
 {
   auto &t = cds->frame_timings;
   *tree_walk_ms = t.tree_walk_ms;
@@ -399,6 +415,7 @@ void points_converter_data_source_get_frame_timings(struct points_converter_data
   if (walker_node_count) *walker_node_count = t.walker_node_count;
   if (walker_total_points) *walker_total_points = t.walker_total_points;
   if (walker_trees_to_load) *walker_trees_to_load = t.walker_trees_to_load;
+  if (io_in_flight) *io_in_flight = t.io_in_flight;
 }
 
 void points_converter_data_source_set_debug_transitions(struct points_converter_data_source_t *cds, uint8_t enabled)

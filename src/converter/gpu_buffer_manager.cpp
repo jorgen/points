@@ -366,7 +366,8 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
                                        const tree_config_t &tree_config,
                                        std::unique_ptr<render::node_data_loader_t> &node_loader,
                                        const glm::dvec3 &camera_position,
-                                       int max_requests)
+                                       int max_requests,
+                                       int max_in_flight)
 {
   m_frontier.clear();
 
@@ -422,11 +423,18 @@ void gpu_buffer_manager_t::schedule_io(std::vector<std::unique_ptr<gpu_node_buff
     return a.distance < b.distance;
   });
 
+  int current_in_flight = 0;
+  for (auto &rb_ptr : render_buffers)
+  {
+    if (rb_ptr->load_handle != render::invalid_load_handle)
+      current_in_flight++;
+  }
+
   std::unordered_set<int> started;
   int requests_started = 0;
   for (auto &fc : m_frontier)
   {
-    if (requests_started >= max_requests)
+    if (requests_started >= max_requests || (current_in_flight + requests_started) >= max_in_flight)
       break;
     if (!started.insert(fc.index).second)
       continue;

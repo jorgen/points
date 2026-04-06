@@ -91,12 +91,15 @@ struct compressed_write_data_t
 struct read_request_t
 {
   void wait_for_read();
+  void set_cancelled() { _cancelled.store(true, std::memory_order_relaxed); }
+  bool is_cancelled() const { return _cancelled.load(std::memory_order_relaxed); }
 
   std::shared_ptr<uint8_t[]> buffer;
   points_converter_buffer_t buffer_info;
   points_error_t error;
 
   bool _done = false;
+  std::atomic_bool _cancelled{false};
   std::mutex _mutex;
   std::condition_variable _block_for_read;
 

@@ -57,6 +57,7 @@ struct points_converter_data_source_t
   size_t gpu_memory_used = 0;
   uint64_t point_budget = 10'000'000;
   size_t upload_budget_per_frame = 5 * 1024 * 1024;
+  int max_in_flight_io = 60;
 
   points_buffer_t index_buffer;
   std::vector<points::converter::tree_walker_with_buffer_t> current_tree_nodes[2];

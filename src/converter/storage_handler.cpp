@@ -589,6 +589,19 @@ vio::task_t<void> storage_handler_t::do_read_request(std::shared_ptr<read_reques
     cache_key_t key{location.file_id, location.offset};
     _read_cache.put(key, cache_value_t{buffer, location.size}, location.size);
 
+    // If cancelled, skip decompression but keep cached compressed data
+    if (read_request->is_cancelled())
+    {
+      auto read_end = std::chrono::steady_clock::now();
+      auto read_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(read_end - read_start).count());
+      _perf_stats.lod_read.record(location.size, read_us);
+
+      std::unique_lock<std::mutex> lock(read_request->_mutex);
+      read_request->_done = true;
+      read_request->_block_for_read.notify_all();
+      co_return;
+    }
+
     read_request->buffer = buffer;
     read_request->buffer_info.size = bytes_read;
     read_request->buffer_info.data = buffer.get();

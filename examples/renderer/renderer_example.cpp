@@ -545,11 +545,11 @@ int main(int argc, char **argv)
     {
       double tree_walk, reconciliation, upload, refine, frontier, draw, eviction, total;
       int registry_nodes, active_set, nodes_drawn, transitioning, evicted, reconcile_destroyed;
-      int walker_nodes, walker_trees_pending;
+      int walker_nodes, walker_trees_pending, io_in_flight;
       uint64_t walker_total_pts;
       points_converter_data_source_get_frame_timings(converter_points.get(), &tree_walk, &reconciliation, &upload, &refine, &frontier, &draw, &eviction, &total,
                                                                   &registry_nodes, &active_set, &nodes_drawn, &transitioning, &evicted, &reconcile_destroyed,
-                                                                  &walker_nodes, &walker_total_pts, &walker_trees_pending);
+                                                                  &walker_nodes, &walker_total_pts, &walker_trees_pending, &io_in_flight);
       ImGui::Text("Total:          %.2f ms", total);
       ImGui::Text("Tree Walk:      %.2f ms", tree_walk);
       ImGui::Text("Reconciliation: %.2f ms", reconciliation);
@@ -565,6 +565,7 @@ int main(int argc, char **argv)
       ImGui::Text("Registry Nodes:  %d", registry_nodes);
       ImGui::Text("Active Set:      %d", active_set);
       ImGui::Text("Nodes Drawn:     %d", nodes_drawn);
+      ImGui::Text("IO In-Flight:    %d", io_in_flight);
       if (debug_transitions)
       {
         ImGui::Separator();

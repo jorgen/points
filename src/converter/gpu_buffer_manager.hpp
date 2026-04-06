@@ -57,7 +57,8 @@ public:
                    const tree_config_t &tree_config,
                    std::unique_ptr<render::node_data_loader_t> &node_loader,
                    const glm::dvec3 &camera_position,
-                   int max_requests);
+                   int max_requests,
+                   int max_in_flight);
 
   void evict(std::vector<std::unique_ptr<gpu_node_buffer_t>> &render_buffers,
              const frame_node_registry_t &registry,

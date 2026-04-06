@@ -47,6 +47,7 @@ POINTS_CONVERTER_EXPORT void points_converter_data_source_set_viewport(struct po
 POINTS_CONVERTER_EXPORT void points_converter_data_source_set_pixel_error_threshold(struct points_converter_data_source_t *converter_data_source, double threshold);
 POINTS_CONVERTER_EXPORT void points_converter_data_source_set_gpu_memory_budget(struct points_converter_data_source_t *converter_data_source, size_t budget_bytes);
 POINTS_CONVERTER_EXPORT void points_converter_data_source_set_upload_budget_per_frame(struct points_converter_data_source_t *converter_data_source, size_t budget_bytes);
+POINTS_CONVERTER_EXPORT void points_converter_data_source_set_max_in_flight_io(struct points_converter_data_source_t *converter_data_source, int max_requests);
 
 POINTS_CONVERTER_EXPORT uint64_t points_converter_data_source_get_points_rendered(struct points_converter_data_source_t *converter_data_source);
 
@@ -56,7 +57,8 @@ POINTS_CONVERTER_EXPORT void points_converter_data_source_get_frame_timings(stru
   double *draw_emission_ms, double *eviction_ms, double *total_ms,
   int *registry_node_count, int *active_set_size, int *nodes_drawn,
   int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed,
-  int *walker_node_count, uint64_t *walker_total_points, int *walker_trees_to_load);
+  int *walker_node_count, uint64_t *walker_total_points, int *walker_trees_to_load,
+  int *io_in_flight);
 
 POINTS_CONVERTER_EXPORT void points_converter_data_source_set_debug_transitions(struct points_converter_data_source_t *cds, uint8_t enabled);
 

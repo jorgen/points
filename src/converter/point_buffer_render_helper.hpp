@@ -36,6 +36,15 @@ struct dyn_points_data_handler_t
   {
   }
 
+  void cancel_requests()
+  {
+    for (auto &req : read_request)
+    {
+      if (req)
+        req->set_cancelled();
+    }
+  }
+
   void start_requests(const std::shared_ptr<dyn_points_data_handler_t> &self, storage_handler_t &storage_handler, const storage_location_t (&locations)[4])
   {
     (void)self;
