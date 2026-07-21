@@ -378,7 +378,9 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
 
   morton::morton_t<MT, C> first = morton_begin[indecies_begin[0]];
   morton::morton_t<MT, C> last = morton_begin[indecies_begin[count - 1]];
-  assert(first < last);
+  // first == last is valid: a single point, or all points quantizing to the same Morton cell
+  // (common for coarse formats / duplicate points). Only first > last would be a real defect.
+  assert(first <= last);
   points.header.lod_span = morton::morton_lod(first, last);
   points_type_t new_type = morton_type_from_lod(points.header.lod_span);
   std::unique_ptr<uint8_t[]> new_data;
@@ -462,7 +464,7 @@ void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &at
 
   points_type_t target_format;
   if (public_header.min[0] == -std::numeric_limits<double>::max() && public_header.min[1] == -std::numeric_limits<double>::max() && public_header.min[2] == -std::numeric_limits<double>::max() &&
-      public_header.max[0] == std::numeric_limits<double>::max() && public_header.min[1] == std::numeric_limits<double>::max() && public_header.min[2] == std::numeric_limits<double>::max())
+      public_header.max[0] == std::numeric_limits<double>::max() && public_header.max[1] == std::numeric_limits<double>::max() && public_header.max[2] == std::numeric_limits<double>::max())
   {
     target_format = points_type_t::points_type_m192;
   }
