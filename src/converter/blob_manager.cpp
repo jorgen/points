@@ -17,6 +17,7 @@
 ************************************************************************/
 #include "blob_manager.hpp"
 
+#include <algorithm>
 #include <assert.h>
 
 free_blob_manager_t::free_blob_manager_t()
@@ -31,7 +32,7 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
   for (auto page_it = _free_sections_by_page.begin(); page_it != _free_sections_by_page.end(); ++page_it)
   {
     auto &[page_number, sections] = *page_it;
-    auto page_offset = page_number * FREE_BLOB_MANAGER_PAGE_SIZE;
+    uint64_t page_offset = uint64_t(page_number) * FREE_BLOB_MANAGER_PAGE_SIZE;
     if (spillover_page + 1 != page_number || (sections.size() && sections.front().offset.data != page_offset))
     {
       spillover_from_last_page = {0};
@@ -42,7 +43,11 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
       auto current_section_size = blob_size_t{section.size.data + spillover_from_last_page.data};
       if (current_section_size.data >= size.data)
       {
-        offset_t return_offset = {page_offset - spillover_from_last_page.data};
+        // Return the free section's own start, not the page start. A mid-page free
+        // section (live data preceding it in the page) has section.offset > page_offset;
+        // returning page_offset would hand back a live blob's location and overwrite it.
+        // When spillover > 0 the front-section invariant guarantees section.offset == page_offset.
+        offset_t return_offset = {section.offset.data - spillover_from_last_page.data};
 
         if (section.size.data == size.data - spillover_from_last_page.data)
         {
@@ -116,7 +121,7 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
     {
       page_it = _free_sections_by_page.emplace(page, std::vector<section_t>()).first;
     }
-    offset_t page_start = {page * FREE_BLOB_MANAGER_PAGE_SIZE};
+    offset_t page_start = {uint64_t(page) * FREE_BLOB_MANAGER_PAGE_SIZE};
     offset_t page_end = {page_start.data + FREE_BLOB_MANAGER_PAGE_SIZE};
     offset_t section_end = {std::min(total_offset.data + total_size.data, page_end.data)};
     offset_t offset_for_page = {std::max(total_offset.data, page_start.data)};
@@ -148,7 +153,16 @@ free_blob_manager_t::offset_t free_blob_manager_t::register_blob(blob_size_t siz
     }
     else
     {
-      sections.emplace_back(section_t{offset_for_page, size_for_page});
+      // Insert at the sorted position (lower_bound `it`), not at the end: the per-page
+      // sections vector must stay sorted by offset for the lower_bound overlap checks
+      // above to work. Coalesce with the following section when adjacent.
+      auto ins = sections.insert(it, section_t{offset_for_page, size_for_page});
+      auto next_it = ins + 1;
+      if (next_it != sections.end() && ins->offset.data + ins->size.data == next_it->offset.data)
+      {
+        ins->size.data += next_it->size.data;
+        sections.erase(next_it);
+      }
     }
 
     if (sections.empty())
@@ -190,7 +204,7 @@ size_t free_blob_manager_t::get_free_sections_count() const
   bool last_page_ended_with_free_section = false;
   for (auto &[page_number, sections] : _free_sections_by_page)
   {
-    if (last_page_ended_with_free_section && sections.size() && sections.front().offset.data == page_number * FREE_BLOB_MANAGER_PAGE_SIZE)
+    if (last_page_ended_with_free_section && sections.size() && sections.front().offset.data == uint64_t(page_number) * FREE_BLOB_MANAGER_PAGE_SIZE)
     {
       count += sections.size() - 1;
     }
@@ -198,7 +212,7 @@ size_t free_blob_manager_t::get_free_sections_count() const
     {
       count += sections.size();
     }
-    last_page_ended_with_free_section = sections.size() && sections.back().offset.data + sections.back().size.data == (page_number + 1) * FREE_BLOB_MANAGER_PAGE_SIZE;
+    last_page_ended_with_free_section = sections.size() && sections.back().offset.data + sections.back().size.data == uint64_t(page_number + 1) * FREE_BLOB_MANAGER_PAGE_SIZE;
   }
   return count;
 }

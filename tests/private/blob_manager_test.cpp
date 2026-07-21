@@ -469,3 +469,74 @@ TEST_CASE("Test section merging")
     REQUIRE(offset7.data > offset6.data);
   }
 }
+
+// Regression: register_blob must return the freed section's own offset, not the
+// page start. Previously a mid-page free section returned offset 0 (page start),
+// which is a live blob -> silent overwrite/corruption.
+TEST_CASE("Reuse a strictly-middle free section returns its real offset")
+{
+  free_blob_manager_t manager;
+  auto a = manager.register_blob({10}); // @0
+  auto b = manager.register_blob({10}); // @10
+  auto c = manager.register_blob({10}); // @20
+  REQUIRE(a.data == 0);
+  REQUIRE(b.data == 10);
+  REQUIRE(c.data == 20);
+
+  // Free the MIDDLE blob, leaving a live blob (a@0) before the free section.
+  REQUIRE(manager.unregister_blob(b, {10}) == true);
+
+  // Reallocating 10 bytes must reuse the freed slot at offset 10, NOT page start 0.
+  auto reused = manager.register_blob({10});
+  REQUIRE(reused.data == 10);
+}
+
+// Regression: freeing sections within a page in DECREASING offset order must keep
+// the per-page free list sorted, so later overlap detection still works and a
+// double-free is rejected rather than silently recording overlapping free regions.
+TEST_CASE("Free sections stay sorted regardless of free order")
+{
+  free_blob_manager_t manager;
+  auto a = manager.register_blob({10}); // @0
+  auto b = manager.register_blob({10}); // @10
+  auto c = manager.register_blob({10}); // @20
+  auto d = manager.register_blob({10}); // @30
+  (void)b;
+  (void)d;
+
+  // Free the higher-offset blob first, then a strictly-lower one (non-adjacent).
+  REQUIRE(manager.unregister_blob(c, {10}) == true); // free [20,30)
+  REQUIRE(manager.unregister_blob(a, {10}) == true); // free [0,10)  (lower offset, appended-late in old code)
+
+  // A double free that overlaps the [20,30) free region must be detected and rejected.
+  REQUIRE(manager.unregister_blob({22}, {5}) == false);
+
+  // The two disjoint free regions are still individually reusable.
+  auto r0 = manager.register_blob({10});
+  auto r1 = manager.register_blob({10});
+  REQUIRE(((r0.data == 0 && r1.data == 20) || (r0.data == 20 && r1.data == 0)));
+}
+
+// Regression: page-number * PAGE_SIZE must be computed in 64-bit. For files beyond
+// ~4 GB (page index >= 41) the old 32-bit product wrapped, corrupting free-section
+// offset math. register_blob only tracks offsets, so we can drive it past 4 GB cheaply.
+TEST_CASE("Blob manager handles offsets beyond 4 GB without 32-bit overflow")
+{
+  free_blob_manager_t manager;
+  const uint32_t page = free_blob_manager_t::FREE_BLOB_MANAGER_PAGE_SIZE; // 100 MB
+  std::vector<free_blob_manager_t::offset_t> offsets;
+  // 45 pages ~= 4.5 GB, well past the 4 GB (page 41) wrap point.
+  for (int i = 0; i < 45; i++)
+    offsets.push_back(manager.register_blob({page}));
+
+  // The 43rd blob starts at byte offset 42 * 100MB = 4,404,019,200 (> 2^32).
+  REQUIRE(offsets[42].data == uint64_t(42) * page);
+
+  // Free a blob living well past 4 GB, then reallocate the same size: must reuse
+  // exactly that offset (correct 64-bit page arithmetic), not a wrapped-around one.
+  auto high = offsets[43];
+  REQUIRE(high.data == uint64_t(43) * page);
+  REQUIRE(manager.unregister_blob(high, {page}) == true);
+  auto reused = manager.register_blob({page});
+  REQUIRE(reused.data == high.data);
+}
