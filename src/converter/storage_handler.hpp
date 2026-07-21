@@ -25,12 +25,12 @@
 #include <vio/thread_pool.h>
 
 #include "attributes_configs.hpp"
-#include "blob_manager.hpp"
 #include "compressor.hpp"
 #include "conversion_types.hpp"
 #include "error.hpp"
 #include "lru_cache.hpp"
 #include "perf_stats.hpp"
+#include "storage_backend.hpp"
 #include "tree.hpp"
 #include <ankerl/unordered_dense.h>
 
@@ -106,7 +106,7 @@ public:
   ~storage_handler_t();
   [[nodiscard]] bool file_exists() const
   {
-    return _file_exists;
+    return _backend && _backend->exists();
   }
   [[nodiscard]] points_error_t read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
                                    std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size);
@@ -135,8 +135,6 @@ private:
   void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)>> &&event);
   void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, points_error_t &&error)> &&done);
   void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> &&done);
-  void handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                          const storage_location_t &compression_stats, const storage_location_t &perf_stats, std::function<void(points_error_t &&error)> &&done);
   void handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location);
 
   vio::task_t<void> do_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location);
@@ -146,28 +144,15 @@ private:
                                    std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)> done);
   vio::task_t<void> do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, points_error_t &&error)> done);
   vio::task_t<void> do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(points_error_t &&error)> done);
-  vio::task_t<void> do_write_index(free_blob_manager_t new_blob_manager, storage_location_t free_blobs, storage_location_t attribute_configs, storage_location_t tree_registry,
-                                   storage_location_t compression_stats, storage_location_t perf_stats, std::function<void(points_error_t &&error)> done);
   vio::task_t<void> do_read_request(std::shared_ptr<read_request_t> read_request, storage_location_t location);
 
-  std::string _file_name;
   vio::thread_pool_t &_thread_pool;
   std::unique_ptr<compressor_t> _compressor;
   vio::thread_with_event_loop_t _event_loop_thread;
   vio::event_loop_t &_event_loop;
-  std::optional<vio::auto_close_file_t> _file;
-  std::atomic_bool _file_opened;
-  std::atomic_bool _file_exists;
-  std::atomic_bool _file_opened_in_write_mode;
+  std::unique_ptr<storage_backend_t> _backend;
 
   attributes_configs_t &_attributes_configs;
-  uint32_t _serialized_index_size;
-  free_blob_manager_t _blob_manager;
-
-  storage_location_t _attributes_location;
-  storage_location_t _blobs_location;
-  storage_location_t _stats_location;
-  storage_location_t _perf_stats_location;
 
   perf_stats_t &_perf_stats;
   std::function<void()> _on_write_progress;

@@ -18,11 +18,8 @@
 #include "storage_handler.hpp"
 #include "input_header.hpp"
 
-#include <uv.h>
-
 #include <cassert>
 #include <cstring>
-#include <fcntl.h>
 
 #include <algorithm>
 #include <limits>
@@ -31,96 +28,18 @@
 namespace points::converter
 {
 
-static std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                                                   const storage_location_t &compression_stats, const storage_location_t &perf_stats)
-{
-  auto serialized_index = std::make_shared<uint8_t[]>(index_size);
-  auto *data = serialized_index.get();
-  memset(data, 0, index_size);
-
-  uint8_t magic[] = {'J', 'L', 'P', 0};
-  memcpy(data, magic, sizeof(magic));
-  data += sizeof(magic);
-
-  memcpy(data, &free_blobs, sizeof(free_blobs));
-  data += sizeof(free_blobs);
-
-  memcpy(data, &attribute_configs, sizeof(attribute_configs));
-  data += sizeof(attribute_configs);
-
-  memcpy(data, &tree_registry, sizeof(tree_registry));
-  data += sizeof(tree_registry);
-
-  memcpy(data, &compression_stats, sizeof(compression_stats));
-  data += sizeof(compression_stats);
-
-  memcpy(data, &perf_stats, sizeof(perf_stats));
-
-  return serialized_index;
-}
-[[nodiscard]] static points_error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry,
-                                               storage_location_t &compression_stats, storage_location_t &perf_stats)
-{
-  (void)buffer_size; // buffer size is validated by the caller
-  uint8_t magic[] = {'J', 'L', 'P', 0};
-  if (memcmp(buffer, magic, sizeof(magic)) != 0)
-  {
-    points_error_t ret;
-    ret.code = 1;
-    ret.msg = "Wrong magic.";
-    return ret;
-  }
-  auto ptr = buffer + sizeof(magic);
-  memcpy(&free_blobs, ptr, sizeof(free_blobs));
-  ptr += sizeof(free_blobs);
-
-  memcpy(&attribute_configs, ptr, sizeof(attribute_configs));
-  ptr += sizeof(attribute_configs);
-
-  memcpy(&tree_registry, ptr, sizeof(tree_registry));
-  ptr += sizeof(tree_registry);
-
-  memcpy(&compression_stats, ptr, sizeof(compression_stats));
-  ptr += sizeof(compression_stats);
-
-  memcpy(&perf_stats, ptr, sizeof(perf_stats));
-  return {};
-}
-
 void read_request_t::wait_for_read()
 {
   std::unique_lock<std::mutex> lock(_mutex);
   _block_for_read.wait(lock, [this] { return this->_done; });
 }
 
-static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, points_error_t &error)
-{
-  assert(error.code == 0);
-  auto buffer = std::make_unique<uint8_t[]>(location.size);
-  uv_buf_t uv_buffer;
-  uv_buffer.base = (char *)buffer.get();
-  uv_buffer.len = location.size;
-  auto result = uv_fs_read(event_loop.loop(), &request, file_handle, &uv_buffer, 1, int64_t(location.offset), NULL);
-  if (result < 0 || request.result != location.size)
-  {
-    error.code = 1;
-    error.msg = "Could not read the entire buffer";
-    return nullptr;
-  }
-  return buffer;
-}
-
 storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written,
                                      vio::event_pipe_t<points_error_t> &storage_error_pipe, points_error_t &error)
-  : _file_name(url)
-  , _thread_pool(thread_pool)
+  : _thread_pool(thread_pool)
   , _event_loop_thread()
   , _event_loop(_event_loop_thread.event_loop())
-  , _file_opened(false)
-  , _file_exists(false)
-  , _file_opened_in_write_mode(false)
   , _attributes_configs(attributes_configs)
-  , _serialized_index_size(128)
   , _perf_stats(perf_stats)
   , _index_written(index_written)
   , _storage_error(storage_error_pipe)
@@ -132,164 +51,50 @@ storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t 
   , _read_cache(256 * 1024 * 1024)
 {
   set_compressor(compression_method_t::zstd);
-  auto stat_result = vio::stat_file(_event_loop, _file_name);
-  if (!stat_result.has_value())
-  {
-    auto index = _blob_manager.register_blob({_serialized_index_size});
-    assert(index.data == 0);
-    return;
-  }
-  _file_exists = true;
-  auto open_result = vio::open_file(_event_loop, _file_name, vio::file_open_flags_t(vio::file_open_flag_t::rdonly), 0);
-  if (!open_result.has_value())
-  {
-    error.code = open_result.error().code;
-    error.msg = open_result.error().msg;
-    return;
-  }
-  _file = std::move(open_result.value());
-  _file_opened = true;
+  _backend = create_storage_backend(url, _event_loop, error);
 }
 
 storage_handler_t::~storage_handler_t()
 {
-  _file.reset();
 }
 
 points_error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
                                       std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size)
 {
-  points_error_t error;
-  uv_fs_t request = {};
-  // On error, close the file
-  struct close_on_error_t
-  {
-    std::optional<vio::auto_close_file_t> &file;
-    points_error_t &error;
-    ~close_on_error_t()
-    {
-      if (error.code != 0)
-      {
-        file.reset();
-      }
-    }
-  } closer{_file, error};
-
-  auto &file = **_file;
-  auto index_buffer = std::make_unique<uint8_t[]>(_serialized_index_size);
-  uv_buf_t index_uv_buf;
-  index_uv_buf.base = (char *)index_buffer.get();
-  index_uv_buf.len = _serialized_index_size;
-  auto read = uv_fs_read(_event_loop.loop(), &request, file.handle, &index_uv_buf, 1, 0, NULL);
-  if (read < 0)
-  {
-    error.code = 1;
-    error.msg = uv_strerror(read);
-    return error;
-  }
-  if (uint32_t(read) != _serialized_index_size)
-  {
-    error.code = 1;
-    error.msg = "could not read index";
-    return error;
-  }
-  storage_location_t free_blobs;
-  storage_location_t attribute_configs;
-  storage_location_t tree_registry;
-  storage_location_t compression_stats;
-  storage_location_t perf_stats;
-  error = deserialize_index(index_buffer.get(), _serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats);
+  index_load_t load;
+  auto error = _backend->read_index(load);
   if (error.code != 0)
-  {
     return error;
-  }
 
-  free_blobs_buffer = read_into_buffer(_event_loop, file.handle, request, free_blobs, error);
-  free_blobs_size = free_blobs.size;
-  if (!free_blobs_buffer)
-  {
-    error.code = 1;
-    error.msg = "Failed to read free blobs: " + error.msg;
-    return error;
-  }
+  free_blobs_buffer = std::move(load.free_blobs);
+  free_blobs_size = load.free_blobs_size;
+  attribute_configs_buffer = std::move(load.attribute_configs);
+  attribute_configs_size = load.attribute_configs_size;
+  tree_registry_buffer = std::move(load.tree_registry);
+  tree_registry_size = load.tree_registry_size;
 
-  attribute_configs_buffer = read_into_buffer(_event_loop, file.handle, request, attribute_configs, error);
-  attribute_configs_size = attribute_configs.size;
-  if (!attribute_configs_buffer)
-  {
-    error.code = 1;
-    error.msg = "Failed to read attribute_configs: " + error.msg;
-    return error;
-  }
-
-  tree_registry_buffer = read_into_buffer(_event_loop, file.handle, request, tree_registry, error);
-  tree_registry_size = tree_registry.size;
-  if (!tree_registry_buffer)
-  {
-    error.code = 1;
-    error.msg = "Failed to read tree_registry: " + error.msg;
-    return error;
-  }
-
-  _stats_location = compression_stats;
-  _perf_stats_location = perf_stats;
-
-  if (compression_stats.size > 0)
-  {
-    auto stats_buffer = read_into_buffer(_event_loop, file.handle, request, compression_stats, error);
-    if (stats_buffer)
-      _compression_stats = compression_stats_t::deserialize(stats_buffer.get(), compression_stats.size);
-  }
-
-  if (perf_stats.size > 0)
-  {
-    auto perf_buffer = read_into_buffer(_event_loop, file.handle, request, perf_stats, error);
-    if (perf_buffer)
-      _deserialized_perf_stats = perf_stats_t::deserialize(perf_buffer.get(), perf_stats.size);
-  }
+  if (load.stats && load.stats_size > 0)
+    _compression_stats = compression_stats_t::deserialize(load.stats.get(), load.stats_size);
+  if (load.perf && load.perf_size > 0)
+    _deserialized_perf_stats = perf_stats_t::deserialize(load.perf.get(), load.perf_size);
 
   return error;
 }
 
 points_error_t storage_handler_t::deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
-  return _blob_manager.deserialize(data, size);
+  return _backend->restore_allocator(data, size);
 }
 
 points_error_t storage_handler_t::upgrade_to_write(bool truncate)
 {
-  vio::file_open_flags_t open_flags(vio::file_open_flag_t::rdwr);
-  if (!_file_exists)
+  auto error = _backend->open_for_write(truncate);
+  if (error.code != 0)
   {
-    open_flags |= vio::file_open_flag_t::creat;
-  }
-
-  _file.reset();
-
-#ifdef WIN32
-  int open_mode = _S_IREAD | _S_IWRITE;
-#else
-  int open_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-#endif
-
-  auto open_result = vio::open_file(_event_loop, _file_name, open_flags, open_mode);
-  if (!open_result.has_value())
-  {
-    points_error_t error;
-    error.code = open_result.error().code;
-    error.msg = open_result.error().msg;
     auto error_copy = error;
     _storage_error.post_event(std::move(error));
     return error_copy;
   }
-  _file = std::move(open_result.value());
-
-  if (truncate)
-  {
-    uv_fs_t request = {};
-    uv_fs_ftruncate(_event_loop.loop(), &request, (**_file).handle, 0, NULL);
-  }
-
   return {};
 }
 
@@ -367,13 +172,9 @@ vio::task_t<void> storage_handler_t::do_write(const std::shared_ptr<uint8_t[]> &
   // hold different data. Invalidate the stale read-cache entry for this (file_id, offset) so a
   // later read does not return the old blob's bytes.
   _read_cache.erase(cache_key_t{location.file_id, location.offset});
-  auto &file = **_file;
-  auto result = co_await vio::write_file(_event_loop, file, data.get(), location.size, int64_t(location.offset));
-  if (!result.has_value())
+  auto error = co_await _backend->write_allocated(location, data);
+  if (error.code != 0)
   {
-    points_error_t error;
-    error.code = result.error().code;
-    error.msg = result.error().msg;
     _storage_error.post_event(std::move(error));
   }
 }
@@ -515,10 +316,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
       _compression_stats.accumulate(wd.attribute_name, wd.format, wd.uncompressed_size, wd.size, wd.min_value, wd.max_value, compression_flags, wd.is_lod);
 
       auto &location = locations[wd.buffer_index];
-      location.file_id = 0;
-      location.size = wd.size;
-      free_blob_manager_t::blob_size_t blob_size = {location.size};
-      location.offset = _blob_manager.register_blob(blob_size).data;
+      _backend->allocate_blob(wd.size, location);
 
       co_await do_write(wd.data, location);
     }
@@ -531,10 +329,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
       _compression_stats.accumulate(info.attr_name, info.format, info.size, info.size, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, info.is_lod);
 
       auto &location = locations[i];
-      location.file_id = 0;
-      location.size = info.size;
-      free_blob_manager_t::blob_size_t size = {location.size};
-      location.offset = _blob_manager.register_blob(size).data;
+      _backend->allocate_blob(info.size, location);
 
       co_await do_write(info.data_owner, location);
     }
@@ -575,22 +370,16 @@ vio::task_t<void> storage_handler_t::do_write_trees(std::vector<tree_id_t> tree_
 
   for (int i = 0; i < int(tree_ids.size()); i++)
   {
-    auto &location = locations[i];
-    location.file_id = 0;
-    location.size = serialized_trees[i].size;
-    free_blob_manager_t::blob_size_t size = {location.size};
-    location.offset = _blob_manager.register_blob(size).data;
+    _backend->allocate_blob(serialized_trees[i].size, locations[i]);
   }
   lock.unlock();
 
-  auto &file = **_file;
   for (int i = 0; i < int(tree_ids.size()); i++)
   {
-    auto result = co_await vio::write_file(_event_loop, file, reinterpret_cast<const uint8_t *>(serialized_trees[i].data.get()), locations[i].size, int64_t(locations[i].offset));
-    if (!result.has_value() && error.code == 0)
+    auto result = co_await _backend->write_allocated(locations[i], serialized_trees[i].data);
+    if (result.code != 0 && error.code == 0)
     {
-      error.code = result.error().code;
-      error.msg = result.error().msg;
+      error = result;
     }
   }
 
@@ -614,20 +403,10 @@ vio::task_t<void> storage_handler_t::do_write_tree_registry(serialized_tree_regi
 {
   std::unique_lock<std::mutex> lock(_mutex);
   storage_location_t location;
-  location.file_id = 0;
-  location.size = serialized_tree_registry.size;
-  free_blob_manager_t::blob_size_t size = {location.size};
-  location.offset = _blob_manager.register_blob(size).data;
+  _backend->allocate_blob(uint32_t(serialized_tree_registry.size), location);
   lock.unlock();
 
-  auto &file = **_file;
-  points_error_t error;
-  auto result = co_await vio::write_file(_event_loop, file, reinterpret_cast<const uint8_t *>(serialized_tree_registry.data.get()), location.size, int64_t(location.offset));
-  if (!result.has_value())
-  {
-    error.code = result.error().code;
-    error.msg = result.error().msg;
-  }
+  points_error_t error = co_await _backend->write_allocated(location, serialized_tree_registry.data);
 
   if (done)
   {
@@ -645,75 +424,7 @@ void storage_handler_t::handle_write_tree_registry(serialized_tree_registry_t &&
 
 vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(points_error_t &&error)> done)
 {
-  auto new_blob_manager = _blob_manager;
-  for (auto &location : old_locations)
-  {
-    auto removed = new_blob_manager.unregister_blob({location.offset}, {location.size});
-    if (!removed)
-    {
-      points_error_t error;
-      error.code = -1;
-      error.msg = "Failed to remove blob";
-      done(std::move(error));
-      co_return;
-    }
-  }
-  if (_attributes_location.offset > 0)
-  {
-    auto removed = new_blob_manager.unregister_blob({_attributes_location.offset}, {_attributes_location.size});
-    if (!removed)
-    {
-      points_error_t error;
-      error.code = -1;
-      error.msg = "Failed to remove attributes config location";
-      done(std::move(error));
-      co_return;
-    }
-  }
-
-  if (_blobs_location.offset > 0)
-  {
-    auto removed = new_blob_manager.unregister_blob({_blobs_location.offset}, {_blobs_location.size});
-    if (!removed)
-    {
-      points_error_t error;
-      error.code = -1;
-      error.msg = "Failed to remove blobs location";
-      done(std::move(error));
-      co_return;
-    }
-  }
-
-  if (_stats_location.offset > 0)
-  {
-    auto removed = new_blob_manager.unregister_blob({_stats_location.offset}, {_stats_location.size});
-    if (!removed)
-    {
-      points_error_t error;
-      error.code = -1;
-      error.msg = "Failed to remove stats location";
-      done(std::move(error));
-      co_return;
-    }
-  }
-
-  if (_perf_stats_location.offset > 0)
-  {
-    auto removed = new_blob_manager.unregister_blob({_perf_stats_location.offset}, {_perf_stats_location.size});
-    if (!removed)
-    {
-      points_error_t error;
-      error.code = -1;
-      error.msg = "Failed to remove perf stats location";
-      done(std::move(error));
-      co_return;
-    }
-  }
-
   auto serialized_attributes_configs = _attributes_configs.serialize();
-  storage_location_t serialized_attributes_configs_location;
-  serialized_attributes_configs_location.offset = new_blob_manager.register_blob({serialized_attributes_configs.size}).data;
-  serialized_attributes_configs_location.size = serialized_attributes_configs.size;
 
   _compression_stats.input_file_count = static_cast<uint32_t>(_seen_input_files.size());
   _compression_stats.input_file_size_bytes = 0;
@@ -724,64 +435,30 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
 
   uint32_t stats_size = 0;
   auto serialized_stats_data = _compression_stats.serialize(stats_size);
-  storage_location_t serialized_stats_location;
-  serialized_stats_location.offset = new_blob_manager.register_blob({stats_size}).data;
-  serialized_stats_location.size = stats_size;
 
   uint32_t perf_size = 0;
   auto serialized_perf_data = _perf_stats.serialize(perf_size);
-  storage_location_t serialized_perf_location;
-  serialized_perf_location.offset = new_blob_manager.register_blob({perf_size}).data;
-  serialized_perf_location.size = perf_size;
 
-  auto serialized_blob = new_blob_manager.serialize();
+  checkpoint_t checkpoint;
+  checkpoint.tree_registry = new_tree_registry_location;
+  checkpoint.freed = std::move(old_locations);
+  checkpoint.attribute_configs = serialized_attributes_configs.data;
+  checkpoint.attribute_configs_size = serialized_attributes_configs.size;
+  checkpoint.stats = serialized_stats_data;
+  checkpoint.stats_size = stats_size;
+  checkpoint.perf = std::move(serialized_perf_data);
+  checkpoint.perf_size = perf_size;
 
-  storage_location_t serialized_blob_location = {0, serialized_blob.size, serialized_blob.offset};
-
-  // Write all blobs
-  auto &file = **_file;
-  auto result1 = co_await vio::write_file(_event_loop, file, reinterpret_cast<const uint8_t *>(serialized_blob.data.get()), serialized_blob.size, int64_t(serialized_blob.offset));
-  if (!result1.has_value())
+  // The backend writes the metadata blobs, then the index/manifest LAST, fsyncs, commits, and only
+  // then reclaims the freed blobs. The index-written event fires only after that whole barrier succeeds.
+  auto error = co_await _backend->write_index(std::move(checkpoint));
+  if (error.code != 0)
   {
-    points_error_t error;
-    error.code = result1.error().code;
-    error.msg = result1.error().msg;
     done(std::move(error));
     co_return;
   }
-
-  auto result2 = co_await vio::write_file(_event_loop, file, reinterpret_cast<const uint8_t *>(serialized_attributes_configs.data.get()), serialized_attributes_configs_location.size, int64_t(serialized_attributes_configs_location.offset));
-  if (!result2.has_value())
-  {
-    points_error_t error;
-    error.code = result2.error().code;
-    error.msg = result2.error().msg;
-    done(std::move(error));
-    co_return;
-  }
-
-  auto result3 = co_await vio::write_file(_event_loop, file, serialized_stats_data.get(), serialized_stats_location.size, int64_t(serialized_stats_location.offset));
-  if (!result3.has_value())
-  {
-    points_error_t error;
-    error.code = result3.error().code;
-    error.msg = result3.error().msg;
-    done(std::move(error));
-    co_return;
-  }
-
-  auto result4 = co_await vio::write_file(_event_loop, file, serialized_perf_data.get(), serialized_perf_location.size, int64_t(serialized_perf_location.offset));
-  if (!result4.has_value())
-  {
-    points_error_t error;
-    error.code = result4.error().code;
-    error.msg = result4.error().msg;
-    done(std::move(error));
-    co_return;
-  }
-
-  co_await do_write_index(std::move(new_blob_manager), serialized_blob_location, serialized_attributes_configs_location, new_tree_registry_location,
-                          serialized_stats_location, serialized_perf_location, std::move(done));
+  _index_written.post_event();
+  done(points_error_t{});
 }
 
 void storage_handler_t::handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> &&done)
@@ -791,45 +468,6 @@ void storage_handler_t::handle_write_blob_locations_and_update_header(storage_lo
   {
     co_await self->do_write_blob_locations_and_update_header(std::move(loc), std::move(old_locs), std::move(done_cb));
   }(this, std::move(new_tree_registry_location), std::move(old_locations), std::move(done));
-}
-
-vio::task_t<void> storage_handler_t::do_write_index(free_blob_manager_t new_blob_manager, storage_location_t free_blobs, storage_location_t attribute_configs, storage_location_t tree_registry,
-                                                    storage_location_t compression_stats, storage_location_t perf_stats, std::function<void(points_error_t &&error)> done)
-{
-  auto serialized_index = serialize_index(_serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats);
-
-  auto &file = **_file;
-  auto result = co_await vio::write_file(_event_loop, file, serialized_index.get(), _serialized_index_size, 0);
-
-  points_error_t error;
-  if (!result.has_value())
-  {
-    error.code = result.error().code;
-    error.msg = result.error().msg;
-    done(std::move(error));
-    co_return;
-  }
-
-  _blob_manager = std::move(new_blob_manager);
-  _blobs_location = free_blobs;
-  _attributes_location = attribute_configs;
-  _stats_location = compression_stats;
-  _perf_stats_location = perf_stats;
-
-  uv_fs_t req = {};
-  uv_fs_fsync(_event_loop.loop(), &req, file.handle, NULL);
-  _index_written.post_event();
-  done(std::move(error));
-}
-
-void storage_handler_t::handle_write_index(free_blob_manager_t &&new_blob_manager, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                                           const storage_location_t &compression_stats, const storage_location_t &perf_stats, std::function<void(points_error_t &&error)> &&done)
-{
-  [](storage_handler_t *self, free_blob_manager_t bm, storage_location_t fb, storage_location_t ac, storage_location_t tr,
-     storage_location_t cs, storage_location_t ps, std::function<void(points_error_t &&error)> done_cb) -> vio::detached_task_t
-  {
-    co_await self->do_write_index(std::move(bm), fb, ac, tr, cs, ps, std::move(done_cb));
-  }(this, std::move(new_blob_manager), free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats, std::move(done));
 }
 
 void storage_handler_t::register_input_file_size(uint32_t file_id, uint64_t size_bytes)
@@ -902,14 +540,13 @@ void storage_handler_t::handle_read_request(std::shared_ptr<read_request_t> &&re
 vio::task_t<void> storage_handler_t::do_read_request(std::shared_ptr<read_request_t> read_request, storage_location_t location)
 {
   auto read_start = std::chrono::steady_clock::now();
-  auto &file = **_file;
   auto buffer = std::make_shared<uint8_t[]>(location.size);
-  auto result = co_await vio::read_file(_event_loop, file, buffer.get(), location.size, int64_t(location.offset));
+  uint32_t bytes_read = 0;
+  auto result = co_await _backend->read_blob(location, buffer.get(), bytes_read);
 
-  if (!result.has_value())
+  if (result.code != 0)
   {
-    read_request->error.code = result.error().code;
-    read_request->error.msg = result.error().msg;
+    read_request->error = std::move(result);
   }
   else
   {
@@ -918,7 +555,7 @@ vio::task_t<void> storage_handler_t::do_read_request(std::shared_ptr<read_reques
     _read_cache.put(key, cache_value_t{buffer, location.size}, location.size);
 
     read_request->buffer = buffer;
-    read_request->buffer_info.size = uint32_t(result.value());
+    read_request->buffer_info.size = bytes_read;
     read_request->buffer_info.data = buffer.get();
 
     // Decompress if needed

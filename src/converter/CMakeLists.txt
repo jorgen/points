@@ -41,6 +41,10 @@ set(private_headers
         compressor_fse.hpp
         compressor_ans.hpp
         compression_preprocess.hpp
+        url.hpp
+        index_format.hpp
+        storage_backend.hpp
+        packed_file_backend.hpp
 )
 
 set(sources
@@ -73,6 +77,8 @@ set(sources
         compressor_fse.cpp
         compressor_ans.cpp
         compression_preprocess.cpp
+        storage_backend.cpp
+        packed_file_backend.cpp
 )
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
