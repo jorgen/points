@@ -47,15 +47,18 @@ void verify_points_range(const read_only_points_t &points, int start_index, int 
     // assert(!(morton_current < morton_previous));
     if (morton_current < local_min)
       count_less++;
-    if (!(morton_current < local_max))
+    // node_max is the inclusive max corner (all sub-node bits set), so a point equal to it
+    // is valid (see the `<=` check at the call site); only strictly-greater is out of range.
+    if (!(morton_current <= local_max))
       count_greater++;
-    if (!(morton_current < morton_previous))
+    // Count genuine out-of-order pairs (current strictly less than previous).
+    if (morton_current < morton_previous)
       wrong_order++;
     morton_previous = morton_current;
   }
   assert(count_less == 0);
   assert(count_greater == 0);
-  assert(wrong_order);
+  assert(wrong_order == 0);
 }
 
 template <typename T, size_t C>
