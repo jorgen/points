@@ -606,3 +606,70 @@ TEST_CASE("Morton name")
     REQUIRE(test == name);
   }
 }
+
+TEST_CASE("morton_is_null and morton_is_set")
+{
+  using namespace points::converter;
+
+  morton::morton64_t zero64 = {};
+  REQUIRE(morton::morton_is_null(zero64) == true);
+  REQUIRE(morton::morton_is_set(zero64) == false);
+
+  morton::morton64_t nonzero64 = {};
+  nonzero64.data[0] = 9;
+  REQUIRE(morton::morton_is_null(nonzero64) == false);
+  REQUIRE(morton::morton_is_set(nonzero64) == true);
+
+  morton::morton192_t zero192 = {};
+  REQUIRE(morton::morton_is_null(zero192) == true);
+  REQUIRE(morton::morton_is_set(zero192) == false);
+
+  // A non-zero value in ANY word must be detected, regardless of which word.
+  for (int word = 0; word < 3; word++)
+  {
+    morton::morton192_t v = {};
+    v.data[word] = (word == 2) ? 7 : 5;
+    REQUIRE(morton::morton_is_null(v) == false);
+    REQUIRE(morton::morton_is_set(v) == true);
+  }
+
+  morton::morton128_t zero128 = {};
+  REQUIRE(morton::morton_is_null(zero128) == true);
+  REQUIRE(morton::morton_is_set(zero128) == false);
+  morton::morton128_t hi128 = {};
+  hi128.data[1] = 1;
+  REQUIRE(morton::morton_is_null(hi128) == false);
+  REQUIRE(morton::morton_is_set(hi128) == true);
+}
+
+TEST_CASE("morton_mask_create 128-bit matches 192-bit (no UB shift for C==2)")
+{
+  using namespace points::converter;
+  // For the 128-bit (C==2) morton, lod 21..41 yields bit index 66..126 (>= 64),
+  // which previously produced an undefined shift-by->=64. Cross-check against the
+  // trusted 192-bit mask (low two words) for every valid lod.
+  for (int lod = 0; lod <= 41; lod++)
+  {
+    auto mask128 = morton::morton_mask_create<uint64_t, 2>(lod);
+    auto mask192 = morton::morton_mask_create<uint64_t, 3>(lod);
+    REQUIRE(mask128.data[0] == mask192.data[0]);
+    REQUIRE(mask128.data[1] == mask192.data[1]);
+  }
+  // Spot-check a specific case that used to be UB: lod 21 -> index 66.
+  auto m = morton::morton_mask_create<uint64_t, 2>(21);
+  REQUIRE(m.data[0] == ~uint64_t(0));
+  REQUIRE(m.data[1] == uint64_t(0x3));
+}
+
+TEST_CASE("set_name_in_morton does not write out of bounds at high magnitude")
+{
+  using namespace points::converter;
+  morton::morton192_t base = {};
+  // magnitude 12 -> lower_bit 180 -> lower_section 2; the spill word would be
+  // data[3] (out of bounds). The guarded implementation must not touch it.
+  // (Under ASan this asserts the OOB write is gone.)
+  auto reply = morton::set_name_in_morton(12, base, uint16_t(0x7fff));
+  // Nothing above data[2] exists; the call simply must return safely.
+  (void)reply;
+  REQUIRE(true);
+}

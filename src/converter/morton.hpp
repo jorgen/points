@@ -156,7 +156,12 @@ inline morton_t<T, C> morton_xor(const morton_t<T, C> &a, const morton_t<T, C> &
 template <typename T, size_t C>
 inline bool morton_is_null(const morton_t<T, C> &a)
 {
-  return a.data[0] == T(0) && C > 1 ? a.data[1] == T(0) : true && C > 2 ? a.data[2] == T(0) : true;
+  bool r = (a.data[0] == T(0));
+  if constexpr (C > 1)
+    r = r && (a.data[1] == T(0));
+  if constexpr (C > 2)
+    r = r && (a.data[2] == T(0));
+  return r;
 }
 
 template <typename T, size_t C>
@@ -242,7 +247,12 @@ inline morton_t<T, C> morton_add(const morton_t<T, C> &a, const morton_t<T, C> &
 template <typename T, size_t C>
 inline bool morton_is_set(const morton_t<T, C> &a)
 {
-  return a.data[0] || C > 1 ? a.data[1] : false || C > 2 ? a.data[2] : false;
+  bool r = a.data[0] != T(0);
+  if constexpr (C > 1)
+    r = r || a.data[1] != T(0);
+  if constexpr (C > 2)
+    r = r || a.data[2] != T(0);
+  return r;
 }
 
 inline int bit_scan_reverse(uint32_t a)
@@ -437,12 +447,12 @@ inline morton_t<T, C> morton_mask_create(int lod)
         {
           macro_index = 1;
         }
-        index = index % 64;
       }
       else
       {
         macro_index = 1;
       }
+      index = index % 64;
     }
   }
   a.data[macro_index] = (T(1) << index) - 1;
@@ -769,8 +779,11 @@ inline morton192_t set_name_in_morton(int magnitude, const morton192_t &morton, 
   int lower_bit_part = lower_bit % int(sizeof(morton.data[0]) * 8);
   int left_over = int(sizeof(morton.data[0]) * 8) - lower_bit_part;
   morton::morton192_t ret = morton;
+  assert(lower_section < 3);
   ret.data[lower_section] |= uint64_t(name) << lower_bit_part;
-  if (left_over < 15)
+  // Guard the spill word so we never write past data[2]. This can only happen at
+  // magnitude 12 (lower_bit == 180), an extent beyond what the 5-level tree supports.
+  if (left_over < 15 && lower_section + 1 < 3)
   {
     ret.data[lower_section + 1] |= (uint64_t(name) >> (left_over));
   }
