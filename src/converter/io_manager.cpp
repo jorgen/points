@@ -15,31 +15,25 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "storage_backend.hpp"
-
 #include "io_manager.hpp"
-#include "object_backend.hpp"
-#include "packed_file_backend.hpp"
-#include "url.hpp"
+
+#include "file_dir_io_manager.hpp"
+#include "memory_io_manager.hpp"
 
 namespace points::converter
 {
 
-std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, points_error_t &error)
+std::unique_ptr<io_manager_t> create_io_manager(const std::string &scheme, const std::string &path, vio::event_loop_t &event_loop, points_error_t &error)
 {
-  auto parsed = parse_url(url);
+  if (scheme == "dir")
+    return std::make_unique<file_dir_io_manager_t>(path, event_loop);
+  if (scheme == "mem")
+    return std::make_unique<memory_io_manager_t>();
 
-  // No scheme (a bare path) or file:// -> the single packed file backend.
-  if (parsed.scheme.empty() || parsed.scheme == "file")
-  {
-    return std::make_unique<packed_file_backend_t>(parsed.path, event_loop, error);
-  }
-
-  // Object-per-blob backends over an io_manager (directory now, in-memory for testing, S3/Azure later).
-  auto io = create_io_manager(parsed.scheme, parsed.path, event_loop, error);
-  if (!io)
-    return nullptr;
-  return std::make_unique<object_backend_t>(std::move(io), event_loop);
+  // s3://, az://, https:// are designed for but not yet implemented (next round).
+  error.code = -1;
+  error.msg = "Unsupported io_manager scheme: '" + scheme + "'";
+  return nullptr;
 }
 
 } // namespace points::converter

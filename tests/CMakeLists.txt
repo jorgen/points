@@ -14,6 +14,7 @@ add_executable(private_interface_unit_tests
         private/converter_tests.cpp
         private/deque_map_test.cpp
         private/blob_manager_test.cpp
+        private/storage_backend_test.cpp
         $<TARGET_OBJECTS:points_common_objects>
         $<TARGET_OBJECTS:points_converter_objects>
         $<TARGET_OBJECTS:points_render_objects>

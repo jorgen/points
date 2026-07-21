@@ -45,6 +45,10 @@ set(private_headers
         index_format.hpp
         storage_backend.hpp
         packed_file_backend.hpp
+        io_manager.hpp
+        file_dir_io_manager.hpp
+        memory_io_manager.hpp
+        object_backend.hpp
 )
 
 set(sources
@@ -79,6 +83,10 @@ set(sources
         compression_preprocess.cpp
         storage_backend.cpp
         packed_file_backend.cpp
+        io_manager.cpp
+        file_dir_io_manager.cpp
+        memory_io_manager.cpp
+        object_backend.cpp
 )
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})

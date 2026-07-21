@@ -15,31 +15,32 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include "storage_backend.hpp"
+#pragma once
 
 #include "io_manager.hpp"
-#include "object_backend.hpp"
-#include "packed_file_backend.hpp"
-#include "url.hpp"
+
+#include <string>
 
 namespace points::converter
 {
 
-std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, points_error_t &error)
+// One file per object under a directory: object "name" -> "<dir>/<name>". Writes are atomic
+// (write a unique temp file, fsync, rename over the final name) so a torn/partial object is never
+// visible; reads are ranged file reads. This is the first object-per-blob backend and the model
+// the S3/Azure backends will follow.
+class file_dir_io_manager_t : public io_manager_t
 {
-  auto parsed = parse_url(url);
+public:
+  file_dir_io_manager_t(std::string dir, vio::event_loop_t &event_loop);
 
-  // No scheme (a bare path) or file:// -> the single packed file backend.
-  if (parsed.scheme.empty() || parsed.scheme == "file")
-  {
-    return std::make_unique<packed_file_backend_t>(parsed.path, event_loop, error);
-  }
+  vio::task_t<points_error_t> read_object(std::string name, uint8_t *dst, io_range_t range, uint32_t &bytes_read) override;
+  vio::task_t<points_error_t> write_object(std::string name, std::shared_ptr<uint8_t[]> data, uint64_t size) override;
+  vio::task_t<points_error_t> object_info(std::string name, object_info_t &out) override;
+  vio::task_t<points_error_t> remove_object(std::string name) override;
 
-  // Object-per-blob backends over an io_manager (directory now, in-memory for testing, S3/Azure later).
-  auto io = create_io_manager(parsed.scheme, parsed.path, event_loop, error);
-  if (!io)
-    return nullptr;
-  return std::make_unique<object_backend_t>(std::move(io), event_loop);
-}
+private:
+  std::string _dir;
+  vio::event_loop_t &_event_loop;
+};
 
 } // namespace points::converter
