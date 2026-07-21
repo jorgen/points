@@ -316,9 +316,12 @@ compression_result_t compressor_ans_t::compress(const void *data, uint32_t size,
       std::vector<uint16_t> perm(f64_count);
       sort_with_permutation_f64(working_b.data(), size, perm.data());
 
-      delta_encode_morton(working_b.data(), size, 8);
+      bool delta_applied = delta_encode_morton(working_b.data(), size, 8);
 
-      fse_compress_standard(working_b.data(), size, format, 0, compression_flag_offset_subtracted | compression_flag_sort_permutation, working_b, result_b);
+      uint8_t path_b_flags = compression_flag_offset_subtracted | compression_flag_sort_permutation;
+      if (delta_applied)
+        path_b_flags |= compression_flag_delta_encoded;
+      fse_compress_standard(working_b.data(), size, format, 0, path_b_flags, working_b, result_b);
 
       if (result_b.data && result_b.error.code == 0)
       {
@@ -335,6 +338,9 @@ compression_result_t compressor_ans_t::compress(const void *data, uint32_t size,
             uint32_t old_payload = hdr_b.compressed_size;
             uint32_t new_payload = 8 + 4 + perm_compressed.size + old_payload;
             hdr_b.compressed_size = new_payload;
+            // hdr_b.flags already carries compression_flag_delta_encoded (set on the inner
+            // standard compression via path_b_flags) plus its 4-byte data_offset=0 prefix;
+            // decompress reads that prefix and reverses the delta over the whole sorted buffer.
             hdr_b.flags |= compression_flag_offset_subtracted | compression_flag_sort_permutation;
             uint32_t total = static_cast<uint32_t>(sizeof(hdr_b)) + new_payload;
             auto output = std::make_shared<uint8_t[]>(total);

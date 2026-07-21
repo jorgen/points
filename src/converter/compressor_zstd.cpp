@@ -209,10 +209,13 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
       sort_with_permutation_f64(working_b.data(), size, perm.data());
 
       // Delta encode the sorted u64 data
-      delta_encode_morton(working_b.data(), size, 8);
+      bool delta_applied = delta_encode_morton(working_b.data(), size, 8);
 
       // Compress the sorted+delta data via standard path (no additional delta in standard)
-      zstd_compress_standard(working_b.data(), size, format, 0, compression_flag_offset_subtracted | compression_flag_sort_permutation, working_b, result_b);
+      uint8_t path_b_flags = compression_flag_offset_subtracted | compression_flag_sort_permutation;
+      if (delta_applied)
+        path_b_flags |= compression_flag_delta_encoded;
+      zstd_compress_standard(working_b.data(), size, format, 0, path_b_flags, working_b, result_b);
 
       if (result_b.data && result_b.error.code == 0)
       {
@@ -232,6 +235,10 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
             // Layout: [min_value:8] [perm_compressed_size:4] [perm_compressed] [old_payload]
             uint32_t new_payload = 8 + 4 + static_cast<uint32_t>(perm_compressed_size) + old_payload;
             hdr_b.compressed_size = new_payload;
+            // hdr_b.flags already carries compression_flag_delta_encoded (set on the inner
+            // standard compression via path_b_flags), together with the 4-byte data_offset=0
+            // prefix it emitted; decompress reads that prefix and, seeing sort_permutation,
+            // reverses the delta over the whole buffer. Just add the offset/sort flags here.
             hdr_b.flags |= compression_flag_offset_subtracted | compression_flag_sort_permutation;
             uint32_t total = static_cast<uint32_t>(sizeof(hdr_b)) + new_payload;
             auto output = std::make_shared<uint8_t[]>(total);

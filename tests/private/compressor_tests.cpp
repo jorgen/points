@@ -1369,3 +1369,128 @@ TEST_CASE("LOD attribute format without original_order is unchanged")
   REQUIRE(memcmp(lod_attrs.attributes[2].name, POINTS_ATTRIBUTE_INTENSITY, strlen(POINTS_ATTRIBUTE_INTENSITY)) == 0);
 }
 
+
+// --- r64 sort+delta (Path B) round trip regression ---
+//
+// A shuffled near-arithmetic double buffer: after offset-subtract + sort it becomes a
+// clustered arithmetic sequence whose byte-shuffled bands compress far better than the
+// unsorted Path A, so the compressor selects Path B (offset + sort + delta). Previously
+// Path B applied a delta but never recorded compression_flag_delta_encoded, so decompress
+// skipped the delta reversal and returned corrupted doubles. This test forces Path B and
+// asserts an exact byte round trip.
+
+// Build a variety of r64 buffers; each returns (data, label). Some are engineered so that
+// offset + sort + delta compresses much better than raw order — forcing r64 Path B selection.
+static std::vector<std::pair<std::vector<uint8_t>, const char *>> make_r64_path_b_candidates()
+{
+  std::vector<std::pair<std::vector<uint8_t>, const char *>> out;
+  auto to_bytes = [](const std::vector<double> &v, const char *label) {
+    std::vector<uint8_t> buf(v.size() * 8);
+    memcpy(buf.data(), v.data(), buf.size());
+    return std::make_pair(std::move(buf), label);
+  };
+
+  for (uint32_t n : {50u, 100u, 500u, 2000u})
+  {
+    // Shuffled wide-range arithmetic sequence.
+    {
+      std::vector<double> v(n);
+      for (uint32_t i = 0; i < n; i++)
+        v[i] = 1.0e6 + double(i) * 8.0;
+      std::mt19937 gen(n);
+      std::shuffle(v.begin(), v.end(), gen);
+      out.push_back(to_bytes(v, "shuffled arithmetic"));
+    }
+    // Already-sorted clustered doubles (near-identity permutation, small deltas).
+    {
+      std::vector<double> v(n);
+      for (uint32_t i = 0; i < n; i++)
+        v[i] = 1.0e9 + double(i) * 1.0e-3;
+      out.push_back(to_bytes(v, "sorted clustered"));
+    }
+    // Low-cardinality shuffled (runs of identical values after sort -> zero deltas).
+    {
+      std::vector<double> v(n);
+      for (uint32_t i = 0; i < n; i++)
+        v[i] = 1.0e6 + double(i % 8);
+      std::mt19937 gen(n + 1);
+      std::shuffle(v.begin(), v.end(), gen);
+      out.push_back(to_bytes(v, "low cardinality"));
+    }
+  }
+  return out;
+}
+
+// Round-trips a variety of r64 buffers through a compressor, asserting exact byte equality for
+// every case (the invariant the Path B delta-flag fix must preserve — before the fix, any case
+// where Path B was selected corrupted on decompress). Returns how many cases actually exercised
+// Path B (sort_permutation flag set), so the caller can assert the path was reached.
+static int check_r64_round_trips(compressor_t &compressor)
+{
+  point_format_t fmt{points_type_r64, points_components_1};
+  int path_b_count = 0;
+  for (auto &[data, label] : make_r64_path_b_candidates())
+  {
+    INFO("case: " << label << " n=" << (data.size() / 8));
+    auto compressed = compressor.compress(data.data(), uint32_t(data.size()), fmt, 0);
+    REQUIRE(compressed.error.code == 0);
+
+    compression_header_t hdr;
+    memcpy(&hdr, compressed.data.get(), sizeof(hdr));
+    if (hdr.flags & compression_flag_sort_permutation)
+    {
+      path_b_count++;
+      // Whenever Path B is chosen its payload IS delta-encoded, so the flag must be recorded.
+      REQUIRE((hdr.flags & compression_flag_delta_encoded) != 0);
+    }
+
+    auto decompressed = compressor.decompress(compressed.data.get(), compressed.size);
+    REQUIRE(decompressed.error.code == 0);
+    REQUIRE(decompressed.size == data.size());
+    REQUIRE(memcmp(decompressed.data.get(), data.data(), data.size()) == 0);
+  }
+  return path_b_count;
+}
+
+TEST_CASE("zstd r64 sort+delta (Path B) round trip")
+{
+  compressor_zstd_t compressor;
+  int path_b = check_r64_round_trips(compressor);
+  // The sweep must actually exercise Path B, otherwise the delta-flag fix is untested.
+  REQUIRE(path_b > 0);
+}
+
+TEST_CASE("ans r64 sort+delta (Path B) round trip")
+{
+  compressor_ans_t compressor;
+  int path_b = check_r64_round_trips(compressor);
+  REQUIRE(path_b > 0);
+}
+
+// Regression: attributes_configs_t::serialize() reserved attributes.size() bytes for the
+// per-config attribute-count field but writes a 4-byte uint32_t. A config with fewer than 4
+// attributes (e.g. a position-only cloud) therefore under-allocated the buffer and overflowed
+// the heap on write. Serialize a 1-attribute config and round-trip it (ASan catches the overflow).
+TEST_CASE("attributes_configs serialize round trip (no heap overflow for small configs)")
+{
+  attributes_configs_t configs;
+
+  points_converter_attributes_t attrs;
+  points_converter_attributes_add_attribute(&attrs, POINTS_ATTRIBUTE_XYZ, uint32_t(strlen(POINTS_ATTRIBUTE_XYZ)), points_type_m64, points_components_1);
+  auto id = configs.get_attribute_config_index(std::move(attrs));
+
+  auto serialized = configs.serialize();
+  REQUIRE(serialized.size > 0);
+
+  std::unique_ptr<uint8_t[]> buf(new uint8_t[serialized.size]);
+  memcpy(buf.get(), serialized.data.get(), serialized.size);
+
+  attributes_configs_t restored;
+  auto err = restored.deserialize(buf, serialized.size);
+  REQUIRE(err.code == 0);
+
+  auto fmt_orig = configs.get_point_format(id);
+  auto fmt_restored = restored.get_point_format(id);
+  REQUIRE(fmt_orig.type == fmt_restored.type);
+  REQUIRE(fmt_orig.components == fmt_restored.components);
+}

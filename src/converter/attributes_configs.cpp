@@ -291,7 +291,10 @@ serialized_attributes_t attributes_configs_t::serialize() const
 
   for (auto &attrib : _attributes_configs)
   {
-    size += uint32_t(attrib.attributes.attributes.size());
+    // The per-config attribute count is written as a uint32_t (see attrib_count below),
+    // so reserve 4 bytes here — NOT attributes.size() bytes, which under-allocates the
+    // buffer whenever a config has fewer than 4 attributes and overflows the heap on write.
+    size += uint32_t(sizeof(uint32_t));
     for (auto &attr : attrib.attributes.attributes)
     {
       size += sizeof(attr.type) + sizeof(attr.components) + sizeof(attr.name_size) + attr.name_size;
