@@ -71,6 +71,18 @@ public:
     evict();
   }
 
+  void erase(const Key &key)
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    auto it = _map.find(key);
+    if (it != _map.end())
+    {
+      _current_bytes -= it->second->size;
+      _lru_list.erase(it->second);
+      _map.erase(it);
+    }
+  }
+
   void clear()
   {
     std::lock_guard<std::mutex> lock(_mutex);

@@ -222,6 +222,11 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
             if (!std::atomic_ref<const uint8_t>(tree_registry.tree_id_initialized[next_tree_id.data]).load(std::memory_order_acquire))
             {
               walker.m_trees_to_load.push_back(next_tree_id);
+              // child_count indexes into the contiguous sub_trees[] array by set-bit ordinal
+              // (one entry per set child bit). It must advance for EVERY set bit, including
+              // unresident ones, or later resident siblings resolve to the wrong sub_tree entry
+              // and are silently dropped from traversal/rendering.
+              child_count++;
               continue;
             }
             next_tree = tree_registry.get(next_tree_id);

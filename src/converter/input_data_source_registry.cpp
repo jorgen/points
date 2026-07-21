@@ -52,6 +52,10 @@ input_data_reference_t input_data_source_registry_t::register_file(std::unique_p
   std::unique_lock<std::mutex> lock(_mutex);
   auto input_id = get_next_input_id();
   auto &item = _registry[input_id.data];
+  // morton_min is a min-accumulator in handle_sorted_points; it must start at the max
+  // sentinel (all 0xFF), mirroring storage_header_initialize. Left at 0 it would stay 0
+  // forever and stall incremental LOD generation. (morton_max correctly starts at 0.)
+  morton::morton_init_max(item.morton_min);
   item.input_id = input_id;
   item.name = std::move(name);
   item.name_length = name_length;
@@ -167,6 +171,10 @@ std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_
   _unsorted_input_sources.pop_back();
   _sorted_input_sources.push_back(id);
   auto &item = _registry[id];
+  // Mark the source as dispatched so a later dirty-rebuild (triggered by a subsequent
+  // pre-init completion) does not re-enqueue and re-read this same file, which would
+  // duplicate its points in the tree. Mirrors handle_file_failed setting the same flag.
+  item.read_started = true;
   input_data_next_input_t ret;
   ret.approximate_point_count = item.approximate_point_count;
   ret.approximate_point_size_bytes = item.approximate_point_size_bytes;

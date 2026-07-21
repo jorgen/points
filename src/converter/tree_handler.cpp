@@ -328,25 +328,48 @@ void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tre
 
 void tree_handler_t::handle_request_aabb(std::function<void(double *, double *)> &&function)
 {
-  auto tree = _tree_registry.get(_tree_registry.root);
-
-  morton::morton192_t morton_max = {};
-  morton::morton192_t morton_min = morton::morton_negate(morton_max);
-  for (auto &data : tree->data[4])
-  {
-    if (data.min < morton_min)
-    {
-      morton_min = data.min;
-    }
-    if (morton_max < data.max)
-    {
-      morton_max = data.max;
-    }
-  }
   const auto &offset = _tree_registry.tree_config.offset;
   const auto &scale = _tree_registry.tree_config.scale;
   double min[3];
   double max[3];
+
+  // Guard against a request before any tree/data exists (would dereference a null/OOB root).
+  if (_tree_registry.data.empty() || _tree_registry.root.data >= _tree_registry.data.size() || !_tree_registry.data[_tree_registry.root.data])
+  {
+    min[0] = min[1] = min[2] = 0.0;
+    max[0] = max[1] = max[2] = 0.0;
+    function(min, max);
+    return;
+  }
+
+  auto tree = _tree_registry.get(_tree_registry.root);
+
+  morton::morton192_t morton_max = {};
+  morton::morton192_t morton_min = morton::morton_negate(morton_max);
+  bool found = false;
+  // Points are held at the coarsest node they fit under node_limit — for a small cloud that
+  // is data[0][0], not data[4]. Scan every level, skipping empty collections (whose min/max
+  // are uninitialized). Only ever inspect populated collections.
+  for (int level = 0; level < 5; level++)
+  {
+    for (auto &data : tree->data[level])
+    {
+      if (data.point_count == 0)
+        continue;
+      found = true;
+      if (data.min < morton_min)
+        morton_min = data.min;
+      if (morton_max < data.max)
+        morton_max = data.max;
+    }
+  }
+  if (!found)
+  {
+    // Root holds no point collections directly (all data pushed into sub-trees, or none yet).
+    // Fall back to the root cell's bounds — a valid, if loose, box — never an inverted min>max.
+    morton_min = tree->morton_min;
+    morton_max = tree->morton_max;
+  }
   convert_morton_to_pos(scale, offset, morton_min, min);
   convert_morton_to_pos(scale, offset, morton_max, max);
   function(min, max);

@@ -18,6 +18,7 @@
 #ifndef ATTRIBUTES_CONFIGS_HPP
 #define ATTRIBUTES_CONFIGS_HPP
 
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -91,7 +92,11 @@ public:
 
 private:
   mutable std::mutex _mutex;
-  std::vector<attribute_config_t> _attributes_configs;
+  // std::deque (not std::vector): get() and the LOD-mapping accessors hand out references into
+  // these configs that outlive the lock, and get_data_worker_t::work holds such a reference across
+  // its whole convert loop. deque never invalidates references to existing elements on append, so a
+  // concurrent worker registering a new config cannot dangle another worker's held reference.
+  std::deque<attribute_config_t> _attributes_configs;
   std::vector<std::string> _attribute_name_registry;
 };
 

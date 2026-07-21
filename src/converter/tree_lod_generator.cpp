@@ -674,6 +674,11 @@ static void quantize_attributres(storage_handler_t &cache, const child_storage_m
     for (int destination_buffer_index = 1; destination_buffer_index < int(buffers.buffers.size()); destination_buffer_index++)
     {
       auto attr_mapping = mapping.source_attributes[destination_buffer_index];
+      // The destination attribute set is the UNION of all child inputs' attributes. An input
+      // that lacks a given unioned attribute yields source_index == -1; indexing locations[-1]
+      // is out of bounds. Such an input contributes nothing to this destination buffer.
+      if (attr_mapping.source_index < 0)
+        continue;
       read_attribute_t source_attrib_data(cache, storage_info.locations[attr_mapping.source_index]);
       copy_attribute_for_input(*inputs_it, indecies, attr_mapping.source_format, source_attrib_data.data, lod_attrib_mapping.destination[destination_buffer_index], buffers.buffers[destination_buffer_index]);
     }

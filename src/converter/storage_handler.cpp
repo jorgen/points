@@ -363,6 +363,10 @@ vio::task_t<void> storage_handler_t::do_write(const std::shared_ptr<uint8_t[]> &
 {
   assert(location.size > 0);
   assert(data != nullptr);
+  // The blob manager reuses freed offsets, so an offset previously read (and cached) may now
+  // hold different data. Invalidate the stale read-cache entry for this (file_id, offset) so a
+  // later read does not return the old blob's bytes.
+  _read_cache.erase(cache_key_t{location.file_id, location.offset});
   auto &file = **_file;
   auto result = co_await vio::write_file(_event_loop, file, data.get(), location.size, int64_t(location.offset));
   if (!result.has_value())
