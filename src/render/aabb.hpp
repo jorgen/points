@@ -24,10 +24,10 @@ namespace points::render
 {
 inline glm::dvec3 aabb_center(const points_aabb_t &aabb)
 {
-  double half_x = aabb.max[0] - aabb.min[0];
-  double half_y = aabb.max[1] - aabb.min[1];
-  double half_z = aabb.max[2] - aabb.min[2];
-  return {aabb.min[1] + half_x, aabb.min[1] + half_y, aabb.min[2] + half_z};
+  double half_x = (aabb.max[0] - aabb.min[0]) * 0.5;
+  double half_y = (aabb.max[1] - aabb.min[1]) * 0.5;
+  double half_z = (aabb.max[2] - aabb.min[2]) * 0.5;
+  return {aabb.min[0] + half_x, aabb.min[1] + half_y, aabb.min[2] + half_z};
 }
 
 } // namespace points::render

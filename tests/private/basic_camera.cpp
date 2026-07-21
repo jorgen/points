@@ -29,6 +29,21 @@ TEST_CASE("Verify_Perspective")
   REQUIRE(aspect == doctest::Approx(1024.0 / 768.0));
 }
 
+TEST_CASE("aabb_center returns the geometric midpoint")
+{
+  points_aabb_t aabb;
+  aabb.min[0] = 10.0;
+  aabb.min[1] = 0.0;
+  aabb.min[2] = 0.0;
+  aabb.max[0] = 12.0;
+  aabb.max[1] = 4.0;
+  aabb.max[2] = 6.0;
+  glm::dvec3 center = points::render::aabb_center(aabb);
+  REQUIRE(center.x == doctest::Approx(11.0));
+  REQUIRE(center.y == doctest::Approx(2.0));
+  REQUIRE(center.z == doctest::Approx(3.0));
+}
+
 TEST_CASE("Check_Frustum_AABB_Culling")
 {
   points::render::unique_camera camera(points_camera_create());
