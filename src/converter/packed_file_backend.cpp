@@ -106,6 +106,18 @@ points_error_t packed_file_backend_t::open_for_write(bool truncate)
   {
     uv_fs_t request = {};
     uv_fs_ftruncate(_event_loop.loop(), &request, (**_file).handle, 0, NULL);
+
+    // When the file already existed the constructor skipped reserving the index/superblock region
+    // at offset 0 (it only reserves that for a brand-new file). Truncation discards the existing
+    // dataset, so re-establish the reservation here to match the fresh-file initial state --
+    // otherwise the first allocate_blob would hand out offset 0 and write_index would later clobber
+    // that blob with the 128-byte index.
+    if (_file_exists)
+    {
+      auto index = _blob_manager.register_blob({_serialized_index_size});
+      assert(index.data == 0);
+      (void)index;
+    }
   }
 
   return {};
