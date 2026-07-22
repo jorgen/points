@@ -12,6 +12,8 @@
 #include <vio/task.h>
 
 #include <atomic>
+#include <cstdio>
+#include <filesystem>
 #include <condition_variable>
 #include <cstring>
 #include <mutex>
@@ -376,4 +378,80 @@ TEST_CASE("object backend: failed manifest write leaves the previous dataset int
   REQUIRE(backend.read_index(load3).code == 0);
   REQUIRE(load3.attribute_configs_size == attrs_v3.size());
   REQUIRE(memcmp(load3.attribute_configs.get(), attrs_v3.data(), attrs_v3.size()) == 0);
+}
+
+// ---------------- the previous tree-registry blob must be reclaimed on the next checkpoint ----------
+
+namespace
+{
+// One checkpoint carrying a freshly-written registry blob of `reg_size` bytes; returns its location.
+storage_location_t do_registry_checkpoint(storage_backend_t &backend, vio::event_loop_t &loop, uint32_t reg_size, uint8_t seed)
+{
+  auto reg = pattern(reg_size, seed);
+  storage_location_t reg_loc;
+  backend.allocate_blob(reg_size, reg_loc);
+  REQUIRE(run_task(loop, [&]() { return backend.write_allocated(reg_loc, make_bytes(reg)); }).code == 0);
+  checkpoint_t cp;
+  cp.tree_registry = reg_loc;
+  cp.attribute_configs = make_bytes(pattern(16, 1));
+  cp.attribute_configs_size = 16;
+  cp.stats = make_bytes(pattern(8, 2));
+  cp.stats_size = 8;
+  cp.perf = make_bytes(pattern(12, 3));
+  cp.perf_size = 12;
+  REQUIRE(run_task(loop, [&]() { return backend.write_index(std::move(cp)); }).code == 0);
+  return reg_loc;
+}
+} // namespace
+
+TEST_CASE("object backend reclaims the superseded tree-registry object")
+{
+  vio::thread_with_event_loop_t loop_thread;
+  auto &loop = loop_thread.event_loop();
+
+  points_error_t err;
+  auto backend = create_storage_backend("mem://regfree", loop, err);
+  REQUIRE(err.code == 0);
+  REQUIRE(backend->open_for_write(true).code == 0);
+
+  auto reg1 = do_registry_checkpoint(*backend, loop, 40, 7);
+  std::vector<uint8_t> tmp(40);
+  uint32_t br = 0;
+  // After checkpoint 1 the registry object is live.
+  REQUIRE(run_task(loop, [&]() { return backend->read_blob(reg1, tmp.data(), br); }).code == 0);
+
+  auto reg2 = do_registry_checkpoint(*backend, loop, 44, 9);
+  // After checkpoint 2 the previous registry object is gone (previously it leaked forever).
+  REQUIRE(run_task(loop, [&]() { return backend->read_blob(reg1, tmp.data(), br); }).code != 0);
+  // The current registry object is still readable.
+  std::vector<uint8_t> tmp2(44);
+  REQUIRE(run_task(loop, [&]() { return backend->read_blob(reg2, tmp2.data(), br); }).code == 0);
+}
+
+TEST_CASE("packed backend does not leak registry blobs across checkpoints")
+{
+  vio::thread_with_event_loop_t loop_thread;
+  auto &loop = loop_thread.event_loop();
+
+  const char *path = "test_leak_packed.jlp";
+  std::remove(path);
+
+  points_error_t err;
+  auto backend = create_storage_backend(path, loop, err);
+  REQUIRE(err.code == 0);
+  REQUIRE(backend->open_for_write(true).code == 0);
+
+  // Large registry blobs so a per-checkpoint leak would balloon the file well past the steady state.
+  const uint32_t reg_size = 4096;
+  for (int i = 0; i < 20; i++)
+    do_registry_checkpoint(*backend, loop, reg_size, uint8_t(i));
+
+  // With the leak, the file would grow ~20 * 4096 = 80 KB of orphaned registry blobs. The fix reuses
+  // the freed space, so the file stays a small steady-state size.
+  std::error_code ec;
+  auto size = std::filesystem::file_size(path, ec);
+  REQUIRE(!ec);
+  REQUIRE(size < 30000);
+
+  std::remove(path);
 }

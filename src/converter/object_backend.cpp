@@ -239,6 +239,7 @@ vio::task_t<points_error_t> object_backend_t::write_index(checkpoint_t checkpoin
   storage_location_t old_attributes = _attributes_location;
   storage_location_t old_stats = _stats_location;
   storage_location_t old_perf = _perf_stats_location;
+  storage_location_t old_tree_registry = _tree_registry_location;
   _attributes_location = attributes_location;
   _stats_location = stats_location;
   _perf_stats_location = perf_location;
@@ -252,6 +253,9 @@ vio::task_t<points_error_t> object_backend_t::write_index(checkpoint_t checkpoin
     co_await _io->remove_object(object_name(old_stats.file_id, old_stats.offset));
   if (old_perf.size > 0)
     co_await _io->remove_object(object_name(old_perf.file_id, old_perf.offset));
+  // Reclaim the previous tree-registry object (previously leaked one orphan object per checkpoint).
+  if (old_tree_registry.size > 0)
+    co_await _io->remove_object(object_name(old_tree_registry.file_id, old_tree_registry.offset));
 
   co_return points_error_t{};
 }

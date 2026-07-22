@@ -63,6 +63,7 @@ private:
   storage_location_t _blobs_location;
   storage_location_t _stats_location;
   storage_location_t _perf_stats_location;
+  storage_location_t _tree_registry_location; // previous registry blob, freed at the next checkpoint
 
   std::mutex _mutex; // guards _blob_manager during allocate_blob
 };

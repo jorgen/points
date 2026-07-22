@@ -186,6 +186,7 @@ points_error_t packed_file_backend_t::read_index(index_load_t &out)
 
   _stats_location = compression_stats;
   _perf_stats_location = perf_stats;
+  _tree_registry_location = tree_registry;
 
   if (compression_stats.size > 0)
   {
@@ -283,6 +284,13 @@ vio::task_t<points_error_t> packed_file_backend_t::write_index(checkpoint_t chec
     if (!new_blob_manager.unregister_blob({_perf_stats_location.offset}, {_perf_stats_location.size}))
       co_return make_error("Failed to remove perf stats location");
   }
+  // Free the previous tree-registry blob too (it was superseded by checkpoint.tree_registry). Without
+  // this the old registry blob leaked its bytes on every checkpoint.
+  if (_tree_registry_location.offset > 0)
+  {
+    if (!new_blob_manager.unregister_blob({_tree_registry_location.offset}, {_tree_registry_location.size}))
+      co_return make_error("Failed to remove tree registry location");
+  }
 
   storage_location_t attributes_location;
   attributes_location.offset = new_blob_manager.register_blob({checkpoint.attribute_configs_size}).data;
@@ -334,6 +342,7 @@ vio::task_t<points_error_t> packed_file_backend_t::write_index(checkpoint_t chec
   _attributes_location = attributes_location;
   _stats_location = stats_location;
   _perf_stats_location = perf_location;
+  _tree_registry_location = checkpoint.tree_registry;
 
   uv_fs_t req = {};
   uv_fs_fsync(_event_loop.loop(), &req, file.handle, NULL);
