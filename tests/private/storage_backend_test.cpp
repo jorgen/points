@@ -1,18 +1,18 @@
 #include <doctest/doctest.h>
 
-#include <io_manager.hpp>
-#include <memory_io_manager.hpp>
-#include <file_dir_io_manager.hpp>
 #include <object_backend.hpp>
 #include <storage_backend.hpp>
 #include <index_format.hpp>
 #include <conversion_types.hpp>
+
+#include <vio/objstore/memory_object_store.h>
 
 #include <vio/event_loop.h>
 #include <vio/task.h>
 
 #include <atomic>
 #include <cstdio>
+#include <expected>
 #include <filesystem>
 #include <condition_variable>
 #include <cstring>
@@ -76,76 +76,8 @@ std::vector<uint8_t> pattern(uint32_t n, uint8_t seed)
 }
 } // namespace
 
-// ---------------- io_manager round-trips ----------------
-
-static void io_manager_round_trip(io_manager_t &io, vio::event_loop_t &loop)
-{
-  auto data = pattern(200, 3);
-  auto err = run_task(loop, [&]() { return io.write_object("obj_a", make_bytes(data), data.size()); });
-  REQUIRE(err.code == 0);
-
-  object_info_t info;
-  err = run_task(loop, [&]() { return io.object_info("obj_a", info); });
-  REQUIRE(err.code == 0);
-  REQUIRE(info.exists);
-  REQUIRE(info.size == data.size());
-
-  // Whole-object read.
-  std::vector<uint8_t> got(data.size());
-  uint32_t br = 0;
-  err = run_task(loop, [&]() { return io.read_object("obj_a", got.data(), io_range_t{0, int64_t(data.size())}, br); });
-  REQUIRE(err.code == 0);
-  REQUIRE(br == data.size());
-  REQUIRE(memcmp(got.data(), data.data(), data.size()) == 0);
-
-  // Range read (bytes [50, 90)).
-  std::vector<uint8_t> range(40);
-  err = run_task(loop, [&]() { return io.read_object("obj_a", range.data(), io_range_t{50, 40}, br); });
-  REQUIRE(err.code == 0);
-  REQUIRE(br == 40);
-  REQUIRE(memcmp(range.data(), data.data() + 50, 40) == 0);
-
-  // Missing object -> error + info reports not-exists.
-  object_info_t missing;
-  err = run_task(loop, [&]() { return io.object_info("nope", missing); });
-  REQUIRE(err.code == 0);
-  REQUIRE(!missing.exists);
-  uint8_t dummy = 0;
-  err = run_task(loop, [&]() { return io.read_object("nope", &dummy, io_range_t{0, 1}, br); });
-  REQUIRE(err.code != 0);
-
-  // Overwrite with different content/size.
-  auto data2 = pattern(64, 200);
-  err = run_task(loop, [&]() { return io.write_object("obj_a", make_bytes(data2), data2.size()); });
-  REQUIRE(err.code == 0);
-  std::vector<uint8_t> got2(data2.size());
-  err = run_task(loop, [&]() { return io.read_object("obj_a", got2.data(), io_range_t{0, int64_t(data2.size())}, br); });
-  REQUIRE(err.code == 0);
-  REQUIRE(memcmp(got2.data(), data2.data(), data2.size()) == 0);
-
-  // Remove is idempotent; object then reports not-exists.
-  err = run_task(loop, [&]() { return io.remove_object("obj_a"); });
-  REQUIRE(err.code == 0);
-  err = run_task(loop, [&]() { return io.remove_object("obj_a"); });
-  REQUIRE(err.code == 0);
-  err = run_task(loop, [&]() { return io.object_info("obj_a", info); });
-  REQUIRE(err.code == 0);
-  REQUIRE(!info.exists);
-}
-
-TEST_CASE("memory_io_manager round trip")
-{
-  vio::thread_with_event_loop_t loop_thread;
-  memory_io_manager_t io;
-  io_manager_round_trip(io, loop_thread.event_loop());
-}
-
-TEST_CASE("file_dir_io_manager round trip")
-{
-  vio::thread_with_event_loop_t loop_thread;
-  file_dir_io_manager_t io("test_io_dir", loop_thread.event_loop());
-  io_manager_round_trip(io, loop_thread.event_loop());
-}
+// The io_manager backends themselves (memory / file-dir / cloud) now live in vio and are unit-tested
+// there (vio/test/test_objstore.cpp). These tests cover the points storage backends built on top.
 
 // ---------------- storage_backend blob + checkpoint round-trips ----------------
 
@@ -305,21 +237,16 @@ TEST_CASE("object backend identifies blobs by file_id AND offset (past the 4B ca
 
 namespace
 {
-class faulty_memory_io_t : public memory_io_manager_t
+class faulty_memory_io_t : public vio::objstore::memory_io_manager_t
 {
 public:
   std::atomic<bool> fail_manifest{false};
 
-  vio::task_t<points_error_t> write_object(std::string name, std::shared_ptr<uint8_t[]> data, uint64_t size) override
+  vio::task_t<std::expected<void, vio::error_t>> write_object(std::string name, std::shared_ptr<uint8_t[]> data, uint64_t size) override
   {
     if (fail_manifest.load() && name == object_backend_t::k_manifest_name)
-    {
-      points_error_t e;
-      e.code = -1;
-      e.msg = "injected manifest write failure";
-      co_return e;
-    }
-    co_return co_await memory_io_manager_t::write_object(std::move(name), std::move(data), size);
+      co_return std::unexpected(vio::error_t{.code = -1, .msg = "injected manifest write failure"});
+    co_return co_await vio::objstore::memory_io_manager_t::write_object(std::move(name), std::move(data), size);
   }
 };
 } // namespace

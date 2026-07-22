@@ -45,14 +45,7 @@ set(private_headers
         index_format.hpp
         storage_backend.hpp
         packed_file_backend.hpp
-        io_manager.hpp
-        file_dir_io_manager.hpp
-        memory_io_manager.hpp
         object_backend.hpp
-        cloud_signing.hpp
-        http_io_manager.hpp
-        s3_io_manager.hpp
-        azure_io_manager.hpp
 )
 
 set(sources
@@ -87,14 +80,7 @@ set(sources
         compression_preprocess.cpp
         storage_backend.cpp
         packed_file_backend.cpp
-        io_manager.cpp
-        file_dir_io_manager.cpp
-        memory_io_manager.cpp
         object_backend.cpp
-        cloud_signing.cpp
-        http_io_manager.cpp
-        s3_io_manager.cpp
-        azure_io_manager.cpp
 )
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})

@@ -24,6 +24,17 @@
 namespace points::converter
 {
 
+using vio::objstore::io_range_t;
+
+// Translate a vio object-store error into the storage layer's points_error_t (code 0 == success).
+static points_error_t to_points_error(const vio::error_t &e)
+{
+  points_error_t p;
+  p.code = e.code != 0 ? e.code : -1;
+  p.msg = e.msg;
+  return p;
+}
+
 namespace
 {
 struct sync_wait_state_t
@@ -84,13 +95,20 @@ storage_location_t object_backend_t::next_location(uint32_t size)
   return loc;
 }
 
-object_backend_t::object_backend_t(std::unique_ptr<io_manager_t> io, vio::event_loop_t &event_loop)
+vio::task_t<points_error_t> object_backend_t::probe_exists(bool &out)
+{
+  auto r = co_await _io->object_info(k_manifest_name);
+  out = r.has_value() && r->exists;
+  co_return points_error_t{};
+}
+
+object_backend_t::object_backend_t(std::unique_ptr<vio::objstore::io_manager_t> io, vio::event_loop_t &event_loop)
   : _io(std::move(io))
   , _event_loop(event_loop)
 {
-  object_info_t info;
-  auto err = run_on_loop_blocking(_event_loop, [this, &info]() { return _io->object_info(k_manifest_name, info); });
-  _exists = (err.code == 0) && info.exists;
+  bool exists = false;
+  (void)run_on_loop_blocking(_event_loop, [this, &exists]() { return probe_exists(exists); });
+  _exists = exists;
 }
 
 object_backend_t::~object_backend_t()
@@ -128,26 +146,26 @@ vio::task_t<points_error_t> object_backend_t::read_location(storage_location_t l
     co_return points_error_t{};
   }
   buf = std::make_unique<uint8_t[]>(loc.size);
-  uint32_t read_bytes = 0;
-  auto err = co_await _io->read_object(object_name(loc.file_id, loc.offset), buf.get(), io_range_t{0, int64_t(loc.size)}, read_bytes);
+  auto r = co_await _io->read_object(object_name(loc.file_id, loc.offset), buf.get(), io_range_t{0, int64_t(loc.size)});
   size = loc.size;
-  co_return err;
+  if (!r.has_value())
+    co_return to_points_error(r.error());
+  co_return points_error_t{};
 }
 
 vio::task_t<points_error_t> object_backend_t::do_read_index(index_load_t &out)
 {
   auto manifest = std::make_shared<uint8_t[]>(k_serialized_index_size);
-  uint32_t br = 0;
-  auto err = co_await _io->read_object(k_manifest_name, manifest.get(), io_range_t{0, int64_t(k_serialized_index_size)}, br);
-  if (err.code != 0)
-    co_return err;
+  auto mr = co_await _io->read_object(k_manifest_name, manifest.get(), io_range_t{0, int64_t(k_serialized_index_size)});
+  if (!mr.has_value())
+    co_return to_points_error(mr.error());
 
   storage_location_t free_blobs;
   storage_location_t attribute_configs;
   storage_location_t tree_registry;
   storage_location_t compression_stats;
   storage_location_t perf_stats;
-  err = deserialize_index(manifest.get(), k_serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats);
+  auto err = deserialize_index(manifest.get(), k_serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats);
   if (err.code != 0)
     co_return err;
 
@@ -196,30 +214,43 @@ void object_backend_t::allocate_blob(uint32_t size, storage_location_t &out)
 
 vio::task_t<points_error_t> object_backend_t::write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data)
 {
-  co_return co_await _io->write_object(object_name(location.file_id, location.offset), std::move(data), location.size);
+  auto r = co_await _io->write_object(object_name(location.file_id, location.offset), std::move(data), location.size);
+  if (!r.has_value())
+    co_return to_points_error(r.error());
+  co_return points_error_t{};
 }
 
 vio::task_t<points_error_t> object_backend_t::read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read)
 {
-  co_return co_await _io->read_object(object_name(location.file_id, location.offset), dst, io_range_t{0, int64_t(location.size)}, bytes_read);
+  auto r = co_await _io->read_object(object_name(location.file_id, location.offset), dst, io_range_t{0, int64_t(location.size)});
+  if (!r.has_value())
+    co_return to_points_error(r.error());
+  bytes_read = uint32_t(r.value());
+  co_return points_error_t{};
 }
 
 vio::task_t<points_error_t> object_backend_t::write_index(checkpoint_t checkpoint)
 {
   storage_location_t attributes_location = next_location(checkpoint.attribute_configs_size);
-  auto err = co_await _io->write_object(object_name(attributes_location.file_id, attributes_location.offset), checkpoint.attribute_configs, attributes_location.size);
-  if (err.code != 0)
-    co_return err;
+  {
+    auto w = co_await _io->write_object(object_name(attributes_location.file_id, attributes_location.offset), checkpoint.attribute_configs, attributes_location.size);
+    if (!w.has_value())
+      co_return to_points_error(w.error());
+  }
 
   storage_location_t stats_location = next_location(checkpoint.stats_size);
-  err = co_await _io->write_object(object_name(stats_location.file_id, stats_location.offset), checkpoint.stats, stats_location.size);
-  if (err.code != 0)
-    co_return err;
+  {
+    auto w = co_await _io->write_object(object_name(stats_location.file_id, stats_location.offset), checkpoint.stats, stats_location.size);
+    if (!w.has_value())
+      co_return to_points_error(w.error());
+  }
 
   storage_location_t perf_location = next_location(checkpoint.perf_size);
-  err = co_await _io->write_object(object_name(perf_location.file_id, perf_location.offset), checkpoint.perf, perf_location.size);
-  if (err.code != 0)
-    co_return err;
+  {
+    auto w = co_await _io->write_object(object_name(perf_location.file_id, perf_location.offset), checkpoint.perf, perf_location.size);
+    if (!w.has_value())
+      co_return to_points_error(w.error());
+  }
 
   // The manifest's free-blobs slot carries the full 64-bit next id so allocation resumes on reopen.
   uint64_t next_id_snapshot;
@@ -231,9 +262,11 @@ vio::task_t<points_error_t> object_backend_t::write_index(checkpoint_t checkpoin
   auto index = serialize_index(k_serialized_index_size, free_blobs_slot, attributes_location, checkpoint.tree_registry, stats_location, perf_location);
 
   // Write the manifest LAST (atomic replace) — the crash-safety commit point.
-  err = co_await _io->write_object(k_manifest_name, index, k_serialized_index_size);
-  if (err.code != 0)
-    co_return err;
+  {
+    auto w = co_await _io->write_object(k_manifest_name, index, k_serialized_index_size);
+    if (!w.has_value())
+      co_return to_points_error(w.error());
+  }
 
   // Commit succeeded: record new metadata locations and only NOW reclaim superseded objects.
   storage_location_t old_attributes = _attributes_location;
@@ -245,17 +278,18 @@ vio::task_t<points_error_t> object_backend_t::write_index(checkpoint_t checkpoin
   _perf_stats_location = perf_location;
   _tree_registry_location = checkpoint.tree_registry;
 
+  // Best-effort reclamation (a failed remove only leaks an orphan object; the dataset stays correct).
   for (auto &loc : checkpoint.freed)
-    co_await _io->remove_object(object_name(loc.file_id, loc.offset));
+    (void)co_await _io->remove_object(object_name(loc.file_id, loc.offset));
   if (old_attributes.size > 0)
-    co_await _io->remove_object(object_name(old_attributes.file_id, old_attributes.offset));
+    (void)co_await _io->remove_object(object_name(old_attributes.file_id, old_attributes.offset));
   if (old_stats.size > 0)
-    co_await _io->remove_object(object_name(old_stats.file_id, old_stats.offset));
+    (void)co_await _io->remove_object(object_name(old_stats.file_id, old_stats.offset));
   if (old_perf.size > 0)
-    co_await _io->remove_object(object_name(old_perf.file_id, old_perf.offset));
+    (void)co_await _io->remove_object(object_name(old_perf.file_id, old_perf.offset));
   // Reclaim the previous tree-registry object (previously leaked one orphan object per checkpoint).
   if (old_tree_registry.size > 0)
-    co_await _io->remove_object(object_name(old_tree_registry.file_id, old_tree_registry.offset));
+    (void)co_await _io->remove_object(object_name(old_tree_registry.file_id, old_tree_registry.offset));
 
   co_return points_error_t{};
 }

@@ -18,8 +18,9 @@
 #pragma once
 
 #include "index_format.hpp"
-#include "io_manager.hpp"
 #include "storage_backend.hpp"
+
+#include <vio/objstore/object_store.h>
 
 #include <memory>
 #include <mutex>
@@ -36,7 +37,7 @@ namespace points::converter
 class object_backend_t : public storage_backend_t
 {
 public:
-  object_backend_t(std::unique_ptr<io_manager_t> io, vio::event_loop_t &event_loop);
+  object_backend_t(std::unique_ptr<vio::objstore::io_manager_t> io, vio::event_loop_t &event_loop);
   ~object_backend_t() override;
 
   [[nodiscard]] bool exists() const override;
@@ -56,9 +57,10 @@ public:
 private:
   vio::task_t<points_error_t> do_read_index(index_load_t &out);
   vio::task_t<points_error_t> read_location(storage_location_t loc, std::unique_ptr<uint8_t[]> &buf, uint32_t &size);
+  vio::task_t<points_error_t> probe_exists(bool &out); // HEAD the manifest to set _exists on open
   storage_location_t next_location(uint32_t size); // allocate a fresh 64-bit id split into file_id/offset
 
-  std::unique_ptr<io_manager_t> _io;
+  std::unique_ptr<vio::objstore::io_manager_t> _io;
   vio::event_loop_t &_event_loop;
   bool _exists = false;
   uint64_t _next_id = 0;

@@ -17,10 +17,11 @@
 ************************************************************************/
 #include "storage_backend.hpp"
 
-#include "io_manager.hpp"
 #include "object_backend.hpp"
 #include "packed_file_backend.hpp"
 #include "url.hpp"
+
+#include <vio/objstore/create_object_store.h>
 
 namespace points::converter
 {
@@ -35,11 +36,14 @@ std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url
     return std::make_unique<packed_file_backend_t>(parsed.path, event_loop, error);
   }
 
-  // Object-per-blob backends over an io_manager (directory now, in-memory for testing, S3/Azure later).
-  auto io = create_io_manager(parsed.scheme, parsed.path, event_loop, error);
-  if (!io)
+  // Object-per-blob over a vio object store (dir:// / mem:// / s3:// / az://), selected by the scheme.
+  auto io = vio::objstore::create_io_manager(url, event_loop);
+  if (!io.has_value())
+  {
+    error = {io.error().code != 0 ? io.error().code : -1, io.error().msg};
     return nullptr;
-  return std::make_unique<object_backend_t>(std::move(io), event_loop);
+  }
+  return std::make_unique<object_backend_t>(std::move(io.value()), event_loop);
 }
 
 } // namespace points::converter
