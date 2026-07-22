@@ -49,16 +49,19 @@ public:
   vio::task_t<points_error_t> write_index(checkpoint_t checkpoint) override;
 
   static constexpr const char *k_manifest_name = "manifest";
-  static std::string object_name(uint32_t id);
+  // The object name is derived from BOTH storage_location fields, so the blob id space is the full
+  // 64-bit counter split across file_id (low 32 bits) and offset (high bits) — far past file_id's 4B.
+  static std::string object_name(uint32_t file_id, uint64_t offset);
 
 private:
   vio::task_t<points_error_t> do_read_index(index_load_t &out);
   vio::task_t<points_error_t> read_location(storage_location_t loc, std::unique_ptr<uint8_t[]> &buf, uint32_t &size);
+  storage_location_t next_location(uint32_t size); // allocate a fresh 64-bit id split into file_id/offset
 
   std::unique_ptr<io_manager_t> _io;
   vio::event_loop_t &_event_loop;
   bool _exists = false;
-  uint32_t _next_id = 0;
+  uint64_t _next_id = 0;
 
   // Locations of the previous committed metadata objects, reclaimed after the next manifest commit.
   storage_location_t _attributes_location;

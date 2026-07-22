@@ -67,9 +67,21 @@ points_error_t run_on_loop_blocking(vio::event_loop_t &loop, Factory factory)
 }
 } // namespace
 
-std::string object_backend_t::object_name(uint32_t id)
+std::string object_backend_t::object_name(uint32_t file_id, uint64_t offset)
 {
-  return fmt::format("blob_{:08x}", id);
+  // 96 bits of identity from the storage_location; a single object per (file_id, offset) pair.
+  return fmt::format("blob_{:08x}_{:016x}", file_id, offset);
+}
+
+storage_location_t object_backend_t::next_location(uint32_t size)
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  uint64_t id = _next_id++;
+  storage_location_t loc;
+  loc.file_id = uint32_t(id & 0xFFFFFFFFu); // low 32 bits (== the whole id until 4B blobs, offset stays 0)
+  loc.offset = id >> 32;                    // high bits carry the overflow past 4B
+  loc.size = size;
+  return loc;
 }
 
 object_backend_t::object_backend_t(std::unique_ptr<io_manager_t> io, vio::event_loop_t &event_loop)
@@ -117,7 +129,7 @@ vio::task_t<points_error_t> object_backend_t::read_location(storage_location_t l
   }
   buf = std::make_unique<uint8_t[]>(loc.size);
   uint32_t read_bytes = 0;
-  auto err = co_await _io->read_object(object_name(loc.file_id), buf.get(), io_range_t{0, int64_t(loc.size)}, read_bytes);
+  auto err = co_await _io->read_object(object_name(loc.file_id, loc.offset), buf.get(), io_range_t{0, int64_t(loc.size)}, read_bytes);
   size = loc.size;
   co_return err;
 }
@@ -139,7 +151,7 @@ vio::task_t<points_error_t> object_backend_t::do_read_index(index_load_t &out)
   if (err.code != 0)
     co_return err;
 
-  _next_id = uint32_t(free_blobs.offset);
+  _next_id = free_blobs.offset; // full 64-bit next id (see next_location / object_name)
   _attributes_location = attribute_configs;
   _stats_location = compression_stats;
   _perf_stats_location = perf_stats;
@@ -179,46 +191,38 @@ points_error_t object_backend_t::restore_allocator(const std::unique_ptr<uint8_t
 
 void object_backend_t::allocate_blob(uint32_t size, storage_location_t &out)
 {
-  std::unique_lock<std::mutex> lock(_mutex);
-  out.file_id = _next_id++;
-  out.size = size;
-  out.offset = 0;
+  out = next_location(size);
 }
 
 vio::task_t<points_error_t> object_backend_t::write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data)
 {
-  co_return co_await _io->write_object(object_name(location.file_id), std::move(data), location.size);
+  co_return co_await _io->write_object(object_name(location.file_id, location.offset), std::move(data), location.size);
 }
 
 vio::task_t<points_error_t> object_backend_t::read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read)
 {
-  co_return co_await _io->read_object(object_name(location.file_id), dst, io_range_t{0, int64_t(location.size)}, bytes_read);
+  co_return co_await _io->read_object(object_name(location.file_id, location.offset), dst, io_range_t{0, int64_t(location.size)}, bytes_read);
 }
 
 vio::task_t<points_error_t> object_backend_t::write_index(checkpoint_t checkpoint)
 {
-  auto alloc_id = [this]() {
-    std::unique_lock<std::mutex> lock(_mutex);
-    return _next_id++;
-  };
-
-  storage_location_t attributes_location{alloc_id(), checkpoint.attribute_configs_size, 0};
-  auto err = co_await _io->write_object(object_name(attributes_location.file_id), checkpoint.attribute_configs, attributes_location.size);
+  storage_location_t attributes_location = next_location(checkpoint.attribute_configs_size);
+  auto err = co_await _io->write_object(object_name(attributes_location.file_id, attributes_location.offset), checkpoint.attribute_configs, attributes_location.size);
   if (err.code != 0)
     co_return err;
 
-  storage_location_t stats_location{alloc_id(), checkpoint.stats_size, 0};
-  err = co_await _io->write_object(object_name(stats_location.file_id), checkpoint.stats, stats_location.size);
+  storage_location_t stats_location = next_location(checkpoint.stats_size);
+  err = co_await _io->write_object(object_name(stats_location.file_id, stats_location.offset), checkpoint.stats, stats_location.size);
   if (err.code != 0)
     co_return err;
 
-  storage_location_t perf_location{alloc_id(), checkpoint.perf_size, 0};
-  err = co_await _io->write_object(object_name(perf_location.file_id), checkpoint.perf, perf_location.size);
+  storage_location_t perf_location = next_location(checkpoint.perf_size);
+  err = co_await _io->write_object(object_name(perf_location.file_id, perf_location.offset), checkpoint.perf, perf_location.size);
   if (err.code != 0)
     co_return err;
 
-  // The manifest's free-blobs slot carries the next id so allocation resumes correctly on reopen.
-  uint32_t next_id_snapshot;
+  // The manifest's free-blobs slot carries the full 64-bit next id so allocation resumes on reopen.
+  uint64_t next_id_snapshot;
   {
     std::unique_lock<std::mutex> lock(_mutex);
     next_id_snapshot = _next_id;
@@ -241,13 +245,13 @@ vio::task_t<points_error_t> object_backend_t::write_index(checkpoint_t checkpoin
   _tree_registry_location = checkpoint.tree_registry;
 
   for (auto &loc : checkpoint.freed)
-    co_await _io->remove_object(object_name(loc.file_id));
+    co_await _io->remove_object(object_name(loc.file_id, loc.offset));
   if (old_attributes.size > 0)
-    co_await _io->remove_object(object_name(old_attributes.file_id));
+    co_await _io->remove_object(object_name(old_attributes.file_id, old_attributes.offset));
   if (old_stats.size > 0)
-    co_await _io->remove_object(object_name(old_stats.file_id));
+    co_await _io->remove_object(object_name(old_stats.file_id, old_stats.offset));
   if (old_perf.size > 0)
-    co_await _io->remove_object(object_name(old_perf.file_id));
+    co_await _io->remove_object(object_name(old_perf.file_id, old_perf.offset));
 
   co_return points_error_t{};
 }

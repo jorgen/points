@@ -271,6 +271,34 @@ TEST_CASE("mem:// object backend round trip (single session)")
   REQUIRE(memcmp(got.data(), blob.data(), blob.size()) == 0);
 }
 
+TEST_CASE("object backend identifies blobs by file_id AND offset (past the 4B cap)")
+{
+  vio::thread_with_event_loop_t loop_thread;
+  auto &loop = loop_thread.event_loop();
+
+  points_error_t err;
+  auto backend = create_storage_backend("mem://ids", loop, err);
+  REQUIRE(err.code == 0);
+  REQUIRE(backend->open_for_write(true).code == 0);
+
+  // Two locations sharing file_id but differing only in offset (the ">4B blobs" regime, where the
+  // id counter overflows file_id into offset) must be distinct objects. Drive them directly, since
+  // allocate_blob can't reach 2^32 ids in a test.
+  auto a = pattern(64, 1);
+  auto b = pattern(64, 200);
+  storage_location_t loc_a{7, uint32_t(a.size()), 0};
+  storage_location_t loc_b{7, uint32_t(b.size()), 1}; // same file_id, offset 1 => a different blob id
+  REQUIRE(run_task(loop, [&]() { return backend->write_allocated(loc_a, make_bytes(a)); }).code == 0);
+  REQUIRE(run_task(loop, [&]() { return backend->write_allocated(loc_b, make_bytes(b)); }).code == 0);
+
+  std::vector<uint8_t> got_a(a.size()), got_b(b.size());
+  uint32_t br = 0;
+  REQUIRE(run_task(loop, [&]() { return backend->read_blob(loc_a, got_a.data(), br); }).code == 0);
+  REQUIRE(run_task(loop, [&]() { return backend->read_blob(loc_b, got_b.data(), br); }).code == 0);
+  REQUIRE(memcmp(got_a.data(), a.data(), a.size()) == 0);
+  REQUIRE(memcmp(got_b.data(), b.data(), b.size()) == 0); // loc_b not clobbered by loc_a
+}
+
 // ---------------- fault injection: a failed manifest write must not corrupt the committed dataset ----
 
 namespace
