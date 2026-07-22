@@ -15,6 +15,8 @@ add_executable(private_interface_unit_tests
         private/deque_map_test.cpp
         private/blob_manager_test.cpp
         private/storage_backend_test.cpp
+        private/cloud_signing_test.cpp
+        private/cloud_io_live_test.cpp
         $<TARGET_OBJECTS:points_common_objects>
         $<TARGET_OBJECTS:points_converter_objects>
         $<TARGET_OBJECTS:points_render_objects>
