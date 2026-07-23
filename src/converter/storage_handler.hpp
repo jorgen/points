@@ -19,7 +19,9 @@
 
 #include <vio/event_loop.h>
 #include <vio/event_pipe.h>
-#include <vio/operation/file.h>
+#ifndef __EMSCRIPTEN__
+#include <vio/operation/file.h> // pulls libuv; the storage handler drives IO through the backend, not vio file ops
+#endif
 #include <vio/operation/work.h>
 #include <vio/task.h>
 #include <vio/thread_pool.h>

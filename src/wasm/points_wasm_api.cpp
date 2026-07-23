@@ -22,8 +22,11 @@
 // cooperative event loop via a busy-yield) are seen from JS as async functions returning Promises.
 
 #include <compressor.hpp>
+#include <frustum_tree_walker.hpp>
 #include <object_backend.hpp>
+#include <point_buffer_render_helper.hpp>
 #include <storage_backend.hpp>
+#include <tree.hpp>
 
 #include <vio/objstore/create_object_store.h>
 #include <vio/platform/wasm/cooperative_runtime.h>
@@ -50,6 +53,8 @@ struct dataset_t
 {
   std::unique_ptr<object_backend_t> backend;
   index_load_t index;
+  tree_registry_t tree_registry; // deserialized on open; carries tree_config (scale) + node/tree locations
+  bool tree_registry_ok = false;
 };
 std::map<int, dataset_t> g_datasets;
 int g_next_handle = 1;
@@ -122,6 +127,38 @@ val to_uint8array(const uint8_t *data, uint32_t size)
     u8.call<void>("set", val(emscripten::typed_memory_view(size, data)));
   return u8;
 }
+
+// Read a blob by storage location (busy-yield) and, if it carries a compression header, decompress it;
+// otherwise return the raw bytes. false + g_last_error on failure.
+bool read_blob_decompressed(object_backend_t *backend, storage_location_t loc, std::shared_ptr<uint8_t[]> &out, uint32_t &out_size)
+{
+  auto raw = std::make_shared<std::vector<uint8_t>>(loc.size);
+  auto br = std::make_shared<uint32_t>(0);
+  points_error_t err = drive_blocking([backend, loc, raw, br]() { return backend->read_blob(loc, raw->data(), *br); });
+  if (err.code != 0)
+  {
+    g_last_error = err.msg.empty() ? "read_blob failed" : err.msg;
+    return false;
+  }
+  if (has_compression_magic(raw->data(), *br))
+  {
+    compression_result_t res = decompress_any(raw->data(), *br);
+    if (res.error.code != 0)
+    {
+      g_last_error = res.error.msg.empty() ? "decompress failed" : res.error.msg;
+      return false;
+    }
+    out = res.data;
+    out_size = res.size;
+  }
+  else
+  {
+    out = std::make_shared<uint8_t[]>(*br);
+    memcpy(out.get(), raw->data(), *br);
+    out_size = *br;
+  }
+  return true;
+}
 } // namespace
 
 // Open an S3 dataset. `config` is a JS object:
@@ -158,6 +195,32 @@ static int points_open(val config)
   {
     g_last_error = err.msg.empty() ? "read_index failed" : err.msg;
     return -1;
+  }
+
+  // Deserialize the tree registry (tree_config scale + per-tree/node storage locations) so readNode can
+  // locate nodes. Best-effort: a dataset with no tree registry (e.g. metadata-only) still opens.
+  if (ds.index.tree_registry_size > 0)
+  {
+    std::unique_ptr<uint8_t[]> tr;
+    uint32_t tr_size = 0;
+    if (has_compression_magic(ds.index.tree_registry.get(), ds.index.tree_registry_size))
+    {
+      compression_result_t res = decompress_any(ds.index.tree_registry.get(), ds.index.tree_registry_size);
+      if (res.error.code == 0)
+      {
+        tr = std::make_unique<uint8_t[]>(res.size);
+        memcpy(tr.get(), res.data.get(), res.size);
+        tr_size = res.size;
+      }
+    }
+    else
+    {
+      tr = std::make_unique<uint8_t[]>(ds.index.tree_registry_size);
+      memcpy(tr.get(), ds.index.tree_registry.get(), ds.index.tree_registry_size);
+      tr_size = ds.index.tree_registry_size;
+    }
+    if (tr_size > 0)
+      ds.tree_registry_ok = tree_registry_deserialize(tr, tr_size, ds.tree_registry).code == 0;
   }
 
   int handle = g_next_handle++;
@@ -236,6 +299,107 @@ static val points_read_blob(int handle, double file_id, double offset, double si
   return to_uint8array(raw->data(), *bytes_read);
 }
 
+// Read + decode the first point node of the root tree, end to end: tree deserialize -> node storage map
+// -> read + decompress the positions blob -> morton decode. Returns { vertex: Float32Array (xyz, node-
+// local), offset: [x,y,z] (node origin in world units), pointCount }, or null on error. This exercises
+// the full render read path in wasm. Async from JS (busy-yields the fetches).
+static val points_read_node(int handle)
+{
+  g_last_error.clear();
+  auto it = g_datasets.find(handle);
+  if (it == g_datasets.end())
+  {
+    g_last_error = "invalid handle";
+    return val::null();
+  }
+  dataset_t &ds = it->second;
+  if (!ds.tree_registry_ok)
+  {
+    g_last_error = "tree registry not loaded";
+    return val::null();
+  }
+  object_backend_t *backend = ds.backend.get();
+
+  // Root tree blob -> deserialize -> its storage map holds the node point locations.
+  tree_id_t root = ds.tree_registry.root;
+  if (root.data >= ds.tree_registry.locations.size())
+  {
+    g_last_error = "root tree location out of range";
+    return val::null();
+  }
+  std::shared_ptr<uint8_t[]> tree_buf;
+  uint32_t tree_size = 0;
+  if (!read_blob_decompressed(backend, ds.tree_registry.locations[root.data], tree_buf, tree_size))
+    return val::null();
+  serialized_tree_t serialized{tree_buf, int(tree_size)};
+  tree_t tree;
+  points_error_t terr;
+  if (!tree_deserialize(serialized, tree, terr))
+  {
+    g_last_error = terr.msg.empty() ? "tree_deserialize failed" : terr.msg;
+    return val::null();
+  }
+
+  // First storage-map entry with a positions blob (attribute index 0).
+  storage_location_t pos_loc{};
+  bool found = false;
+  tree.storage_map.for_each([&](input_data_id_t, attributes_id_t, const std::vector<storage_location_t> &storage) {
+    if (!found && !storage.empty() && storage[0].size > 0)
+    {
+      pos_loc = storage[0];
+      found = true;
+    }
+  });
+  if (!found)
+  {
+    g_last_error = "root tree has no node with a positions blob";
+    return val::null();
+  }
+
+  // Read + decompress the positions blob -> storage_header_t + morton point data.
+  std::shared_ptr<uint8_t[]> pos_buf;
+  uint32_t pos_size = 0;
+  if (!read_blob_decompressed(backend, pos_loc, pos_buf, pos_size))
+    return val::null();
+  storage_header_t header{};
+  points_converter_buffer_t point_data{};
+  points_error_t derr;
+  if (!deserialize_points(points_converter_buffer_t(pos_buf.get(), pos_size), header, point_data, derr))
+  {
+    g_last_error = derr.msg.empty() ? "deserialize_points failed" : derr.msg;
+    return val::null();
+  }
+
+  // Morton -> float32 xyz via the render helper (hand-populate the data handler).
+  point_format_t formats[4] = {header.point_format, point_format_t(), point_format_t(), point_format_t()};
+  dyn_points_data_handler_t dh(formats);
+  dh.header = header;
+  dh.read_request.push_back(std::make_shared<read_request_t>());
+  dh.read_request[0]->buffer = pos_buf;
+  dh.read_request[0]->buffer_info = points_converter_buffer_t(pos_buf.get(), pos_size);
+  dh.data_info[0] = point_data;
+  dh.target_count = 1;
+  dh.done = 1;
+
+  dyn_points_draw_buffer_t draw;
+  convert_points_to_vertex_data(ds.tree_registry.tree_config, dh, draw);
+
+  uint32_t point_count = header.point_count;
+  const float *xyz = reinterpret_cast<const float *>(draw.data[0].get());
+  val out = val::object();
+  out.set("pointCount", point_count);
+  val offset = val::array();
+  offset.call<void>("push", draw.offset[0]);
+  offset.call<void>("push", draw.offset[1]);
+  offset.call<void>("push", draw.offset[2]);
+  out.set("offset", offset);
+  val vertex = val::global("Float32Array").new_(point_count * 3);
+  if (point_count > 0)
+    vertex.call<void>("set", val(emscripten::typed_memory_view(size_t(point_count) * 3, xyz)));
+  out.set("vertex", vertex);
+  return out;
+}
+
 static void points_close(int handle)
 {
   g_datasets.erase(handle);
@@ -246,6 +410,7 @@ EMSCRIPTEN_BINDINGS(points_data)
   emscripten::function("open", &points_open);
   emscripten::function("readIndex", &points_read_index);
   emscripten::function("readBlob", &points_read_blob);
+  emscripten::function("readNode", &points_read_node);
   emscripten::function("exists", &points_exists);
   emscripten::function("lastError", &points_last_error);
   emscripten::function("close", &points_close);

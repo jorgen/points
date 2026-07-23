@@ -4,6 +4,7 @@
 
 set(_conv ${CMAKE_CURRENT_SOURCE_DIR}/../converter)
 set(_common ${CMAKE_CURRENT_SOURCE_DIR}/../common)
+set(_render ${CMAKE_CURRENT_SOURCE_DIR}/../render)
 
 add_executable(points_data_wasm
     points_wasm_api.cpp
@@ -16,13 +17,20 @@ add_executable(points_data_wasm
     ${_conv}/compressor_ans.cpp
     ${_conv}/byte_shuffle.cpp
     ${_conv}/compression_preprocess.cpp
+    # Tree (de)serialize + node storage map + attribute configs, for the frustum-walk / readNode path:
+    ${_conv}/tree.cpp
+    ${_conv}/input_storage_map.cpp
+    ${_conv}/attributes_configs.cpp
 )
 
 target_include_directories(points_data_wasm PRIVATE
     ${_conv}
     ${_common}
+    ${_render}
     ${fmt_SOURCE_DIR}/include
+    ${glm_SOURCE_DIR}
     ${libmorton_SOURCE_DIR}/include
+    ${unordered_dense_SOURCE_DIR}/include
     ${zstd_SOURCE_DIR}/lib
 )
 

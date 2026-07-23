@@ -18,8 +18,10 @@
 #include "storage_backend.hpp"
 
 #include "object_backend.hpp"
-#include "packed_file_backend.hpp"
 #include "url.hpp"
+#ifndef __EMSCRIPTEN__
+#include "packed_file_backend.hpp" // pulls libuv; the browser build has no single-file/local backend
+#endif
 
 #include <vio/objstore/create_object_store.h>
 
@@ -33,7 +35,12 @@ std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url
   // No scheme (a bare path) or file:// -> the single packed file backend.
   if (parsed.scheme.empty() || parsed.scheme == "file")
   {
+#ifdef __EMSCRIPTEN__
+    error = {-1, "the packed/local-file storage backend is unavailable in the WebAssembly build; use an object-store URL (s3://, dir://, mem://)"};
+    return nullptr;
+#else
     return std::make_unique<packed_file_backend_t>(parsed.path, event_loop, error);
+#endif
   }
 
   // Object-per-blob over a vio object store (dir:// / mem:// / s3:// / az://), selected by the scheme.
