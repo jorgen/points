@@ -376,11 +376,18 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   morton::morton192_t base_morton;
   morton::encode(tmp, base_morton);
 
-  morton::morton_t<MT, C> first = morton_begin[indecies_begin[0]];
-  morton::morton_t<MT, C> last = morton_begin[indecies_begin[count - 1]];
-  // first == last is valid: a single point, or all points quantizing to the same Morton cell
-  // (common for coarse formats / duplicate points). Only first > last would be a real defect.
-  assert(first <= last);
+  morton::morton_t<MT, C> first{};
+  morton::morton_t<MT, C> last{};
+  if (count > 0)
+  {
+    first = morton_begin[indecies_begin[0]];
+    last = morton_begin[indecies_begin[count - 1]];
+    // first == last is valid: a single point, or all points quantizing to the same Morton cell
+    // (common for coarse formats / duplicate points). Only first > last would be a real defect.
+    assert(first <= last);
+  }
+  // An empty batch (count == 0) yields an empty sorted buffer; guard the first/last lookup, which would
+  // otherwise index indecies_begin[-1] and crash.
   points.header.lod_span = morton::morton_lod(first, last);
   points_type_t new_type = morton_type_from_lod(points.header.lod_span);
   std::unique_ptr<uint8_t[]> new_data;
