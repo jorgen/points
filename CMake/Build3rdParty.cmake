@@ -33,6 +33,9 @@ macro(Build3rdParty)
     # vio changed its include directory from PUBLIC to PRIVATE; re-expose it
     target_include_directories(vio PUBLIC ${vio_SOURCE_DIR}/src)
 
+    # laszip is only needed for LAS/LAZ ingest (the write/convert path), which the WebAssembly read-only
+    # data library does not build. Skip it under Emscripten.
+    if (NOT EMSCRIPTEN)
     # Build laszip as an OBJECT library directly from sources
     set(LASZIP_API_VERSION_MAJOR 3)
     set(LASZIP_API_VERSION_MINOR 5)
@@ -83,6 +86,7 @@ macro(Build3rdParty)
     else ()
         target_compile_options(laszip PRIVATE -w -fexceptions)
     endif ()
+    endif () # NOT EMSCRIPTEN (laszip)
 
     set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)
@@ -100,6 +104,10 @@ macro(Build3rdParty)
     set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
     set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
     set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    if (EMSCRIPTEN)
+        # No pthreads in the single-threaded wasm build.
+        set(ZSTD_MULTITHREAD_SUPPORT OFF CACHE BOOL "" FORCE)
+    endif ()
     add_subdirectory(${zstd_SOURCE_DIR}/build/cmake ${CMAKE_CURRENT_BINARY_DIR}/zstd_build SYSTEM)
     unset(ZSTD_BUILD_PROGRAMS CACHE)
     unset(ZSTD_BUILD_SHARED CACHE)

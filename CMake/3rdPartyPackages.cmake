@@ -2,13 +2,19 @@
 # Included by CmDepFetch and CmDepFetchDependencies.
 # Caller must define CmDepFetchPackage(name version url url_hash) before including this file.
 
-CmDepFetchPackage(fmt 10.1.1 https://github.com/fmtlib/fmt/archive/10.1.1.tar.gz SHA256=78b8c0a72b1c35e4443a7e308df52498252d1cefc2b08c9a97bc9ee6cfe61f8b)
+# fmt 10.x does not compile under Emscripten's (very new) clang -- a consteval error in format-inl.h.
+# The wasm build uses fmt 11.2.0; the native build keeps the established 10.1.1 pin untouched.
+if(EMSCRIPTEN)
+    CmDepFetchPackage(fmt 11.2.0 https://github.com/fmtlib/fmt/archive/11.2.0.tar.gz SHA256=bc23066d87ab3168f27cef3e97d545fa63314f5c79df5ea444d41d56f962c6af)
+else()
+    CmDepFetchPackage(fmt 10.1.1 https://github.com/fmtlib/fmt/archive/10.1.1.tar.gz SHA256=78b8c0a72b1c35e4443a7e308df52498252d1cefc2b08c9a97bc9ee6cfe61f8b)
+endif()
 CmDepFetchPackage(sdl 3.1.6 https://github.com/libsdl-org/SDL/archive/refs/tags/preview-3.1.6.tar.gz SHA256=5da5e265c150b954d007bf1465b155d9df1d0d52f10115a49bb918dc8fe2826a)
 CmDepFetchPackage(glm 1.0.1 https://github.com/g-truc/glm/archive/1.0.1.tar.gz SHA256=9f3174561fd26904b23f0db5e560971cbf9b3cbda0b280f04d5c379d03bf234c)
 CmDepFetchPackage(doctest 2.4.12 https://github.com/doctest/doctest/archive/v2.4.12.tar.gz SHA256=73381c7aa4dee704bd935609668cf41880ea7f19fa0504a200e13b74999c2d70)
 CmDepFetchPackage(cmakerc 952ff https://github.com/vector-of-bool/cmrc/archive/952ffddba731fc110bd50409e8d2b8a06abbd237.zip SHA256=b199e7481dda667cd1b1936c9acb64e496ebc3c5ad90b381ba8d0f361c80638d)
 CmDepFetchPackage(imgui 1.91.6 https://github.com/ocornut/imgui/archive/v1.91.6.tar.gz SHA256=c5fbc5dcab1d46064001c3b84d7a88812985cde7e0e9ced03f5677bec1ba502a)
-CmDepFetchPackage(vio fce297e https://github.com/jorgen/vio/archive/fce297ec8a39c558840dcd33c8e6c1eb88d09a76.tar.gz SHA256=970587b10efcca018c1005d364083d2a01292c416c67bf6dadae1fb199bfde77)
+CmDepFetchPackage(vio fe27fab https://github.com/jorgen/vio/archive/fe27fab84ef4b228ece9eb2b9d9cf8c1f7c9fddb.tar.gz SHA256=4356a47f8f3658d2136b9f85da70aa28c6c50d3d9c5f4693d10155b9c2356e9f)
 CmDepFetchPackage(laszip 3.5.0 https://github.com/LASzip/LASzip/archive/refs/tags/3.5.0.tar.gz SHA256=6e9baac8689dfd2e1502ceafabb20c62b6cd572744d240fb755503fd57c2a6af)
 CmDepFetchPackage(libmorton 0.2.10 https://github.com/Forceflow/libmorton/archive/v0.2.10.tar.gz SHA256=5f4a8dbf350222b0bec35ad1bee6b76fa22e16ea364e1e80ca47d8f5a7210d6f)
 CmDepFetchPackage(argh 431bf323ac https://github.com/adishavit/argh/archive/431bf323acd3bb805483491ff277dac5d85772ad.tar.gz SHA256=af6579d9143b9e2445354796645648c2bbbecdbe3705ba825221861a95f936ea)

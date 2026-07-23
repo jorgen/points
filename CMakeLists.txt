@@ -58,6 +58,15 @@ option(POINTS_BUILD_TESTS "Build tests" ON)
 option(POINTS_BUILD_EXAMPLES "Build examples" ON)
 option(BUILD_SHARED_LIBS "Build shared libs" ON)
 
+if(EMSCRIPTEN)
+    # The WebAssembly build produces a single read-only data library (src/wasm); no shared libraries,
+    # tests, or examples, and no laszip/SDL. Everything below is guarded by EMSCRIPTEN so the native
+    # build is unaffected.
+    set(POINTS_BUILD_TESTS OFF)
+    set(POINTS_BUILD_EXAMPLES OFF)
+    set(BUILD_SHARED_LIBS OFF)
+endif()
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 find_package(Threads)
 
@@ -82,7 +91,10 @@ if (POINTS_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif ()
 
-add_subdirectory(tools)
+# CLI tools (jlp_info / jlp_extract) depend on the native converter/render libraries.
+if (NOT EMSCRIPTEN)
+    add_subdirectory(tools)
+endif ()
 
 if (NOT DEFINED CPACK_GENERATOR)
     if (UNIX)

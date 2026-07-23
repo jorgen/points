@@ -21,6 +21,10 @@
 
 #include <fmt/core.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h> // emscripten_sleep (Asyncify)
+#endif
+
 namespace points::converter
 {
 
@@ -72,8 +76,21 @@ points_error_t run_on_loop_blocking(vio::event_loop_t &loop, Factory factory)
   // The lambda handed to run_in_loop is NOT a coroutine: it just forwards into sync_wait_coro, whose
   // by-value parameters own copies of state/factory for the lifetime of the actual io.
   loop.run_in_loop([state, factory = std::move(factory)]() mutable -> vio::task_t<void> { return sync_wait_coro(state, std::move(factory)); });
+#ifdef __EMSCRIPTEN__
+  // Single-threaded wasm: no other thread can ever satisfy a condition_variable, so a cv.wait here
+  // would deadlock. Instead pump `loop` ourselves (there is no separate loop thread to make progress)
+  // and yield to the browser between passes so the pending emscripten_fetch/XHR callbacks can run and
+  // post their coroutine resumes back onto the loop. Requires -sASYNCIFY. This is a one-time bootstrap
+  // path (exists / read_index on open), never the hot per-node read loop.
+  while (!state->done)
+  {
+    loop.poll();
+    emscripten_sleep(0);
+  }
+#else
   std::unique_lock<std::mutex> lk(state->m);
   state->cv.wait(lk, [&] { return state->done; });
+#endif
   return state->result;
 }
 } // namespace
