@@ -99,6 +99,28 @@ struct read_request_t
   bool _done = false;
   std::mutex _mutex;
   std::condition_variable _block_for_read;
+
+#ifdef __EMSCRIPTEN__
+  // Single-thread cooperative build: rather than parking a thread on wait_for_read, a coroutine can
+  // co_await the read completing. do_read_request resumes this continuation on its owning loop when the
+  // read finishes, so nothing blocks. (read() runs on the storage loop; the awaiting coroutine may live
+  // on another cooperative loop, hence the explicit continuation loop for a cross-loop resume.)
+  std::coroutine_handle<> _continuation{};
+  vio::event_loop_t *_continuation_loop = nullptr;
+  struct awaiter_t
+  {
+    read_request_t *req;
+    vio::event_loop_t *loop;
+    bool await_ready() const noexcept { return req->_done; }
+    void await_suspend(std::coroutine_handle<> h) noexcept
+    {
+      req->_continuation = h;
+      req->_continuation_loop = loop;
+    }
+    void await_resume() const noexcept {}
+  };
+  awaiter_t await_on(vio::event_loop_t &loop) noexcept { return awaiter_t{this, &loop}; }
+#endif
 };
 
 class storage_handler_t

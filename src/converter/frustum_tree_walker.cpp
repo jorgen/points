@@ -89,7 +89,8 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
 {
   (void)attribute_index_map;
   (void)walker;
-  if (!std::atomic_ref<const uint8_t>(tree_registry.tree_id_initialized[tree_id.data]).load(std::memory_order_acquire))
+  // const_cast for a load-only atomic view: libc++ (emscripten) rejects atomic_ref over a const type.
+  if (!std::atomic_ref<uint8_t>(const_cast<uint8_t &>(tree_registry.tree_id_initialized[tree_id.data])).load(std::memory_order_acquire))
   {
     walker.m_trees_to_load.push_back(tree_id);
     return;
@@ -219,7 +220,7 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
             auto next_sub_tree_skip = current_tree->skips[4][possible_nodes.skip] + child_count;
             auto next_tree_id = current_tree->sub_trees[next_sub_tree_skip];
 
-            if (!std::atomic_ref<const uint8_t>(tree_registry.tree_id_initialized[next_tree_id.data]).load(std::memory_order_acquire))
+            if (!std::atomic_ref<uint8_t>(const_cast<uint8_t &>(tree_registry.tree_id_initialized[next_tree_id.data])).load(std::memory_order_acquire))
             {
               walker.m_trees_to_load.push_back(next_tree_id);
               // child_count indexes into the contiguous sub_trees[] array by set-bit ordinal

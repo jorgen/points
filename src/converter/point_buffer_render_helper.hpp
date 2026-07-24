@@ -42,7 +42,9 @@ struct dyn_points_data_handler_t
     read_request.reserve(4);
     for (int i = 0; i < 4; i++)
     {
-      if (locations[i].offset == 0)
+      // An empty storage slot is size==0 (the codebase-wide convention); offset==0 is a VALID blob
+      // location under object storage (one object per blob), so it must not be treated as empty.
+      if (locations[i].size == 0)
       {
         break;
       }

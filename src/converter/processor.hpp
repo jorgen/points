@@ -20,7 +20,9 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <uv.h>
+#ifndef __EMSCRIPTEN__
+#include <uv.h> // unused here; pulls libuv, which the wasm build does not link
+#endif
 #include <vector>
 
 #include <points/converter/converter.h>

@@ -25,13 +25,44 @@
 #include <limits>
 #include <utility>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
 namespace points::converter
 {
 
+#ifdef __EMSCRIPTEN__
+// Mark a read complete on the single-thread cooperative build: resume the awaiting coroutine (if any)
+// on its owning loop instead of notifying a condition variable no thread is waiting on.
+static void complete_read_request(read_request_t &r)
+{
+  r._done = true;
+  if (r._continuation)
+  {
+    auto c = r._continuation;
+    auto *loop = r._continuation_loop;
+    r._continuation = nullptr;
+    loop->run_in_loop([c]() { c.resume(); });
+  }
+}
+#endif
+
 void read_request_t::wait_for_read()
 {
+#ifdef __EMSCRIPTEN__
+  // Cooperative fallback: the render path co_awaits await_on() instead, so this only runs for the
+  // (currently unused-on-wasm) write/LOD read paths. Spin the browser event loop until the read lands;
+  // safe only at the top of the call stack (never re-entered from inside a loop handler).
+  while (!_done)
+  {
+    vio::wasm::pump();
+    emscripten_sleep(0);
+  }
+#else
   std::unique_lock<std::mutex> lock(_mutex);
   _block_for_read.wait(lock, [this] { return this->_done; });
+#endif
 }
 
 storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written,
@@ -517,9 +548,13 @@ std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t locat
       ret->buffer_info.data = ret->buffer.get();
       ret->buffer_info.size = cv.compressed_size;
     }
+#ifdef __EMSCRIPTEN__
+    complete_read_request(*ret);
+#else
     std::unique_lock<std::mutex> lock(ret->_mutex);
     ret->_done = true;
     ret->_block_for_read.notify_all();
+#endif
     return ret;
   }
 
@@ -579,9 +614,13 @@ vio::task_t<void> storage_handler_t::do_read_request(std::shared_ptr<read_reques
   auto read_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(read_end - read_start).count());
   _perf_stats.lod_read.record(location.size, read_us);
 
+#ifdef __EMSCRIPTEN__
+  complete_read_request(*read_request);
+#else
   std::unique_lock<std::mutex> lock(read_request->_mutex);
   read_request->_done = true;
   read_request->_block_for_read.notify_all();
+#endif
 }
 
 } // namespace points::converter

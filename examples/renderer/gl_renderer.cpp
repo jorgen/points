@@ -1,6 +1,7 @@
 #include "gl_renderer.h"
 
 #include <cmath>
+#include <string>
 #include <fmt/printf.h>
 
 #define CMRC_NO_EXCEPTIONS 1
@@ -61,7 +62,11 @@ int type_to_glformat(points_type_t type)
   case points_type_r32:
     return GL_FLOAT;
   case points_type_r64:
+#ifdef __EMSCRIPTEN__
+    return GL_INVALID_VALUE; // WebGL2 has no double vertex attributes; positions are always r32 here
+#else
     return GL_DOUBLE;
+#endif
   default:
     return GL_INVALID_VALUE;
   }
@@ -90,7 +95,20 @@ int component_to_tex_format(points_components_t components)
 int create_shader(const GLchar *shader, GLint size, GLenum shader_type)
 {
   GLuint s = glCreateShader(shader_type);
+#ifdef __EMSCRIPTEN__
+  // The shader sources begin with the desktop "#version 330" line. WebGL2/GLES3 needs "#version 300 es"
+  // plus an explicit default float/int precision (fragment shaders have no default float precision in
+  // ES3). Rewrite just the leading #version line at load time so the shader bodies stay single-source.
+  std::string src(shader, shader + size);
+  size_t first_nl = src.find('\n');
+  std::string body = (first_nl == std::string::npos) ? std::string() : src.substr(first_nl + 1);
+  src = "#version 300 es\nprecision highp float;\nprecision highp int;\n" + body;
+  const GLchar *src_ptr = src.c_str();
+  GLint src_len = GLint(src.size());
+  glShaderSource(s, 1, &src_ptr, &src_len);
+#else
   glShaderSource(s, 1, &shader, &size);
+#endif
   glCompileShader(s);
 
   GLint status;
@@ -169,7 +187,7 @@ void gl_aabb_handler::initialize()
   auto vertex_shader = shaderfs.open("shaders/aabb.vert");
   auto fragment_shader = shaderfs.open("shaders/aabb.frag");
 
-  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), vertex_shader.end() - vertex_shader.begin());
+  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), fragment_shader.end() - fragment_shader.begin());
   glUseProgram(program);
   attrib_position = glGetAttribLocation(program, "position");
   attrib_color = glGetAttribLocation(program, "color");
@@ -321,7 +339,9 @@ void gl_dyn_points_handler::draw(points_draw_group_t &group, color_components_t 
 
   auto &gl_handle = gl_handles[int(color_components)];
 
-  glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
+#ifndef __EMSCRIPTEN__
+  glEnable(GL_VERTEX_PROGRAM_POINT_SIZE); // WebGL2/GLES3 always honours gl_PointSize; the enum does not exist there
+#endif
 
   glBindVertexArray(gl_handle.vao);
   glUseProgram(gl_handle.program);
@@ -364,7 +384,9 @@ void gl_dyn_points_handler::draw_crossfade(points_draw_group_t &group, float poi
   if (!is_initialized)
     initialize();
 
-  glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
+#ifndef __EMSCRIPTEN__
+  glEnable(GL_VERTEX_PROGRAM_POINT_SIZE); // WebGL2/GLES3 always honours gl_PointSize; the enum does not exist there
+#endif
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -439,7 +461,7 @@ void gl_flat_points_handler::initialize()
   auto vertex_shader = shaderfs.open("shaders/points.vert");
   auto fragment_shader = shaderfs.open("shaders/points.frag");
 
-  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), vertex_shader.end() - vertex_shader.begin());
+  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), fragment_shader.end() - fragment_shader.begin());
   glUseProgram(program);
   attrib_position = glGetAttribLocation(program, "position");
   attrib_color = glGetAttribLocation(program, "color");
@@ -517,7 +539,7 @@ void gl_skybox_handler::initialize()
   auto vertex_shader = shaderfs.open("shaders/skybox.vert");
   auto fragment_shader = shaderfs.open("shaders/skybox.frag");
 
-  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), vertex_shader.end() - vertex_shader.begin());
+  program = create_program(vertex_shader.begin(), vertex_shader.end() - vertex_shader.begin(), fragment_shader.begin(), fragment_shader.end() - fragment_shader.begin());
   glUseProgram(program);
   attrib_vertex = glGetAttribLocation(program, "vertex");
   uniform_inverse_vp = glGetUniformLocation(program, "inverse_vp");

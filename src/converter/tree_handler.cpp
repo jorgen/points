@@ -24,6 +24,10 @@
 #include <atomic>
 #include <chrono>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
 namespace points::converter
 {
 
@@ -120,8 +124,18 @@ points_error_t tree_handler_t::deserialize_tree_registry(std::unique_ptr<uint8_t
 void tree_handler_t::request_root()
 {
   _request_root.post_event();
+#ifdef __EMSCRIPTEN__
+  // Cooperative single-thread: spin the browser event loop (this runs at open, top of stack, so a
+  // nested pump is safe) until the root read+deserialize chain sets _first_root_initialized.
+  while (!_first_root_initialized)
+  {
+    vio::wasm::pump();
+    emscripten_sleep(0);
+  }
+#else
   std::unique_lock<std::mutex> lock(_root_mutex);
   _root_cv.wait(lock, [this] { return _first_root_initialized; });
+#endif
 }
 
 void tree_handler_t::set_tree_initialization_config(const tree_config_t &config)
@@ -199,6 +213,24 @@ void tree_handler_t::handle_request_trees_batch(std::vector<tree_id_t> &&tree_id
     _tree_id_requested[tree_id.data] = 1;
     auto location = _tree_registry.locations[tree_id.data];
     auto req = _file_cache.read(location);
+#ifdef __EMSCRIPTEN__
+    // No thread pool on wasm: drive the read as a detached coroutine that suspends on the async read
+    // (co_await await_on) instead of parking a pool thread on wait_for_read. req is captured by value
+    // (shared_ptr) so the read_request stays alive across the suspension.
+    [](tree_handler_t *self, std::shared_ptr<read_request_t> req, tree_id_t tree_id) -> vio::detached_task_t
+    {
+      co_await req->await_on(self->_event_loop);
+      if (req->error.code != 0)
+      {
+        fmt::print("Error reading tree\n");
+        co_return;
+      }
+      serialized_tree_t data;
+      data.size = int(req->buffer_info.size);
+      data.data = req->buffer;
+      self->_deserialize_tree.post_event(tree_id_t(tree_id.data), std::move(data));
+    }(this, req, tree_id);
+#else
     _thread_pool.enqueue([this, req, tree_id]() {
       req->wait_for_read();
       if (req->error.code != 0)
@@ -211,6 +243,7 @@ void tree_handler_t::handle_request_trees_batch(std::vector<tree_id_t> &&tree_id
       data.data = req->buffer;
       this->_deserialize_tree.post_event(tree_id_t(tree_id.data), std::move(data));
     });
+#endif
   }
 }
 

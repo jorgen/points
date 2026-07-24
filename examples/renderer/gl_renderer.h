@@ -4,7 +4,12 @@
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
 
+#ifdef __EMSCRIPTEN__
+// Emscripten links the WebGL2 (GLES3) entry points directly; glad's runtime loader is meaningless here.
+#include <GLES3/gl3.h>
+#else
 #include "include/glad/glad.h"
+#endif
 
 #include <vector>
 
