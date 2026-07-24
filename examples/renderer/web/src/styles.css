@@ -1,0 +1,236 @@
+:root {
+  --bg: #14161a;
+  --panel: #1c2027;
+  --panel-2: #242a33;
+  --border: #333a45;
+  --text: #e6e9ee;
+  --muted: #9aa4b2;
+  --accent: #4c8bf5;
+  --error: #ff6b6b;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: 100%;
+}
+
+/* --- sidebar --- */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.sidebar__header h1 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.5px;
+}
+.sidebar__header p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sidebar__footer {
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* --- connect form --- */
+.connect {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.field input[type='text'],
+.field input[type='password'] {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 13px;
+}
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.field input:disabled {
+  opacity: 0.6;
+}
+.field--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.connect__error {
+  margin: 0;
+  color: var(--error);
+  font-size: 12px;
+}
+
+.btn {
+  margin-top: 4px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.btn--ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+/* --- viewer --- */
+.content {
+  position: relative;
+  min-width: 0;
+}
+
+.viewer {
+  position: absolute;
+  inset: 0;
+}
+
+.viewer__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none; /* let pointer events drive the camera instead of scrolling */
+  cursor: grab;
+}
+.viewer__canvas:active {
+  cursor: grabbing;
+}
+
+.viewer__overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.viewer__overlay > * {
+  pointer-events: auto;
+}
+
+.badge {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+.badge--busy {
+  color: var(--accent);
+}
+.badge--error {
+  color: var(--error);
+  border-color: var(--error);
+  max-width: 60ch;
+}
+
+.hud {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  min-width: 200px;
+  border-radius: 8px;
+  background: rgba(28, 32, 39, 0.86);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+}
+.hud__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.hud__row b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.hud__row select {
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+.hud__bounds {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer__hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+.viewer__hint p {
+  margin: 0;
+}
+.viewer__hint-sub {
+  font-size: 12px;
+  opacity: 0.75;
+}

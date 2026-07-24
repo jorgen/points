@@ -80,13 +80,34 @@ public:
 
   ~renderer_wasm_t()
   {
-    // Detach the wake hook first so a late fetch completion cannot call into a destroyed instance.
-    vio::wasm::set_wake_hook({});
+    dispose();
+  }
+
+  // Release GL + data-source resources. Idempotent, so React can call it on unmount (and under
+  // StrictMode's mount/unmount/mount cycle) to free the WebGL context immediately instead of waiting for
+  // GC. After dispose() the instance must not be used again.
+  void dispose()
+  {
+    // Detach the wake hook first so a late fetch completion cannot call into a disposed instance -- but
+    // only if WE still own it. The hook is process-global; a newer instance (e.g. React StrictMode's
+    // overlapping create/dispose) may have taken it over, and we must not clear that one.
+    if (wake_owner() == this)
+    {
+      vio::wasm::set_wake_hook({});
+      wake_owner() = nullptr;
+    }
+    _request_update = val::undefined();
     if (_cds)
+    {
       points_converter_data_source_destroy(_cds);
+      _cds = nullptr;
+    }
     // renderer/camera/arcball are owned by the render library; gl_renderer holds only non-owning refs.
     if (_gl_ctx)
+    {
       emscripten_webgl_destroy_context(_gl_ctx);
+      _gl_ctx = 0;
+    }
   }
 
   // JS registers the redraw callback. Also wires vio's wake hook (fired when an async storage read
@@ -94,6 +115,7 @@ public:
   void setRequestUpdate(val cb)
   {
     _request_update = std::move(cb);
+    wake_owner() = this;
     vio::wasm::set_wake_hook([this]() { mark_dirty(); });
   }
 
@@ -150,7 +172,8 @@ public:
     for (uint32_t i = 0; i < count; ++i)
     {
       uint32_t n = points_converter_data_get_attribute_name(_cds, int(i), buf, sizeof(buf));
-      out.set(i, std::string(buf, buf + (n < sizeof(buf) ? n : sizeof(buf) - 1)));
+      size_t len = ::strnlen(buf, n < sizeof(buf) ? n : sizeof(buf)); // the C API may include a trailing NUL
+      out.set(i, std::string(buf, buf + len));
     }
     return out;
   }
@@ -182,6 +205,13 @@ private:
   {
     if (!_request_update.isUndefined() && !_request_update.isNull())
       _request_update();
+  }
+
+  // Which instance currently owns the single process-global vio wake hook (see setRequestUpdate/dispose).
+  static renderer_wasm_t *&wake_owner()
+  {
+    static renderer_wasm_t *owner = nullptr;
+    return owner;
   }
 
   void apply_size(int w, int h)
@@ -297,7 +327,8 @@ EMSCRIPTEN_BINDINGS(points_render)
     .function("setAttribute", &renderer_wasm_t::setAttribute)
     .function("getAttributeNames", &renderer_wasm_t::getAttributeNames)
     .function("getAabb", &renderer_wasm_t::getAabb)
-    .function("getPointsRendered", &renderer_wasm_t::getPointsRendered);
+    .function("getPointsRendered", &renderer_wasm_t::getPointsRendered)
+    .function("dispose", &renderer_wasm_t::dispose);
 
   function("createRenderer", &create_renderer, allow_raw_pointers());
 }

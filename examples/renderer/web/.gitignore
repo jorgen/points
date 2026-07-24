@@ -1,0 +1,8 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# Built Emscripten artifacts, copied in by scripts/copy-wasm.mjs (not source).
+public/points_render.mjs
+public/points_render.wasm
