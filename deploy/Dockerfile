@@ -10,6 +10,9 @@
 # Pin the emsdk version the renderer is developed against (keep in sync with deploy.yml).
 FROM emscripten/emsdk:6.0.3 AS wasm
 WORKDIR /src
+# The emsdk image ships CMake 3.28; the points build requires >= 3.30, so install a newer CMake (pip puts it
+# in /usr/local/bin, ahead of the image's cmake on PATH).
+RUN pip3 install --break-system-packages --no-cache-dir cmake
 COPY . ./
 # Configure the points project under Emscripten and build only the WebGL2 renderer module. (The build-preset
 # 'emscripten' defaults to points_data_wasm, so the target is named explicitly.) Fetches the pinned CmDep
