@@ -6,6 +6,7 @@
 #include <cinttypes>
 #include <numeric>
 
+#include <points/converter/connection_cli.h>
 #include <points/converter/converter.h>
 
 struct callback_data_t
@@ -204,28 +205,43 @@ struct args_t
 {
   std::vector<std::string> input;
   std::string output;
+  std::string connection; // --connection spec (inline / @file / env:VAR) for a cloud output URL
   points_converter_compression_t compression;
   bool inspect = false;
 };
 
-args_t parse_arguments(int argc, char *argv[])
+bool parse_arguments(int argc, char *argv[], args_t &args)
 {
-  args_t args = {{}, "out.jlp", points_converter_compression_zstd, false};
   for (int i = 1; i < argc; ++i)
   {
-    if (std::strcmp(argv[i], "-o") == 0 || std::strcmp(argv[i], "--out") == 0)
-    {
-      if (i + 1 < argc)
+    auto need_value = [&](const char *flag) -> const char * {
+      if (i + 1 >= argc)
       {
-        args.output = argv[++i];
+        fmt::print(stderr, "missing value for {}\n", flag);
+        return nullptr;
       }
+      return argv[++i];
+    };
+    if (std::strcmp(argv[i], "-o") == 0 || std::strcmp(argv[i], "--out") == 0 || std::strcmp(argv[i], "-u") == 0 || std::strcmp(argv[i], "--url") == 0)
+    {
+      const char *value = need_value(argv[i]);
+      if (!value)
+        return false;
+      args.output = value;
+    }
+    else if (std::strcmp(argv[i], "-C") == 0 || std::strcmp(argv[i], "--connection") == 0)
+    {
+      const char *value = need_value(argv[i]);
+      if (!value)
+        return false;
+      args.connection = value;
     }
     else if (std::strcmp(argv[i], "-c") == 0 || std::strcmp(argv[i], "--compression") == 0)
     {
-      if (i + 1 < argc)
-      {
-        args.compression = parse_compression(argv[++i]);
-      }
+      const char *value = need_value(argv[i]);
+      if (!value)
+        return false;
+      args.compression = parse_compression(value);
     }
     else if (std::strcmp(argv[i], "-i") == 0 || std::strcmp(argv[i], "--inspect") == 0)
     {
@@ -237,12 +253,14 @@ args_t parse_arguments(int argc, char *argv[])
     }
   }
 
-  return args;
+  return true;
 }
 
 int main(int argc, char **argv)
 {
-  args_t args = parse_arguments(argc, argv);
+  args_t args = {{}, "out.jlp", "", points_converter_compression_zstd, false};
+  if (!parse_arguments(argc, argv, args))
+    return 1;
 
   if (args.inspect)
   {
@@ -281,8 +299,18 @@ int main(int argc, char **argv)
   std::vector<points_converter_str_buffer> input_str_buf(args.input.size());
   std::transform(args.input.begin(), args.input.end(), input_str_buf.begin(), [](const std::string &str) -> points_converter_str_buffer { return {str.c_str(), static_cast<uint32_t>(str.size())}; });
 
+  std::string connection;
+  {
+    std::string conn_error;
+    if (!points::converter::cli::resolve_connection_spec(args.connection, connection, conn_error))
+    {
+      fmt::print(stderr, "Connection error: {}\n", conn_error);
+      return 1;
+    }
+  }
+
   points_error_t *create_error = nullptr;
-  auto converter = create_unique_ptr(points_converter_create(args.output.data(), args.output.size(), points_open_file_semantics_truncate, &create_error), &points_converter_destroy);
+  auto converter = create_unique_ptr(points_converter_create_with_connection(args.output.data(), args.output.size(), connection.data(), connection.size(), points_open_file_semantics_truncate, &create_error), &points_converter_destroy);
   if (!converter)
   {
     if (create_error)

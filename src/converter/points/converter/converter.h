@@ -209,6 +209,12 @@ struct points_converter_perf_stats_t
 struct points_converter_t;
 POINTS_CONVERTER_EXPORT struct points_converter_t *points_converter_create(const char *cache_filename, uint64_t cache_filename_size, enum points_converter_open_file_semantics_t open_file_semantics, struct points_error_t **error);
 
+// As points_converter_create, but first applies `connection` (a vendor connection string -- credentials /
+// endpoint / region; see connection_cli.h + vio connection_string.h) for the output URL's provider, so a
+// dataset can be written directly to a cloud store. `connection` may be null/empty for local outputs or
+// when credentials come from the environment. `open_file_semantics` is typically truncate.
+POINTS_CONVERTER_EXPORT struct points_converter_t *points_converter_create_with_connection(const char *url, uint64_t url_size, const char *connection, uint64_t connection_size, enum points_converter_open_file_semantics_t open_file_semantics, struct points_error_t **error);
+
 POINTS_CONVERTER_EXPORT void points_converter_destroy(struct points_converter_t *destroy);
 
 POINTS_CONVERTER_EXPORT void points_converter_set_file_converter_callbacks(struct points_converter_t *converter, struct points_converter_file_convert_callbacks_t callbacks);

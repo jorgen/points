@@ -28,11 +28,12 @@
 namespace points::converter
 {
 
-std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, points_error_t &error)
+std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, std::string_view connection, vio::event_loop_t &event_loop, points_error_t &error)
 {
   auto parsed = parse_url(url);
 
-  // No scheme (a bare path) or file:// -> the single packed file backend.
+  // No scheme (a bare path) or file:// -> the single packed file backend. Local files carry no
+  // credentials, so `connection` is ignored here.
   if (parsed.scheme.empty() || parsed.scheme == "file")
   {
 #ifdef __EMSCRIPTEN__
@@ -44,13 +45,19 @@ std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url
   }
 
   // Object-per-blob over a vio object store (dir:// / mem:// / s3:// / az://), selected by the scheme.
-  auto io = vio::objstore::create_io_manager(url, event_loop);
+  // Credentials/endpoint/region resolve from `connection` first, then the AWS_*/AZURE_* environment.
+  auto io = vio::objstore::create_io_manager(url, connection, event_loop);
   if (!io.has_value())
   {
     error = {io.error().code != 0 ? io.error().code : -1, io.error().msg};
     return nullptr;
   }
   return std::make_unique<object_backend_t>(std::move(io.value()), event_loop);
+}
+
+std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, points_error_t &error)
+{
+  return create_storage_backend(url, std::string_view{}, event_loop, error);
 }
 
 } // namespace points::converter

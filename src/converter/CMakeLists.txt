@@ -2,6 +2,7 @@
 set(public_headers
         points/converter/export.h
         points/converter/converter.h
+        points/converter/connection_cli.h
         points/converter/default_attribute_names.h
         points/converter/converter_data_source.h
 )

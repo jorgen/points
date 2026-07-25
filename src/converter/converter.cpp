@@ -22,7 +22,11 @@
 #include "perf_stats.hpp"
 #include "processor.hpp"
 
+#include <vio/objstore/create_object_store.h>
+
 #include <memory>
+#include <string>
+#include <string_view>
 #include <vector>
 
 using namespace points::converter;
@@ -40,6 +44,37 @@ struct points_converter_t *points_converter_create(const char *url, uint64_t url
     }
     delete converter;
     return nullptr;
+  }
+  return converter;
+}
+
+struct points_converter_t *points_converter_create_with_connection(const char *url, uint64_t url_size, const char *connection, uint64_t connection_size, enum points_converter_open_file_semantics_t semantics, points_error_t **error)
+{
+  // Install the connection string (credentials/endpoint/region) for the output URL's provider before the
+  // storage backend is created inside points_converter_create. A no-op for local (file/dir/mem) URLs.
+  bool applied = false;
+  if (connection && connection_size > 0)
+  {
+    auto result = vio::objstore::apply_connection_override(std::string(url, url_size), std::string_view(connection, connection_size));
+    if (!result)
+    {
+      if (error)
+      {
+        *error = new points_error_t();
+        (*error)->code = result.error().code != 0 ? result.error().code : -1;
+        (*error)->msg = result.error().msg;
+      }
+      return nullptr;
+    }
+    applied = true;
+  }
+  auto *converter = points_converter_create(url, url_size, semantics, error);
+  // The override was consumed when the backend was created (its bucket/prefix are baked in), so clear it
+  // now; leaving it set would leak into a later create with a different URL in the same process.
+  if (applied)
+  {
+    vio::objstore::clear_s3_config_override();
+    vio::objstore::clear_azure_config_override();
   }
   return converter;
 }

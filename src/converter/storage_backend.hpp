@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace points::converter
@@ -94,7 +95,10 @@ struct storage_backend_t
 };
 
 // Selects the backend from the URL scheme (no scheme / file:// -> packed; dir://, mem://, s3:// ...
-// -> object). event_loop is the storage handler's own loop, used for all IO.
+// -> object). event_loop is the storage handler's own loop, used for all IO. `connection` is a vendor
+// connection string (see vio connection_string.h) supplying credentials/endpoint/region for cloud stores;
+// empty means "AWS_*/AZURE_* environment + defaults". Ignored for local packed files.
+std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, std::string_view connection, vio::event_loop_t &event_loop, points_error_t &error);
 std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, points_error_t &error);
 
 } // namespace points::converter
