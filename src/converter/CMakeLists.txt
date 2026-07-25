@@ -85,7 +85,7 @@ set(sources
 )
 
 add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio libzstd_static)
+target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio_objstore libzstd_static)
 target_link_libraries(points_converter_objects PRIVATE laszip)
 target_include_directories(points_converter_objects
         PUBLIC

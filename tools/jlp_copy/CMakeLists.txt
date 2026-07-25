@@ -6,7 +6,7 @@ add_executable(jlp_copy
         $<TARGET_OBJECTS:points_render_objects>
 )
 
-target_link_libraries(jlp_copy PRIVATE vio libzstd_static)
+target_link_libraries(jlp_copy PRIVATE vio_objstore libzstd_static)
 target_link_libraries(jlp_copy PRIVATE fmt glm unordered_dense laszip)
 target_include_directories(jlp_copy PRIVATE
         ${PROJECT_SOURCE_DIR}/src/converter
