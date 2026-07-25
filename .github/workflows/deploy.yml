@@ -87,8 +87,8 @@ jobs:
           file: deploy/Dockerfile
           push: true
           tags: |
-            ghcr.io/jorgen/points-web:latest
-            ghcr.io/jorgen/points-web:${{ github.sha }}
+            ghcr.io/jorgen/points:latest
+            ghcr.io/jorgen/points:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

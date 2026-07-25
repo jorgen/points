@@ -13,7 +13,7 @@ backend is a tiny `prism` static-file server.
 - `deploy/Dockerfile` — multi-stage image (emsdk builds the renderer WASM → node builds the SPA → the prism
   server is built against pinned vio/structify/prism → slim runtime serving `/app/dist` on `:8080`).
 - `.github/workflows/deploy.yml` — on push to `master` (paths that affect the bundle) build+push
-  `ghcr.io/jorgen/points-web` then SSH `/opt/stack/update.sh points <sha>`.
+  `ghcr.io/jorgen/points` then SSH `/opt/stack/update.sh points <sha>`.
 
 ## Local run
 
@@ -38,7 +38,7 @@ cmake -S backend -B backend/build -G Ninja && cmake --build backend/build --targ
 
 1. In **this** repo, add GitHub secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (same values
    as the other limilind apps).
-2. In **`limilind-edge`**: add a `points` compose service (`image ghcr.io/jorgen/points-web`,
+2. In **`limilind-edge`**: add a `points` compose service (`image ghcr.io/jorgen/points`,
    `networks: [web]`, `POINTS_HOST=0.0.0.0`/`POINTS_PORT=8080`, no Postgres), append
    `;points.limilind.com=points:8080` to `GATEWAY_ROUTES` (+ `.env`), add a `points` welcome card, and add a
    GoDaddy A-record `points.limilind.com` → droplet IP. The gateway auto-issues the TLS cert by SNI.
