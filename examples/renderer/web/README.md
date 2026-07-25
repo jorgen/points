@@ -30,17 +30,22 @@ npm install
 npm run dev      # http://localhost:5173  (copies the wasm artifacts in first)
 ```
 
-Fill in the endpoint / bucket / prefix / credentials and click **Connect**. For a local minio dataset:
+Enter the **Dataset URL** and a **connection string**, then click **Connect**. The URL is the dataset
+location (`scheme://bucket/prefix`); the connection string is every *other* parameter, in the exact same
+`key=value;…` grammar as the CLI tools (`converter --connection`, `jlp_copy -s/-d`). For a local minio
+dataset:
 
-- Endpoint `http://127.0.0.1:9000`, path-style checked
-- Bucket `pointstest`, prefix `synth`
-- Access key / secret `minioadmin` / `minioadmin`
+- Dataset URL `s3://pointstest/synth`
+- Connection string `endpoint=http://127.0.0.1:9000;access_key_id=minioadmin;secret_access_key=minioadmin;region=us-east-1;path_style=true`
+
+The connection string is identical to what you'd hand the CLI; the API takes the two as separate arguments:
+`createRenderer(canvasSelector, url, connectionString)`.
 
 You can also prefill (and auto-connect) via query params — handy for shareable links, **local testing
 only** since it puts credentials in the URL:
 
 ```
-http://localhost:5173/?endpoint=http://127.0.0.1:9000&bucket=pointstest&prefix=synth&pathStyle=1&accessKeyId=minioadmin&secretAccessKey=minioadmin&autoconnect=1
+http://localhost:5173/?url=s3://pointstest/synth&connection=endpoint%3Dhttp%3A%2F%2F127.0.0.1%3A9000%3Baccess_key_id%3Dminioadmin%3Bsecret_access_key%3Dminioadmin%3Bregion%3Dus-east-1%3Bpath_style%3Dtrue&autoconnect=1
 ```
 
 ## Controls

@@ -60,7 +60,7 @@ export function usePointCloudRenderer(
         const mod = await loadPointsRender();
         if (cancelled) return;
 
-        renderer = await mod.createRenderer('#' + CANVAS_ID, connection.url, connection.creds);
+        renderer = await mod.createRenderer('#' + CANVAS_ID, connection.url, connection.connectionString);
         if (cancelled || !renderer) {
           renderer?.dispose();
           if (!cancelled && !renderer) {

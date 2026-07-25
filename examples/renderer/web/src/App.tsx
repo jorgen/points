@@ -5,23 +5,17 @@ import type { Connection } from './pointsRender';
 
 /**
  * Read connection defaults from the URL query string, e.g.
- *   ?endpoint=http://127.0.0.1:9000&bucket=pointstest&prefix=synth&pathStyle=1
- *   &accessKeyId=…&secretAccessKey=…&autoconnect=1
- * autoconnect connects immediately if bucket + credentials are present. NOTE: passing secrets in the URL
- * is convenient for local testing only — never do it against a real/shared deployment.
+ *   ?url=s3://pointstest/synth&connection=<url-encoded connection string>&autoconnect=1
+ * `connection` is the connection string (CLI grammar). autoconnect connects immediately if the dataset URL
+ * is present. NOTE: passing secrets in the URL is convenient for local testing only — never do it against a
+ * real/shared deployment.
  */
 function parseParams(): { initial: Partial<FormValues>; autoconnect: boolean } {
   const p = new URLSearchParams(window.location.search);
   const str = (k: string) => p.get(k) ?? undefined;
   const initial: Partial<FormValues> = {
-    endpoint: str('endpoint'),
-    bucket: str('bucket'),
-    prefix: str('prefix'),
-    region: str('region'),
-    accessKeyId: str('accessKeyId'),
-    secretAccessKey: str('secretAccessKey'),
-    sessionToken: str('sessionToken'),
-    pathStyle: p.has('pathStyle') ? !['0', 'false', ''].includes(p.get('pathStyle') ?? '') : undefined,
+    url: str('url'),
+    connectionString: str('connection'),
   };
   const autoconnect = ['1', 'true'].includes(p.get('autoconnect') ?? '');
   return { initial, autoconnect };

@@ -22,8 +22,7 @@
 
 #include "error.hpp" // the full points_error_t (code + std::string msg)
 
-#include <vio/objstore/create_object_store.h> // set_s3_config_override, detail::parse_endpoint
-#include <vio/objstore/s3_object_store.h>      // s3_io_manager_t::config_t
+#include <vio/objstore/create_object_store.h> // parse_connection_string, apply_connection_override
 #include <vio/platform/wasm/event_loop_impl.h> // vio::wasm::pump / set_wake_hook
 
 #include <cstring>
@@ -31,45 +30,6 @@
 #include <string>
 
 using namespace emscripten;
-
-namespace
-{
-
-std::string opt_string(const val &obj, const char *key, const std::string &fallback = {})
-{
-  val v = obj[key];
-  return v.isString() ? v.as<std::string>() : fallback;
-}
-
-// Build the S3 config that vio's URL-driven storage backend will use, from JS-supplied temporary
-// credentials. Mirrors create_object_store.h's create_s3 env logic, but with values injected from JS.
-vio::objstore::s3_io_manager_t::config_t make_s3_config(const val &creds)
-{
-  vio::objstore::s3_io_manager_t::config_t cfg;
-  cfg.access_key = opt_string(creds, "accessKeyId");
-  cfg.secret_key = opt_string(creds, "secretAccessKey");
-  cfg.session_token = opt_string(creds, "sessionToken");
-  cfg.region = opt_string(creds, "region", "us-east-1");
-
-  std::string endpoint = opt_string(creds, "endpoint");
-  if (!endpoint.empty())
-  {
-    vio::objstore::detail::parse_endpoint(endpoint, cfg.https, cfg.host, cfg.port);
-    cfg.path_style = true; // custom endpoints (minio) default to path-style
-  }
-  else
-  {
-    cfg.https = true;
-    cfg.host = "s3." + cfg.region + ".amazonaws.com";
-    cfg.path_style = false;
-  }
-  if (creds["pathStyle"].isTrue())
-    cfg.path_style = true;
-  // bucket/prefix are filled by create_s3 from the s3:// URL.
-  return cfg;
-}
-
-} // namespace
 
 // A single renderer instance: GL context + render object graph + streaming data source + arcball camera.
 // Constructed by create_renderer() (which does the async open) and handed to JS as an embind object.
@@ -199,7 +159,7 @@ public:
   }
 
 private:
-  friend renderer_wasm_t *create_renderer(std::string, std::string, val);
+  friend renderer_wasm_t *create_renderer(std::string, std::string, std::string);
 
   void mark_dirty()
   {
@@ -245,9 +205,11 @@ private:
 };
 
 // Async factory (suspends via Asyncify while the root tree + AABB load, so JS gets a Promise<Renderer>).
-// canvas_selector is a CSS selector for the React-owned <canvas> (e.g. "#points-canvas"); url is the
-// dataset (s3://bucket/prefix); creds is a JS object with the temporary S3 credentials.
-renderer_wasm_t *create_renderer(std::string canvas_selector, std::string url, val creds)
+// canvas_selector is a CSS selector for the React-owned <canvas> (e.g. "#points-canvas"). url is the dataset
+// location -- scheme + bucket/prefix, e.g. "s3://bucket/prefix". connection_string is a vio connection
+// string (the SAME grammar and keys the CLI tools use, minus the URL) carrying the remaining connection
+// parameters, e.g. "endpoint=https://host:9000;access_key_id=..;secret_access_key=..;path_style=true".
+renderer_wasm_t *create_renderer(std::string canvas_selector, std::string url, std::string connection_string)
 {
   auto *r = new renderer_wasm_t();
 
@@ -271,8 +233,14 @@ renderer_wasm_t *create_renderer(std::string canvas_selector, std::string url, v
   }
   emscripten_webgl_make_context_current(r->_gl_ctx);
 
-  // 2. Inject the temporary S3 credentials so the URL-driven storage backend can sign requests.
-  vio::objstore::set_s3_config_override(make_s3_config(creds));
+  // 2. Resolve + install the credentials for the dataset's provider from the connection string (the 'url'
+  //    key is ignored here). getenv is meaningless in the browser, so the credentials must be in the string.
+  if (auto applied = vio::objstore::apply_connection_override(url, connection_string); !applied)
+  {
+    emscripten_console_error(("createRenderer: " + applied.error().msg).c_str());
+    delete r;
+    return nullptr;
+  }
 
   // 3. Render object graph + streaming data source. data_source_create opens the dataset, which drives
   //    the (Asyncify) busy-yield in request_root -- this call suspends until the root tree is loaded.

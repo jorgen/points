@@ -2,43 +2,22 @@ import { useState, type FormEvent } from 'react';
 import type { Connection } from './pointsRender';
 
 export interface FormValues {
-  endpoint: string;
-  bucket: string;
-  prefix: string;
-  region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  sessionToken: string;
-  pathStyle: boolean;
+  /** Dataset URL, e.g. s3://bucket/prefix. */
+  url: string;
+  /** Connection string: the remaining parameters as the CLI ";"-separated grammar. */
+  connectionString: string;
 }
 
 export const EMPTY_FORM: FormValues = {
-  endpoint: '',
-  bucket: '',
-  prefix: '',
-  region: 'us-east-1',
-  accessKeyId: '',
-  secretAccessKey: '',
-  sessionToken: '',
-  pathStyle: false,
+  url: '',
+  connectionString: '',
 };
 
-/** Build a Connection from (possibly partial) form values, or null if required fields are missing. */
+/** Build a Connection from form values, or null if the dataset URL is missing. */
 export function buildConnection(v: Partial<FormValues>): Connection | null {
-  if (!v.bucket || !v.accessKeyId || !v.secretAccessKey) return null;
-  const prefix = (v.prefix ?? '').replace(/^\/+/, '');
-  const url = `s3://${v.bucket}${prefix ? '/' + prefix : ''}`;
-  return {
-    url,
-    creds: {
-      accessKeyId: v.accessKeyId,
-      secretAccessKey: v.secretAccessKey,
-      sessionToken: v.sessionToken || undefined,
-      region: v.region || undefined,
-      endpoint: v.endpoint || undefined,
-      pathStyle: v.pathStyle ?? false,
-    },
-  };
+  const url = (v.url ?? '').trim();
+  if (!url) return null;
+  return { url, connectionString: (v.connectionString ?? '').trim() };
 }
 
 interface ConnectFormProps {
@@ -64,44 +43,45 @@ export function ConnectForm({ initial, connected, busy, onConnect, onDisconnect 
     e.preventDefault();
     const connection = buildConnection(values);
     if (!connection) {
-      setFormError('Bucket, access key, and secret key are required.');
+      setFormError('A dataset URL is required.');
       return;
     }
     setFormError(null);
     onConnect(connection);
   };
 
-  const text = (key: keyof FormValues, label: string, placeholder = '', type = 'text') => (
-    <label className="field">
-      <span>{label}</span>
-      <input
-        type={type}
-        value={String(values[key])}
-        placeholder={placeholder}
-        disabled={connected || busy}
-        onChange={(e) => set(key, e.target.value as FormValues[typeof key])}
-      />
-    </label>
-  );
+  const disabled = connected || busy;
 
   return (
     <form className="connect" onSubmit={onSubmit}>
-      {text('endpoint', 'Endpoint', 'http://127.0.0.1:9000 (blank = AWS)')}
-      {text('bucket', 'Bucket', 'my-bucket')}
-      {text('prefix', 'Prefix', 'path/to/dataset')}
-      {text('region', 'Region', 'us-east-1')}
-      {text('accessKeyId', 'Access key ID')}
-      {text('secretAccessKey', 'Secret access key', '', 'password')}
-      {text('sessionToken', 'Session token', 'optional (STS)')}
-      <label className="field field--check">
+      <label className="field">
+        <span>Dataset URL</span>
         <input
-          type="checkbox"
-          checked={values.pathStyle}
-          disabled={connected || busy}
-          onChange={(e) => set('pathStyle', e.target.checked)}
+          type="text"
+          value={values.url}
+          placeholder="s3://bucket/prefix"
+          disabled={disabled}
+          onChange={(e) => set('url', e.target.value)}
         />
-        <span>Path-style addressing (minio)</span>
       </label>
+      <label className="field">
+        <span>Connection string</span>
+        <textarea
+          className="field__area"
+          value={values.connectionString}
+          placeholder={'endpoint=http://127.0.0.1:9000;access_key_id=…;secret_access_key=…;region=us-east-1;path_style=true'}
+          disabled={disabled}
+          rows={5}
+          spellCheck={false}
+          onChange={(e) => set('connectionString', e.target.value)}
+        />
+      </label>
+      <p className="connect__hint">
+        The dataset URL is <code>scheme://bucket/prefix</code>; the connection string is the same{' '}
+        <code>key=value;…</code> grammar as the CLI tools. Keys: <code>endpoint</code>,{' '}
+        <code>access_key_id</code>, <code>secret_access_key</code>, <code>session_token</code>,{' '}
+        <code>region</code>, <code>path_style</code>.
+      </p>
 
       {formError && <p className="connect__error">{formError}</p>}
 

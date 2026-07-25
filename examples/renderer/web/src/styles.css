@@ -100,6 +100,38 @@ body {
   color: var(--text);
 }
 
+.field__area {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+  min-height: 88px;
+}
+.field__area:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.field__area:disabled {
+  opacity: 0.6;
+}
+
+.connect__hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.connect__hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--panel-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--text);
+}
+
 .connect__error {
   margin: 0;
   color: var(--error);

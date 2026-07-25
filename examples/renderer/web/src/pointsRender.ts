@@ -3,22 +3,15 @@
 // into public/ by scripts/copy-wasm.mjs); the module is imported at runtime so Vite never bundles the
 // Emscripten glue or the WebAssembly binary.
 
-export interface Credentials {
-  accessKeyId: string;
-  secretAccessKey: string;
-  /** STS temporary-credential session token (adds x-amz-security-token to signed requests). */
-  sessionToken?: string;
-  region?: string;
-  /** Custom S3 endpoint, e.g. "http://127.0.0.1:9000" for minio. Omit for AWS. */
-  endpoint?: string;
-  /** Force path-style addressing (required for minio and most non-AWS endpoints). */
-  pathStyle?: boolean;
-}
-
+// A connection has two parts: the dataset `url` (scheme + bucket/prefix, e.g. s3://bucket/prefix) and a
+// `connectionString` -- the remaining connection parameters as a ";"-separated key=value list, using the
+// EXACT same grammar and keys as the CLI tools (converter --connection, jlp_copy -s/-d), e.g.
+//   endpoint=https://host:9000;access_key_id=..;secret_access_key=..;region=us-east-1;path_style=true
 export interface Connection {
-  /** Dataset URL, e.g. "s3://bucket/prefix". */
+  /** Dataset location: scheme + bucket/prefix, e.g. "s3://bucket/prefix". */
   url: string;
-  creds: Credentials;
+  /** All other connection parameters as the ";"-separated CLI connection-string grammar. */
+  connectionString: string;
 }
 
 export interface Aabb {
@@ -47,7 +40,7 @@ export interface Renderer {
 }
 
 interface PointsRenderModule {
-  createRenderer(canvasSelector: string, url: string, creds: Credentials): Promise<Renderer | null>;
+  createRenderer(canvasSelector: string, url: string, connectionString: string): Promise<Renderer | null>;
 }
 
 type ModuleFactory = (moduleArg?: Record<string, unknown>) => Promise<PointsRenderModule>;
