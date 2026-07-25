@@ -308,6 +308,8 @@ int main(int argc, char **argv)
       return 1;
     }
   }
+  // For a plain AWS s3:// output with no credentials given, fall back to the AWS CLI provider chain (~/.aws).
+  points::converter::cli::apply_aws_cli_credentials(args.output, connection);
 
   points_error_t *create_error = nullptr;
   auto converter = create_unique_ptr(points_converter_create_with_connection(args.output.data(), args.output.size(), connection.data(), connection.size(), points_open_file_semantics_truncate, &create_error), &points_converter_destroy);

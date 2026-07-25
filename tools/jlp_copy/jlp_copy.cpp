@@ -287,6 +287,11 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  // For plain AWS s3:// URLs with no credentials given, fall back to the AWS CLI's provider chain (~/.aws,
+  // SSO, `aws login`, assume-role, ...), just like `aws s3` would.
+  points::converter::cli::apply_aws_cli_credentials(args.source_url, source_connection);
+  points::converter::cli::apply_aws_cli_credentials(args.dest_url, dest_connection);
+
   // The event loop runs on its own thread so the (blocking) object-backend index read + the copy
   // coroutine can be driven from main via run_on_loop_blocking. Declared first => destroyed last.
   vio::thread_with_event_loop_t loop_thread;

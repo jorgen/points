@@ -1,4 +1,5 @@
 #include <fmt/format.h>
+#include <points/converter/connection_cli.h>
 #include <points/converter/converter.h>
 
 #include <cstring>
@@ -144,6 +145,9 @@ int main(int argc, char **argv)
 
     if (argc > 2)
       fmt::print("=== {} ===\n", filename);
+
+    // For a plain AWS s3:// dataset with no credentials in the environment, fall back to ~/.aws.
+    points::converter::cli::apply_aws_cli_credentials(filename, "");
 
     points_error_t *err = nullptr;
     converter_handle_t conv(points_converter_create(filename, len, points_open_file_semantics_read_only, &err));
