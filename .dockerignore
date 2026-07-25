@@ -1,0 +1,23 @@
+# Keep the Docker build context small: the multi-stage deploy/Dockerfile only needs source. Build
+# directories, fetched dependencies, and node artifacts are rebuilt/refetched inside the image.
+.git
+.idea
+.vscode
+
+# Local build directories (CMake presets + any ad-hoc ones)
+cmake-build-*/
+build/
+build-*/
+
+# CmDep-fetched third-party sources (refetched at pinned versions inside the image)
+3rdparty/
+
+# Frontend node artifacts + built bundle + copied-in WASM (rebuilt in the web stage)
+**/node_modules/
+**/dist/
+examples/renderer/web/public/points_render.mjs
+examples/renderer/web/public/points_render.wasm
+
+# Object files / misc
+**/*.o
+**/*.obj
