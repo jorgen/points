@@ -18,6 +18,8 @@
 #ifndef POINTS_CONVERTER_CONNECTION_CLI_H
 #define POINTS_CONVERTER_CONNECTION_CLI_H
 
+#include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -30,12 +32,27 @@ namespace converter
 namespace cli
 {
 
+// Does a connection string appear to carry a secret value (one that should not be world-visible)? Used
+// only to decide whether to warn about an inline (argv) connection string.
+inline bool connection_string_has_secret(const std::string &connection)
+{
+  std::string lower(connection);
+  for (char &c : lower)
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  static const char *const markers[] = {"secret", "token", "account_key", "accountkey", "shared_access_signature", "sharedaccesssignature", "sas=", "password"};
+  for (const char *marker : markers)
+    if (lower.find(marker) != std::string::npos)
+      return true;
+  return false;
+}
+
 // Resolve a connection-string command-line argument (--connection / --source-connection /
 // --destination-connection) into the actual connection string, so credentials never need to sit in argv
 // (which is world-visible via `ps aux`):
 //   "@path"        -> the contents of a file (recommended chmod 600); trailing whitespace is stripped
 //   "env:NAME"     -> the value of environment variable NAME
 //   anything else  -> the literal string (an inline connection string, or "")
+// An inline string carrying a secret warns to stderr (prefer @file / env:VAR so it stays out of argv).
 // On success returns true and fills `out`; on failure returns false and sets `error`.
 inline bool resolve_connection_spec(const std::string &spec, std::string &out, std::string &error)
 {
@@ -65,7 +82,9 @@ inline bool resolve_connection_spec(const std::string &spec, std::string &out, s
     out = value;
     return true;
   }
-  out = spec;
+  out = spec; // inline connection string (or "")
+  if (connection_string_has_secret(out))
+    std::fprintf(stderr, "warning: credentials on the command line are visible to other users via `ps`; prefer '@file' or 'env:VAR'\n");
   return true;
 }
 
