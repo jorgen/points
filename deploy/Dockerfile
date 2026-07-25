@@ -39,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 # Pinned dependency commits — keep in sync with .github/workflows/deploy.yml.
-ARG VIO_REF=7a8425ab7341b0685abddb833c57cbacf1735470
+ARG VIO_REF=2051451f4067e580a09d036323834b69ce44661c
 ARG STRUCTIFY_REF=7ff77ebeb8da5c28d24d88a55abde350e0f0e0e4
 ARG PRISM_REF=95ce77f03a7c3c2ebea966bae39eeffa79a48302
 RUN git clone --filter=blob:none https://github.com/jorgen/vio.git       /deps/vio       && git -C /deps/vio       checkout -q "$VIO_REF" \
