@@ -40,6 +40,15 @@ public:
       fn(id, value.attributes_id, value.storage);
   }
 
+  // Rewrite each entry's storage locations in place, leaving attributes_id and ref_count untouched. Used
+  // by the copy tool to remap blob locations without disturbing the (serialized) reference counts.
+  template <typename Fn>
+  void remap_storage(Fn &&fn)
+  {
+    for (auto &[id, value] : _map)
+      fn(value.storage);
+  }
+
   uint32_t serialized_size() const;
   std::pair<bool, uint8_t *> serialize(uint8_t *buffer, const uint8_t *end) const;
   std::pair<bool, const uint8_t *> deserialize(const uint8_t *buffer, const uint8_t *end);

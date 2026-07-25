@@ -8,3 +8,4 @@ endfunction()
 
 add_subdirectory(jlp_info)
 add_subdirectory(jlp_extract)
+add_subdirectory(jlp_copy)
