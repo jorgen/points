@@ -8,7 +8,7 @@ import type { Connection } from './pointsRender';
 // The default demo dataset: a public point cloud in an S3 bucket. It is prefilled (and auto-connected) so
 // the page renders something immediately with no input; the connect form is still there for pointing at
 // another dataset, with credentials for a private bucket.
-const DEFAULT_URL = 's3://limilind-public/points/kosciol_libusza';
+const DEFAULT_URL = 's3://limilind-public/points/g_sw_anny';
 const DEFAULT_CONNECTION = 'region=eu-north-1;anonymous=true';
 
 /**

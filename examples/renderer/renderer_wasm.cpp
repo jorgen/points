@@ -381,6 +381,11 @@ renderer_wasm_t *create_renderer(std::string canvas_selector, std::string url, s
 
   points_renderer_add_data_source(r->_renderer, points_converter_data_source_get(r->_cds));
 
+  // The node bounding-box overlay is a sub-source of the converter (visibility toggled by
+  // setShowBoundingBoxes). It must be registered with the renderer to draw at all; add it AFTER the points
+  // so its lines (drawn with depth-test off) paint on top of them. Mirrors the desktop example.
+  points_renderer_add_data_source(r->_renderer, points_converter_data_source_get_bbox_data_source(r->_cds));
+
   // 6. Perspective + arcball. Default to a Z-up dataset viewed from -Y (matches the desktop example).
   const int w0 = 1, h0 = 1; // real size arrives with the first frame() call
   r->apply_size(w0, h0);

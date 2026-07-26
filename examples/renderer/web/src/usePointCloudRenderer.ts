@@ -166,16 +166,50 @@ export function usePointCloudRenderer(
         armDpr();
         cleanups.push(() => dprQuery?.removeEventListener('change', onDprChange));
 
-        // --- pointer/wheel input -> semantic camera (deltas normalized by canvas CSS size) ---
+        // --- input -> semantic camera (deltas normalized by canvas CSS size). Mouse/pen drive orbit/pan/
+        //     dolly by button; touch is gesture-based: one finger orbits, two fingers pinch to zoom and
+        //     drag to move the arcball center. ---
+        const cssSize = () => ({ w: canvas.clientWidth || 1, h: canvas.clientHeight || 1 });
+
+        // Single-pointer drag state — used by mouse/pen and by one-finger touch orbit.
         let dragging = false;
         let activeButton = 0;
         let activePointer = -1;
         let lastX = 0;
         let lastY = 0;
-        const cssSize = () => ({ w: canvas.clientWidth || 1, h: canvas.clientHeight || 1 });
+
+        // Active touch points, keyed by pointerId (insertion order preserved so the first two drive a
+        // gesture). `pinch` is the running reference (finger spacing + midpoint) while >=2 fingers are down.
+        const touches = new Map<number, { x: number; y: number }>();
+        let pinch: { dist: number; midX: number; midY: number } | null = null;
+        const twoFinger = () => {
+          const [a, b] = [...touches.values()].slice(0, 2);
+          return { dist: Math.hypot(b.x - a.x, b.y - a.y), midX: (a.x + b.x) / 2, midY: (a.y + b.y) / 2 };
+        };
+        const beginOrbit = (id: number, x: number, y: number) => {
+          dragging = true;
+          activeButton = 0; // orbit
+          activePointer = id;
+          lastX = x;
+          lastY = y;
+        };
 
         const onPointerDown = (e: PointerEvent) => {
-          if (dragging) return; // ignore extra pointers while a drag is active
+          if (e.pointerType === 'touch') {
+            e.preventDefault();
+            canvas.setPointerCapture(e.pointerId);
+            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (touches.size === 1) {
+              beginOrbit(e.pointerId, e.clientX, e.clientY); // one finger orbits
+            } else {
+              dragging = false; // a second finger switches to the pinch/pan gesture
+              activePointer = -1;
+              pinch = twoFinger();
+            }
+            return;
+          }
+          // mouse / pen
+          if (dragging) return; // ignore extra buttons while a drag is active
           if (e.button !== 0 && e.button !== 1 && e.button !== 2) return;
           e.preventDefault(); // suppress middle-click autoscroll / incidental selection
           dragging = true;
@@ -186,8 +220,31 @@ export function usePointCloudRenderer(
           canvas.setPointerCapture(e.pointerId);
         };
         const onPointerMove = (e: PointerEvent) => {
-          if (!dragging || e.pointerId !== activePointer) return;
           const { w, h } = cssSize();
+          if (e.pointerType === 'touch') {
+            if (!touches.has(e.pointerId)) return;
+            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (touches.size >= 2 && pinch) {
+              const m = twoFinger();
+              // Pinch -> zoom: treat the change in finger spacing like a wheel deltaY (same tuned scale).
+              // Spreading the fingers (dist grows) should zoom IN, and cameraZoom's negative arg shrinks
+              // the orbit distance, so negate.
+              const dDist = m.dist - pinch.dist;
+              if (dDist !== 0) r.cameraZoom(-dDist * WHEEL_ZOOM_SCALE);
+              // Two-finger drag -> move the arcball center in the view plane (same normalization as pan).
+              const dx = (m.midX - pinch.midX) / w;
+              const dy = (pinch.midY - m.midY) / h; // screen Y is down; arcball up is positive
+              if (dx !== 0 || dy !== 0) r.cameraPan(dx, dy);
+              pinch = m;
+            } else if (dragging && e.pointerId === activePointer) {
+              r.cameraRotate((e.clientX - lastX) / w, (lastY - e.clientY) / h); // one finger orbits
+              lastX = e.clientX;
+              lastY = e.clientY;
+            }
+            return;
+          }
+          // mouse / pen
+          if (!dragging || e.pointerId !== activePointer) return;
           const dx = (e.clientX - lastX) / w;
           // Screen Y grows downward; negate so it matches the arcball's up-positive convention.
           const dy = (lastY - e.clientY) / h;
@@ -203,15 +260,31 @@ export function usePointCloudRenderer(
             r.cameraPan(dx, dy); // middle button
           }
         };
-        const endDrag = (e: PointerEvent) => {
-          if (e.pointerId !== activePointer) return;
-          dragging = false;
-          activePointer = -1;
+        const endPointer = (e: PointerEvent) => {
           try {
             canvas.releasePointerCapture(e.pointerId);
           } catch {
             // pointer may already be released
           }
+          if (e.pointerType === 'touch') {
+            touches.delete(e.pointerId);
+            if (touches.size >= 2) {
+              pinch = twoFinger(); // lost one of >2 fingers: re-anchor so the remaining pair doesn't jump
+            } else if (touches.size === 1) {
+              pinch = null;
+              const [id, p] = [...touches.entries()][0];
+              beginOrbit(id, p.x, p.y); // drop back to one-finger orbit without a jump
+            } else {
+              pinch = null;
+              dragging = false;
+              activePointer = -1;
+            }
+            return;
+          }
+          // mouse / pen
+          if (e.pointerId !== activePointer) return;
+          dragging = false;
+          activePointer = -1;
         };
         const onWheel = (e: WheelEvent) => {
           e.preventDefault();
@@ -225,15 +298,15 @@ export function usePointCloudRenderer(
 
         canvas.addEventListener('pointerdown', onPointerDown);
         canvas.addEventListener('pointermove', onPointerMove);
-        canvas.addEventListener('pointerup', endDrag);
-        canvas.addEventListener('pointercancel', endDrag);
+        canvas.addEventListener('pointerup', endPointer);
+        canvas.addEventListener('pointercancel', endPointer);
         canvas.addEventListener('wheel', onWheel, { passive: false });
         canvas.addEventListener('contextmenu', onContextMenu);
         cleanups.push(() => {
           canvas.removeEventListener('pointerdown', onPointerDown);
           canvas.removeEventListener('pointermove', onPointerMove);
-          canvas.removeEventListener('pointerup', endDrag);
-          canvas.removeEventListener('pointercancel', endDrag);
+          canvas.removeEventListener('pointerup', endPointer);
+          canvas.removeEventListener('pointercancel', endPointer);
           canvas.removeEventListener('wheel', onWheel);
           canvas.removeEventListener('contextmenu', onContextMenu);
         });

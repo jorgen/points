@@ -30,7 +30,8 @@ export function Viewer({
         <div className="viewer__hint">
           <p>Connect to a dataset to start rendering.</p>
           <p className="viewer__hint-sub">
-            Drag to orbit · right-drag to pan · ctrl+right to pan on the ground · shift+right to dolly · scroll to zoom
+            Drag to orbit · right-drag to pan · ctrl+right to pan on the ground · shift+right to dolly · scroll to
+            zoom · one finger to orbit · pinch to zoom · two-finger drag to move
           </p>
         </div>
       )}

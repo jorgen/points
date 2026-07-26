@@ -68,7 +68,8 @@ export function Controls({
           Reset view
         </button>
         <p className="controls__hint">
-          Drag orbit · right-drag pan · ctrl+right pan-ground · shift+right dolly · scroll zoom
+          Drag orbit · right-drag pan · ctrl+right pan-ground · shift+right dolly · scroll zoom · 1 finger orbit ·
+          pinch zoom · 2-finger drag move
         </p>
       </section>
 
