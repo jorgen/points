@@ -24,9 +24,6 @@ add_executable(private_interface_unit_tests
         private/compression_preprocess_tests.cpp
         private/compressor_tests.cpp
         private/camera_arcball_tests.cpp
-        private/frame_node_registry_tests.cpp
-        private/node_selector_tests.cpp
-        private/draw_emitter_tests.cpp
         private/memory_writer_tests.cpp
 )
 target_link_libraries(private_interface_unit_tests PRIVATE vio_objstore libzstd_static)

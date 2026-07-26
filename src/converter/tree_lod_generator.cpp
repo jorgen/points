@@ -359,7 +359,7 @@ struct morton_to_lod_t
 };
 
 template <typename S_M, typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, const points_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+static void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, const points_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
                                       const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
@@ -391,7 +391,7 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
 }
 
 template <typename T, size_t N>
-static void find_indecies_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, points_type_t source_type, const points_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+static void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, points_type_t source_type, const points_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
                                       const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   assert(source_type == points_type_m32 || source_type == points_type_m64 || source_type == points_type_m128 || source_type == points_type_m192);
@@ -399,13 +399,13 @@ static void find_indecies_to_quantize(input_data_id_t input_id, const morton::mo
   switch (source_type)
   {
   case points_type_m32:
-    return find_indecies_to_quantize<morton::morton32_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+    return find_indices_to_quantize<morton::morton32_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
   case points_type_m64:
-    return find_indecies_to_quantize<morton::morton64_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+    return find_indices_to_quantize<morton::morton64_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
   case points_type_m128:
-    return find_indecies_to_quantize<morton::morton128_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+    return find_indices_to_quantize<morton::morton128_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
   case points_type_m192:
-    return find_indecies_to_quantize<morton::morton192_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
+    return find_indices_to_quantize<morton::morton192_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
   default:
     break;
   }
@@ -706,7 +706,7 @@ static void quantize_subset(storage_handler_t &cache, const points_subset_t &sub
 
   assert(buffer_is_subset(subset_data.data, source_buffer));
   morton::morton192_t subset_min = morton::morton_and(morton::morton_negate(morton::morton_mask_create<uint64_t, 3>(lod - 1)), subset_data.header.morton_min);
-  find_indecies_to_quantize(subset.input_id, subset_min, subset_data.header.point_format.type, source_buffer, offset, point_count, std::max(0, lod - 3 * 3), random_offsets, morton_to_lod);
+  find_indices_to_quantize(subset.input_id, subset_min, subset_data.header.point_format.type, source_buffer, offset, point_count, std::max(0, lod - 3 * 3), random_offsets, morton_to_lod);
 }
 
 template <typename T, size_t N>

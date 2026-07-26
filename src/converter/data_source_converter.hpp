@@ -20,15 +20,15 @@
 #include "compressor.hpp"
 #include "converter.hpp"
 #include "data_source_node_bbox.hpp"
-#include "draw_emitter.hpp"
-#include "frame_node_registry.hpp"
 #include "frustum_tree_walker.hpp"
-#include "gpu_buffer_manager.hpp"
-#include "gpu_node_buffer.hpp"
-#include "node_selector.hpp"
+#include "render_node.hpp"
+#include "render_pipeline.hpp"
 #include "renderer_callbacks.hpp"
 #include <points/render/data_source.h>
 
+#include <vio/thread_pool.h>
+
+#include <chrono>
 #include <limits>
 #include <memory>
 #include <string>
@@ -54,17 +54,16 @@ struct points_converter_data_source_t
   int viewport_height = 1080;
   double screen_fraction_threshold = 0.5;
   size_t gpu_memory_budget = 512 * 1024 * 1024;
-  size_t gpu_memory_used = 0;
   uint64_t point_budget = 10'000'000;
-  size_t upload_budget_per_frame = 5 * 1024 * 1024;
-  int max_in_flight_io = 60;
+  size_t upload_budget_per_frame = 2 * 1024 * 1024;
+  int max_in_flight_io = 32;
+  int max_new_io_per_frame = 4;
 
   points_buffer_t index_buffer;
-  std::vector<points::converter::tree_walker_with_buffer_t> current_tree_nodes[2];
-  bool current_tree_nodes_index = false;
 
   std::unique_ptr<points::render::node_data_loader_t> node_loader;
-  std::vector<std::unique_ptr<points::converter::gpu_node_buffer_t>> render_buffers;
+  vio::thread_pool_t convert_pool{std::max(2u, std::thread::hardware_concurrency() / 2)};
+  points::converter::render_list_t render_list;
 
   uint64_t points_rendered_last_frame = 0;
   points::converter::frame_timings_t frame_timings;
@@ -76,16 +75,13 @@ struct points_converter_data_source_t
   std::vector<std::string> cached_walker_attribute_names;
   std::string cached_walker_attribute_source;
 
-  points::converter::frame_node_registry_t node_registry;
-  points::converter::node_selector_t node_selector;
-  points::converter::gpu_buffer_manager_t buffer_manager;
-  points::converter::draw_emitter_t draw_emitter;
+  float fade_duration_ms = points::converter::default_fade_duration_ms;
+  std::chrono::high_resolution_clock::time_point last_frame_time;
 
   std::unique_ptr<points::converter::node_bbox_data_source_t> bbox_data_source;
   points::converter::node_aabb_t tight_aabb_accumulator = {{std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()},
                                         {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()}};
   bool show_bounding_boxes = false;
   bool debug_transitions = false;
-  points::converter::frame_node_registry_t::node_set_t previous_active_set;
   points::converter::node_set_t previously_subdivided;
 };
