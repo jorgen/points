@@ -129,11 +129,8 @@ add_executable(points_render_wasm
     ${_conv}/attributes_configs.cpp
     ${_conv}/data_source_converter.cpp
     ${_conv}/data_source_node_bbox.cpp
-    ${_conv}/draw_emitter.cpp
-    ${_conv}/frame_node_registry.cpp
+    ${_conv}/render_pipeline.cpp
     ${_conv}/frustum_tree_walker.cpp
-    ${_conv}/gpu_buffer_manager.cpp
-    ${_conv}/node_selector.cpp
     ${_conv}/native_node_data_loader.cpp
     ${_conv}/blob_manager.cpp
     ${_conv}/input_data_source_registry.cpp
