@@ -17,6 +17,9 @@
 #include <points/render/aabb.h>
 #include <points/render/camera.h>
 #include <points/render/renderer.h>
+#include <points/render/environment_data_source.h>
+#include <points/render/axis_gizmo_data_source.h>
+#include <points/render/origin_anchor_data_source.h>
 
 #include <points/converter/converter_data_source.h>
 
@@ -25,6 +28,8 @@
 #include <vio/objstore/create_object_store.h> // parse_connection_string, apply_connection_override
 #include <vio/platform/wasm/event_loop_impl.h> // vio::wasm::pump / set_wake_hook
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -57,6 +62,22 @@ public:
       wake_owner() = nullptr;
     }
     _request_update = val::undefined();
+    // Destroy the scene overlays (environment/gizmo/anchor) alongside the point-cloud source.
+    if (_axis_gizmo)
+    {
+      points_axis_gizmo_data_source_destroy(_axis_gizmo);
+      _axis_gizmo = nullptr;
+    }
+    if (_origin_anchor)
+    {
+      points_origin_anchor_data_source_destroy(_origin_anchor);
+      _origin_anchor = nullptr;
+    }
+    if (_environment)
+    {
+      points_environment_data_source_destroy(_environment);
+      _environment = nullptr;
+    }
     if (_cds)
     {
       points_converter_data_source_destroy(_cds);
@@ -87,6 +108,7 @@ public:
     if (w != _width || h != _height)
       apply_size(w, h);
     vio::wasm::pump();
+    update_overlays();
     _gl->draw(static_cast<clear>(int(clear::color) | int(clear::depth)), _width, _height);
   }
 
@@ -233,6 +255,31 @@ private:
     points_converter_data_source_set_viewport(_cds, w, h);
   }
 
+  // Per-frame overlay upkeep (mirrors the desktop example): keep the gizmo + origin anchor on the current
+  // orbit center, and lower the ground plane as deeper geometry streams in.
+  void update_overlays()
+  {
+    if (_arcball)
+    {
+      double c[3];
+      points_arcball_get_center(_arcball, c);
+      if (_axis_gizmo)
+        points_axis_gizmo_data_source_set_center(_axis_gizmo, c);
+      if (_origin_anchor)
+        points_origin_anchor_data_source_set_center(_origin_anchor, c);
+    }
+    if (_environment && _cds)
+    {
+      double tmin[3], tmax[3];
+      points_converter_data_source_get_tight_aabb(_cds, tmin, tmax);
+      if (tmin[2] < _ground_z)
+      {
+        _ground_z = tmin[2];
+        points_environment_data_source_set_ground_z(_environment, _ground_z);
+      }
+    }
+  }
+
   static void on_aabb(double amin[3], double amax[3], void *user)
   {
     auto *self = static_cast<renderer_wasm_t *>(user);
@@ -247,6 +294,12 @@ private:
   std::unique_ptr<gl_renderer> _gl;
   points_converter_data_source_t *_cds = nullptr;
   points_arcball_t *_arcball = nullptr;
+  // Scene overlays ported from the desktop example: procedural sky + ground grid, corner axis gizmo, and a
+  // small origin anchor at the orbit center.
+  points_environment_data_source_t *_environment = nullptr;
+  points_axis_gizmo_data_source_t *_axis_gizmo = nullptr;
+  points_origin_anchor_data_source_t *_origin_anchor = nullptr;
+  double _ground_z = 0.0;
   int _width = 0;
   int _height = 0;
   val _request_update = val::undefined();
@@ -307,9 +360,8 @@ renderer_wasm_t *create_renderer(std::string canvas_selector, std::string url, s
     delete r;
     return nullptr;
   }
-  points_renderer_add_data_source(r->_renderer, points_converter_data_source_get(r->_cds));
-
-  // 4. Fit the camera to the dataset AABB (request is async; suspend until the callback fires).
+  // 4. Fit the camera to the dataset AABB (request is async; suspend until the callback fires). This acts on
+  //    the converter data source directly, so it does not need the source registered with the renderer yet.
   points_converter_data_source_request_aabb(r->_cds, &renderer_wasm_t::on_aabb, r);
   while (!r->_aabb_ready)
   {
@@ -317,7 +369,19 @@ renderer_wasm_t *create_renderer(std::string canvas_selector, std::string url, s
     emscripten_sleep(0);
   }
 
-  // 5. Perspective + arcball. Default to a Z-up dataset viewed from -Y (matches the desktop example).
+  // 5. Add the scene overlays + the point cloud. Data sources draw in ADD ORDER (points_renderer_frame
+  //    emits them in the order they were added, with no sorting), and the environment paints a full-screen
+  //    sky + ground grid with depth-test OFF -- so it MUST be added before the point cloud or it would paint
+  //    over it. Mirror the desktop example: environment first, then the points.
+  const double extent[3] = {r->_aabb_max[0] - r->_aabb_min[0], r->_aabb_max[1] - r->_aabb_min[1], r->_aabb_max[2] - r->_aabb_min[2]};
+  r->_ground_z = r->_aabb_min[2];
+  const double grid_size = std::max(extent[0], extent[1]) / 10.0;
+  r->_environment = points_environment_data_source_create(r->_renderer, r->_ground_z, grid_size);
+  points_renderer_add_data_source(r->_renderer, points_environment_data_source_get(r->_environment));
+
+  points_renderer_add_data_source(r->_renderer, points_converter_data_source_get(r->_cds));
+
+  // 6. Perspective + arcball. Default to a Z-up dataset viewed from -Y (matches the desktop example).
   const int w0 = 1, h0 = 1; // real size arrives with the first frame() call
   r->apply_size(w0, h0);
   points_aabb_t aabb;
@@ -329,6 +393,15 @@ renderer_wasm_t *create_renderer(std::string canvas_selector, std::string url, s
   const double center[3] = {(r->_aabb_min[0] + r->_aabb_max[0]) * 0.5, (r->_aabb_min[1] + r->_aabb_max[1]) * 0.5, (r->_aabb_min[2] + r->_aabb_max[2]) * 0.5};
   r->_arcball = points_arcball_create(r->_camera, center);
   points_arcball_set_up_axis(r->_arcball, up);
+
+  // 7. Orbit-center overlays: the corner XYZ axis gizmo + a small origin anchor, sized to ~5% of the AABB
+  //    diagonal (scale-appropriate for arbitrary datasets). update_overlays() keeps them on the orbit center.
+  const double diag = std::sqrt(extent[0] * extent[0] + extent[1] * extent[1] + extent[2] * extent[2]);
+  const double overlay_size = diag * 0.05;
+  r->_axis_gizmo = points_axis_gizmo_data_source_create(r->_renderer, center, overlay_size);
+  points_renderer_add_data_source(r->_renderer, points_axis_gizmo_data_source_get(r->_axis_gizmo));
+  r->_origin_anchor = points_origin_anchor_data_source_create(r->_renderer, center, overlay_size);
+  points_renderer_add_data_source(r->_renderer, points_origin_anchor_data_source_get(r->_origin_anchor));
 
   return r;
 }
