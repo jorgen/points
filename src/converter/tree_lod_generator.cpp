@@ -884,6 +884,11 @@ static void adjust_tree_after_lod(tree_registry_t &tree_cache, std::vector<lod_t
     tree_t *tree = tree_cache.get(adjust_data.tree_id);
     if (adjust_data.nodes[level].empty())
       continue;
+    // Writing LOD point counts / storage locations mutates the tree's serialized state, so mark it dirty.
+    // Otherwise a tree that was already serialized-and-cleaned by an earlier (empty) LOD pass — which
+    // happens with multi-file input, where LOD is first triggered on a partial done-morton watermark
+    // before all files land — never gets re-serialized, and its LOD is silently dropped on disk.
+    tree->is_dirty = true;
     int tree_index = 0;
     for (int node_index = 0; node_index < int(adjust_data.nodes[level].size()); node_index++)
     {
