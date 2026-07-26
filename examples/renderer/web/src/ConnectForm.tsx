@@ -85,12 +85,17 @@ export function ConnectForm({ initial, connected, busy, onConnect, onDisconnect 
 
       {formError && <p className="connect__error">{formError}</p>}
 
+      {/* The distinct keys are load-bearing. Without them React reuses the same <button> DOM node across
+          the connected/disconnected swap and merely mutates its `type` from "button" to "submit" during
+          the click's synchronous flush — so the in-flight "Disconnect" click then lands on a submit button
+          and submits the form, immediately re-connecting (the "briefly Connecting…, then Disconnect again"
+          symptom). Distinct keys force React to replace the node instead of morphing it. */}
       {connected ? (
-        <button type="button" className="btn btn--ghost" onClick={onDisconnect}>
+        <button key="disconnect" type="button" className="btn btn--ghost" onClick={onDisconnect}>
           Disconnect
         </button>
       ) : (
-        <button type="submit" className="btn" disabled={busy}>
+        <button key="connect" type="submit" className="btn" disabled={busy}>
           {busy ? 'Connecting…' : 'Connect'}
         </button>
       )}
