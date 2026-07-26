@@ -156,6 +156,16 @@ static void arcball_extract_angles(points_arcball_t *arcball)
   }
 }
 
+// Snapshot the current view as the "home" the reset button returns to.
+static void arcball_capture_home(points_arcball_t *arcball)
+{
+  arcball->home_center = arcball->center;
+  arcball->home_up = arcball->up;
+  arcball->home_distance = arcball->distance;
+  arcball->home_yaw = arcball->yaw;
+  arcball->home_pitch = arcball->pitch;
+}
+
 struct points_arcball_t *points_arcball_create(struct points_camera_t *camera, const double center[3])
 {
   auto ret = new points_arcball_t;
@@ -164,6 +174,7 @@ struct points_arcball_t *points_arcball_create(struct points_camera_t *camera, c
   ret->up = glm::dvec3(0, 1, 0);
   arcball_extract_angles(ret);
   arcball_update_view(ret);
+  arcball_capture_home(ret);
   return ret;
 }
 
@@ -174,7 +185,11 @@ void points_arcball_destroy(struct points_arcball_t *arcball)
 
 void points_arcball_reset(struct points_arcball_t *arcball)
 {
-  arcball_extract_angles(arcball);
+  arcball->center = arcball->home_center;
+  arcball->up = arcball->home_up;
+  arcball->distance = arcball->home_distance;
+  arcball->yaw = arcball->home_yaw;
+  arcball->pitch = arcball->home_pitch;
   arcball_update_view(arcball);
 }
 
@@ -315,6 +330,7 @@ void points_arcball_set_up_axis(struct points_arcball_t *arcball, const double u
   arcball->up = glm::make_vec3(up);
   arcball_extract_angles(arcball);
   arcball_update_view(arcball);
+  arcball_capture_home(arcball);
 }
 
 void points_arcball_get_up_axis(struct points_arcball_t *arcball, double up[3])

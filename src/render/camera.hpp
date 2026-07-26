@@ -52,6 +52,13 @@ struct points_arcball_t
   double distance;
   double yaw;
   double pitch;
+  // "Home" view captured after initial setup (create + set_up_axis); points_arcball_reset restores it.
+  // Without a stored snapshot, reset just re-derived the current view and did nothing.
+  glm::dvec3 home_center;
+  glm::dvec3 home_up;
+  double home_distance;
+  double home_yaw;
+  double home_pitch;
 };
 
 struct points_fps_t
