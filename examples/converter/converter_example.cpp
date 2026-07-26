@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <cstdlib>
 #include <cinttypes>
 #include <numeric>
 
@@ -208,6 +209,7 @@ struct args_t
   std::string connection; // --connection spec (inline / @file / env:VAR) for a cloud output URL
   points_converter_compression_t compression;
   bool inspect = false;
+  uint32_t node_point_limit = 0; // points per node / blob-size lever; 0 = converter default
 };
 
 bool parse_arguments(int argc, char *argv[], args_t &args)
@@ -242,6 +244,13 @@ bool parse_arguments(int argc, char *argv[], args_t &args)
       if (!value)
         return false;
       args.compression = parse_compression(value);
+    }
+    else if (std::strcmp(argv[i], "-n") == 0 || std::strcmp(argv[i], "--node-points") == 0)
+    {
+      const char *value = need_value(argv[i]);
+      if (!value)
+        return false;
+      args.node_point_limit = static_cast<uint32_t>(std::strtoul(value, nullptr, 10));
     }
     else if (std::strcmp(argv[i], "-i") == 0 || std::strcmp(argv[i], "--inspect") == 0)
     {
@@ -325,6 +334,8 @@ int main(int argc, char **argv)
   points_converter_runtime_callbacks_t runtime_callbacks = {&converter_progress_callback_t, &converter_warning_callback_t, &converter_error_callback_t, &converter_done_callback_t};
   points_converter_set_runtime_callbacks(converter.get(), runtime_callbacks, &cb_data);
   points_converter_set_compression(converter.get(), args.compression);
+  if (args.node_point_limit > 0)
+    points_converter_set_node_point_limit(converter.get(), args.node_point_limit);
   points_converter_add_data_file(converter.get(), input_str_buf.data(), int(input_str_buf.size()));
   points_converter_wait_idle(converter.get());
 

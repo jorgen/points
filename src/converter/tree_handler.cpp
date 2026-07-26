@@ -88,7 +88,6 @@ tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_
   , _event_loop(_event_loop_thread.event_loop())
   , _initialized(false)
   , _configuration_initialized(false)
-  , _pre_init_node_limit(1000000)
   , _pre_init_tree_config({0.001, {100000, 100000, 100000}})
   , _first_root_initialized(false)
   , _file_cache(file_cache)
@@ -145,11 +144,11 @@ void tree_handler_t::set_tree_initialization_config(const tree_config_t &config)
   _pre_init_tree_config = config;
 }
 
-void tree_handler_t::set_tree_initialization_node_limit(uint32_t limit)
+void tree_handler_t::set_tree_initialization_node_point_limit(uint32_t limit)
 {
   std::unique_lock<std::mutex> lock(_configuration_mutex);
   assert(!_configuration_initialized);
-  _pre_init_node_limit = limit;
+  _pre_init_tree_config.node_point_limit = limit;
 }
 
 void tree_handler_t::about_to_block()

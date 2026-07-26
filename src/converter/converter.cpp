@@ -111,6 +111,11 @@ void points_converter_set_compression_level(points_converter_t *converter, int l
   converter->processor.storage_handler().set_compression_level(level);
 }
 
+void points_converter_set_node_point_limit(points_converter_t *converter, uint32_t points)
+{
+  converter->processor.set_pre_init_node_point_limit(points);
+}
+
 void points_converter_add_data_file(points_converter_t *converter, points_converter_str_buffer *buffers, uint32_t buffer_count)
 {
   std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> input_files;

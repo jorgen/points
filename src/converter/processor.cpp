@@ -359,9 +359,9 @@ void processor_t::set_pre_init_tree_config(const tree_config_t &tree_config)
   _tree_handler.set_tree_initialization_config(tree_config);
 }
 
-void processor_t::set_pre_init_tree_node_limit(uint32_t node_limit)
+void processor_t::set_pre_init_node_point_limit(uint32_t node_point_limit)
 {
-  _tree_handler.set_tree_initialization_node_limit(node_limit);
+  _tree_handler.set_tree_initialization_node_point_limit(node_point_limit);
 }
 
 void processor_t::set_runtime_callbacks(const points_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr)

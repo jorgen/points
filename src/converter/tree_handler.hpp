@@ -42,7 +42,7 @@ public:
   [[nodiscard]] points_error_t deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size);
   void request_root();
   void set_tree_initialization_config(const tree_config_t &config);
-  void set_tree_initialization_node_limit(uint32_t limit);
+  void set_tree_initialization_node_point_limit(uint32_t limit);
   void about_to_block() override;
   void generate_lod(const morton::morton192_t &max);
   tree_config_t tree_config();
@@ -67,8 +67,10 @@ private:
     if (_configuration_initialized)
       return;
     _configuration_initialized = true;
-    _tree_registry.node_limit = _pre_init_node_limit;
     _tree_registry.tree_config = _pre_init_tree_config;
+    // node_point_limit is the single source of truth for both the read/sort chunk size and the octree
+    // node capacity; seed the registry's node_limit from it.
+    _tree_registry.node_limit = _pre_init_tree_config.node_point_limit;
   }
 
   vio::thread_pool_t &_thread_pool;
@@ -77,7 +79,6 @@ private:
   std::mutex _configuration_mutex;
   bool _initialized;
   bool _configuration_initialized;
-  uint32_t _pre_init_node_limit;
   tree_config_t _pre_init_tree_config;
 
   std::mutex _root_mutex;

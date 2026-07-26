@@ -173,6 +173,12 @@ struct tree_config_t
   double scale = {};
   double offset[3] = {};
   bool store_original_order = false;
+  // Max points per octree node AND the read/sort chunk size: one chunk becomes one node and one
+  // compressed blob per attribute, so this is the primary lever on stored blob size. The default
+  // (200k) keeps the data-heavy attributes (xyz, gps_time) under ~1MB compressed. Fits in the padding
+  // after store_original_order, so sizeof(tree_config_t) is unchanged. Set via
+  // points_converter_set_node_point_limit.
+  uint32_t node_point_limit = 200000;
 };
 
 struct offset_t

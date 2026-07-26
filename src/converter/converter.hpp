@@ -38,7 +38,8 @@ struct points_converter_t
     error = processor.upgrade_to_write(semantics == points_converter_open_file_semantics_t::points_open_file_semantics_truncate);
     if (error.code != 0)
       return;
-    processor.set_pre_init_tree_node_limit(100000);
+    // node_point_limit (points per node = read/sort chunk size = blob size lever) defaults to 200k in
+    // tree_config_t; override per-conversion with points_converter_set_node_point_limit.
     processor.set_pre_init_tree_config({0.00025, {-10000, -10000, -10000}});
   }
   points_error_t error;

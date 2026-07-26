@@ -227,6 +227,11 @@ POINTS_CONVERTER_EXPORT void points_converter_set_store_original_order(struct po
 
 POINTS_CONVERTER_EXPORT void points_converter_set_compression_level(struct points_converter_t *converter, int level);
 
+// Set the target points per octree node. This doubles as the read/sort chunk size, so it is the main
+// control over stored blob size (one node ~ one compressed blob per attribute). Default 200000. Must be
+// called before points_converter_add_data_file.
+POINTS_CONVERTER_EXPORT void points_converter_set_node_point_limit(struct points_converter_t *converter, uint32_t points);
+
 POINTS_CONVERTER_EXPORT void points_converter_add_data_file(struct points_converter_t *converter, struct points_converter_str_buffer *buffers, uint32_t buffer_count);
 
 POINTS_CONVERTER_EXPORT void points_converter_wait_idle(struct points_converter_t *converter);
