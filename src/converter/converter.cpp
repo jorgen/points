@@ -99,6 +99,18 @@ void points_converter_set_compression(points_converter_t *converter, enum points
   converter->processor.storage_handler().set_compressor(static_cast<compression_method_t>(compression));
 }
 
+void points_converter_set_store_original_order(points_converter_t *converter, bool store)
+{
+  auto config = converter->processor.tree_config();
+  config.store_original_order = store;
+  converter->processor.set_pre_init_tree_config(config);
+}
+
+void points_converter_set_compression_level(points_converter_t *converter, int level)
+{
+  converter->processor.storage_handler().set_compression_level(level);
+}
+
 void points_converter_add_data_file(points_converter_t *converter, points_converter_str_buffer *buffers, uint32_t buffer_count)
 {
   std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> input_files;

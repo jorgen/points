@@ -150,6 +150,7 @@ public:
 
   void register_input_file_size(uint32_t file_id, uint64_t size_bytes);
   void set_compressor(compression_method_t method);
+  void set_compression_level(int level);
   void set_read_cache_size(uint64_t max_bytes);
   void set_on_write_progress(std::function<void()> cb) { _on_write_progress = std::move(cb); }
 

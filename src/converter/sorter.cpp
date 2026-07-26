@@ -323,7 +323,7 @@ static void reorder_buffer_into(uint32_t count, const INDEX_T *indecies_begin, s
 }
 
 template <typename T, typename INDEX_T, typename MT, size_t C>
-void convert_and_sort_morton(const tree_config_t &tree_config, attributes_configs_t &attributes_config, const points_converter_header_t &public_header, points_t &points, double smallest_scale, points_type_t type, points_error_t &error)
+void convert_and_sort_morton(const tree_config_t &tree_config, attributes_configs_t &attributes_config, const points_converter_header_t &public_header, points_t &points, double smallest_scale, points_type_t type, points_error_t &error, bool store_original_order)
 {
   (void)error;
   auto &header = points.header;
@@ -416,11 +416,14 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   points_converter_attributes_t attributes;
   attributes_copy(orig_attributes, attributes);
   attributes.attributes[0].type = type;
-  attributes.attribute_names.push_back(std::unique_ptr<char[]>(new char[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER) + 1]));
-  memcpy(attributes.attribute_names.back().get(), POINTS_ATTRIBUTE_ORIGINAL_ORDER, sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER));
-  attributes.attribute_names.back().get()[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)] = 0;
-  attributes.attributes.emplace_back(attributes.attribute_names.back().get(), uint32_t(sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)), type_from_type<INDEX_T>(), points_components_1);
-  int reorder_attr_count = int(attributes.attributes.size()) - 2;
+  if (store_original_order)
+  {
+    attributes.attribute_names.push_back(std::unique_ptr<char[]>(new char[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER) + 1]));
+    memcpy(attributes.attribute_names.back().get(), POINTS_ATTRIBUTE_ORIGINAL_ORDER, sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER));
+    attributes.attribute_names.back().get()[sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)] = 0;
+    attributes.attributes.emplace_back(attributes.attribute_names.back().get(), uint32_t(sizeof(POINTS_ATTRIBUTE_ORIGINAL_ORDER)), type_from_type<INDEX_T>(), points_components_1);
+  }
+  int reorder_attr_count = int(attributes.attributes.size()) - (store_original_order ? 2 : 1);
   if (reorder_attr_count > 0)
   {
     uint32_t total_reorder_size = 0;
@@ -444,8 +447,11 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
     }
     points.buffers.data.emplace_back(std::move(reorder_block));
   }
-  points.buffers.data.emplace_back(std::move(indecies));
-  points.buffers.buffers.emplace_back(points.buffers.data.back().get(), uint32_t(sizeof(INDEX_T)) * count);
+  if (store_original_order)
+  {
+    points.buffers.data.emplace_back(std::move(indecies));
+    points.buffers.buffers.emplace_back(points.buffers.data.back().get(), uint32_t(sizeof(INDEX_T)) * count);
+  }
 
   points.attributes_id = attributes_config.get_attribute_config_index(std::move(attributes));
   points.header.point_format = {type, points_components_1};
@@ -455,7 +461,7 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
 }
 
 template <typename T, typename INDEX_T>
-void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error)
+void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error, bool store_original_order)
 {
   auto &header = points.header;
 
@@ -493,16 +499,16 @@ void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &at
   switch (target_format)
   {
   case points_type_m32:
-    convert_and_sort_morton<T, INDEX_T, uint32_t, 1>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error);
+    convert_and_sort_morton<T, INDEX_T, uint32_t, 1>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error, store_original_order);
     break;
   case points_type_m64:
-    convert_and_sort_morton<T, INDEX_T, uint64_t, 1>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error);
+    convert_and_sort_morton<T, INDEX_T, uint64_t, 1>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error, store_original_order);
     break;
   case points_type_m128:
-    convert_and_sort_morton<T, INDEX_T, uint64_t, 2>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error);
+    convert_and_sort_morton<T, INDEX_T, uint64_t, 2>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error, store_original_order);
     break;
   case points_type_m192:
-    convert_and_sort_morton<T, INDEX_T, uint64_t, 3>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error);
+    convert_and_sort_morton<T, INDEX_T, uint64_t, 3>(tree_config, attributes_configs, public_header, points, smallest_scale, target_format, error, store_original_order);
     break;
   default:
     assert(false);
@@ -511,29 +517,29 @@ void convert_and_sort(const tree_config_t &tree_config, attributes_configs_t &at
 }
 
 template <typename T>
-void convert_and_sort_resolve_index_t(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error)
+void convert_and_sort_resolve_index_t(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error, bool store_original_order)
 {
   if (points.header.point_count < std::numeric_limits<uint16_t>::max())
   {
-    convert_and_sort<T, uint16_t>(tree_config, attributes_configs, public_header, points, error);
+    convert_and_sort<T, uint16_t>(tree_config, attributes_configs, public_header, points, error, store_original_order);
   }
   else if (points.header.point_count < std::numeric_limits<uint32_t>::max())
   {
-    convert_and_sort<T, uint32_t>(tree_config, attributes_configs, public_header, points, error);
+    convert_and_sort<T, uint32_t>(tree_config, attributes_configs, public_header, points, error, store_original_order);
   }
   else
   {
-    convert_and_sort<T, uint64_t>(tree_config, attributes_configs, public_header, points, error);
+    convert_and_sort<T, uint64_t>(tree_config, attributes_configs, public_header, points, error, store_original_order);
   }
 }
 
-void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error)
+void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error, bool store_original_order)
 {
   auto point_format = attributes_configs.get_point_format(points.attributes_id);
   switch (point_format.type)
   {
   case points_type_i32:
-    convert_and_sort_resolve_index_t<int32_t>(tree_config, attributes_configs, public_header, points, error);
+    convert_and_sort_resolve_index_t<int32_t>(tree_config, attributes_configs, public_header, points, error, store_original_order);
     break;
   default:
     assert(false);

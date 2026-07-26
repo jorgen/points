@@ -16,6 +16,7 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "storage_handler.hpp"
+#include "compressor_zstd.hpp"
 #include "input_header.hpp"
 
 #include <cassert>
@@ -510,6 +511,14 @@ void storage_handler_t::register_input_file_size(uint32_t file_id, uint64_t size
 void storage_handler_t::set_compressor(compression_method_t method)
 {
   _compressor = create_compressor(method);
+}
+
+void storage_handler_t::set_compression_level(int level)
+{
+  if (_compressor && _compressor->method() == compression_method_t::zstd)
+  {
+    static_cast<compressor_zstd_t *>(_compressor.get())->set_compression_level(level);
+  }
 }
 
 void storage_handler_t::set_read_cache_size(uint64_t max_bytes)

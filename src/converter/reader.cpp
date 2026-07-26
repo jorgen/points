@@ -162,7 +162,7 @@ sort_worker_t::sort_worker_t(const tree_config_t &a_tree_config, point_reader_fi
 void sort_worker_t::work()
 {
   auto sort_start = std::chrono::steady_clock::now();
-  sort_points(_tree_config, attributes_configs, public_header, points, error);
+  sort_points(_tree_config, attributes_configs, public_header, points, error, _tree_config.store_original_order);
   auto sort_end = std::chrono::steady_clock::now();
 
   uint64_t sort_bytes = 0;

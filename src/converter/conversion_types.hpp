@@ -172,6 +172,7 @@ struct tree_config_t
 {
   double scale = {};
   double offset[3] = {};
+  bool store_original_order = false;
 };
 
 struct offset_t

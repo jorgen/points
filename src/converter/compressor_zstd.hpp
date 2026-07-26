@@ -28,6 +28,15 @@ public:
   compression_method_t method() const override;
   compression_result_t compress(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count) override;
   compression_result_t decompress(const void *data, uint32_t size) override;
+
+  void set_compression_level(int level) { _compression_level = level; }
+  int compression_level() const { return _compression_level; }
+
+private:
+  void zstd_compress_standard(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count, uint8_t flags_in,
+                              std::vector<uint8_t> &working, compression_result_t &result) const;
+
+  int _compression_level = 9;
 };
 
 } // namespace points::converter

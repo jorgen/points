@@ -223,6 +223,10 @@ POINTS_CONVERTER_EXPORT void points_converter_set_runtime_callbacks(struct point
 
 POINTS_CONVERTER_EXPORT void points_converter_set_compression(struct points_converter_t *converter, enum points_converter_compression_t compression);
 
+POINTS_CONVERTER_EXPORT void points_converter_set_store_original_order(struct points_converter_t *converter, bool store);
+
+POINTS_CONVERTER_EXPORT void points_converter_set_compression_level(struct points_converter_t *converter, int level);
+
 POINTS_CONVERTER_EXPORT void points_converter_add_data_file(struct points_converter_t *converter, struct points_converter_str_buffer *buffers, uint32_t buffer_count);
 
 POINTS_CONVERTER_EXPORT void points_converter_wait_idle(struct points_converter_t *converter);

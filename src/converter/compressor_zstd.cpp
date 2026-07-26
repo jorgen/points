@@ -28,15 +28,13 @@
 namespace points::converter
 {
 
-static constexpr int zstd_compression_level = 9;
-
 compression_method_t compressor_zstd_t::method() const
 {
   return compression_method_t::zstd;
 }
 
-static void zstd_compress_standard(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count, uint8_t flags_in,
-                                   std::vector<uint8_t> &working, compression_result_t &result)
+void compressor_zstd_t::zstd_compress_standard(const void *data, uint32_t size, const point_format_t &format, uint32_t point_count, uint8_t flags_in,
+                                               std::vector<uint8_t> &working, compression_result_t &result) const
 {
   int typesize = size_for_format(format.type);
   if (typesize <= 0)
@@ -61,7 +59,7 @@ static void zstd_compress_standard(const void *data, uint32_t size, const point_
 
   size_t max_compressed = ZSTD_compressBound(size);
   std::vector<uint8_t> compressed_full(max_compressed);
-  size_t compressed_full_size = ZSTD_compress(compressed_full.data(), max_compressed, shuffled.data(), size, zstd_compression_level);
+  size_t compressed_full_size = ZSTD_compress(compressed_full.data(), max_compressed, shuffled.data(), size, _compression_level);
 
   if (ZSTD_isError(compressed_full_size))
   {
@@ -83,7 +81,7 @@ static void zstd_compress_standard(const void *data, uint32_t size, const point_
 
     size_t max_compacted_compressed = ZSTD_compressBound(compacted_size);
     compressed_compacted.resize(max_compacted_compressed);
-    size_t compressed_compacted_size = ZSTD_compress(compressed_compacted.data(), max_compacted_compressed, band_result.compacted_data.data(), compacted_size, zstd_compression_level);
+    size_t compressed_compacted_size = ZSTD_compress(compressed_compacted.data(), max_compacted_compressed, band_result.compacted_data.data(), compacted_size, _compression_level);
 
     if (!ZSTD_isError(compressed_compacted_size))
     {
@@ -227,7 +225,7 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
           uint32_t perm_bytes = f64_count * 2;
           size_t perm_bound = ZSTD_compressBound(perm_bytes);
           std::vector<uint8_t> perm_compressed(perm_bound);
-          size_t perm_compressed_size = ZSTD_compress(perm_compressed.data(), perm_bound, perm.data(), perm_bytes, zstd_compression_level);
+          size_t perm_compressed_size = ZSTD_compress(perm_compressed.data(), perm_bound, perm.data(), perm_bytes, _compression_level);
 
           if (!ZSTD_isError(perm_compressed_size))
           {
