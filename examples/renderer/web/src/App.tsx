@@ -5,10 +5,10 @@ import { Viewer } from './Viewer';
 import { usePointCloudRenderer } from './usePointCloudRenderer';
 import type { Connection } from './pointsRender';
 
-// The default demo dataset: a small synthetic point cloud in a public S3 bucket. It is prefilled (and
-// auto-connected) so the page renders something immediately with no input; the connect form is still there
-// for pointing at another dataset, with credentials for a private bucket.
-const DEFAULT_URL = 's3://limilind-public/points/synthetic';
+// The default demo dataset: a public point cloud in an S3 bucket. It is prefilled (and auto-connected) so
+// the page renders something immediately with no input; the connect form is still there for pointing at
+// another dataset, with credentials for a private bucket.
+const DEFAULT_URL = 's3://limilind-public/points/kosciol_libusza';
 const DEFAULT_CONNECTION = 'region=eu-north-1;anonymous=true';
 
 /**
