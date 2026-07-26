@@ -27,12 +27,26 @@ export interface Renderer {
   cameraRotate(ndx: number, ndy: number): void;
   cameraRoll(nd: number): void;
   cameraPan(ndx: number, ndy: number): void;
+  /** Pan within the dataset's ground plane (the desktop app's ctrl+right-drag). */
+  cameraPanGround(ndx: number, ndy: number): void;
   cameraDolly(nd: number): void;
   cameraZoom(nz: number): void;
+  /** Restore the initial fitted view. */
+  resetView(): void;
   setAttribute(name: string): void;
   getAttributeNames(): string[];
   getAabb(): Aabb;
   getPointsRendered(): number;
+  /** Point splat world size. */
+  setPointSize(v: number): void;
+  /** Level-of-detail scale base (higher = coarser LOD kept). */
+  setLodScaleBase(v: number): void;
+  /** Octree refinement budget: smaller screen-space pixel error = more detail (+ more streaming). */
+  setPixelErrorThreshold(v: number): void;
+  /** GPU memory budget in MB; the streamer evicts to stay under it. */
+  setGpuMemoryBudgetMb(mb: number): void;
+  /** Toggle the per-node bounding-box overlay. */
+  setShowBoundingBoxes(show: boolean): void;
   /** Register the JS redraw callback; the renderer invokes it whenever the frame becomes dirty. */
   setRequestUpdate(cb: () => void): void;
   /** Release GL + streaming resources. Idempotent; the instance must not be used afterwards. */

@@ -29,13 +29,16 @@ body {
 }
 
 .app {
-  display: grid;
-  grid-template-columns: 320px 1fr;
+  display: flex;
   height: 100%;
+  position: relative;
+  overflow: hidden;
 }
 
-/* --- sidebar --- */
+/* --- sidebar (a collapsible drawer) --- */
 .sidebar {
+  flex: 0 0 320px;
+  width: 320px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -43,8 +46,19 @@ body {
   background: var(--panel);
   border-right: 1px solid var(--border);
   overflow-y: auto;
+  z-index: 20;
+  transition: margin-left 0.22s ease;
+}
+.app--collapsed .sidebar {
+  margin-left: -320px;
 }
 
+.sidebar__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
 .sidebar__header h1 {
   margin: 0;
   font-size: 22px;
@@ -265,4 +279,144 @@ body {
 .viewer__hint-sub {
   font-size: 12px;
   opacity: 0.75;
+}
+
+/* --- panel toggle buttons + backdrop --- */
+.icon-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.icon-btn:hover {
+  color: var(--text);
+}
+
+.panel-open {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(28, 32, 39, 0.86);
+  backdrop-filter: blur(6px);
+  color: var(--text);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.backdrop {
+  display: none;
+}
+
+/* --- controls (ported from the desktop Input panel) --- */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.controls__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.controls__section h2 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+.controls__hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ctl__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ctl__label b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.ctl input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.ctl select {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+.ctl--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.ctl__stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ctl__stat b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ctl__stat--bounds b {
+  font-size: 11px;
+}
+
+/* --- mobile: the sidebar becomes an overlay drawer over the full-width canvas --- */
+@media (max-width: 760px) {
+  .sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(86vw, 340px);
+    flex-basis: auto;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  }
+  .app--collapsed .sidebar {
+    margin-left: calc(-1 * min(86vw, 340px) - 2px);
+  }
+  .app:not(.app--collapsed) .backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    background: rgba(0, 0, 0, 0.45);
+  }
 }

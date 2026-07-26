@@ -158,6 +158,57 @@ public:
     return double(points_converter_data_source_get_points_rendered(_cds));
   }
 
+  // --- appearance (gl_renderer public fields) ---
+  void setPointSize(float v)
+  {
+    if (_gl)
+      _gl->point_world_size = v;
+    mark_dirty();
+  }
+  void setLodScaleBase(float v)
+  {
+    if (_gl)
+      _gl->lod_scale_base = v;
+    mark_dirty();
+  }
+
+  // --- streaming / level of detail (data-source tuning) ---
+  // Octree refinement budget: a smaller screen-space pixel error draws more detail (and streams more).
+  void setPixelErrorThreshold(double v)
+  {
+    points_converter_data_source_set_pixel_error_threshold(_cds, v);
+    mark_dirty();
+  }
+  // GPU memory budget in MB; the streamer evicts to stay under it.
+  void setGpuMemoryBudgetMb(double mb)
+  {
+    if (mb < 0.0)
+      mb = 0.0;
+    points_converter_data_source_set_gpu_memory_budget(_cds, static_cast<size_t>(mb) * 1024u * 1024u);
+    mark_dirty();
+  }
+
+  // --- scene overlays ---
+  void setShowBoundingBoxes(bool show)
+  {
+    points_converter_data_source_set_show_bounding_boxes(_cds, show ? 1 : 0);
+    mark_dirty();
+  }
+
+  // --- camera ---
+  // Pan within the dataset's ground plane (the desktop app's ctrl+right-drag gesture).
+  void cameraPanGround(float ndx, float ndy)
+  {
+    points_arcball_pan_ground(_arcball, ndx, ndy);
+    mark_dirty();
+  }
+  // Restore the initial fitted view (the arcball was created at the AABB-fit camera, so reset returns to it).
+  void resetView()
+  {
+    points_arcball_reset(_arcball);
+    mark_dirty();
+  }
+
 private:
   friend renderer_wasm_t *create_renderer(std::string, std::string, std::string);
 
@@ -292,10 +343,17 @@ EMSCRIPTEN_BINDINGS(points_render)
     .function("cameraPan", &renderer_wasm_t::cameraPan)
     .function("cameraDolly", &renderer_wasm_t::cameraDolly)
     .function("cameraZoom", &renderer_wasm_t::cameraZoom)
+    .function("cameraPanGround", &renderer_wasm_t::cameraPanGround)
+    .function("resetView", &renderer_wasm_t::resetView)
     .function("setAttribute", &renderer_wasm_t::setAttribute)
     .function("getAttributeNames", &renderer_wasm_t::getAttributeNames)
     .function("getAabb", &renderer_wasm_t::getAabb)
     .function("getPointsRendered", &renderer_wasm_t::getPointsRendered)
+    .function("setPointSize", &renderer_wasm_t::setPointSize)
+    .function("setLodScaleBase", &renderer_wasm_t::setLodScaleBase)
+    .function("setPixelErrorThreshold", &renderer_wasm_t::setPixelErrorThreshold)
+    .function("setGpuMemoryBudgetMb", &renderer_wasm_t::setGpuMemoryBudgetMb)
+    .function("setShowBoundingBoxes", &renderer_wasm_t::setShowBoundingBoxes)
     .function("dispose", &renderer_wasm_t::dispose);
 
   function("createRenderer", &create_renderer, allow_raw_pointers());

@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectForm, buildConnection, type FormValues } from './ConnectForm';
+import { Controls } from './Controls';
 import { Viewer } from './Viewer';
+import { usePointCloudRenderer } from './usePointCloudRenderer';
 import type { Connection } from './pointsRender';
 
 // The default demo dataset: a small synthetic point cloud in a public S3 bucket. It is prefilled (and
@@ -33,8 +35,14 @@ export function App() {
   const { initial, autoconnect } = useMemo(parseParams, []);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [busy, setBusy] = useState(false);
+  // The panel starts open on a wide screen and collapsed on a phone, so the canvas gets full width.
+  const [panelOpen, setPanelOpen] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth > 760));
 
-  // Optional one-shot auto-connect from URL params (for shareable links / headless testing).
+  // The canvas + renderer lifecycle live here (not in Viewer) so the controls can sit in the sidebar.
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const renderer = usePointCloudRenderer(canvasRef, connection);
+
+  // Optional one-shot auto-connect from URL params / the demo default.
   useEffect(() => {
     if (!autoconnect) return;
     const c = buildConnection(initial);
@@ -51,18 +59,24 @@ export function App() {
     setConnection(null);
   };
 
-  // `busy` only reflects the brief window until the Viewer takes over; clear it once a connection is set.
+  // `busy` only reflects the brief window until the renderer takes over; clear it once a connection is set.
   useEffect(() => {
     if (connection) setBusy(false);
   }, [connection]);
 
   return (
-    <div className="app">
+    <div className={panelOpen ? 'app' : 'app app--collapsed'}>
       <aside className="sidebar">
         <header className="sidebar__header">
-          <h1>points</h1>
-          <p>WebGL2 · WebAssembly renderer</p>
+          <div>
+            <h1>points</h1>
+            <p>WebGL2 · WebAssembly renderer</p>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Collapse panel" onClick={() => setPanelOpen(false)}>
+            ✕
+          </button>
         </header>
+
         <ConnectForm
           initial={initial}
           connected={connection !== null}
@@ -70,13 +84,36 @@ export function App() {
           onConnect={onConnect}
           onDisconnect={onDisconnect}
         />
+
+        {renderer.status === 'ready' && (
+          <Controls
+            attributes={renderer.attributes}
+            activeAttribute={renderer.activeAttribute}
+            setActiveAttribute={renderer.setActiveAttribute}
+            controls={renderer.controls}
+            setControl={renderer.setControl}
+            resetView={renderer.resetView}
+            pointsRendered={renderer.pointsRendered}
+            aabb={renderer.aabb}
+          />
+        )}
+
         <footer className="sidebar__footer">
           Streams &amp; decodes an octree point cloud from S3, drawn on-demand in WebGL2.
         </footer>
       </aside>
+
       <main className="content">
-        <Viewer connection={connection} />
+        {!panelOpen && (
+          <button type="button" className="panel-open" aria-label="Open controls" onClick={() => setPanelOpen(true)}>
+            ☰
+          </button>
+        )}
+        <Viewer canvasRef={canvasRef} status={renderer.status} error={renderer.error} />
       </main>
+
+      {/* Mobile only (CSS-gated): tap the backdrop to dismiss the drawer. */}
+      {panelOpen && <div className="backdrop" onClick={() => setPanelOpen(false)} />}
     </div>
   );
 }

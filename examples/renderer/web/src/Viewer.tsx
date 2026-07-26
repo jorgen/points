@@ -1,8 +1,5 @@
-import { useRef } from 'react';
-import { CANVAS_ID, usePointCloudRenderer, type RendererStatus } from './usePointCloudRenderer';
-import type { Aabb, Connection } from './pointsRender';
-
-const fmtVec = (v: [number, number, number]) => `[${v.map((x) => x.toFixed(0)).join(', ')}]`;
+import type { RefObject } from 'react';
+import { CANVAS_ID, type RendererStatus } from './usePointCloudRenderer';
 
 function StatusLine({ status, error }: { status: RendererStatus; error: string | null }) {
   if (status === 'connecting') return <div className="badge badge--busy">Connecting…</div>;
@@ -10,52 +7,30 @@ function StatusLine({ status, error }: { status: RendererStatus; error: string |
   return null;
 }
 
-function BoundsLine({ aabb }: { aabb: Aabb }) {
-  return (
-    <div className="hud__bounds">
-      bounds {fmtVec(aabb.min)} → {fmtVec(aabb.max)}
-    </div>
-  );
-}
-
-export function Viewer({ connection }: { connection: Connection | null }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { status, error, attributes, activeAttribute, setActiveAttribute, pointsRendered, aabb } =
-    usePointCloudRenderer(canvasRef, connection);
-
+/** Hosts the WebGL2 <canvas> the renderer draws into, plus status + first-run hint overlays. The renderer
+ * lifecycle + controls live in App (via usePointCloudRenderer) so the controls can sit in the sidebar. */
+export function Viewer({
+  canvasRef,
+  status,
+  error,
+}: {
+  canvasRef: RefObject<HTMLCanvasElement>;
+  status: RendererStatus;
+  error: string | null;
+}) {
   return (
     <div className="viewer">
       <canvas id={CANVAS_ID} ref={canvasRef} className="viewer__canvas" />
 
       <div className="viewer__overlay">
         <StatusLine status={status} error={error} />
-
-        {status === 'ready' && (
-          <div className="hud">
-            <label className="hud__row">
-              <span>Attribute</span>
-              <select value={activeAttribute ?? ''} onChange={(e) => setActiveAttribute(e.target.value)}>
-                {attributes.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="hud__row">
-              <span>Points</span>
-              <b>{pointsRendered.toLocaleString()}</b>
-            </div>
-            {aabb && <BoundsLine aabb={aabb} />}
-          </div>
-        )}
       </div>
 
       {status === 'idle' && (
         <div className="viewer__hint">
-          <p>Connect to an S3 dataset to start rendering.</p>
+          <p>Connect to a dataset to start rendering.</p>
           <p className="viewer__hint-sub">
-            Drag to orbit · right-drag to pan · shift+right-drag to dolly · scroll to zoom
+            Drag to orbit · right-drag to pan · ctrl+right to pan on the ground · shift+right to dolly · scroll to zoom
           </p>
         </div>
       )}

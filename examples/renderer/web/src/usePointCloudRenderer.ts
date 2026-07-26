@@ -6,6 +6,38 @@ export const CANVAS_ID = 'points-cloud-canvas';
 
 export type RendererStatus = 'idle' | 'connecting' | 'ready' | 'error';
 
+/** Live view controls, mirroring the desktop app's Input panel. */
+export interface ViewControls {
+  /** Point splat world size. */
+  pointSize: number;
+  /** Level-of-detail scale base (higher keeps coarser LOD). */
+  lodScaleBase: number;
+  /** Octree refinement budget: smaller = more detail (+ more streaming). */
+  pixelErrorThreshold: number;
+  /** GPU memory budget in MB. */
+  gpuMemoryBudgetMb: number;
+  /** Per-node bounding-box overlay. */
+  showBoundingBoxes: boolean;
+}
+
+// Defaults match the C++ gl_renderer fields (point_world_size 0.05, lod_scale_base 1.1); the streaming
+// values are browser-appropriate starting points pushed to the data source on connect.
+export const DEFAULT_CONTROLS: ViewControls = {
+  pointSize: 0.05,
+  lodScaleBase: 1.1,
+  pixelErrorThreshold: 1.0,
+  gpuMemoryBudgetMb: 512,
+  showBoundingBoxes: false,
+};
+
+function applyControls(r: Renderer, c: ViewControls) {
+  r.setPointSize(c.pointSize);
+  r.setLodScaleBase(c.lodScaleBase);
+  r.setPixelErrorThreshold(c.pixelErrorThreshold);
+  r.setGpuMemoryBudgetMb(c.gpuMemoryBudgetMb);
+  r.setShowBoundingBoxes(c.showBoundingBoxes);
+}
+
 export interface RendererState {
   status: RendererStatus;
   error: string | null;
@@ -14,6 +46,9 @@ export interface RendererState {
   setActiveAttribute: (name: string) => void;
   pointsRendered: number;
   aabb: Aabb | null;
+  controls: ViewControls;
+  setControl: <K extends keyof ViewControls>(key: K, value: ViewControls[K]) => void;
+  resetView: () => void;
 }
 
 // Wheel deltas differ by device/mode; normalize a notch to roughly this zoom step.
@@ -35,7 +70,11 @@ export function usePointCloudRenderer(
   const [activeAttribute, setActiveAttributeState] = useState<string | null>(null);
   const [pointsRendered, setPointsRendered] = useState(0);
   const [aabb, setAabb] = useState<Aabb | null>(null);
+  const [controls, setControlsState] = useState<ViewControls>(DEFAULT_CONTROLS);
   const rendererRef = useRef<Renderer | null>(null);
+  // Latest controls for the connect effect to apply without re-running on every tweak.
+  const controlsRef = useRef(controls);
+  controlsRef.current = controls;
 
   useEffect(() => {
     if (!connection) {
@@ -76,6 +115,9 @@ export function usePointCloudRenderer(
         // throws nothing below has been wired yet and the catch only has to dispose.
         const names = r.getAttributeNames();
         const bounds = r.getAabb();
+        // Apply the current view controls to the fresh renderer so the UI and renderer agree from the
+        // first frame (and a reconnect preserves the user's settings).
+        applyControls(r, controlsRef.current);
 
         // --- dirty-driven render loop: coalesce redraw requests into a single rAF ---
         let raf = 0;
@@ -154,7 +196,8 @@ export function usePointCloudRenderer(
           if (activeButton === 0) {
             r.cameraRotate(dx, dy);
           } else if (activeButton === 2) {
-            if (e.shiftKey) r.cameraDolly(dy);
+            if (e.ctrlKey) r.cameraPanGround(dx, dy); // ctrl+right-drag = pan in the ground plane
+            else if (e.shiftKey) r.cameraDolly(dy);
             else r.cameraPan(dx, dy);
           } else {
             r.cameraPan(dx, dy); // middle button
@@ -234,5 +277,42 @@ export function usePointCloudRenderer(
     setActiveAttributeState(name);
   }, []);
 
-  return { status, error, attributes, activeAttribute, setActiveAttribute, pointsRendered, aabb };
+  // Update one control: reflect it in React state and push it to the renderer (which marks dirty).
+  const setControl = useCallback(<K extends keyof ViewControls>(key: K, value: ViewControls[K]) => {
+    setControlsState((prev) => ({ ...prev, [key]: value }));
+    const r = rendererRef.current;
+    if (!r) return;
+    switch (key) {
+      case 'pointSize':
+        r.setPointSize(value as number);
+        break;
+      case 'lodScaleBase':
+        r.setLodScaleBase(value as number);
+        break;
+      case 'pixelErrorThreshold':
+        r.setPixelErrorThreshold(value as number);
+        break;
+      case 'gpuMemoryBudgetMb':
+        r.setGpuMemoryBudgetMb(value as number);
+        break;
+      case 'showBoundingBoxes':
+        r.setShowBoundingBoxes(value as boolean);
+        break;
+    }
+  }, []);
+
+  const resetView = useCallback(() => rendererRef.current?.resetView(), []);
+
+  return {
+    status,
+    error,
+    attributes,
+    activeAttribute,
+    setActiveAttribute,
+    pointsRendered,
+    aabb,
+    controls,
+    setControl,
+    resetView,
+  };
 }
