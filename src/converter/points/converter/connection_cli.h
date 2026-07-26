@@ -73,7 +73,14 @@ inline bool resolve_connection_spec(const std::string &spec, std::string &out, s
   if (spec.rfind("env:", 0) == 0)
   {
     const std::string name = spec.substr(4);
+#if defined(_MSC_VER)
+#  pragma warning(push)
+#  pragma warning(disable : 4996) // std::getenv is flagged deprecated by MSVC but is portable and correct here
+#endif
     const char *value = std::getenv(name.c_str());
+#if defined(_MSC_VER)
+#  pragma warning(pop)
+#endif
     if (!value)
     {
       error = "environment variable not set: " + name;
