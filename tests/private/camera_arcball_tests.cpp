@@ -191,7 +191,7 @@ TEST_CASE("arcball set up axis Z-up")
   REQUIRE(dist == approx_abs(arc->distance, 0.01));
 }
 
-TEST_CASE("arcball reset re-derives angles")
+TEST_CASE("arcball reset restores the initial fitted view")
 {
   unique_camera cam(points_camera_create());
   double eye[] = {0, 0, 10};
@@ -201,22 +201,28 @@ TEST_CASE("arcball reset re-derives angles")
 
   unique_arcball arc(points_arcball_create(cam.get(), center));
 
-  // Rotate to a new orientation
+  // Capture the initial ("home") view the arcball was created at.
+  double view_home[16];
+  points_camera_get_view_matrix(cam.get(), view_home);
+
+  // Rotate to a new orientation — the view must actually change.
   points_arcball_rotate(arc.get(), 0.3f, 0.2f, 0.0f);
+  double view_rotated[16];
+  points_camera_get_view_matrix(cam.get(), view_rotated);
+  bool changed = false;
+  for (int i = 0; i < 16; i++)
+    if (std::abs(view_rotated[i] - view_home[i]) > 1e-3)
+      changed = true;
+  REQUIRE(changed);
 
-  // Capture current view
-  double view_before[16];
-  points_camera_get_view_matrix(cam.get(), view_before);
-
-  // Reset re-derives from current view
+  // Reset restores the initial fitted view (not a no-op re-derivation of the current one).
   points_arcball_reset(arc.get());
 
   double view_after[16];
   points_camera_get_view_matrix(cam.get(), view_after);
 
-  // View should be essentially the same after reset
   for (int i = 0; i < 16; i++)
-    REQUIRE(view_after[i] == approx_abs(view_before[i], 1e-4));
+    REQUIRE(view_after[i] == approx_abs(view_home[i], 1e-4));
 }
 
 TEST_CASE("arcball get center and up axis")
