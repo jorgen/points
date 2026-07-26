@@ -183,12 +183,10 @@ Each draw type has its own `buffer_mapping` enum defining the semantic meaning o
 ### Converter-integrated rendering
 
 Files in `src/converter/` that bridge converter and renderer:
-- `data_source_converter.hpp/cpp` — data source wrapping the converter's tree, with pixel-error LOD selection and GPU memory budgeting
+- `data_source_converter.hpp/cpp` — data source wrapping the converter's tree. Drives the per-frame render pipeline, with pixel-error LOD selection and GPU memory budgeting.
 - `frustum_tree_walker.hpp/cpp` — walks the octree with frustum culling
-- `draw_emitter.hpp/cpp` — emits draw groups from visible tree nodes
-- `gpu_buffer_manager.hpp/cpp` — manages GPU buffer allocation for tree node data
-- `frame_node_registry.hpp/cpp` — tracks which nodes are loaded per frame
-- `node_selector.hpp/cpp` — selects which nodes to load/unload based on camera
+- `render_node.hpp` — `render_node_t`: one entry per visible node, carrying its IO/GPU/fade state machines (`render_node_io_state`, `render_node_gpu_state`, `render_node_fade_state`), GPU buffers, and cached camera distance. Also defines `frame_timings_t`.
+- `render_pipeline.hpp/cpp` — the unified render pipeline over a `render_list_t` (a distance/LOD-sorted vector of `render_node_t`). Each frame: `build_render_list` (diff the walker output against the previous frame's list, spawning fade-ins for new nodes and fade-outs for departed ones), `process_io_and_upload` (single pass: compute distances, advance IO state, schedule closest-first loads, decompress/morton-decode on a `convert_pool` worker thread, then upload to the GPU under budget), `update_fades` (frame-time-based crossfade), and `emit_draws` (steady opaque pass + fading pass). Replaces the older reconcile → select → schedule → emit → evict design.
 - `native_node_data_loader.hpp/cpp` — async node data loading from disk
 
 ### OpenGL Example
