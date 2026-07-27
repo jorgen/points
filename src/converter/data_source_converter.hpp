@@ -55,9 +55,13 @@ struct points_converter_data_source_t
   double screen_fraction_threshold = 0.5;
   size_t gpu_memory_budget = 512 * 1024 * 1024;
   uint64_t point_budget = 10'000'000;
-  size_t upload_budget_per_frame = 2 * 1024 * 1024;
-  int max_in_flight_io = 32;
-  int max_new_io_per_frame = 4;
+  // Streaming throughput. Loads are issued closest-first, so a freshly-exposed near region has to catch up
+  // from coarse to fine after each camera move; too low a rate leaves it visibly sparse while a farther
+  // region that was refined earlier (and is cached in the render list) still looks dense. Keep these high
+  // enough that refinement converges in a second or two. Bounded overall by gpu_memory_budget.
+  size_t upload_budget_per_frame = 6 * 1024 * 1024;
+  int max_in_flight_io = 64;
+  int max_new_io_per_frame = 16;
 
   points_buffer_t index_buffer;
 
