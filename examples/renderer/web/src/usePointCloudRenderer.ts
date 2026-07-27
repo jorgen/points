@@ -20,11 +20,11 @@ export interface ViewControls {
   showBoundingBoxes: boolean;
 }
 
-// Defaults match the C++ gl_renderer fields (point_world_size 1.5 as an adaptive-spacing multiplier,
+// Defaults match the C++ gl_renderer fields (point_world_size 1.2 as an adaptive-spacing multiplier,
 // lod_scale_base 1.0 = no per-LOD bias); the streaming values are browser-appropriate starting points
 // pushed to the data source on connect.
 export const DEFAULT_CONTROLS: ViewControls = {
-  pointSize: 1.5,
+  pointSize: 1.2,
   lodScaleBase: 1.0,
   pixelErrorThreshold: 1.0,
   gpuMemoryBudgetMb: 512,

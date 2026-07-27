@@ -215,9 +215,9 @@ public:
 
   // Splat sizing is adaptive: each point is drawn to cover its node's world-space point spacing (see
   // gl_renderer::draw). These two are now dimensionless multipliers on that adaptive size:
-  //  - point_world_size: overall splat-size multiplier (~1.5 gives gap-free coverage; lower = crisper dots).
+  //  - point_world_size: overall splat-size multiplier (~1.2 ~gap-free; higher = solid/blobby, lower = crisp dots).
   //  - lod_scale_base: optional per-LOD bias, pow(lod_scale_base, lod); 1.0 = pure adaptive (no bias).
-  float point_world_size = 1.5f;
+  float point_world_size = 1.2f;
   float lod_scale_base = 1.0f;
 
 private:
