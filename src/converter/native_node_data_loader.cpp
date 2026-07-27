@@ -18,8 +18,10 @@
 #include "native_node_data_loader.hpp"
 #include "point_buffer_render_helper.hpp"
 
+#include <array>
 #include <cassert>
 #include <cstring>
+#include <vector>
 
 namespace points::converter
 {
@@ -74,6 +76,41 @@ render::loaded_node_data_t native_node_data_loader_t::get_data(render::load_hand
   convert_points_to_vertex_data(req.tree_config, *req.data_handler, tmp);
   convert_attribute_to_draw_buffer_data(*req.data_handler, tmp, 1);
 
+  // Approach B runtime LOD: reorder the decoded vertex + its attribute coarse->fine so drawing the first
+  // prefix_count[W+1] points is a screen-uniform subsample (see build_lod_order). Morton nodes only.
+  std::array<uint32_t, 64> prefix_count = {};
+  bool has_lod_order = false;
+  {
+    std::vector<uint32_t> perm;
+    switch (req.data_handler->header.point_format.type)
+    {
+    case points_type_m32: build_lod_order<morton::morton32_t>(*req.data_handler, prefix_count, perm); has_lod_order = true; break;
+    case points_type_m64: build_lod_order<morton::morton64_t>(*req.data_handler, prefix_count, perm); has_lod_order = true; break;
+    case points_type_m128: build_lod_order<morton::morton128_t>(*req.data_handler, prefix_count, perm); has_lod_order = true; break;
+    case points_type_m192: build_lod_order<morton::morton192_t>(*req.data_handler, prefix_count, perm); has_lod_order = true; break;
+    default: break;
+    }
+    if (has_lod_order && tmp.point_count > 0)
+    {
+      const uint32_t n = tmp.point_count;
+      const uint32_t vstride = tmp.data_info[0].size / n;
+      auto reordered_vertex = reorder_points_by_perm(static_cast<const uint8_t *>(tmp.data_info[0].data), n, vstride, perm);
+      tmp.data[0] = reordered_vertex;
+      tmp.data_info[0] = points_converter_buffer_t(reordered_vertex.get(), n * vstride);
+      if (tmp.data_info[1].data && tmp.data_info[1].size)
+      {
+        const uint32_t astride = tmp.data_info[1].size / n;
+        auto reordered_attribute = reorder_points_by_perm(static_cast<const uint8_t *>(tmp.data_info[1].data), n, astride, perm);
+        tmp.data[1] = reordered_attribute;
+        tmp.data_info[1] = points_converter_buffer_t(reordered_attribute.get(), n * astride);
+      }
+    }
+    else
+    {
+      has_lod_order = false;
+    }
+  }
+
   struct impl_data_t
   {
     std::shared_ptr<dyn_points_data_handler_t> data_handler;
@@ -100,6 +137,8 @@ render::loaded_node_data_t native_node_data_loader_t::get_data(render::load_hand
   result.point_count = tmp.point_count;
   result.offset = tmp.offset;
   result.draw_type = tmp.draw_type;
+  result.prefix_count = prefix_count;
+  result.has_lod_order = has_lod_order;
 
   result._impl_data = std::move(impl);
 

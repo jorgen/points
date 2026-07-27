@@ -74,6 +74,11 @@ struct render_node_t
   glm::vec4 params_data = {1.0f, 1.0f, 0.0f, 0.0f};
 
   double cached_distance = 0.0;
+
+  // Runtime per-node LOD (Approach B): points are uploaded reordered coarse->fine; prefix_count[k] is the
+  // draw count for render grid width k-1. Copied from loaded_data at convert time (survives the release()).
+  std::array<uint32_t, 64> prefix_count = {};
+  bool has_lod_order = false;
 };
 
 struct frame_timings_t

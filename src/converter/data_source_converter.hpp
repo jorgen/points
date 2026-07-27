@@ -53,6 +53,10 @@ struct points_converter_data_source_t
   int viewport_width = 1920;
   int viewport_height = 1080;
   double screen_fraction_threshold = 0.5;
+  // Runtime per-node LOD (Approach B): target on-screen size (pixels) of a rendered point's morton grid
+  // cell. Each node is drawn thinned so its points sit ~this far apart on screen -> uniform density
+  // independent of source density / tree depth. Larger = sparser/crisper, smaller = denser/solid.
+  double render_density_px = 1.5;
   size_t gpu_memory_budget = 512 * 1024 * 1024;
   uint64_t point_budget = 10'000'000;
   // Streaming throughput. Loads are issued closest-first, so a freshly-exposed near region has to catch up

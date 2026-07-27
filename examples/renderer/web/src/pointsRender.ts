@@ -43,6 +43,8 @@ export interface Renderer {
   setLodScaleBase(v: number): void;
   /** Octree refinement budget: smaller screen-space pixel error = more detail (+ more streaming). */
   setPixelErrorThreshold(v: number): void;
+  /** Runtime per-node LOD: target on-screen spacing (px) between drawn points → uniform density. */
+  setRenderDensityPx(v: number): void;
   /** GPU memory budget in MB; the streamer evicts to stay under it. */
   setGpuMemoryBudgetMb(mb: number): void;
   /** Toggle the per-node bounding-box overlay. */

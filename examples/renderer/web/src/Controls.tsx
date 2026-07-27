@@ -108,6 +108,15 @@ export function Controls({
       <section className="controls__section">
         <h2>Streaming</h2>
         <Slider
+          label="Density (px, lower = denser)"
+          value={controls.renderDensityPx}
+          min={0.5}
+          max={6.0}
+          step={0.1}
+          onChange={(v) => setControl('renderDensityPx', v)}
+          format={(v) => `${v.toFixed(1)}px`}
+        />
+        <Slider
           label="Pixel error (lower = finer)"
           value={controls.pixelErrorThreshold}
           min={0.1}

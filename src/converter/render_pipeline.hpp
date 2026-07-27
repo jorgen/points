@@ -94,6 +94,8 @@ int emit_draws(
     const tree_config_t &tree_config,
     points_to_render_t *to_render,
     float fade_duration_ms,
+    int viewport_height,
+    double render_density_px,
     uint64_t &points_rendered);
 
 void destroy_render_node(

@@ -81,6 +81,8 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   double frac_threshold;
   size_t frame_upload_budget;
   int max_io_in_flight;
+  int frame_viewport_height;
+  double frame_render_density_px;
   {
     std::unique_lock<std::mutex> lock(mutex);
     new_attribute = current_attribute_name != next_attribute_name;
@@ -88,6 +90,8 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     frac_threshold = screen_fraction_threshold;
     frame_upload_budget = upload_budget_per_frame;
     max_io_in_flight = max_in_flight_io;
+    frame_viewport_height = viewport_height;
+    frame_render_density_px = render_density_px;
   }
 
   // Handle attribute change
@@ -203,7 +207,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
 
   // Phase 5: Emit draws
   uint64_t pts_rendered = 0;
-  frame_timings.nodes_drawn = emit_draws(render_list, callbacks, camera, tree_config, to_render, fade_duration_ms, pts_rendered);
+  frame_timings.nodes_drawn = emit_draws(render_list, callbacks, camera, tree_config, to_render, fade_duration_ms, frame_viewport_height, frame_render_density_px, pts_rendered);
   points_rendered_last_frame = pts_rendered;
   auto t_after_emit = clock::now();
 
@@ -275,6 +279,12 @@ void points_converter_data_source_set_pixel_error_threshold(struct points_conver
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->screen_fraction_threshold = threshold;
+}
+
+void points_converter_data_source_set_render_density_px(struct points_converter_data_source_t *converter_data_source, double density_px)
+{
+  std::unique_lock<std::mutex> lock(converter_data_source->mutex);
+  converter_data_source->render_density_px = density_px > 0.0 ? density_px : 0.01;
 }
 
 void points_converter_data_source_set_gpu_memory_budget(struct points_converter_data_source_t *converter_data_source, size_t budget_bytes)

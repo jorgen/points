@@ -46,6 +46,13 @@ struct loaded_node_data_t
   std::array<double, 3> offset = {};
   points_draw_type_t draw_type = points_dyn_points_1;
 
+  // Runtime per-node LOD: the vertex + attribute buffers are reordered coarse->fine (one morton-cell
+  // representative first), so drawing the first N points is a screen-uniform subsample. prefix_count[k] =
+  // number of points whose morton "representative level" is >= k, i.e. the draw count for render grid
+  // width k-1. has_lod_order is false for non-morton nodes (drawn in full). See point_buffer_render_helper.
+  std::array<uint32_t, 64> prefix_count = {};
+  bool has_lod_order = false;
+
   std::shared_ptr<void> _impl_data;
 
   void release()

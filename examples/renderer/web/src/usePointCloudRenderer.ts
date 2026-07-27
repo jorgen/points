@@ -14,6 +14,8 @@ export interface ViewControls {
   lodScaleBase: number;
   /** Octree refinement budget: smaller = more detail (+ more streaming). */
   pixelErrorThreshold: number;
+  /** Runtime per-node LOD: on-screen spacing (px) between drawn points → uniform density. Higher = sparser. */
+  renderDensityPx: number;
   /** GPU memory budget in MB. */
   gpuMemoryBudgetMb: number;
   /** Per-node bounding-box overlay. */
@@ -26,6 +28,7 @@ export const DEFAULT_CONTROLS: ViewControls = {
   pointSize: 0.05,
   lodScaleBase: 1.1,
   pixelErrorThreshold: 1.0,
+  renderDensityPx: 1.5,
   gpuMemoryBudgetMb: 512,
   showBoundingBoxes: false,
 };
@@ -34,6 +37,7 @@ function applyControls(r: Renderer, c: ViewControls) {
   r.setPointSize(c.pointSize);
   r.setLodScaleBase(c.lodScaleBase);
   r.setPixelErrorThreshold(c.pixelErrorThreshold);
+  r.setRenderDensityPx(c.renderDensityPx);
   r.setGpuMemoryBudgetMb(c.gpuMemoryBudgetMb);
   r.setShowBoundingBoxes(c.showBoundingBoxes);
 }
@@ -383,6 +387,9 @@ export function usePointCloudRenderer(
         break;
       case 'pixelErrorThreshold':
         r.setPixelErrorThreshold(value as number);
+        break;
+      case 'renderDensityPx':
+        r.setRenderDensityPx(value as number);
         break;
       case 'gpuMemoryBudgetMb':
         r.setGpuMemoryBudgetMb(value as number);

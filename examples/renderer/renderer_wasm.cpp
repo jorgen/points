@@ -201,6 +201,12 @@ public:
     points_converter_data_source_set_pixel_error_threshold(_cds, v);
     mark_dirty();
   }
+  // Runtime per-node LOD: target on-screen size (px) of a drawn point's morton cell -> uniform density.
+  void setRenderDensityPx(double v)
+  {
+    points_converter_data_source_set_render_density_px(_cds, v);
+    mark_dirty();
+  }
   // GPU memory budget in MB; the streamer evicts to stay under it.
   void setGpuMemoryBudgetMb(double mb)
   {
@@ -430,6 +436,7 @@ EMSCRIPTEN_BINDINGS(points_render)
     .function("setPointSize", &renderer_wasm_t::setPointSize)
     .function("setLodScaleBase", &renderer_wasm_t::setLodScaleBase)
     .function("setPixelErrorThreshold", &renderer_wasm_t::setPixelErrorThreshold)
+    .function("setRenderDensityPx", &renderer_wasm_t::setRenderDensityPx)
     .function("setGpuMemoryBudgetMb", &renderer_wasm_t::setGpuMemoryBudgetMb)
     .function("setShowBoundingBoxes", &renderer_wasm_t::setShowBoundingBoxes)
     .function("dispose", &renderer_wasm_t::dispose);

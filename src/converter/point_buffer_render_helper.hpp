@@ -228,6 +228,65 @@ inline void convert_attribute_to_draw_buffer_data(const dyn_points_data_handler_
   draw_buffer.data_info[data_slot] = draw_buffer.data_handler->data_info[data_slot];
   draw_buffer.format[data_slot] = draw_buffer.data_handler->point_format[data_slot];
 }
+
+// Runtime per-node LOD (Approach B). Points arrive morton-sorted; a point i starts a new grid cell of width
+// W iff morton_lod(code[i-1], code[i]) > W. rep_level[i] is that transition level (point 0 is the sentinel,
+// always kept). We counting-sort a permutation coarse->fine (highest rep_level first, stable in morton
+// order) so that drawing the first prefix_count[W+1] points yields one representative per width-W cell -- a
+// screen-uniform subsample. prefix_count[k] = #{ i : rep_level[i] >= k }, so prefix_count[0] == point_count.
+constexpr int lod_order_max_level = 63;
+
+template <typename MORTON_TYPE>
+inline void build_lod_order(const dyn_points_data_handler_t &data_handler, std::array<uint32_t, 64> &prefix_count, std::vector<uint32_t> &perm)
+{
+  const auto *morton_array = static_cast<const MORTON_TYPE *>(data_handler.data_info[0].data);
+  const uint32_t point_count = data_handler.header.point_count;
+  perm.resize(point_count);
+  prefix_count = {};
+  if (point_count == 0)
+    return;
+
+  std::vector<uint8_t> rep_level(point_count);
+  uint32_t hist[64] = {};
+  rep_level[0] = uint8_t(lod_order_max_level); // the first (morton-min) point is a representative at every width
+  hist[lod_order_max_level]++;
+  for (uint32_t i = 1; i < point_count; i++)
+  {
+    int level = morton::morton_lod(morton_array[i - 1], morton_array[i]);
+    level = level < 0 ? 0 : (level > lod_order_max_level ? lod_order_max_level : level);
+    rep_level[i] = uint8_t(level);
+    hist[level]++;
+  }
+
+  // Counting sort: bucket lod_order_max_level first (coarsest), descending; stable within a bucket.
+  uint32_t start[64];
+  uint32_t acc = 0;
+  for (int level = lod_order_max_level; level >= 0; level--)
+  {
+    start[level] = acc;
+    acc += hist[level];
+  }
+  for (uint32_t i = 0; i < point_count; i++)
+    perm[start[rep_level[i]]++] = i;
+
+  // prefix_count[k] = #{ rep_level >= k } (suffix sum). Draw count for render width W is prefix_count[W+1].
+  uint32_t suffix = 0;
+  for (int k = lod_order_max_level; k >= 0; k--)
+  {
+    suffix += hist[k];
+    prefix_count[size_t(k)] = suffix;
+  }
+}
+
+// Reorder a tightly-packed point buffer (stride bytes/point) into permutation order: out[j] = src[perm[j]].
+inline std::shared_ptr<uint8_t[]> reorder_points_by_perm(const uint8_t *src, uint32_t point_count, uint32_t stride, const std::vector<uint32_t> &perm)
+{
+  auto out = std::make_shared<uint8_t[]>(size_t(point_count) * stride);
+  auto *out_ptr = out.get();
+  for (uint32_t j = 0; j < point_count; j++)
+    std::memcpy(out_ptr + size_t(j) * stride, src + size_t(perm[j]) * stride, stride);
+  return out;
+}
 } // namespace points::converter
 
 #endif // POINT_BUFFER_RENDER_HELPER_H

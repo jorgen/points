@@ -24,6 +24,7 @@
 #include <vio/thread_pool.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <thread>
 
@@ -241,6 +242,8 @@ static void convert_node_data(render_node_t &node, render::node_data_loader_t *n
     node.point_count = node.loaded_data.point_count;
     node.offset = node.loaded_data.offset;
     node.draw_type = node.loaded_data.draw_type;
+    node.prefix_count = node.loaded_data.prefix_count; // survives loaded_data.release() after upload
+    node.has_lod_order = node.loaded_data.has_lod_order;
     node.gpu_memory_size = node.loaded_data.vertex_data_size + node.loaded_data.attribute_data_size
                           + sizeof(node.camera_view) + sizeof(node.params_data);
   }
@@ -436,6 +439,37 @@ void update_fades(
   }
 }
 
+// Runtime per-node LOD (Approach B): how many of the node's coarse->fine-ordered points to draw so that a
+// morton grid cell projects to ~render_density_px pixels -- giving uniform on-screen density regardless of
+// source density or tree depth. Returns point_count for non-morton nodes or when the projection degenerates.
+static uint32_t compute_lod_draw_size(const render_node_t &node, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, int viewport_height, double render_density_px)
+{
+  if (!node.has_lod_order || node.point_count == 0)
+    return node.point_count;
+  const double distance = node.cached_distance;
+  if (distance <= 0.0)
+    return node.point_count;
+  // pixels per world meter at this node's distance (projection[1][1] = 1/tan(fovy/2), pairs with height).
+  const double px_per_meter = camera.projection[1][1] * 0.5 * double(viewport_height) / distance;
+  if (px_per_meter <= 0.0 || tree_config.scale <= 0.0)
+    return node.point_count;
+  const double cell_world = render_density_px / px_per_meter;   // world cell size that projects to the target
+  const double cells = cell_world / tree_config.scale;          // == 2^(W+1) in decoded units
+  const int render_width = int(std::floor(std::log2(std::max(cells, 1e-9)))) - 1; // morton grid width W
+  int idx = render_width + 1;                                   // prefix_count[W+1] = draw count for width W
+  const int max_idx = int(node.prefix_count.size()) - 1;        // 63
+  if (idx < 0)
+    idx = 0;
+  if (idx > max_idx)
+    idx = max_idx;
+  uint32_t draw_size = node.prefix_count[size_t(idx)];
+  if (draw_size < 1)
+    draw_size = 1;
+  if (draw_size > node.point_count)
+    draw_size = node.point_count;
+  return draw_size;
+}
+
 int emit_draws(
     render_list_t &render_list,
     render::callback_manager_t &callbacks,
@@ -443,6 +477,8 @@ int emit_draws(
     const tree_config_t &tree_config,
     points_to_render_t *to_render,
     float fade_duration_ms,
+    int viewport_height,
+    double render_density_px,
     uint64_t &points_rendered)
 {
   int nodes_drawn = 0;
@@ -470,10 +506,11 @@ int emit_draws(
     node.draw_list[1] = {points_dyn_points_bm_color, node.gpu_buffers[1].user_ptr};
     node.draw_list[2] = {points_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
 
-    points_draw_group_t draw_group = {node.draw_type, node.draw_list, 3, int(node.point_count), node.walker_data.lod};
+    const uint32_t draw_size = compute_lod_draw_size(node, camera, tree_config, viewport_height, render_density_px);
+    points_draw_group_t draw_group = {node.draw_type, node.draw_list, 3, int(draw_size), node.walker_data.lod};
     points_to_render_add_render_group(to_render, draw_group);
 
-    points_rendered += node.point_count;
+    points_rendered += draw_size;
     nodes_drawn++;
   }
 
@@ -521,10 +558,11 @@ int emit_draws(
     node.draw_list[3] = {points_dyn_points_bm_old_color, node.gpu_buffers[1].user_ptr};
     node.draw_list[4] = {points_dyn_points_bm_params, node.params_buffer.user_ptr};
 
-    points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 5, int(node.point_count), node.walker_data.lod};
+    const uint32_t draw_size = compute_lod_draw_size(node, camera, tree_config, viewport_height, render_density_px);
+    points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 5, int(draw_size), node.walker_data.lod};
     points_to_render_add_render_group(to_render, draw_group);
 
-    points_rendered += node.point_count;
+    points_rendered += draw_size;
     nodes_drawn++;
   }
 
