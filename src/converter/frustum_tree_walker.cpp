@@ -198,6 +198,7 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
         to_add.frustum_visible = visible;
         to_add.offset_in_subset = points.offset;
         to_add.point_count = points.count;
+        to_add.node_point_count = points_collection.point_count; // whole-node total, pairs with tight_aabb
         to_add.input_id = points.input_id;
         for (int i = 0; i < 4 && i < attribute_index_map.get_attribute_count(); i++)
         {

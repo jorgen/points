@@ -147,6 +147,7 @@ render_list_t build_render_list(
       std::memcpy(pnode.walker_data.format, wit->format, sizeof(wit->format));
       std::memcpy(pnode.walker_data.locations, wit->locations, sizeof(wit->locations));
       pnode.walker_data.point_count = wit->point_count;
+      pnode.walker_data.node_point_count = wit->node_point_count; // keep paired with tight_aabb (below)
       pnode.walker_data.aabb = wit->aabb;
       pnode.walker_data.tight_aabb = wit->tight_aabb;
       if (pnode.fade_state == render_node_fade_state::fade_out)
@@ -497,7 +498,7 @@ int emit_draws(
     node.draw_list[2] = {points_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
 
     points_draw_group_t draw_group = {node.draw_type, node.draw_list, 3, int(node.point_count), node.walker_data.lod,
-                                      node_world_spacing(node.walker_data.tight_aabb, node.point_count)};
+                                      node_world_spacing(node.walker_data.tight_aabb, node.walker_data.node_point_count ? node.walker_data.node_point_count : node.point_count)};
     points_to_render_add_render_group(to_render, draw_group);
 
     points_rendered += node.point_count;
@@ -549,7 +550,7 @@ int emit_draws(
     node.draw_list[4] = {points_dyn_points_bm_params, node.params_buffer.user_ptr};
 
     points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 5, int(node.point_count), node.walker_data.lod,
-                                      node_world_spacing(node.walker_data.tight_aabb, node.point_count)};
+                                      node_world_spacing(node.walker_data.tight_aabb, node.walker_data.node_point_count ? node.walker_data.node_point_count : node.point_count)};
     points_to_render_add_render_group(to_render, draw_group);
 
     points_rendered += node.point_count;
