@@ -1096,7 +1096,17 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
 
   double fov_rad = 0;
   points_camera_perspective_properties(camera, &fov_rad, nullptr, nullptr, nullptr);
-  float base_point_scale = float(point_world_size * (1.0 / tan(fov_rad / 2.0)) * viewport_height / 2.0);
+  // Projection factor: world length -> pixel size at clip w = 1 (the splat shader divides by gl_Position.w).
+  const float world_to_pixels = float((1.0 / tan(fov_rad / 2.0)) * viewport_height / 2.0);
+
+  // Adaptive splat size: cover each node's world-space point spacing so the gaps that perspective
+  // foreshortening opens on near / grazing surfaces fill in, scaled by the user size multiplier
+  // (point_world_size) plus an optional per-LOD bias (lod_scale_base; 1.0 = off). Falls back to a small
+  // fixed world size for nodes that report no spacing.
+  auto adaptive_point_scale = [&](const points_draw_group_t &g) {
+    const float spacing = g.world_spacing > 0.0f ? g.world_spacing : 0.05f;
+    return spacing * point_world_size * std::pow(lod_scale_base, float(g.lod_level)) * world_to_pixels;
+  };
 
   auto frame = points_renderer_frame(renderer, camera);
   for (int i = 0; i < frame.to_render_size; i++)
@@ -1115,15 +1125,13 @@ void gl_renderer::draw(clear clear, int viewport_width, int viewport_height)
       break;
     case points_dyn_points_1:
     case points_dyn_points_3: {
-      float lod_scale = std::pow(lod_scale_base, float(to_render.lod_level));
-      float point_scale = base_point_scale * lod_scale;
+      float point_scale = adaptive_point_scale(to_render);
       auto color = to_render.draw_type == points_dyn_points_1 ? gl_dyn_points_handler::color_1 : gl_dyn_points_handler::color_3;
       dynpoints_handler.draw(to_render, color, point_scale);
       break;
     }
     case points_dyn_points_crossfade: {
-      float lod_scale = std::pow(lod_scale_base, float(to_render.lod_level));
-      float point_scale = base_point_scale * lod_scale;
+      float point_scale = adaptive_point_scale(to_render);
       dynpoints_handler.draw_crossfade(to_render, point_scale);
       break;
     }

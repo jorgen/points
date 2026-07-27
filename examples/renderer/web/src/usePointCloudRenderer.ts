@@ -8,9 +8,9 @@ export type RendererStatus = 'idle' | 'connecting' | 'ready' | 'error';
 
 /** Live view controls, mirroring the desktop app's Input panel. */
 export interface ViewControls {
-  /** Point splat world size. */
+  /** Splat-size multiplier on the adaptive per-node spacing (~1.5 = gap-free; lower = crisper dots). */
   pointSize: number;
-  /** Level-of-detail scale base (higher keeps coarser LOD). */
+  /** Per-LOD splat-size bias, pow(lodScaleBase, lod); 1.0 = pure adaptive (no bias). */
   lodScaleBase: number;
   /** Octree refinement budget: smaller = more detail (+ more streaming). */
   pixelErrorThreshold: number;
@@ -20,11 +20,12 @@ export interface ViewControls {
   showBoundingBoxes: boolean;
 }
 
-// Defaults match the C++ gl_renderer fields (point_world_size 0.05, lod_scale_base 1.1); the streaming
-// values are browser-appropriate starting points pushed to the data source on connect.
+// Defaults match the C++ gl_renderer fields (point_world_size 1.5 as an adaptive-spacing multiplier,
+// lod_scale_base 1.0 = no per-LOD bias); the streaming values are browser-appropriate starting points
+// pushed to the data source on connect.
 export const DEFAULT_CONTROLS: ViewControls = {
-  pointSize: 0.05,
-  lodScaleBase: 1.1,
+  pointSize: 1.5,
+  lodScaleBase: 1.0,
   pixelErrorThreshold: 1.0,
   gpuMemoryBudgetMb: 512,
   showBoundingBoxes: false,

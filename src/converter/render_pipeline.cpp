@@ -24,11 +24,37 @@
 #include <vio/thread_pool.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <thread>
 
 namespace points::converter
 {
+
+// Estimate the world-space spacing between adjacent points in a node, for adaptive splat sizing, from the
+// node's tight bounds + point count (no assumption of a fixed subsample grid).
+//
+// Point clouds are overwhelmingly SURFACES (terrain, walls, scanned objects), so we estimate spacing as if
+// the N points tile the node's dominant face -- its two LARGEST extents -- and deliberately ignore the
+// smallest extent. That is what keeps a surface's relief/thickness, and the axis-aligned-box slack of a
+// tilted plane, from inflating the splat: folding in the full box volume would swing the size several-fold
+// with pure orientation and over-cover every planar node whose relief is thicker than its point spacing
+// (i.e. all real terrain). A 1D term (largest/N) keeps thin, edge-like nodes from collapsing to
+// sub-spacing dots. Genuinely volumetric clouds are then slightly under-covered, which the size multiplier
+// absorbs -- the safe direction (crisper dots, not the gaps this feature exists to remove).
+static float node_world_spacing(const node_aabb_t &tight, uint64_t point_count)
+{
+  if (point_count < 1)
+    return 0.0f;
+  const double n = double(point_count);
+  const glm::dvec3 e = glm::abs(tight.max - tight.min);
+  const double largest = std::max({e.x, e.y, e.z});
+  const double smallest = std::min({e.x, e.y, e.z});
+  const double middle = (e.x + e.y + e.z) - largest - smallest;                    // remaining (middle) extent
+  const double surface = (largest * middle > 0.0) ? std::sqrt(largest * middle / n) : 0.0; // 2D: dominant face
+  const double line = (largest > 0.0) ? largest / n : 0.0;                         // 1D: thin edge-like node
+  return float(std::max(surface, line));
+}
 
 bool render_node_less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs)
 {
@@ -470,7 +496,8 @@ int emit_draws(
     node.draw_list[1] = {points_dyn_points_bm_color, node.gpu_buffers[1].user_ptr};
     node.draw_list[2] = {points_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
 
-    points_draw_group_t draw_group = {node.draw_type, node.draw_list, 3, int(node.point_count), node.walker_data.lod};
+    points_draw_group_t draw_group = {node.draw_type, node.draw_list, 3, int(node.point_count), node.walker_data.lod,
+                                      node_world_spacing(node.walker_data.tight_aabb, node.point_count)};
     points_to_render_add_render_group(to_render, draw_group);
 
     points_rendered += node.point_count;
@@ -521,7 +548,8 @@ int emit_draws(
     node.draw_list[3] = {points_dyn_points_bm_old_color, node.gpu_buffers[1].user_ptr};
     node.draw_list[4] = {points_dyn_points_bm_params, node.params_buffer.user_ptr};
 
-    points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 5, int(node.point_count), node.walker_data.lod};
+    points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 5, int(node.point_count), node.walker_data.lod,
+                                      node_world_spacing(node.walker_data.tight_aabb, node.point_count)};
     points_to_render_add_render_group(to_render, draw_group);
 
     points_rendered += node.point_count;
