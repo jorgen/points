@@ -145,7 +145,10 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   auto *morton_array = static_cast<MORTON_TYPE *>(data_handler.data_info[0].data);
   auto point_count = data_handler.header.point_count;
 
-  auto buffer_size = uint32_t(point_count * sizeof(DECODED_T));
+  // Output is always packed float3 (r32x3, 12 bytes); DECODED_T only picks the morton decode width. Sizing
+  // by sizeof(DECODED_T) over-allocates (m128/m192) or under-allocates+overflows (m32), so size by float3.
+  (void)sizeof(DECODED_T);
+  auto buffer_size = uint32_t(point_count * sizeof(std::array<float, 3>));
   vertex_data = std::make_shared<uint8_t[]>(buffer_size);
   vertex_data_info = points_converter_buffer_t(vertex_data.get(), buffer_size);
   auto vertex_data_ptr = vertex_data.get();

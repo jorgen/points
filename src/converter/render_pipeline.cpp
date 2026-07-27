@@ -577,6 +577,13 @@ void handle_attribute_change(
   for (auto &np : render_list)
   {
     auto &node = *np;
+    // A worker thread may still be in convert_node_data (writing loaded_data + prefix_count/has_lod_order);
+    // wait for it before we release/reload, same guard as destroy_render_node.
+    if (node.io_state == render_node_io_state::converting)
+    {
+      while (!node.convert_done.load(std::memory_order_acquire))
+        std::this_thread::yield();
+    }
     if (node.load_handle != render::invalid_load_handle)
     {
       node_loader->cancel(node.load_handle);

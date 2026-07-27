@@ -93,7 +93,10 @@ render::loaded_node_data_t native_node_data_loader_t::get_data(render::load_hand
     if (has_lod_order && tmp.point_count > 0)
     {
       const uint32_t n = tmp.point_count;
-      const uint32_t vstride = tmp.data_info[0].size / n;
+      // The decoded vertex is always packed r32x3 (12 bytes/point). The decode buffer is over-allocated to
+      // sizeof(DECODED_T)*n (24 for m128/m192, 6 for m32), so the stride must come from the OUTPUT format,
+      // not data_info[0].size/n. The reordered buffer is exactly the packed 12*n bytes we then upload.
+      const uint32_t vstride = 3u * uint32_t(sizeof(float));
       auto reordered_vertex = reorder_points_by_perm(static_cast<const uint8_t *>(tmp.data_info[0].data), n, vstride, perm);
       tmp.data[0] = reordered_vertex;
       tmp.data_info[0] = points_converter_buffer_t(reordered_vertex.get(), n * vstride);
