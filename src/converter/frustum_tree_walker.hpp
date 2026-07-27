@@ -82,8 +82,7 @@ struct tree_walker_data_t
   node_aabb_t aabb;
   node_aabb_t tight_aabb;
   offset_in_subset_t offset_in_subset;
-  point_count_t point_count;      // this subset's point count
-  uint64_t node_point_count = 0;  // total points in the whole node (all subsets); pairs with tight_aabb
+  point_count_t point_count;
   input_data_id_t input_id;
   point_format_t format[4];
   storage_location_t locations[4];

@@ -530,8 +530,8 @@ int main(int argc, char **argv)
     {
       points_converter_data_source_set_debug_transitions(converter_points.get(), debug_transitions);
     }
-    ImGui::SliderFloat("Splat Size x", &points_gl_renderer.point_world_size, 0.25f, 4.0f, "%.2f");
-    ImGui::SliderFloat("LOD Bias", &points_gl_renderer.lod_scale_base, 1.0f, 3.0f, "%.2f");
+    ImGui::SliderFloat("Point World Size", &points_gl_renderer.point_world_size, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("LOD Scale Base", &points_gl_renderer.lod_scale_base, 1.0f, 5.0f, "%.1f");
     {
       uint64_t points_rendered = points_converter_data_source_get_points_rendered(converter_points.get());
       if (points_rendered >= 1000000)

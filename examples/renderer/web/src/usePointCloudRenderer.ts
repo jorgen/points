@@ -8,9 +8,9 @@ export type RendererStatus = 'idle' | 'connecting' | 'ready' | 'error';
 
 /** Live view controls, mirroring the desktop app's Input panel. */
 export interface ViewControls {
-  /** Splat-size multiplier on the adaptive per-node spacing (~1.5 = gap-free; lower = crisper dots). */
+  /** Point splat world size. */
   pointSize: number;
-  /** Per-LOD splat-size bias, pow(lodScaleBase, lod); 1.0 = pure adaptive (no bias). */
+  /** Level-of-detail scale base (higher keeps coarser LOD). */
   lodScaleBase: number;
   /** Octree refinement budget: smaller = more detail (+ more streaming). */
   pixelErrorThreshold: number;
@@ -20,12 +20,11 @@ export interface ViewControls {
   showBoundingBoxes: boolean;
 }
 
-// Defaults match the C++ gl_renderer fields (point_world_size 1.2 as an adaptive-spacing multiplier,
-// lod_scale_base 1.0 = no per-LOD bias); the streaming values are browser-appropriate starting points
-// pushed to the data source on connect.
+// Defaults match the C++ gl_renderer fields (point_world_size 0.05, lod_scale_base 1.1); the streaming
+// values are browser-appropriate starting points pushed to the data source on connect.
 export const DEFAULT_CONTROLS: ViewControls = {
-  pointSize: 1.2,
-  lodScaleBase: 1.0,
+  pointSize: 0.05,
+  lodScaleBase: 1.1,
   pixelErrorThreshold: 1.0,
   gpuMemoryBudgetMb: 512,
   showBoundingBoxes: false,
@@ -54,6 +53,21 @@ export interface RendererState {
 
 // Wheel deltas differ by device/mode; normalize a notch to roughly this zoom step.
 const WHEEL_ZOOM_SCALE = 0.0015;
+
+/**
+ * Choose the default color attribute by precedence: 'rgb', then 'intensity', then the first usable
+ * attribute after the coordinates (i.e. not 'xyz'), falling back to 'xyz' (the first name) if none of the
+ * above exist. Matching is case-insensitive. getAttributeNames() lists coordinates ('xyz') first.
+ */
+function pickDefaultAttribute(names: string[]): string | null {
+  if (names.length === 0) return null;
+  const lower = names.map((n) => n.toLowerCase());
+  const byName = (target: string) => {
+    const i = lower.indexOf(target);
+    return i >= 0 ? names[i] : null;
+  };
+  return byName('rgb') ?? byName('intensity') ?? names.find((n) => n.toLowerCase() !== 'xyz') ?? names[0];
+}
 
 /**
  * Owns the lifecycle of a single renderer instance bound to `canvasRef` + `connection`:
@@ -314,7 +328,11 @@ export function usePointCloudRenderer(
 
         // --- publish initial UI state + first draw ---
         setAttributes(names);
-        setActiveAttributeState(names[0] ?? null);
+        // Pick a sensible default color attribute by precedence rather than always the first (xyz):
+        // rgb, then intensity, then the first usable non-coordinate attribute, falling back to xyz.
+        const preferred = pickDefaultAttribute(names);
+        if (preferred) r.setAttribute(preferred);
+        setActiveAttributeState(preferred);
         setAabb(bounds);
         setStatus('ready');
         requestRedraw();

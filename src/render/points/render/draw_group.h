@@ -51,10 +51,6 @@ struct points_draw_group_t
   int buffers_size;
   int draw_size;
   int lod_level;
-  /* World-space point spacing of this node (distance between adjacent points at its LOD), used for
-     adaptive splat sizing so the renderer can size each point to cover its neighbourhood -- filling the
-     gaps that perspective foreshortening opens up on near/grazing surfaces. 0 if unknown. */
-  float world_spacing;
 };
 
 #ifdef __cplusplus

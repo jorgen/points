@@ -86,20 +86,20 @@ export function Controls({
           </select>
         </label>
         <Slider
-          label="Splat size ×"
+          label="Point size"
           value={controls.pointSize}
-          min={0.25}
-          max={4}
-          step={0.05}
+          min={0.005}
+          max={0.5}
+          step={0.005}
           onChange={(v) => setControl('pointSize', v)}
-          format={(v) => `${v.toFixed(2)}×`}
+          format={(v) => v.toFixed(3)}
         />
         <Slider
-          label="LOD bias"
+          label="LOD scale"
           value={controls.lodScaleBase}
           min={1.0}
-          max={3.0}
-          step={0.02}
+          max={5.0}
+          step={0.05}
           onChange={(v) => setControl('lodScaleBase', v)}
           format={(v) => v.toFixed(2)}
         />
