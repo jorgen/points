@@ -276,8 +276,14 @@ io_upload_stats_t process_io_and_upload(
   for (int i = 0; i < int(render_list.size()); i++)
   {
     auto &node = *render_list[i];
-    glm::dvec3 center = (node.walker_data.aabb.min + node.walker_data.aabb.max) * 0.5;
-    node.cached_distance = glm::length(center - camera_position);
+    // Distance to the NEAREST point of the node's TIGHT (actual-points) AABB -- not the loose octree-cube
+    // center. The loose cube extends into empty space, so its center is offset from where the points are;
+    // measuring to it made the per-node LOD density wrong in both directions (far nodes drawn dense when the
+    // cube center fell nearer than the points, near nodes thinned when it fell farther). Nearest-point of the
+    // tight box gives the closest part of the node the target density and never under-draws it.
+    const auto &taabb = node.walker_data.tight_aabb;
+    glm::dvec3 nearest = glm::clamp(camera_position, taabb.min, taabb.max);
+    node.cached_distance = glm::length(nearest - camera_position);
 
     if (node.gpu_state == render_node_gpu_state::uploaded)
       stats.gpu_memory_used += node.gpu_memory_size;
