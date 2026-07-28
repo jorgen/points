@@ -114,6 +114,7 @@ public:
     GLint uniform_camera = 0;
     GLint uniform_point_scale = 0;
     GLint uniform_params = 0;
+    GLint uniform_lod_fade_alpha = 0;
   } crossfade_handle;
 };
 

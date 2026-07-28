@@ -316,6 +316,7 @@ void gl_dyn_points_handler::initialize()
     crossfade_handle.uniform_camera = glGetUniformLocation(crossfade_handle.program, "camera");
     crossfade_handle.uniform_point_scale = glGetUniformLocation(crossfade_handle.program, "point_scale");
     crossfade_handle.uniform_params = glGetUniformLocation(crossfade_handle.program, "params");
+    crossfade_handle.uniform_lod_fade_alpha = glGetUniformLocation(crossfade_handle.program, "lod_fade_alpha");
 
     glGenVertexArrays(1, &crossfade_handle.vao);
     glBindVertexArray(crossfade_handle.vao);
@@ -450,7 +451,22 @@ void gl_dyn_points_handler::draw_crossfade(points_draw_group_t &group, float poi
     }
   }
 
-  glDrawArrays(GL_POINTS, 0, group.draw_size);
+  // Same LOD screen-door split as the steady pass so a node's density does not jump when it transitions
+  // between crossfading and steady: [0, solid) opaque, [solid, draw_size) screen-doored at lod_fade_alpha.
+  const int solid = group.lod_solid_count;
+  const bool fading = group.lod_fade_alpha < 1.0f && solid > 0 && solid < group.draw_size;
+  if (!fading)
+  {
+    glUniform1f(crossfade_handle.uniform_lod_fade_alpha, 1.0f);
+    glDrawArrays(GL_POINTS, 0, group.draw_size);
+  }
+  else
+  {
+    glUniform1f(crossfade_handle.uniform_lod_fade_alpha, 1.0f);
+    glDrawArrays(GL_POINTS, 0, solid);
+    glUniform1f(crossfade_handle.uniform_lod_fade_alpha, group.lod_fade_alpha);
+    glDrawArrays(GL_POINTS, solid, group.draw_size - solid);
+  }
   glBindVertexArray(0);
 
   glDisable(GL_BLEND);
