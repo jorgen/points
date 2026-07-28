@@ -239,12 +239,16 @@ inline void convert_attribute_to_draw_buffer_data(const dyn_points_data_handler_
 // screen-uniform subsample. prefix_count[k] = #{ i : rep_level[i] >= k }, so prefix_count[0] == point_count.
 constexpr int lod_order_max_level = 63;
 
+// perm orders points coarse->fine; prefix_count[W+1] is the draw count for width W. rep_level_out receives the
+// per-point representative level REORDERED to match perm (rep_level_out[j] == rep_level[perm[j]]), so it can be
+// uploaded 1:1 with the reordered vertex/attribute buffers and used for a per-point LOD test in the shader.
 template <typename MORTON_TYPE>
-inline void build_lod_order(const dyn_points_data_handler_t &data_handler, std::array<uint32_t, 64> &prefix_count, std::vector<uint32_t> &perm)
+inline void build_lod_order(const dyn_points_data_handler_t &data_handler, std::array<uint32_t, 64> &prefix_count, std::vector<uint32_t> &perm, std::vector<uint8_t> &rep_level_out)
 {
   const auto *morton_array = static_cast<const MORTON_TYPE *>(data_handler.data_info[0].data);
   const uint32_t point_count = data_handler.header.point_count;
   perm.resize(point_count);
+  rep_level_out.clear();
   prefix_count = {};
   if (point_count == 0)
     return;
@@ -271,6 +275,11 @@ inline void build_lod_order(const dyn_points_data_handler_t &data_handler, std::
   }
   for (uint32_t i = 0; i < point_count; i++)
     perm[start[rep_level[i]]++] = i;
+
+  // Reordered per-point rep_level (coarse->fine, matching perm), for per-point LOD in the shader.
+  rep_level_out.resize(point_count);
+  for (uint32_t j = 0; j < point_count; j++)
+    rep_level_out[j] = rep_level[perm[j]];
 
   // prefix_count[k] = #{ rep_level >= k } (suffix sum). Draw count for render width W is prefix_count[W+1].
   uint32_t suffix = 0;

@@ -245,6 +245,7 @@ static void convert_node_data(render_node_t &node, render::node_data_loader_t *n
     node.prefix_count = node.loaded_data.prefix_count; // survives loaded_data.release() after upload
     node.has_lod_order = node.loaded_data.has_lod_order;
     node.gpu_memory_size = node.loaded_data.vertex_data_size + node.loaded_data.attribute_data_size
+                          + node.loaded_data.rep_level_data_size
                           + sizeof(node.camera_view) + sizeof(node.params_data);
   }
   node.convert_done.store(true, std::memory_order_release);
@@ -276,15 +277,13 @@ io_upload_stats_t process_io_and_upload(
   for (int i = 0; i < int(render_list.size()); i++)
   {
     auto &node = *render_list[i];
-    // Distance to the center of the node's TIGHT (actual-points) AABB -- not the loose octree-cube center.
-    // The loose cube extends into empty space (its center is offset from where the points actually are), so
-    // measuring to it made the per-node LOD density wrong (far nodes drawn dense / near nodes thinned,
-    // view-dependent). The tight-box center sits on the point surface. (A node that spans a wide depth range
-    // at a grazing angle still can't be perfectly served by one distance -- center is the balanced choice;
-    // nearest over-draws its far half, farthest thins its near half. A full fix needs finer subdivision.)
+    // Distance to the NEAREST point of the node's TIGHT (actual-points) AABB. With per-point LOD in the shader
+    // this is no longer the visible-density lever -- it only (a) bounds how many points we submit
+    // (draw_size = prefix down to the finest level any part of the node needs) and (b) prioritizes IO
+    // closest-first. Nearest guarantees the fine near points are submitted; the shader culls the far ones.
     const auto &taabb = node.walker_data.tight_aabb;
-    glm::dvec3 tcenter = (taabb.min + taabb.max) * 0.5;
-    node.cached_distance = glm::length(tcenter - camera_position);
+    glm::dvec3 nearest = glm::clamp(camera_position, taabb.min, taabb.max);
+    node.cached_distance = glm::length(nearest - camera_position);
 
     if (node.gpu_state == render_node_gpu_state::uploaded)
       stats.gpu_memory_used += node.gpu_memory_size;
@@ -396,6 +395,13 @@ io_upload_stats_t process_io_and_upload(
     else
       callbacks.do_initialize_buffer(node.gpu_buffers[1], loaded.attribute_type, loaded.attribute_components, int(loaded.attribute_data_size), loaded.attribute_data);
 
+    // Per-point rep_level (u8x1, normalized to [0,1] in the shader) for the per-point LOD test.
+    if (loaded.rep_level_data && loaded.rep_level_data_size)
+    {
+      callbacks.do_create_buffer(node.gpu_buffers[3], points_buffer_type_vertex);
+      callbacks.do_initialize_buffer(node.gpu_buffers[3], points_type_u8, points_components_1, int(loaded.rep_level_data_size), loaded.rep_level_data);
+    }
+
     auto offset = to_glm(tree_config.offset) + to_glm(node.offset);
     node.camera_view = glm::mat4(camera_frame.projection * glm::translate(camera_frame.view, offset));
     callbacks.do_create_buffer(node.gpu_buffers[2], points_buffer_type_uniform);
@@ -459,50 +465,33 @@ static uint32_t lod_prefix_draw_size(const render_node_t &node, int idx)
   return draw_size;
 }
 
-// The steady per-node LOD draw split. On-screen density is a CONTINUOUS function of camera distance so it
-// never pops at a level boundary AND never lags/thins while the camera moves (unlike a time-eased reveal --
-// the earlier design culled the finest level for the whole duration of a zoom, which read as nodes
-// "disappearing"). draw [0, solid) opaque = the coarser levels; [solid, draw_size) = the finest level,
-// screen-doored by fade_alpha so exactly enough of it shows for the target density.
-struct lod_draw_t
+// Per-point LOD SUBMIT BOUND. The visible density is now decided per point in the shader (each point culled
+// by its own distance); this only bounds how many points we submit so the shader has everything it might draw.
+// The finest level any part of the node needs is set by the NEAREST point (node.cached_distance): submit the
+// prefix down to that level (prefix_count[floor(idx_cont)]). Points farther than the nearest are included
+// (they have coarser rep_levels, earlier in the prefix) and get culled per-point; points finer than the
+// nearest need are excluded. The shader uses view depth (gl_Position.w <= true distance) so at screen edges it
+// over-draws the submitted prefix rather than under-drawing it -- no gaps.
+static uint32_t compute_lod_draw_size(const render_node_t &node, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, int viewport_height, double render_density_px)
 {
-  uint32_t draw_size; // total points to submit (opaque prefix + faded finest level)
-  uint32_t solid;     // [0, solid) drawn fully opaque
-  float fade_alpha;   // screen-door coverage of [solid, draw_size); 1.0 => whole prefix opaque
-};
-
-static lod_draw_t compute_lod_draw(const render_node_t &node, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, int viewport_height, double render_density_px)
-{
-  lod_draw_t r{node.point_count, node.point_count, 1.0f}; // default: whole node, one opaque draw
   if (!node.has_lod_order || node.point_count == 0)
-    return r;
+    return node.point_count;
   const double distance = node.cached_distance;
   if (distance <= 0.0)
-    return r;
-  // pixels per world meter at this node's distance (projection[1][1] = 1/tan(fovy/2), pairs with height).
+    return node.point_count;
   const double px_per_meter = camera.projection[1][1] * 0.5 * double(viewport_height) / distance;
   if (px_per_meter <= 0.0 || tree_config.scale <= 0.0)
-    return r;
-  const double cell_world = render_density_px / px_per_meter; // world cell size that projects to the target
-  const double cells = cell_world / tree_config.scale;        // == 2^(W+1) in decoded units
-  // Continuous LOD index. prefix_count[floor(idx)] is the draw count at the coarser side of the boundary;
-  // the finest level (== floor(idx)) is screen-doored by (1 - frac) so drawing interpolates smoothly toward
-  // prefix_count[floor(idx)+1] as the camera pulls back. No floor() on the density -> no quantization pop.
+    return node.point_count;
+  const double cell_world = render_density_px / px_per_meter;
+  const double cells = cell_world / tree_config.scale;
   const double idx_cont = std::log2(std::max(cells, 1e-9));
   const int max_idx = int(node.prefix_count.size()) - 1; // 63
   int idx_lo = int(std::floor(idx_cont));
-  if (idx_lo < 0) // closer than the finest cell: whole node, opaque
-    return r;
+  if (idx_lo < 0) // closer than the finest cell -> submit the whole node
+    return node.point_count;
   if (idx_lo > max_idx)
     idx_lo = max_idx;
-  const double frac = idx_cont - double(idx_lo); // [0,1)
-  const int solid_idx = idx_lo + 1 <= max_idx ? idx_lo + 1 : max_idx;
-  r.draw_size = lod_prefix_draw_size(node, idx_lo);   // coarser levels + the finest (faded) level
-  r.solid = lod_prefix_draw_size(node, solid_idx);    // coarser levels, always opaque
-  if (r.solid > r.draw_size)
-    r.solid = r.draw_size;
-  r.fade_alpha = float(1.0 - frac); // finest-level coverage; == 1 exactly at a level boundary (no dither there)
-  return r;
+  return lod_prefix_draw_size(node, idx_lo);
 }
 
 int emit_draws(
@@ -518,6 +507,11 @@ int emit_draws(
 {
   int nodes_drawn = 0;
   points_rendered = 0;
+
+  // Per-frame per-point-LOD constants (same for every node). The shader turns view depth gl_Position.w into a
+  // grid level: cells = lod_density_scale * w / lod_px_scale; W = log2(cells); keep point iff rep_level >= W.
+  const float lod_px_scale = float(camera.projection[1][1] * 0.5 * double(viewport_height));
+  const float lod_density_scale = tree_config.scale > 0.0 ? float(render_density_px / tree_config.scale) : 0.0f;
 
   // Pass 1: steady opaque nodes
   for (auto &np : render_list)
@@ -540,15 +534,15 @@ int emit_draws(
     node.draw_list[0] = {points_dyn_points_bm_vertex, node.gpu_buffers[0].user_ptr};
     node.draw_list[1] = {points_dyn_points_bm_color, node.gpu_buffers[1].user_ptr};
     node.draw_list[2] = {points_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
+    node.draw_list[3] = {points_dyn_points_bm_replevel, node.gpu_buffers[3].user_ptr};
 
-    // Distance-driven continuous LOD split (see compute_lod_draw): the coarser levels are opaque and the
-    // finest level is screen-doored so on-screen density tracks the camera smoothly -- no boundary pop, and
-    // no thinning while the camera moves.
-    const lod_draw_t lod = compute_lod_draw(node, camera, tree_config, viewport_height, render_density_px);
-    points_draw_group_t draw_group = {node.draw_type, node.draw_list, 3, int(lod.draw_size), node.walker_data.lod, int(lod.solid), lod.fade_alpha};
+    // Submit the prefix down to the finest level the nearest part of the node needs; the shader culls the rest
+    // per point (near dense, far coarse). One opaque draw -- no per-node screen-door split.
+    const uint32_t draw_size = compute_lod_draw_size(node, camera, tree_config, viewport_height, render_density_px);
+    points_draw_group_t draw_group = {node.draw_type, node.draw_list, 4, int(draw_size), node.walker_data.lod, lod_px_scale, lod_density_scale};
     points_to_render_add_render_group(to_render, draw_group);
 
-    points_rendered += lod.draw_size;
+    points_rendered += draw_size;
     nodes_drawn++;
   }
 
@@ -595,14 +589,15 @@ int emit_draws(
     node.draw_list[2] = {points_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
     node.draw_list[3] = {points_dyn_points_bm_old_color, node.gpu_buffers[1].user_ptr};
     node.draw_list[4] = {points_dyn_points_bm_params, node.params_buffer.user_ptr};
+    node.draw_list[5] = {points_dyn_points_bm_replevel, node.gpu_buffers[3].user_ptr};
 
-    // Node-level crossfade animates the whole node via its params alpha; draw the SAME distance-driven
-    // screen-door LOD split as the steady pass so density does not jump at the fade<->steady transition.
-    const lod_draw_t lod = compute_lod_draw(node, camera, tree_config, viewport_height, render_density_px);
-    points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 5, int(lod.draw_size), node.walker_data.lod, int(lod.solid), lod.fade_alpha};
+    // Node-level crossfade animates the whole node via its params alpha; same per-point LOD submit + shader
+    // cull as the steady pass so density is consistent across the fade<->steady transition.
+    const uint32_t draw_size = compute_lod_draw_size(node, camera, tree_config, viewport_height, render_density_px);
+    points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 6, int(draw_size), node.walker_data.lod, lod_px_scale, lod_density_scale};
     points_to_render_add_render_group(to_render, draw_group);
 
-    points_rendered += lod.draw_size;
+    points_rendered += draw_size;
     nodes_drawn++;
   }
 
@@ -638,6 +633,8 @@ void handle_attribute_change(
         callbacks.do_destroy_buffer(node.gpu_buffers[0]);
       if (node.gpu_buffers[2].user_ptr)
         callbacks.do_destroy_buffer(node.gpu_buffers[2]);
+      if (node.gpu_buffers[3].user_ptr)
+        callbacks.do_destroy_buffer(node.gpu_buffers[3]);
       if (node.params_buffer.user_ptr)
         callbacks.do_destroy_buffer(node.params_buffer);
       node.gpu_state = render_node_gpu_state::none;

@@ -42,6 +42,11 @@ struct loaded_node_data_t
   points_type_t attribute_type = points_type_u8;
   points_components_t attribute_components = points_components_3;
 
+  // Per-point representative level (u8, one per point, reordered to match vertex/attribute). Uploaded as a
+  // vertex attribute for the per-point LOD test in the shader. Null for non-morton nodes.
+  void *rep_level_data = nullptr;
+  uint32_t rep_level_data_size = 0;
+
   uint32_t point_count = 0;
   std::array<double, 3> offset = {};
   points_draw_type_t draw_type = points_dyn_points_1;
@@ -60,6 +65,7 @@ struct loaded_node_data_t
     _impl_data.reset();
     vertex_data = nullptr;
     attribute_data = nullptr;
+    rep_level_data = nullptr;
   }
 };
 

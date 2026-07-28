@@ -76,7 +76,8 @@ enum points_dyn_points_buffer_mapping_t
   points_dyn_points_bm_color,
   points_dyn_points_bm_camera,
   points_dyn_points_bm_old_color,
-  points_dyn_points_bm_params
+  points_dyn_points_bm_params,
+  points_dyn_points_bm_replevel
 };
 
 enum points_axis_gizmo_buffer_mapping_t

@@ -77,17 +77,21 @@ render::loaded_node_data_t native_node_data_loader_t::get_data(render::load_hand
   convert_attribute_to_draw_buffer_data(*req.data_handler, tmp, 1);
 
   // Approach B runtime LOD: reorder the decoded vertex + its attribute coarse->fine so drawing the first
-  // prefix_count[W+1] points is a screen-uniform subsample (see build_lod_order). Morton nodes only.
+  // prefix_count[W+1] points is a screen-uniform subsample (see build_lod_order). Morton nodes only. The
+  // reordered per-point rep_level rides along as a u8 buffer for the per-point LOD test in the shader.
   std::array<uint32_t, 64> prefix_count = {};
   bool has_lod_order = false;
+  std::shared_ptr<uint8_t[]> rep_level_buffer;
+  uint32_t rep_level_size = 0;
   {
     std::vector<uint32_t> perm;
+    std::vector<uint8_t> rep_level;
     switch (req.data_handler->header.point_format.type)
     {
-    case points_type_m32: build_lod_order<morton::morton32_t>(*req.data_handler, prefix_count, perm); has_lod_order = true; break;
-    case points_type_m64: build_lod_order<morton::morton64_t>(*req.data_handler, prefix_count, perm); has_lod_order = true; break;
-    case points_type_m128: build_lod_order<morton::morton128_t>(*req.data_handler, prefix_count, perm); has_lod_order = true; break;
-    case points_type_m192: build_lod_order<morton::morton192_t>(*req.data_handler, prefix_count, perm); has_lod_order = true; break;
+    case points_type_m32: build_lod_order<morton::morton32_t>(*req.data_handler, prefix_count, perm, rep_level); has_lod_order = true; break;
+    case points_type_m64: build_lod_order<morton::morton64_t>(*req.data_handler, prefix_count, perm, rep_level); has_lod_order = true; break;
+    case points_type_m128: build_lod_order<morton::morton128_t>(*req.data_handler, prefix_count, perm, rep_level); has_lod_order = true; break;
+    case points_type_m192: build_lod_order<morton::morton192_t>(*req.data_handler, prefix_count, perm, rep_level); has_lod_order = true; break;
     default: break;
     }
     if (has_lod_order && tmp.point_count > 0)
@@ -107,10 +111,22 @@ render::loaded_node_data_t native_node_data_loader_t::get_data(render::load_hand
         tmp.data[1] = reordered_attribute;
         tmp.data_info[1] = points_converter_buffer_t(reordered_attribute.get(), n * astride);
       }
+      // rep_level is already in perm (coarse->fine) order from build_lod_order; copy into an owned buffer.
+      rep_level_buffer = std::make_shared<uint8_t[]>(n);
+      std::memcpy(rep_level_buffer.get(), rep_level.data(), n);
+      rep_level_size = n;
     }
     else
     {
       has_lod_order = false;
+    }
+    // Non-morton (or empty-order) nodes get a sentinel rep_level of 255 so the shader keeps every point
+    // (255 >= any grid level W). Keeps the rep_level attribute always bound and avoids a per-draw special case.
+    if (!rep_level_buffer && tmp.point_count > 0)
+    {
+      rep_level_buffer = std::make_shared<uint8_t[]>(tmp.point_count);
+      std::memset(rep_level_buffer.get(), 255, tmp.point_count);
+      rep_level_size = tmp.point_count;
     }
   }
 
@@ -119,12 +135,14 @@ render::loaded_node_data_t native_node_data_loader_t::get_data(render::load_hand
     std::shared_ptr<dyn_points_data_handler_t> data_handler;
     std::shared_ptr<uint8_t[]> vertex_data;
     std::shared_ptr<uint8_t[]> attribute_data;
+    std::shared_ptr<uint8_t[]> rep_level_data;
   };
 
   auto impl = std::make_shared<impl_data_t>();
   impl->data_handler = std::move(req.data_handler);
   impl->vertex_data = std::move(tmp.data[0]);
   impl->attribute_data = std::move(tmp.data[1]);
+  impl->rep_level_data = rep_level_buffer;
 
   render::loaded_node_data_t result;
   result.vertex_data = tmp.data_info[0].data;
@@ -136,6 +154,9 @@ render::loaded_node_data_t native_node_data_loader_t::get_data(render::load_hand
   result.attribute_data_size = tmp.data_info[1].size;
   result.attribute_type = tmp.format[1].type;
   result.attribute_components = tmp.format[1].components;
+
+  result.rep_level_data = rep_level_buffer ? rep_level_buffer.get() : nullptr;
+  result.rep_level_data_size = rep_level_size;
 
   result.point_count = tmp.point_count;
   result.offset = tmp.offset;

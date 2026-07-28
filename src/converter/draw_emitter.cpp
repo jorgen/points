@@ -149,7 +149,7 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
       render_buffer.render_list[2].buffer_mapping = points_dyn_points_bm_camera;
       render_buffer.render_list[2].user_ptr = render_buffer.render_buffers[2].user_ptr;
 
-      points_draw_group_t draw_group = {render_buffer.draw_type, render_buffer.render_list, 3, int(render_buffer.point_count), render_buffer.node_info.lod, int(render_buffer.point_count), 1.0f};
+      points_draw_group_t draw_group = {render_buffer.draw_type, render_buffer.render_list, 3, int(render_buffer.point_count), render_buffer.node_info.lod, 0.0f, 0.0f};
       points_to_render_add_render_group(to_render, draw_group);
 
       dbg_emitted++;
@@ -301,7 +301,7 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
       render_buffer.render_list[4].buffer_mapping = points_dyn_points_bm_params;
       render_buffer.render_list[4].user_ptr = render_buffer.params_buffer.user_ptr;
 
-      points_draw_group_t draw_group = {points_dyn_points_crossfade, render_buffer.render_list, 5, int(render_buffer.point_count), render_buffer.node_info.lod, int(render_buffer.point_count), 1.0f};
+      points_draw_group_t draw_group = {points_dyn_points_crossfade, render_buffer.render_list, 5, int(render_buffer.point_count), render_buffer.node_info.lod, 0.0f, 0.0f};
       points_to_render_add_render_group(to_render, draw_group);
 
       dbg_emitted++;
@@ -361,7 +361,7 @@ draw_result_t draw_emitter_t::emit(std::vector<std::unique_ptr<gpu_node_buffer_t
         render_buffer.render_list[4].buffer_mapping = points_dyn_points_bm_params;
         render_buffer.render_list[4].user_ptr = render_buffer.params_buffer.user_ptr;
 
-        points_draw_group_t draw_group = {points_dyn_points_crossfade, render_buffer.render_list, 5, int(render_buffer.point_count), render_buffer.node_info.lod, int(render_buffer.point_count), 1.0f};
+        points_draw_group_t draw_group = {points_dyn_points_crossfade, render_buffer.render_list, 5, int(render_buffer.point_count), render_buffer.node_info.lod, 0.0f, 0.0f};
         points_to_render_add_render_group(to_render, draw_group);
 
         dbg_emitted++;

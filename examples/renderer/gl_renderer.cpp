@@ -285,9 +285,11 @@ void gl_dyn_points_handler::initialize()
     glUseProgram(gl_handle.program);
     gl_handle.rgb_position = glGetAttribLocation(gl_handle.program, "rgb");
     gl_handle.vertex_position = glGetAttribLocation(gl_handle.program, "position");
+    gl_handle.rep_level_position = glGetAttribLocation(gl_handle.program, "rep_level");
     gl_handle.uniform_camera = glGetUniformLocation(gl_handle.program, "camera");
     gl_handle.uniform_point_scale = glGetUniformLocation(gl_handle.program, "point_scale");
-    gl_handle.uniform_fade_alpha = glGetUniformLocation(gl_handle.program, "fade_alpha");
+    gl_handle.uniform_lod_px_scale = glGetUniformLocation(gl_handle.program, "lod_px_scale");
+    gl_handle.uniform_lod_density_scale = glGetUniformLocation(gl_handle.program, "lod_density_scale");
 
     glGenVertexArrays(1, &gl_handle.vao);
     glBindVertexArray(gl_handle.vao);
@@ -297,6 +299,8 @@ void gl_dyn_points_handler::initialize()
     glBindBuffer(GL_ARRAY_BUFFER, tmp_buffer);
     glEnableVertexAttribArray(gl_handle.vertex_position);
     glEnableVertexAttribArray(gl_handle.rgb_position);
+    if (gl_handle.rep_level_position >= 0)
+      glEnableVertexAttribArray(gl_handle.rep_level_position);
     glBindVertexArray(0);
     glDeleteBuffers(1, &tmp_buffer);
     glBindVertexArray(0);
@@ -313,10 +317,12 @@ void gl_dyn_points_handler::initialize()
     crossfade_handle.vertex_position = glGetAttribLocation(crossfade_handle.program, "position");
     crossfade_handle.rgb_position = glGetAttribLocation(crossfade_handle.program, "rgb");
     crossfade_handle.old_rgb_position = glGetAttribLocation(crossfade_handle.program, "old_rgb");
+    crossfade_handle.rep_level_position = glGetAttribLocation(crossfade_handle.program, "rep_level");
     crossfade_handle.uniform_camera = glGetUniformLocation(crossfade_handle.program, "camera");
     crossfade_handle.uniform_point_scale = glGetUniformLocation(crossfade_handle.program, "point_scale");
     crossfade_handle.uniform_params = glGetUniformLocation(crossfade_handle.program, "params");
-    crossfade_handle.uniform_lod_fade_alpha = glGetUniformLocation(crossfade_handle.program, "lod_fade_alpha");
+    crossfade_handle.uniform_lod_px_scale = glGetUniformLocation(crossfade_handle.program, "lod_px_scale");
+    crossfade_handle.uniform_lod_density_scale = glGetUniformLocation(crossfade_handle.program, "lod_density_scale");
 
     glGenVertexArrays(1, &crossfade_handle.vao);
     glBindVertexArray(crossfade_handle.vao);
@@ -328,6 +334,8 @@ void gl_dyn_points_handler::initialize()
     glEnableVertexAttribArray(crossfade_handle.rgb_position);
     if (crossfade_handle.old_rgb_position >= 0)
       glEnableVertexAttribArray(crossfade_handle.old_rgb_position);
+    if (crossfade_handle.rep_level_position >= 0)
+      glEnableVertexAttribArray(crossfade_handle.rep_level_position);
     glBindVertexArray(0);
     glDeleteBuffers(1, &tmp_buffer);
     glBindVertexArray(0);
@@ -348,6 +356,8 @@ void gl_dyn_points_handler::draw(points_draw_group_t &group, color_components_t 
   glBindVertexArray(gl_handle.vao);
   glUseProgram(gl_handle.program);
   glUniform1f(gl_handle.uniform_point_scale, point_scale);
+  glUniform1f(gl_handle.uniform_lod_px_scale, group.lod_px_scale);
+  glUniform1f(gl_handle.uniform_lod_density_scale, group.lod_density_scale);
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
@@ -366,6 +376,15 @@ void gl_dyn_points_handler::draw(points_draw_group_t &group, color_components_t 
       glVertexAttribPointer(gl_handle.rgb_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
       break;
     }
+    case points_dyn_points_bm_replevel: {
+      if (gl_handle.rep_level_position >= 0 && buffer.user_ptr)
+      {
+        gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+        glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+        glVertexAttribPointer(gl_handle.rep_level_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
+      }
+      break;
+    }
     case points_dyn_points_bm_camera: {
       gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
       glUniformMatrix4fv(gl_handle.uniform_camera, 1, GL_FALSE, (const GLfloat *)gl_buffer->data);
@@ -377,23 +396,8 @@ void gl_dyn_points_handler::draw(points_draw_group_t &group, color_components_t 
     }
   }
 
-  // Runtime per-node LOD fade-in: draw the settled prefix [0, solid) fully opaque, then the level currently
-  // being revealed [solid, draw_size) with fade_alpha < 1 so the shader dissolves it in. When not fading
-  // (fade_alpha >= 1 or nothing to reveal) it collapses to a single opaque draw of the whole prefix.
-  const int solid = group.lod_solid_count;
-  const bool fading = group.lod_fade_alpha < 1.0f && solid > 0 && solid < group.draw_size;
-  if (!fading)
-  {
-    glUniform1f(gl_handle.uniform_fade_alpha, 1.0f);
-    glDrawArrays(GL_POINTS, 0, group.draw_size);
-  }
-  else
-  {
-    glUniform1f(gl_handle.uniform_fade_alpha, 1.0f);
-    glDrawArrays(GL_POINTS, 0, solid);
-    glUniform1f(gl_handle.uniform_fade_alpha, group.lod_fade_alpha);
-    glDrawArrays(GL_POINTS, solid, group.draw_size - solid);
-  }
+  // Per-point LOD is decided in the shader (rep_level vs the point's own distance) -- one opaque draw.
+  glDrawArrays(GL_POINTS, 0, group.draw_size);
   glBindVertexArray(0);
 }
 
@@ -405,12 +409,13 @@ void gl_dyn_points_handler::draw_crossfade(points_draw_group_t &group, float poi
 #ifndef __EMSCRIPTEN__
   glEnable(GL_VERTEX_PROGRAM_POINT_SIZE); // WebGL2/GLES3 always honours gl_PointSize; the enum does not exist there
 #endif
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  // No blending: the node crossfade is now folded into the per-point screen-door (opaque), same as steady.
 
   glBindVertexArray(crossfade_handle.vao);
   glUseProgram(crossfade_handle.program);
   glUniform1f(crossfade_handle.uniform_point_scale, point_scale);
+  glUniform1f(crossfade_handle.uniform_lod_px_scale, group.lod_px_scale);
+  glUniform1f(crossfade_handle.uniform_lod_density_scale, group.lod_density_scale);
   for (int i = 0; i < group.buffers_size; i++)
   {
     auto &buffer = group.buffers[i];
@@ -448,28 +453,21 @@ void gl_dyn_points_handler::draw_crossfade(points_draw_group_t &group, float poi
       glUniform4fv(crossfade_handle.uniform_params, 1, (const GLfloat *)gl_buffer->data);
       break;
     }
+    case points_dyn_points_bm_replevel: {
+      if (crossfade_handle.rep_level_position >= 0 && buffer.user_ptr)
+      {
+        gl_buffer_t *gl_buffer = static_cast<gl_buffer_t *>(buffer.user_ptr);
+        glBindBuffer(GL_ARRAY_BUFFER, gl_buffer->id);
+        glVertexAttribPointer(crossfade_handle.rep_level_position, gl_buffer->components, type_to_glformat(gl_buffer->type), GL_TRUE, 0, 0);
+      }
+      break;
+    }
     }
   }
 
-  // Same LOD screen-door split as the steady pass so a node's density does not jump when it transitions
-  // between crossfading and steady: [0, solid) opaque, [solid, draw_size) screen-doored at lod_fade_alpha.
-  const int solid = group.lod_solid_count;
-  const bool fading = group.lod_fade_alpha < 1.0f && solid > 0 && solid < group.draw_size;
-  if (!fading)
-  {
-    glUniform1f(crossfade_handle.uniform_lod_fade_alpha, 1.0f);
-    glDrawArrays(GL_POINTS, 0, group.draw_size);
-  }
-  else
-  {
-    glUniform1f(crossfade_handle.uniform_lod_fade_alpha, 1.0f);
-    glDrawArrays(GL_POINTS, 0, solid);
-    glUniform1f(crossfade_handle.uniform_lod_fade_alpha, group.lod_fade_alpha);
-    glDrawArrays(GL_POINTS, solid, group.draw_size - solid);
-  }
+  // Per-point LOD * node fade folded into the shader screen-door -- one opaque draw.
+  glDrawArrays(GL_POINTS, 0, group.draw_size);
   glBindVertexArray(0);
-
-  glDisable(GL_BLEND);
 }
 
 gl_flat_points_handler::gl_flat_points_handler()

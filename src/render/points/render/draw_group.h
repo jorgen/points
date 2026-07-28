@@ -51,11 +51,13 @@ struct points_draw_group_t
   int buffers_size;
   int draw_size;
   int lod_level;
-  // Runtime per-node LOD fade-in (dyn_points steady draws only; 0 elsewhere). [0, lod_solid_count) is the
-  // settled prefix drawn opaque; [lod_solid_count, draw_size) is the level being revealed, drawn with
-  // lod_fade_alpha in [0,1] (screen-door dissolve). lod_fade_alpha >= 1 (or solid==draw_size) means no fade.
-  int lod_solid_count;
-  float lod_fade_alpha;
+  // Per-point LOD constants for dyn_points (0 elsewhere). The vertex shader turns view depth gl_Position.w
+  // into a continuous grid level: cells = lod_density_scale * w / lod_px_scale; W = log2(cells); a point is
+  // kept iff its rep_level >= W (smooth screen-door). Per-frame constants (same for every node this frame):
+  //   lod_px_scale     = projection[1][1] * 0.5 * viewport_height
+  //   lod_density_scale = render_density_px / tree_config.scale
+  float lod_px_scale;
+  float lod_density_scale;
 };
 
 #ifdef __cplusplus

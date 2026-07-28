@@ -99,9 +99,11 @@ public:
     GLuint program = 0;
     GLint vertex_position = 0;
     GLint rgb_position = 0;
+    GLint rep_level_position = 0;
     GLint uniform_camera = 0;
     GLint uniform_point_scale = 0;
-    GLint uniform_fade_alpha = 0;
+    GLint uniform_lod_px_scale = 0;
+    GLint uniform_lod_density_scale = 0;
   } gl_handles[2];
 
   struct
@@ -111,10 +113,12 @@ public:
     GLint vertex_position = 0;
     GLint rgb_position = 0;
     GLint old_rgb_position = 0;
+    GLint rep_level_position = 0;
     GLint uniform_camera = 0;
     GLint uniform_point_scale = 0;
     GLint uniform_params = 0;
-    GLint uniform_lod_fade_alpha = 0;
+    GLint uniform_lod_px_scale = 0;
+    GLint uniform_lod_density_scale = 0;
   } crossfade_handle;
 };
 
