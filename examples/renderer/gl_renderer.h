@@ -101,6 +101,7 @@ public:
     GLint rgb_position = 0;
     GLint uniform_camera = 0;
     GLint uniform_point_scale = 0;
+    GLint uniform_fade_alpha = 0;
   } gl_handles[2];
 
   struct

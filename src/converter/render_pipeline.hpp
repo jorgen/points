@@ -96,7 +96,9 @@ int emit_draws(
     float fade_duration_ms,
     int viewport_height,
     double render_density_px,
-    uint64_t &points_rendered);
+    float delta_ms,
+    uint64_t &points_rendered,
+    int &nodes_lod_fading);
 
 void destroy_render_node(
     render_node_t &node,

@@ -79,6 +79,12 @@ struct render_node_t
   // draw count for render grid width k-1. Copied from loaded_data at convert time (survives the release()).
   std::array<uint32_t, 64> prefix_count = {};
   bool has_lod_order = false;
+
+  // LOD fade-in state (Approach B): lod_shown_level is the finest prefix_count index currently being
+  // revealed (coarser levels are settled/opaque); lod_fade_alpha eases 0->1 as that level dissolves in.
+  // Init to "everything shown" so the first frame snaps to the target LOD without an initial fade.
+  int lod_shown_level = 0;
+  float lod_fade_alpha = 1.0f;
 };
 
 struct frame_timings_t
@@ -103,6 +109,7 @@ struct frame_timings_t
   int nodes_uploaded = 0;
   int nodes_fading_in = 0;
   int nodes_fading_out = 0;
+  int nodes_lod_fading = 0;
   int uploads_this_frame = 0;
 };
 

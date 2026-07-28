@@ -207,7 +207,9 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
 
   // Phase 5: Emit draws
   uint64_t pts_rendered = 0;
-  frame_timings.nodes_drawn = emit_draws(render_list, callbacks, camera, tree_config, to_render, fade_duration_ms, frame_viewport_height, frame_render_density_px, pts_rendered);
+  int lod_fading = 0;
+  frame_timings.nodes_drawn = emit_draws(render_list, callbacks, camera, tree_config, to_render, fade_duration_ms, frame_viewport_height, frame_render_density_px, delta_ms, pts_rendered, lod_fading);
+  frame_timings.nodes_lod_fading = lod_fading;
   points_rendered_last_frame = pts_rendered;
   auto t_after_emit = clock::now();
 
@@ -308,6 +310,15 @@ void points_converter_data_source_set_max_in_flight_io(struct points_converter_d
 uint64_t points_converter_data_source_get_points_rendered(struct points_converter_data_source_t *converter_data_source)
 {
   return converter_data_source->points_rendered_last_frame;
+}
+
+// True while the last frame left an animation in progress (node crossfades or per-node LOD fade-in). The
+// dirty-driven host (renderer_wasm) polls this after a draw to re-arm the next frame so fades keep playing
+// even with no camera input or IO in flight.
+uint8_t points_converter_data_source_is_animating(struct points_converter_data_source_t *cds)
+{
+  auto &t = cds->frame_timings;
+  return (t.nodes_fading_in + t.nodes_fading_out + t.nodes_lod_fading) > 0 ? 1 : 0;
 }
 
 void points_converter_data_source_get_frame_timings(struct points_converter_data_source_t *cds, double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms, double *refine_strategy_ms, double *frontier_scheduling_ms,

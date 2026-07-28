@@ -110,6 +110,10 @@ public:
     vio::wasm::pump();
     update_overlays();
     _gl->draw(static_cast<clear>(int(clear::color) | int(clear::depth)), _width, _height);
+    // Rendering is dirty-driven: re-arm the next frame while a fade (node crossfade or LOD fade-in) is still
+    // in progress, so it keeps animating with no camera input or IO in flight. Goes idle when animation ends.
+    if (_cds && points_converter_data_source_is_animating(_cds))
+      mark_dirty();
   }
 
   // Semantic camera ops. Inputs are normalized deltas (React divides pixel movement by canvas size); the

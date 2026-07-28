@@ -439,20 +439,21 @@ void update_fades(
   }
 }
 
-// Runtime per-node LOD (Approach B): how many of the node's coarse->fine-ordered points to draw so that a
-// morton grid cell projects to ~render_density_px pixels -- giving uniform on-screen density regardless of
-// source density or tree depth. Returns point_count for non-morton nodes or when the projection degenerates.
-static uint32_t compute_lod_draw_size(const render_node_t &node, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, int viewport_height, double render_density_px)
+// Runtime per-node LOD (Approach B): the prefix_count index (== morton render width + 1) whose prefix draws
+// one representative per grid cell that projects to ~render_density_px pixels -- uniform on-screen density
+// regardless of source density or tree depth. Lower index = finer = more points. Returns -1 for non-morton
+// nodes or a degenerate projection (caller draws the full node). Range otherwise [0, 63].
+static int compute_lod_target_idx(const render_node_t &node, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, int viewport_height, double render_density_px)
 {
   if (!node.has_lod_order || node.point_count == 0)
-    return node.point_count;
+    return -1;
   const double distance = node.cached_distance;
   if (distance <= 0.0)
-    return node.point_count;
+    return -1;
   // pixels per world meter at this node's distance (projection[1][1] = 1/tan(fovy/2), pairs with height).
   const double px_per_meter = camera.projection[1][1] * 0.5 * double(viewport_height) / distance;
   if (px_per_meter <= 0.0 || tree_config.scale <= 0.0)
-    return node.point_count;
+    return -1;
   const double cell_world = render_density_px / px_per_meter;   // world cell size that projects to the target
   const double cells = cell_world / tree_config.scale;          // == 2^(W+1) in decoded units
   const int render_width = int(std::floor(std::log2(std::max(cells, 1e-9)))) - 1; // morton grid width W
@@ -462,12 +463,72 @@ static uint32_t compute_lod_draw_size(const render_node_t &node, const render::f
     idx = 0;
   if (idx > max_idx)
     idx = max_idx;
+  return idx;
+}
+
+// prefix_count[idx] clamped to a drawable [1, point_count]. idx < 0 => full node (non-morton / degenerate).
+static uint32_t lod_prefix_draw_size(const render_node_t &node, int idx)
+{
+  if (idx < 0)
+    return node.point_count;
   uint32_t draw_size = node.prefix_count[size_t(idx)];
   if (draw_size < 1)
     draw_size = 1;
   if (draw_size > node.point_count)
     draw_size = node.point_count;
   return draw_size;
+}
+
+// Ease a node's revealed LOD toward target_idx (see render_node_t::lod_shown_level). Returns true while the
+// node is still animating (caller keeps requesting frames). Revealing a finer level (shown > target) fades it
+// in over fade_duration_ms via lod_fade_alpha; coarsening (shown < target) snaps instantly (detail drops).
+// A large jump toward finer detail catches up to within one level immediately so we only ever fade the last.
+static bool update_lod_fade(render_node_t &node, int target_idx, float delta_ms, float fade_duration_ms)
+{
+  if (target_idx < 0)
+  {
+    node.lod_shown_level = 0;
+    node.lod_fade_alpha = 1.0f;
+    return false;
+  }
+  // Floor the step so a pathological delta_ms==0 frame still makes progress (guarantees convergence, hence
+  // that the animating->re-arm loop always terminates); negligible vs a normal ~16ms/300ms == 0.05 step.
+  const float step = std::max(fade_duration_ms > 0.0f ? delta_ms / fade_duration_ms : 1.0f, 1e-3f);
+  if (node.lod_shown_level < target_idx)
+  {
+    // Coarsen: drop finer detail immediately (fade-out is a future refinement).
+    node.lod_shown_level = target_idx;
+    node.lod_fade_alpha = 1.0f;
+    return false;
+  }
+  if (node.lod_shown_level > target_idx)
+  {
+    if (node.lod_shown_level - target_idx > 2)
+    {
+      // Big refinement: show all but the final level at once, then fade only that last level.
+      node.lod_shown_level = target_idx + 1;
+      node.lod_fade_alpha = 1.0f;
+    }
+    node.lod_fade_alpha += step;
+    if (node.lod_fade_alpha >= 1.0f)
+    {
+      node.lod_shown_level -= 1;
+      node.lod_fade_alpha = 0.0f; // the next-finer level starts hidden and fades in from scratch
+    }
+    return true;
+  }
+  // shown_level == target_idx: finish dissolving the current level in.
+  if (node.lod_fade_alpha < 1.0f)
+  {
+    node.lod_fade_alpha += step;
+    if (node.lod_fade_alpha >= 1.0f)
+    {
+      node.lod_fade_alpha = 1.0f;
+      return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 int emit_draws(
@@ -479,10 +540,13 @@ int emit_draws(
     float fade_duration_ms,
     int viewport_height,
     double render_density_px,
-    uint64_t &points_rendered)
+    float delta_ms,
+    uint64_t &points_rendered,
+    int &nodes_lod_fading)
 {
   int nodes_drawn = 0;
   points_rendered = 0;
+  nodes_lod_fading = 0;
 
   // Pass 1: steady opaque nodes
   for (auto &np : render_list)
@@ -506,8 +570,25 @@ int emit_draws(
     node.draw_list[1] = {points_dyn_points_bm_color, node.gpu_buffers[1].user_ptr};
     node.draw_list[2] = {points_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
 
-    const uint32_t draw_size = compute_lod_draw_size(node, camera, tree_config, viewport_height, render_density_px);
-    points_draw_group_t draw_group = {node.draw_type, node.draw_list, 3, int(draw_size), node.walker_data.lod};
+    // Ease the revealed LOD toward the target; draw the settled prefix opaque and the level being revealed
+    // with a screen-door dissolve so growing the draw count never pops (see update_lod_fade / the shader).
+    const int target_idx = compute_lod_target_idx(node, camera, tree_config, viewport_height, render_density_px);
+    if (update_lod_fade(node, target_idx, delta_ms, fade_duration_ms))
+      nodes_lod_fading++;
+    // target_idx < 0 (non-morton node or degenerate projection) => draw the whole node, no fade split.
+    const uint32_t draw_size = lod_prefix_draw_size(node, target_idx < 0 ? -1 : node.lod_shown_level);
+    uint32_t solid = draw_size;
+    if (target_idx >= 0)
+    {
+      int solid_idx = node.lod_shown_level + 1;
+      if (solid_idx > int(node.prefix_count.size()) - 1)
+        solid_idx = int(node.prefix_count.size()) - 1;
+      solid = lod_prefix_draw_size(node, solid_idx);
+      if (solid > draw_size)
+        solid = draw_size;
+    }
+
+    points_draw_group_t draw_group = {node.draw_type, node.draw_list, 3, int(draw_size), node.walker_data.lod, int(solid), node.lod_fade_alpha};
     points_to_render_add_render_group(to_render, draw_group);
 
     points_rendered += draw_size;
@@ -558,8 +639,14 @@ int emit_draws(
     node.draw_list[3] = {points_dyn_points_bm_old_color, node.gpu_buffers[1].user_ptr};
     node.draw_list[4] = {points_dyn_points_bm_params, node.params_buffer.user_ptr};
 
-    const uint32_t draw_size = compute_lod_draw_size(node, camera, tree_config, viewport_height, render_density_px);
-    points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 5, int(draw_size), node.walker_data.lod};
+    // Node-level crossfade already animates the whole node; snap the per-level LOD to its target so it does
+    // not double-fade, and so the node arrives at a consistent shown_level when it becomes steady.
+    const int target_idx = compute_lod_target_idx(node, camera, tree_config, viewport_height, render_density_px);
+    node.lod_shown_level = target_idx < 0 ? 0 : target_idx;
+    node.lod_fade_alpha = 1.0f;
+    const uint32_t draw_size = lod_prefix_draw_size(node, target_idx);
+    // Crossfade handler ignores the LOD-fade fields; set "no fade" (whole prefix opaque) for clarity.
+    points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 5, int(draw_size), node.walker_data.lod, int(draw_size), 1.0f};
     points_to_render_add_render_group(to_render, draw_group);
 
     points_rendered += draw_size;

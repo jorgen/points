@@ -52,6 +52,8 @@ POINTS_CONVERTER_EXPORT void points_converter_data_source_set_max_in_flight_io(s
 
 POINTS_CONVERTER_EXPORT uint64_t points_converter_data_source_get_points_rendered(struct points_converter_data_source_t *converter_data_source);
 
+POINTS_CONVERTER_EXPORT uint8_t points_converter_data_source_is_animating(struct points_converter_data_source_t *converter_data_source);
+
 POINTS_CONVERTER_EXPORT void points_converter_data_source_get_frame_timings(struct points_converter_data_source_t *converter_data_source,
   double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms,
   double *refine_strategy_ms, double *frontier_scheduling_ms,

@@ -287,6 +287,7 @@ void gl_dyn_points_handler::initialize()
     gl_handle.vertex_position = glGetAttribLocation(gl_handle.program, "position");
     gl_handle.uniform_camera = glGetUniformLocation(gl_handle.program, "camera");
     gl_handle.uniform_point_scale = glGetUniformLocation(gl_handle.program, "point_scale");
+    gl_handle.uniform_fade_alpha = glGetUniformLocation(gl_handle.program, "fade_alpha");
 
     glGenVertexArrays(1, &gl_handle.vao);
     glBindVertexArray(gl_handle.vao);
@@ -375,7 +376,23 @@ void gl_dyn_points_handler::draw(points_draw_group_t &group, color_components_t 
     }
   }
 
-  glDrawArrays(GL_POINTS, 0, group.draw_size);
+  // Runtime per-node LOD fade-in: draw the settled prefix [0, solid) fully opaque, then the level currently
+  // being revealed [solid, draw_size) with fade_alpha < 1 so the shader dissolves it in. When not fading
+  // (fade_alpha >= 1 or nothing to reveal) it collapses to a single opaque draw of the whole prefix.
+  const int solid = group.lod_solid_count;
+  const bool fading = group.lod_fade_alpha < 1.0f && solid > 0 && solid < group.draw_size;
+  if (!fading)
+  {
+    glUniform1f(gl_handle.uniform_fade_alpha, 1.0f);
+    glDrawArrays(GL_POINTS, 0, group.draw_size);
+  }
+  else
+  {
+    glUniform1f(gl_handle.uniform_fade_alpha, 1.0f);
+    glDrawArrays(GL_POINTS, 0, solid);
+    glUniform1f(gl_handle.uniform_fade_alpha, group.lod_fade_alpha);
+    glDrawArrays(GL_POINTS, solid, group.draw_size - solid);
+  }
   glBindVertexArray(0);
 }
 
