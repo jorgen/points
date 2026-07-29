@@ -343,6 +343,21 @@ static void walk_virtual(virtual_node_t &v, const resident_source_t &src, const 
   }
 }
 
+// True iff no descendant holds a GPU buffer or an in-flight/materialized job -> its child structs are safe to
+// drop (R18). A materializing node is NOT idle, so pruning never frees a node with a running convert job.
+static bool subtree_all_idle(const virtual_node_t &v)
+{
+  for (auto &c : v.children)
+    if (c)
+    {
+      if (c->mat_state != virtual_mat_state::none || c->gpu_state != render_node_gpu_state::none)
+        return false;
+      if (!subtree_all_idle(*c))
+        return false;
+    }
+  return true;
+}
+
 // One recursion that advances IO, uploads the selected, TTL-evicts the unselected, and tallies cut coverage
 // (R12: folds the old clear_selected + any_uploaded_selected passes into this single traversal).
 static void process_virtual_node(virtual_node_t &v, const resident_source_t &src, const virtual_frame_t &f, virtual_cut_stats_t &cut)
@@ -354,7 +369,14 @@ static void process_virtual_node(virtual_node_t &v, const resident_source_t &src
     if (v.mat_state == virtual_mat_state::materializing && v.convert_done.load(std::memory_order_acquire))
       v.mat_state = virtual_mat_state::materialized;
     if (v.mat_state == virtual_mat_state::materialized && v.gpu_state == render_node_gpu_state::none)
-      upload_virtual_node(v, src, f);
+    {
+      // Unified GPU budget (R7): admit a virtual upload only if real (this frame) + virtual (running) + this
+      // node fit. The walk is additive root->frontier, so coarse ancestors are admitted before fine octants.
+      const uint32_t astride = (src.data_handler->data_info[1].data && src.point_count) ? uint32_t(src.data_handler->data_info[1].size / src.point_count) : 0;
+      const size_t est_bytes = size_t(v.draw_count) * (3u * sizeof(float) + astride + 1u) + sizeof(v.camera_view);
+      if (f.gpu_memory_budget == 0 || f.real_gpu_used + *f.gpu_memory_used + est_bytes <= f.gpu_memory_budget)
+        upload_virtual_node(v, src, f);
+    }
     if (v.gpu_state == render_node_gpu_state::uploaded)
     {
       cut.uploaded++;
@@ -381,6 +403,15 @@ static void process_virtual_node(virtual_node_t &v, const resident_source_t &src
   for (auto &c : v.children)
     if (c)
       process_virtual_node(*c, src, f, cut);
+
+  // R18: reclaim the struct subtree of a long-cold node (re-descent cheaply rebuilds it from the immutable
+  // resident codes). Guarded on subtree_all_idle so no in-flight/uploaded descendant is dropped.
+  if (v.children_built && v.last_selected_frame != f.frame_index && (f.frame_index - v.last_selected_frame) > f.prune_ttl_frames && subtree_all_idle(v))
+  {
+    for (auto &c : v.children)
+      c.reset();
+    v.children_built = false;
+  }
 }
 
 // R3: free the promoted leaf's own monolith GPU buffers once the virtual cut has been stably covering it. The

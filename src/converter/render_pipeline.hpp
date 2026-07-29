@@ -54,7 +54,8 @@ render_list_t build_render_list(
     render_list_t &&previous_list,
     float fade_duration_ms,
     render::callback_manager_t &callbacks,
-    render::node_data_loader_t *node_loader);
+    render::node_data_loader_t *node_loader,
+    size_t *virtual_gpu_used);
 
 struct io_upload_stats_t
 {
@@ -81,7 +82,8 @@ io_upload_stats_t process_io_and_upload(
     size_t max_upload_bytes,
     size_t gpu_memory_budget,
     double attr_min, double attr_max,
-    bool promote_leaves);
+    bool promote_leaves,
+    size_t virtual_gpu_used);
 
 void update_fades(
     render_list_t &render_list,
@@ -102,7 +104,8 @@ int emit_draws(
 void destroy_render_node(
     render_node_t &node,
     render::callback_manager_t &callbacks,
-    render::node_data_loader_t *node_loader);
+    render::node_data_loader_t *node_loader,
+    size_t *virtual_gpu_used);
 
 void handle_attribute_change(
     render_list_t &render_list,

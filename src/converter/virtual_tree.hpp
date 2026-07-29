@@ -50,6 +50,7 @@ struct virtual_frame_t
   uint32_t virtual_min_points = 1;
   uint32_t frame_index = 0;             // monotonic per-frame counter (selection + TTL eviction age)
   uint32_t evict_ttl_frames = 30;       // hold an unselected virtual node this many frames before freeing it
+  uint32_t prune_ttl_frames = 120;      // reclaim a long-cold node's child struct subtree (rebuilt on re-descent)
   uint32_t monolith_free_after_frames = 30; // free a promoted leaf's monolith after the cut is stably complete
   float delta_ms = 16.0f;               // frame time (virtual fade advance)
   float fade_duration_ms = 300.0f;

@@ -149,7 +149,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
 
   // Phase 2: Build render list
   render_list = build_render_list(walker_subsets, std::move(render_list),
-      fade_duration_ms, callbacks, node_loader.get());
+      fade_duration_ms, callbacks, node_loader.get(), &virtual_gpu_used);
   frame_timings.render_list_size = int(render_list.size());
   auto t_after_build = clock::now();
 
@@ -157,7 +157,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   auto tree_config = processor.tree_config();
   auto io_stats = process_io_and_upload(render_list, camera_position, tree_config,
       callbacks, node_loader.get(), convert_pool, camera, max_io_in_flight, max_new_io_per_frame,
-      frame_upload_budget, gpu_memory_budget, current_attr_min, current_attr_max, enable_virtual_subtrees);
+      frame_upload_budget, gpu_memory_budget, current_attr_min, current_attr_max, enable_virtual_subtrees, virtual_gpu_used);
   frame_timings.io_in_flight = io_stats.io_in_flight;
   frame_timings.scan_classify_ms = io_stats.scan_classify_ms;
   frame_timings.schedule_io_ms = io_stats.schedule_io_ms;
@@ -197,13 +197,14 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         node.resident_handler.reset(); // compact leaf: maskWidth(lod_span)==0, no coarser LOD to offer
         continue;
       }
-      if (promotions_left <= 0)
-        continue; // ramp the rest over subsequent frames
+      if (promotions_left <= 0 || resident_cpu_used >= cpu_resident_budget)
+        continue; // ramp over frames; and don't promote while over the CPU-resident budget (R5)
       --promotions_left;
       node.resident = build_resident_source(node.resident_handler, tree_config);
       node.resident_handler.reset(); // the resident took its own ref to the data_handler
       node.virtual_root = make_virtual_root(*node.resident, node.walker_data.tight_aabb, node.walker_data.aabb);
       node.is_virtual_source = true;
+      resident_cpu_used += node.resident->cpu_bytes;
     }
     virtual_frame_t vf;
     vf.camera = &camera;
@@ -225,6 +226,32 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     vf.attr_min = current_attr_min;
     vf.attr_max = current_attr_max;
     process_virtual_trees(render_list, vf);
+
+    // R5: CPU-resident budget. Recompute the pinned total, then un-promote farthest-first until under budget --
+    // the evicted leaf falls back to its monolith (reload it if R3 had freed it).
+    resident_cpu_used = 0;
+    for (auto &np : render_list)
+      if (np->is_virtual_source && np->resident)
+        resident_cpu_used += np->resident->cpu_bytes;
+    while (resident_cpu_used > cpu_resident_budget)
+    {
+      render_node_t *farthest = nullptr;
+      for (auto &np : render_list)
+        if (np->is_virtual_source && np->resident && (!farthest || np->cached_distance > farthest->cached_distance))
+          farthest = np.get();
+      if (!farthest)
+        break;
+      resident_cpu_used -= farthest->resident->cpu_bytes;
+      destroy_virtual_subtree(farthest->virtual_root, callbacks, &virtual_gpu_used);
+      farthest->resident.reset();
+      farthest->is_virtual_source = false;
+      farthest->draw_suppressed = false;
+      if (farthest->monolith_freed) // R3 freed it -> reload the monolith so the node is drawable again
+      {
+        farthest->monolith_freed = false;
+        farthest->io_state = render_node_io_state::none;
+      }
+    }
   }
 
   // Collect bounding boxes and tight AABB, count stats

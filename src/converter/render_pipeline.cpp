@@ -46,7 +46,7 @@ bool render_node_less_than(const tree_walker_data_t &lhs, const tree_walker_data
   return lhs.lod < rhs.lod;
 }
 
-void destroy_render_node(render_node_t &node, render::callback_manager_t &callbacks, render::node_data_loader_t *node_loader)
+void destroy_render_node(render_node_t &node, render::callback_manager_t &callbacks, render::node_data_loader_t *node_loader, size_t *virtual_gpu_used)
 {
   // If a worker thread is converting this node, we must wait for it to finish
   // before we can safely touch the node's data.
@@ -74,7 +74,7 @@ void destroy_render_node(render_node_t &node, render::callback_manager_t &callba
   // Tear down any virtual subtree children-first (spin-waits in-flight materialize) before freeing the resident
   // it reads from. Ordering guarantees no materialize job dereferences a freed resident_source.
   if (node.virtual_root)
-    destroy_virtual_subtree(node.virtual_root, callbacks, nullptr);
+    destroy_virtual_subtree(node.virtual_root, callbacks, virtual_gpu_used);
   node.resident.reset();
   node.resident_handler.reset();
   node.is_virtual_source = false;
@@ -88,7 +88,8 @@ render_list_t build_render_list(
     render_list_t &&previous_list,
     float fade_duration_ms,
     render::callback_manager_t &callbacks,
-    render::node_data_loader_t *node_loader)
+    render::node_data_loader_t *node_loader,
+    size_t *virtual_gpu_used)
 {
   render_list_t new_list;
   new_list.reserve(walker_nodes.size() + 16);
@@ -121,7 +122,7 @@ render_list_t build_render_list(
       }
       else
       {
-        destroy_render_node(pnode, callbacks, node_loader);
+        destroy_render_node(pnode, callbacks, node_loader, virtual_gpu_used);
       }
       ++pit;
     }
@@ -168,7 +169,7 @@ render_list_t build_render_list(
     }
     else
     {
-      destroy_render_node(pnode, callbacks, node_loader);
+      destroy_render_node(pnode, callbacks, node_loader, virtual_gpu_used);
     }
     ++pit;
   }
@@ -217,7 +218,8 @@ io_upload_stats_t process_io_and_upload(
     size_t max_upload_bytes,
     size_t gpu_memory_budget,
     double attr_min, double attr_max,
-    bool promote_leaves)
+    bool promote_leaves,
+    size_t virtual_gpu_used)
 {
   using clock = std::chrono::high_resolution_clock;
   auto to_ms = [](auto d) { return std::chrono::duration<double, std::milli>(d).count(); };
@@ -319,7 +321,9 @@ io_upload_stats_t process_io_and_upload(
     if (bytes_uploaded >= max_upload_bytes)
       break;
     auto &node = *render_list[entry.index];
-    if (stats.gpu_memory_used + node.gpu_memory_size > gpu_memory_budget)
+    // Unified GPU budget (R7): leave room for the virtual nodes' total (last frame) so real + virtual together
+    // are bounded by gpu_memory_budget, not just the real monoliths.
+    if (stats.gpu_memory_used + virtual_gpu_used + node.gpu_memory_size > gpu_memory_budget)
       break;
 
     auto &loaded = node.loaded_data;

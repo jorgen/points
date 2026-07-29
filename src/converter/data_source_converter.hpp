@@ -98,6 +98,8 @@ struct points_converter_data_source_t
   uint32_t virtual_min_points = 256;         // don't subdivide tiny leaves
   uint32_t virtual_max_promotions_per_frame = 4; // ramp the one-time resident decodes so they don't hitch
   size_t virtual_gpu_used = 0;               // running total of GPU bytes held by uploaded virtual nodes
+  size_t resident_cpu_used = 0;              // CPU bytes pinned by promoted leaves' resident_source_t
+  size_t cpu_resident_budget = 256 * 1024 * 1024; // over this -> un-promote the farthest leaf (fall back to monolith)
   uint32_t virtual_frame_counter = 0;        // monotonic per-frame counter (virtual selection + TTL age)
   int last_virtual_promoted = -1;            // report promotions only on change (avoid per-frame console spam)
   std::vector<float> virtual_lod_random_offsets; // deterministic per-cell pick, identical to the converter's
