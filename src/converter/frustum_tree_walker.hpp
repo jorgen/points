@@ -87,6 +87,7 @@ struct tree_walker_data_t
   point_format_t format[4];
   storage_location_t locations[4];
   bool frustum_visible = true;
+  bool is_leaf = false; // the tree stops here (no child nodes) -> a candidate for virtual subdivision
 };
 
 struct tree_walker_nodes_t

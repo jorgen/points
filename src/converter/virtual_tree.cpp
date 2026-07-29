@@ -23,6 +23,11 @@
 #include "morton_tree_coordinate_transform.hpp" // convert_morton_to_pos
 #include "point_buffer_render_helper.hpp"       // convert_points_to_vertex_data, dyn_points_draw_buffer_t
 #include "point_buffer_splitter.hpp"            // for_each_octant_range
+#include "renderer.hpp"                         // points_to_render_add_render_group
+
+#include <data_source.hpp> // render::frame_camera_cpp_t
+
+#include <thread>
 
 #include <algorithm>
 #include <cstring>
@@ -169,12 +174,208 @@ static void materialize_interior(virtual_node_t &node, const resident_source_t &
   node.draw_count = m;
 }
 
-void materialize_virtual_node(virtual_node_t &node, const resident_source_t &src, const std::vector<float> &lod_random_offsets)
+void materialize_virtual_node(virtual_node_t &node, const resident_source_t &src, bool is_leaf, const std::vector<float> &lod_random_offsets)
 {
-  if (node.is_leaf)
+  if (is_leaf)
     materialize_leaf(node, src);
   else
     materialize_interior(node, src, lod_random_offsets);
+}
+
+// ------------------------------------------------------------------ per-frame walk / upload / emit / evict
+
+static void clear_selected(virtual_node_t &v)
+{
+  v.selected_this_frame = false;
+  for (auto &c : v.children)
+    if (c)
+      clear_selected(*c);
+}
+
+static void evict_virtual_node(virtual_node_t &v, render::callback_manager_t &callbacks, size_t *gpu_memory_used)
+{
+  if (v.gpu_state == render_node_gpu_state::uploaded)
+  {
+    for (auto &b : v.gpu_buffers)
+      if (b.user_ptr)
+        callbacks.do_destroy_buffer(b);
+    if (gpu_memory_used)
+      *gpu_memory_used -= v.gpu_memory_size;
+    v.gpu_state = render_node_gpu_state::none;
+  }
+  v.mat_state = virtual_mat_state::none;
+  v.vertex_data.reset();
+  v.attribute_data.reset();
+  v.gpu_memory_size = 0;
+}
+
+static void upload_virtual_node(virtual_node_t &v, const resident_source_t &src, const virtual_frame_t &f)
+{
+  const uint32_t vbytes = v.draw_count * 3u * uint32_t(sizeof(float));
+  f.callbacks->do_create_buffer(v.gpu_buffers[0], points_buffer_type_vertex);
+  f.callbacks->do_initialize_buffer(v.gpu_buffers[0], points_type_r32, points_components_3, int(vbytes), v.vertex_data.get());
+
+  uint32_t abytes = 0;
+  f.callbacks->do_create_buffer(v.gpu_buffers[1], points_buffer_type_vertex);
+  if (v.attribute_data && src.point_count && src.data_handler->data_info[1].size)
+  {
+    const auto attr_fmt = src.data_handler->point_format[1];
+    const uint32_t astride = src.data_handler->data_info[1].size / src.point_count;
+    abytes = v.draw_count * astride;
+    f.callbacks->do_initialize_buffer(v.gpu_buffers[1], attr_fmt.type, attr_fmt.components, int(abytes), v.attribute_data.get());
+  }
+
+  const auto offset = glm::dvec3(f.tree_config->offset[0], f.tree_config->offset[1], f.tree_config->offset[2]) + glm::dvec3(src.decode_offset[0], src.decode_offset[1], src.decode_offset[2]);
+  v.camera_view = glm::mat4(f.camera->projection * glm::translate(f.camera->view, offset));
+  f.callbacks->do_create_buffer(v.gpu_buffers[2], points_buffer_type_uniform);
+  f.callbacks->do_initialize_buffer(v.gpu_buffers[2], points_type_r32, points_components_4x4, sizeof(v.camera_view), &v.camera_view);
+
+  v.gpu_memory_size = vbytes + abytes + uint32_t(sizeof(v.camera_view));
+  v.gpu_state = render_node_gpu_state::uploaded;
+  if (f.gpu_memory_used)
+    *f.gpu_memory_used += v.gpu_memory_size;
+  v.vertex_data.reset(); // GPU has it now; the resident source stays for other virtual nodes
+  v.attribute_data.reset();
+}
+
+static void walk_virtual(virtual_node_t &v, const resident_source_t &src, const virtual_frame_t &f, render::frustum_t &frustum)
+{
+  const glm::dvec3 nearest = glm::clamp(f.camera_position, v.tight_aabb.min, v.tight_aabb.max);
+  v.cached_distance = glm::length(nearest - f.camera_position);
+  if (frustum.test_aabb(v.loose_aabb.min, v.loose_aabb.max) == render::frustum_intersection_t::outside)
+    return; // not selected -> will be evicted in the process pass
+  v.selected_this_frame = true;
+
+  const bool subdivide = v.src_count > f.virtual_min_points && should_subdivide(*f.lod_params, v.loose_aabb, false);
+  const bool want_leaf = !subdivide;
+
+  // If the leaf/interior role flipped since materialization, re-materialize (evict what we have; enqueue below).
+  if (v.mat_state == virtual_mat_state::materialized && want_leaf != v.is_leaf)
+    evict_virtual_node(v, *f.callbacks, f.gpu_memory_used);
+
+  if (v.mat_state == virtual_mat_state::none)
+  {
+    v.is_leaf = want_leaf;
+    v.mat_state = virtual_mat_state::materializing;
+    v.convert_done.store(false, std::memory_order_relaxed);
+    virtual_node_t *vp = &v;
+    const resident_source_t *sp = &src;
+    const std::vector<float> *offs = f.lod_random_offsets;
+    const bool as_leaf = want_leaf;
+    f.convert_pool->enqueue([vp, sp, offs, as_leaf] {
+      materialize_virtual_node(*vp, *sp, as_leaf, *offs);
+      vp->convert_done.store(true, std::memory_order_release);
+    });
+  }
+
+  if (subdivide)
+  {
+    if (!v.children_built)
+      split_octants(v, src, *f.tree_config);
+    for (auto &c : v.children)
+      if (c)
+        walk_virtual(*c, src, f, frustum);
+  }
+}
+
+static void process_virtual_node(virtual_node_t &v, const resident_source_t &src, const virtual_frame_t &f)
+{
+  if (v.selected_this_frame)
+  {
+    if (v.mat_state == virtual_mat_state::materializing && v.convert_done.load(std::memory_order_acquire))
+      v.mat_state = virtual_mat_state::materialized;
+    if (v.mat_state == virtual_mat_state::materialized && v.gpu_state == render_node_gpu_state::none)
+      upload_virtual_node(v, src, f);
+  }
+  else if (v.mat_state != virtual_mat_state::none)
+  {
+    // Not selected -> evict, but never free while a materialize job is still in flight.
+    if (!(v.mat_state == virtual_mat_state::materializing && !v.convert_done.load(std::memory_order_acquire)))
+      evict_virtual_node(v, *f.callbacks, f.gpu_memory_used);
+  }
+  for (auto &c : v.children)
+    if (c)
+      process_virtual_node(*c, src, f);
+}
+
+static bool any_uploaded_selected(const virtual_node_t &v)
+{
+  if (v.selected_this_frame && v.gpu_state == render_node_gpu_state::uploaded && v.draw_count > 0)
+    return true;
+  for (auto &c : v.children)
+    if (c && any_uploaded_selected(*c))
+      return true;
+  return false;
+}
+
+void process_virtual_trees(render_list_t &render_list, virtual_frame_t &f)
+{
+  render::frustum_t frustum;
+  frustum.update(f.camera->view_projection);
+  for (auto &np : render_list)
+  {
+    auto &node = *np;
+    if (!node.is_virtual_source || !node.virtual_root || !node.resident)
+      continue;
+    clear_selected(*node.virtual_root);
+    walk_virtual(*node.virtual_root, *node.resident, f, frustum);
+    process_virtual_node(*node.virtual_root, *node.resident, f);
+    node.draw_suppressed = any_uploaded_selected(*node.virtual_root);
+  }
+}
+
+static void emit_virtual_node(virtual_node_t &v, const resident_source_t &src, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint64_t &points_rendered, int &drawn)
+{
+  if (v.selected_this_frame && v.gpu_state == render_node_gpu_state::uploaded && v.draw_count > 0)
+  {
+    const auto offset = glm::dvec3(tree_config.offset[0], tree_config.offset[1], tree_config.offset[2]) + glm::dvec3(src.decode_offset[0], src.decode_offset[1], src.decode_offset[2]);
+    v.camera_view = glm::mat4(camera.projection * glm::translate(camera.view, offset));
+    callbacks.do_modify_buffer(v.gpu_buffers[2], 0, sizeof(v.camera_view), &v.camera_view);
+
+    v.draw_list[0] = {points_dyn_points_bm_vertex, v.gpu_buffers[0].user_ptr};
+    v.draw_list[1] = {points_dyn_points_bm_color, v.gpu_buffers[1].user_ptr};
+    v.draw_list[2] = {points_dyn_points_bm_camera, v.gpu_buffers[2].user_ptr};
+    // lod_density_scale = 0 -> shader W is very negative -> keeps all points (flat draw; no rep_level needed).
+    points_draw_group_t draw_group = {v.draw_type, v.draw_list, 3, int(v.draw_count), v.level, 1.0f, 0.0f};
+    points_to_render_add_render_group(to_render, draw_group);
+    points_rendered += v.draw_count;
+    drawn++;
+  }
+  for (auto &c : v.children)
+    if (c)
+      emit_virtual_node(*c, src, callbacks, camera, tree_config, to_render, points_rendered, drawn);
+}
+
+int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint64_t &points_rendered)
+{
+  int drawn = 0;
+  for (auto &np : render_list)
+  {
+    auto &node = *np;
+    if (!node.is_virtual_source || !node.virtual_root || !node.resident)
+      continue;
+    emit_virtual_node(*node.virtual_root, *node.resident, callbacks, camera, tree_config, to_render, points_rendered, drawn);
+  }
+  return drawn;
+}
+
+static void destroy_virtual_node_recursive(virtual_node_t &v, render::callback_manager_t &callbacks, size_t *gpu_memory_used)
+{
+  for (auto &c : v.children)
+    if (c)
+      destroy_virtual_node_recursive(*c, callbacks, gpu_memory_used);
+  if (v.mat_state == virtual_mat_state::materializing)
+    while (!v.convert_done.load(std::memory_order_acquire))
+      std::this_thread::yield();
+  evict_virtual_node(v, callbacks, gpu_memory_used);
+}
+
+void destroy_virtual_subtree(std::unique_ptr<virtual_node_t> &root, render::callback_manager_t &callbacks, size_t *gpu_memory_used)
+{
+  if (!root)
+    return;
+  destroy_virtual_node_recursive(*root, callbacks, gpu_memory_used);
+  root.reset();
 }
 
 } // namespace points::converter

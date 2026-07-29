@@ -196,6 +196,7 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
         to_add.aabb = possible_nodes.aabbs;
         to_add.tight_aabb = tight_aabb;
         to_add.frustum_visible = visible;
+        to_add.is_leaf = (current_tree->nodes[current_depth_in_tree][possible_nodes.skip] == 0);
         to_add.offset_in_subset = points.offset;
         to_add.point_count = points.count;
         to_add.input_id = points.input_id;
