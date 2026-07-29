@@ -203,14 +203,6 @@ void materialize_virtual_node(virtual_node_t &node, const resident_source_t &src
 
 // ------------------------------------------------------------------ per-frame walk / upload / emit / evict
 
-static void clear_selected(virtual_node_t &v)
-{
-  v.selected_this_frame = false;
-  for (auto &c : v.children)
-    if (c)
-      clear_selected(*c);
-}
-
 static void evict_virtual_node(virtual_node_t &v, render::callback_manager_t &callbacks, size_t *gpu_memory_used)
 {
   if (v.gpu_state == render_node_gpu_state::uploaded)
@@ -257,17 +249,25 @@ static void upload_virtual_node(virtual_node_t &v, const resident_source_t &src,
   v.attribute_data.reset();
 }
 
+struct virtual_cut_stats_t
+{
+  int selected = 0; // nodes the walk visited this frame (root..frontier)
+  int uploaded = 0; // of those, how many have their GPU buffers ready
+};
+
 static void walk_virtual(virtual_node_t &v, const resident_source_t &src, const virtual_frame_t &f, render::frustum_t &frustum)
 {
   const glm::dvec3 nearest = glm::clamp(f.camera_position, v.tight_aabb.min, v.tight_aabb.max);
   v.cached_distance = glm::length(nearest - f.camera_position);
   if (frustum.test_aabb(v.loose_aabb.min, v.loose_aabb.max) == render::frustum_intersection_t::outside)
-    return; // not selected -> will be evicted in the process pass
-  v.selected_this_frame = true;
+    return; // not selected -> deferred-evicted once its TTL lapses (no clear pass needed)
+  v.last_selected_frame = f.frame_index;
 
-  const bool subdivide = v.src_count > f.virtual_min_points && should_subdivide(*f.lod_params, v.loose_aabb, false);
+  // Hysteresis (R2), mirroring the real walker: a node subdivided last frame uses a lower threshold, so a node
+  // parked at the LOD boundary doesn't flip selected/unselected (and re-quantize) every frame under motion.
+  const bool subdivide = v.src_count > f.virtual_min_points && should_subdivide(*f.lod_params, v.loose_aabb, v.subdivided_last_frame);
+  v.subdivided_last_frame = subdivide;
 
-  // Materialize once (level-driven, so the result never changes for this node -> no re-materialize on flip).
   if (v.mat_state == virtual_mat_state::none)
   {
     v.mat_state = virtual_mat_state::materializing;
@@ -291,34 +291,33 @@ static void walk_virtual(virtual_node_t &v, const resident_source_t &src, const 
   }
 }
 
-static void process_virtual_node(virtual_node_t &v, const resident_source_t &src, const virtual_frame_t &f)
+// One recursion that advances IO, uploads the selected, TTL-evicts the unselected, and tallies cut coverage
+// (R12: folds the old clear_selected + any_uploaded_selected passes into this single traversal).
+static void process_virtual_node(virtual_node_t &v, const resident_source_t &src, const virtual_frame_t &f, virtual_cut_stats_t &cut)
 {
-  if (v.selected_this_frame)
+  const bool selected = (v.last_selected_frame == f.frame_index);
+  if (selected)
   {
+    cut.selected++;
     if (v.mat_state == virtual_mat_state::materializing && v.convert_done.load(std::memory_order_acquire))
       v.mat_state = virtual_mat_state::materialized;
     if (v.mat_state == virtual_mat_state::materialized && v.gpu_state == render_node_gpu_state::none)
       upload_virtual_node(v, src, f);
+    if (v.gpu_state == render_node_gpu_state::uploaded)
+      cut.uploaded++;
   }
   else if (v.mat_state != virtual_mat_state::none)
   {
-    // Not selected -> evict, but never free while a materialize job is still in flight.
-    if (!(v.mat_state == virtual_mat_state::materializing && !v.convert_done.load(std::memory_order_acquire)))
+    // Deferred eviction (R9): hold an unselected node for a TTL so a brief deselect (panning across a cut, a
+    // frustum clip) resumes with zero rework. Never free while a materialize job is still in flight.
+    const bool in_flight = (v.mat_state == virtual_mat_state::materializing && !v.convert_done.load(std::memory_order_acquire));
+    const uint32_t age = f.frame_index - v.last_selected_frame;
+    if (!in_flight && age > f.evict_ttl_frames)
       evict_virtual_node(v, *f.callbacks, f.gpu_memory_used);
   }
   for (auto &c : v.children)
     if (c)
-      process_virtual_node(*c, src, f);
-}
-
-static bool any_uploaded_selected(const virtual_node_t &v)
-{
-  if (v.selected_this_frame && v.gpu_state == render_node_gpu_state::uploaded && v.draw_count > 0)
-    return true;
-  for (auto &c : v.children)
-    if (c && any_uploaded_selected(*c))
-      return true;
-  return false;
+      process_virtual_node(*c, src, f, cut);
 }
 
 void process_virtual_trees(render_list_t &render_list, virtual_frame_t &f)
@@ -330,16 +329,26 @@ void process_virtual_trees(render_list_t &render_list, virtual_frame_t &f)
     auto &node = *np;
     if (!node.is_virtual_source || !node.virtual_root || !node.resident)
       continue;
-    clear_selected(*node.virtual_root);
+    if (node.fade_state == render_node_fade_state::fade_out)
+    {
+      // Departing (R10): let the monolith's own crossfade play; don't also draw the virtual cut (double draw).
+      node.draw_suppressed = false;
+      continue;
+    }
     walk_virtual(*node.virtual_root, *node.resident, f, frustum);
-    process_virtual_node(*node.virtual_root, *node.resident, f);
-    node.draw_suppressed = any_uploaded_selected(*node.virtual_root);
+    virtual_cut_stats_t cut;
+    process_virtual_node(*node.virtual_root, *node.resident, f, cut);
+    // R16: replace the monolith only when the WHOLE selected cut is uploaded (frontier-complete), so the
+    // handoff never briefly shows a coarser/partially-loaded cut than the monolith already had.
+    const bool cut_complete = cut.selected > 0 && cut.uploaded == cut.selected;
+    node.virtual_cut_live_frames = cut_complete ? node.virtual_cut_live_frames + 1 : 0;
+    node.draw_suppressed = cut_complete;
   }
 }
 
-static void emit_virtual_node(virtual_node_t &v, const resident_source_t &src, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint64_t &points_rendered, int &drawn)
+static void emit_virtual_node(virtual_node_t &v, const resident_source_t &src, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, uint64_t &points_rendered, int &drawn)
 {
-  if (v.selected_this_frame && v.gpu_state == render_node_gpu_state::uploaded && v.draw_count > 0)
+  if (v.last_selected_frame == frame_index && v.gpu_state == render_node_gpu_state::uploaded && v.draw_count > 0)
   {
     const auto offset = glm::dvec3(tree_config.offset[0], tree_config.offset[1], tree_config.offset[2]) + glm::dvec3(src.decode_offset[0], src.decode_offset[1], src.decode_offset[2]);
     v.camera_view = glm::mat4(camera.projection * glm::translate(camera.view, offset));
@@ -356,10 +365,10 @@ static void emit_virtual_node(virtual_node_t &v, const resident_source_t &src, r
   }
   for (auto &c : v.children)
     if (c)
-      emit_virtual_node(*c, src, callbacks, camera, tree_config, to_render, points_rendered, drawn);
+      emit_virtual_node(*c, src, callbacks, camera, tree_config, to_render, frame_index, points_rendered, drawn);
 }
 
-int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint64_t &points_rendered)
+int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, uint64_t &points_rendered)
 {
   int drawn = 0;
   for (auto &np : render_list)
@@ -367,7 +376,7 @@ int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &c
     auto &node = *np;
     if (!node.is_virtual_source || !node.virtual_root || !node.resident)
       continue;
-    emit_virtual_node(*node.virtual_root, *node.resident, callbacks, camera, tree_config, to_render, points_rendered, drawn);
+    emit_virtual_node(*node.virtual_root, *node.resident, callbacks, camera, tree_config, to_render, frame_index, points_rendered, drawn);
   }
   return drawn;
 }

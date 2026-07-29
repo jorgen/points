@@ -49,8 +49,9 @@ struct virtual_node_t
   node_aabb_t loose_aabb = {};  // geometric octant cube -> frustum + should_subdivide
   node_aabb_t tight_aabb = {};  // actual points' bounds -> cached_distance (honest per-subnode distance)
 
-  bool is_leaf = false;             // this frame: frontier (draw all) vs interior (draw quantized reps)
-  bool selected_this_frame = false; // visited by the walk this frame (else -> fade out + evict)
+  uint32_t last_selected_frame = 0;   // the frame counter when the walk last visited this node ("selected" ==
+                                      //   last_selected_frame == frame_index; deferred-evicted after a TTL)
+  bool subdivided_last_frame = false; // fed back into should_subdivide as hysteresis (mirrors the real walker)
 
   // Owned drawable product (produced on convert_pool, dropped after upload).
   std::shared_ptr<uint8_t[]> vertex_data;

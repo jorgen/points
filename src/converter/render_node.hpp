@@ -76,6 +76,12 @@ struct render_node_t
   std::unique_ptr<virtual_node_t> virtual_root;
   bool is_virtual_source = false;
   bool draw_suppressed = false;
+  // R3/R16: the virtual cut replaces this leaf's monolith only once every selected virtual node is uploaded
+  // (frontier-complete). After the cut has been complete for `monolith_free_after_frames`, the monolith's own
+  // GPU buffers are freed (monolith_freed) since the additive virtual cut always keeps coverage; on
+  // un-promotion the node resets io_state=none to reload.
+  uint32_t virtual_cut_live_frames = 0;
+  bool monolith_freed = false;
 };
 
 struct frame_timings_t

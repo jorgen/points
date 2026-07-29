@@ -45,8 +45,14 @@ struct virtual_frame_t
   vio::thread_pool_t *convert_pool = nullptr;
   const std::vector<float> *lod_random_offsets = nullptr;
   size_t gpu_memory_budget = 0;
-  size_t *gpu_memory_used = nullptr; // shared with the real render nodes
+  size_t *gpu_memory_used = nullptr;    // running total of virtual-node GPU bytes (shared across frames)
+  size_t real_gpu_used = 0;             // monolith GPU bytes this frame -> the shared budget admission gate
   uint32_t virtual_min_points = 1;
+  uint32_t frame_index = 0;             // monotonic per-frame counter (selection + TTL eviction age)
+  uint32_t evict_ttl_frames = 30;       // hold an unselected virtual node this many frames before freeing it
+  uint32_t monolith_free_after_frames = 30; // free a promoted leaf's monolith after the cut is stably complete
+  float delta_ms = 16.0f;               // frame time (virtual fade advance)
+  float fade_duration_ms = 300.0f;
 };
 
 // Decode a loaded spanning leaf into a resident source: keep its morton-sorted codes + one morton-order r32x3
@@ -76,7 +82,7 @@ void process_virtual_trees(render_list_t &render_list, virtual_frame_t &frame);
 
 // Emit flat draw groups (lod_density_scale=0 -> the shader keeps all points) for selected+uploaded virtual
 // nodes, refreshing each node's camera uniform. Returns the number of virtual nodes drawn.
-int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint64_t &points_rendered);
+int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, uint64_t &points_rendered);
 
 // Destroy a virtual subtree children-first, spin-waiting each in-flight materialize before freeing.
 void destroy_virtual_subtree(std::unique_ptr<virtual_node_t> &root, render::callback_manager_t &callbacks, size_t *gpu_memory_used);

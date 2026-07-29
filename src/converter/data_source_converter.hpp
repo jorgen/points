@@ -97,7 +97,8 @@ struct points_converter_data_source_t
   bool enable_virtual_subtrees = true;
   uint32_t virtual_min_points = 256;         // don't subdivide tiny leaves
   uint32_t virtual_max_promotions_per_frame = 4; // ramp the one-time resident decodes so they don't hitch
-  size_t virtual_gpu_used = 0;               // bytes held by uploaded virtual nodes (stat; not yet a hard budget)
+  size_t virtual_gpu_used = 0;               // running total of GPU bytes held by uploaded virtual nodes
+  uint32_t virtual_frame_counter = 0;        // monotonic per-frame counter (virtual selection + TTL age)
   int last_virtual_promoted = -1;            // report promotions only on change (avoid per-frame console spam)
   std::vector<float> virtual_lod_random_offsets; // deterministic per-cell pick, identical to the converter's
 };

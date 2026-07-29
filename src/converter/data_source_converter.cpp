@@ -215,7 +215,11 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     vf.lod_random_offsets = &virtual_lod_random_offsets;
     vf.gpu_memory_budget = gpu_memory_budget;
     vf.gpu_memory_used = &virtual_gpu_used;
+    vf.real_gpu_used = io_stats.gpu_memory_used; // monolith GPU total this frame -> shared budget gate
     vf.virtual_min_points = virtual_min_points;
+    vf.frame_index = ++virtual_frame_counter;
+    vf.delta_ms = delta_ms;
+    vf.fade_duration_ms = fade_duration_ms;
     process_virtual_trees(render_list, vf);
   }
 
@@ -261,7 +265,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   frame_timings.nodes_drawn = emit_draws(render_list, callbacks, camera, tree_config, to_render, fade_duration_ms, frame_viewport_height, frame_render_density_px, pts_rendered);
   if (enable_virtual_subtrees)
   {
-    frame_timings.nodes_drawn += emit_virtual_draws(render_list, callbacks, camera, tree_config, to_render, pts_rendered);
+    frame_timings.nodes_drawn += emit_virtual_draws(render_list, callbacks, camera, tree_config, to_render, virtual_frame_counter, pts_rendered);
     // Report virtual-subnode activity only when it changes, so it's a verifiable signal without per-frame spam.
     int promoted = 0;
     for (auto &np : render_list)
