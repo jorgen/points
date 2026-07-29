@@ -65,6 +65,15 @@ POINTS_CONVERTER_EXPORT void points_converter_data_source_get_frame_timings(stru
 
 POINTS_CONVERTER_EXPORT void points_converter_data_source_set_debug_transitions(struct points_converter_data_source_t *cds, uint8_t enabled);
 
+/* Virtual subnodes (render-time balanced LOD for spanning leaves). Toggling off tears every virtual cut down
+ * and falls the leaves back to their monoliths, so it is a live A/B on one camera path. */
+POINTS_CONVERTER_EXPORT void points_converter_data_source_set_enable_virtual_subtrees(struct points_converter_data_source_t *cds, uint8_t enabled);
+POINTS_CONVERTER_EXPORT uint8_t points_converter_data_source_get_enable_virtual_subtrees(struct points_converter_data_source_t *cds);
+/* Observability: how many spanning leaves are currently promoted, the GPU bytes their virtual nodes hold, the
+ * CPU bytes their resident sources pin, and how many virtual nodes were drawn last frame. */
+POINTS_CONVERTER_EXPORT void points_converter_data_source_get_virtual_stats(struct points_converter_data_source_t *cds,
+  uint32_t *promoted, uint64_t *gpu_bytes, uint64_t *resident_cpu_bytes, uint32_t *nodes_drawn);
+
 POINTS_CONVERTER_EXPORT void points_converter_data_source_set_show_bounding_boxes(struct points_converter_data_source_t *cds, uint8_t enabled);
 POINTS_CONVERTER_EXPORT struct points_data_source_t points_converter_data_source_get_bbox_data_source(struct points_converter_data_source_t *cds);
 

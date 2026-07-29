@@ -303,8 +303,9 @@ static void upload_virtual_node(virtual_node_t &v, const resident_source_t &src,
 
 struct virtual_cut_stats_t
 {
-  int selected = 0; // nodes the walk visited this frame (root..frontier)
-  int uploaded = 0; // of those, how many have their GPU buffers ready
+  int selected = 0;        // nodes the walk visited this frame (root..frontier)
+  int uploaded = 0;        // of those, how many have their GPU buffers ready
+  bool animating = false;  // a node is materializing or fading -> the frame loop must keep ticking
 };
 
 static void walk_virtual(virtual_node_t &v, const resident_source_t &src, const virtual_frame_t &f, render::frustum_t &frustum)
@@ -366,6 +367,8 @@ static void process_virtual_node(virtual_node_t &v, const resident_source_t &src
   if (selected)
   {
     cut.selected++;
+    if (v.mat_state == virtual_mat_state::materializing)
+      cut.animating = true; // decode in flight -> keep requesting frames so it uploads once ready
     if (v.mat_state == virtual_mat_state::materializing && v.convert_done.load(std::memory_order_acquire))
       v.mat_state = virtual_mat_state::materialized;
     if (v.mat_state == virtual_mat_state::materialized && v.gpu_state == render_node_gpu_state::none)
@@ -382,6 +385,7 @@ static void process_virtual_node(virtual_node_t &v, const resident_source_t &src
       cut.uploaded++;
       if (v.fade_state == render_node_fade_state::fade_in) // crossfade in (R17)
       {
+        cut.animating = true;
         v.fade_ms += f.delta_ms;
         if (v.fade_ms >= f.fade_duration_ms)
         {
@@ -452,6 +456,7 @@ void process_virtual_trees(render_list_t &render_list, virtual_frame_t &f)
     // R16: replace the monolith only when the WHOLE selected cut is uploaded (frontier-complete), so the
     // handoff never briefly shows a coarser/partially-loaded cut than the monolith already had.
     const bool cut_complete = cut.selected > 0 && cut.uploaded == cut.selected;
+    f.any_animating = f.any_animating || cut.animating || !cut_complete; // keep ticking until the cut settles
     node.virtual_cut_live_frames = cut_complete ? node.virtual_cut_live_frames + 1 : 0;
     node.draw_suppressed = cut_complete || node.monolith_freed;
     if (node.virtual_cut_live_frames >= f.monolith_free_after_frames && node.gpu_state == render_node_gpu_state::uploaded && !node.monolith_freed)

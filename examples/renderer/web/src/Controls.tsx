@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import type { Aabb } from './pointsRender';
-import type { ViewControls } from './usePointCloudRenderer';
+import type { ViewControls, VirtualStats } from './usePointCloudRenderer';
 
 interface ControlsProps {
   attributes: string[];
@@ -7,6 +8,7 @@ interface ControlsProps {
   setActiveAttribute: (name: string) => void;
   controls: ViewControls;
   setControl: <K extends keyof ViewControls>(key: K, value: ViewControls[K]) => void;
+  getVirtualStats: () => VirtualStats | null;
   resetView: () => void;
   pointsRendered: number;
   aabb: Aabb | null;
@@ -14,6 +16,7 @@ interface ControlsProps {
 
 function Slider({
   label,
+  title,
   value,
   min,
   max,
@@ -22,6 +25,7 @@ function Slider({
   format,
 }: {
   label: string;
+  title?: string;
   value: number;
   min: number;
   max: number;
@@ -30,7 +34,7 @@ function Slider({
   format: (v: number) => string;
 }) {
   return (
-    <label className="ctl">
+    <label className="ctl" title={title}>
       <span className="ctl__label">
         {label}
         <b>{format(value)}</b>
@@ -48,6 +52,7 @@ function Slider({
 }
 
 const fmtVec = (v: [number, number, number]) => `[${v.map((x) => x.toFixed(0)).join(', ')}]`;
+const fmtMb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 /** The live view controls, ported from the desktop app's "Input" panel. Lives in the sidebar. */
 export function Controls({
@@ -56,10 +61,18 @@ export function Controls({
   setActiveAttribute,
   controls,
   setControl,
+  getVirtualStats,
   resetView,
   pointsRendered,
   aabb,
 }: ControlsProps) {
+  // Poll virtual-subnode telemetry a couple of times a second for the diagnostics panel.
+  const [vstats, setVstats] = useState<VirtualStats | null>(null);
+  useEffect(() => {
+    const id = window.setInterval(() => setVstats(getVirtualStats()), 500);
+    return () => window.clearInterval(id);
+  }, [getVirtualStats]);
+
   return (
     <div className="controls">
       <section className="controls__section">
@@ -106,9 +119,10 @@ export function Controls({
       </section>
 
       <section className="controls__section">
-        <h2>Streaming</h2>
+        <h2>Detail</h2>
         <Slider
           label="Density (px, lower = denser)"
+          title="On-screen spacing between drawn points WITHIN a node. Lower = denser. Draw-time thinning only — no extra streaming or GPU memory."
           value={controls.renderDensityPx}
           min={0.5}
           max={6.0}
@@ -118,6 +132,7 @@ export function Controls({
         />
         <Slider
           label="Pixel error (lower = finer)"
+          title="Octree refinement — WHICH nodes stream in (how deep the tree is walked). Lower = finer detail, but more IO and GPU memory."
           value={controls.pixelErrorThreshold}
           min={0.1}
           max={3.0}
@@ -125,6 +140,10 @@ export function Controls({
           onChange={(v) => setControl('pixelErrorThreshold', v)}
           format={(v) => v.toFixed(2)}
         />
+      </section>
+
+      <section className="controls__section">
+        <h2>Streaming</h2>
         <Slider
           label="GPU budget"
           value={controls.gpuMemoryBudgetMb}
@@ -134,10 +153,41 @@ export function Controls({
           onChange={(v) => setControl('gpuMemoryBudgetMb', v)}
           format={(v) => `${v} MB`}
         />
+        <Slider
+          label="Upload / frame"
+          title="Per-frame GPU upload budget. Higher = refinement converges faster after a camera move (matters most on slow networks)."
+          value={controls.uploadBudgetMb}
+          min={1}
+          max={64}
+          step={1}
+          onChange={(v) => setControl('uploadBudgetMb', v)}
+          format={(v) => `${v} MB`}
+        />
+        <Slider
+          label="Max in-flight IO"
+          title="Maximum concurrent tile requests. Higher = faster convergence on high-latency (S3) connections."
+          value={controls.maxInFlightIo}
+          min={8}
+          max={256}
+          step={8}
+          onChange={(v) => setControl('maxInFlightIo', v)}
+          format={(v) => `${v}`}
+        />
       </section>
 
       <section className="controls__section">
         <h2>Scene</h2>
+        <label
+          className="ctl ctl--check"
+          title="Render-time balanced LOD for sparse 'spanning' leaves (near+far in one octree node). Off = those leaves fall back to their full-resolution monolith. Toggle to A/B compare on one view."
+        >
+          <input
+            type="checkbox"
+            checked={controls.enableVirtualSubtrees}
+            onChange={(e) => setControl('enableVirtualSubtrees', e.currentTarget.checked)}
+          />
+          <span>Virtual subnodes (spanning-leaf LOD)</span>
+        </label>
         <label className="ctl ctl--check">
           <input
             type="checkbox"
@@ -161,6 +211,26 @@ export function Controls({
               {fmtVec(aabb.min)} → {fmtVec(aabb.max)}
             </b>
           </div>
+        )}
+        {vstats && (
+          <>
+            <div className="ctl__stat">
+              <span>Promoted leaves</span>
+              <b>{vstats.promoted.toLocaleString()}</b>
+            </div>
+            <div className="ctl__stat">
+              <span>Virtual nodes drawn</span>
+              <b>{vstats.nodesDrawn.toLocaleString()}</b>
+            </div>
+            <div className="ctl__stat">
+              <span>Virtual GPU</span>
+              <b>{fmtMb(vstats.gpuBytes)}</b>
+            </div>
+            <div className="ctl__stat">
+              <span>Resident CPU</span>
+              <b>{fmtMb(vstats.residentCpuBytes)}</b>
+            </div>
+          </>
         )}
       </section>
     </div>

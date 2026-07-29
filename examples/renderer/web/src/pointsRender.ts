@@ -47,6 +47,18 @@ export interface Renderer {
   setRenderDensityPx(v: number): void;
   /** GPU memory budget in MB; the streamer evicts to stay under it. */
   setGpuMemoryBudgetMb(mb: number): void;
+  /** Per-frame GPU upload budget in MB (streaming convergence speed). */
+  setUploadBudgetPerFrameMb(mb: number): void;
+  /** Max concurrent in-flight IO requests (streaming convergence speed). */
+  setMaxInFlightIo(n: number): void;
+  /** Virtual subnodes: render-time balanced LOD for spanning leaves. Off = leaves fall back to monoliths. */
+  setEnableVirtualSubtrees(on: boolean): void;
+  getEnableVirtualSubtrees(): boolean;
+  /** Telemetry: promoted spanning-leaf count, virtual GPU bytes, resident CPU bytes, virtual nodes drawn. */
+  getVirtualPromoted(): number;
+  getVirtualGpuBytes(): number;
+  getResidentCpuBytes(): number;
+  getVirtualNodesDrawn(): number;
   /** Toggle the per-node bounding-box overlay. */
   setShowBoundingBoxes(show: boolean): void;
   /** Register the JS redraw callback; the renderer invokes it whenever the frame becomes dirty. */

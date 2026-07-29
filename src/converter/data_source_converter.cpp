@@ -202,7 +202,9 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
       {
         node.resident_building = false;
         node.resident = std::move(node.pending_resident);
-        node.resident_handler.reset();
+        // Keep resident_handler: it is the SAME shared_ptr as resident->data_handler (a free extra ref while
+        // promoted), so un-promotion (A-B toggle off, or a receded cut) can re-promote instantly without a
+        // reload. Released only on CPU eviction (R5) or node teardown.
         if (node.resident)
         {
           node.virtual_root = make_virtual_root(*node.resident, node.walker_data.tight_aabb, node.walker_data.aabb);
@@ -259,6 +261,15 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     vf.attr_min = current_attr_min;
     vf.attr_max = current_attr_max;
     process_virtual_trees(render_list, vf);
+    // Keep the on-demand renderer ticking while any resident build / materialize / fade is pending, so async
+    // virtual work completes even when the camera is idle (e.g. right after flipping the A/B toggle).
+    virtual_animating = vf.any_animating;
+    for (auto &np : render_list)
+      if (np->resident_building)
+      {
+        virtual_animating = true;
+        break;
+      }
 
     // R5: CPU-resident budget. Recompute the pinned total, then un-promote farthest-first until under budget --
     // the evicted leaf falls back to its monolith (reload it if R3 had freed it).
@@ -277,6 +288,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
       resident_cpu_used -= farthest->resident->cpu_bytes;
       destroy_virtual_subtree(farthest->virtual_root, callbacks, &virtual_gpu_used);
       farthest->resident.reset();
+      farthest->resident_handler.reset(); // genuinely free the data_handler CPU (unlike a toggle-off, which keeps it)
       farthest->is_virtual_source = false;
       farthest->draw_suppressed = false;
       if (farthest->monolith_freed) // R3 freed it -> reload the monolith so the node is drawable again
@@ -329,17 +341,26 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   frame_timings.nodes_drawn = emit_draws(render_list, callbacks, camera, tree_config, to_render, fade_duration_ms, frame_viewport_height, frame_render_density_px, pts_rendered);
   if (enable_virtual_subtrees)
   {
-    frame_timings.nodes_drawn += emit_virtual_draws(render_list, callbacks, camera, tree_config, to_render, virtual_frame_counter, frame_viewport_height, frame_render_density_px, fade_duration_ms, pts_rendered);
-    // Report virtual-subnode activity only when it changes, so it's a verifiable signal without per-frame spam.
+    int vdrawn = emit_virtual_draws(render_list, callbacks, camera, tree_config, to_render, virtual_frame_counter, frame_viewport_height, frame_render_density_px, fade_duration_ms, pts_rendered);
+    frame_timings.nodes_drawn += vdrawn;
+    virtual_nodes_drawn_last = vdrawn;
     int promoted = 0;
     for (auto &np : render_list)
       if (np->is_virtual_source)
         promoted++;
+    virtual_promoted_last = promoted;
+    // Report virtual-subnode activity only when it changes, so it's a verifiable signal without per-frame spam.
     if (promoted != last_virtual_promoted)
     {
       fmt::print(stderr, "[virtual] promoted spanning leaves = {} (gpu {} KB)\n", promoted, virtual_gpu_used / 1024);
       last_virtual_promoted = promoted;
     }
+  }
+  else
+  {
+    virtual_promoted_last = 0;
+    virtual_nodes_drawn_last = 0;
+    virtual_animating = false;
   }
   points_rendered_last_frame = pts_rendered;
   auto t_after_emit = clock::now();
@@ -449,7 +470,7 @@ uint64_t points_converter_data_source_get_points_rendered(struct points_converte
 uint8_t points_converter_data_source_is_animating(struct points_converter_data_source_t *cds)
 {
   auto &t = cds->frame_timings;
-  return (t.nodes_fading_in + t.nodes_fading_out) > 0 ? 1 : 0;
+  return ((t.nodes_fading_in + t.nodes_fading_out) > 0 || cds->virtual_animating) ? 1 : 0;
 }
 
 void points_converter_data_source_get_frame_timings(struct points_converter_data_source_t *cds, double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms, double *refine_strategy_ms, double *frontier_scheduling_ms,
@@ -490,6 +511,57 @@ void points_converter_data_source_set_show_bounding_boxes(struct points_converte
 {
   cds->show_bounding_boxes = enabled;
   cds->bbox_data_source->enabled = enabled;
+}
+
+void points_converter_data_source_set_enable_virtual_subtrees(struct points_converter_data_source_t *cds, uint8_t enabled)
+{
+  const bool on = enabled != 0;
+  if (on == cds->enable_virtual_subtrees)
+    return;
+  cds->enable_virtual_subtrees = on;
+  if (!on)
+  {
+    // Turn-off: tear every virtual cut down and fall the leaves back to their monoliths, so draw_suppressed
+    // isn't left stale (which would blank the promoted regions) and a later turn-on re-promotes cleanly.
+    for (auto &np : cds->render_list)
+    {
+      auto &node = *np;
+      if (!node.is_virtual_source)
+        continue;
+      if (node.virtual_root)
+        points::converter::destroy_virtual_subtree(node.virtual_root, cds->callbacks, &cds->virtual_gpu_used);
+      node.resident.reset();
+      node.is_virtual_source = false;
+      node.draw_suppressed = false;
+      if (node.monolith_freed) // R3 freed it -> reload the monolith
+      {
+        node.monolith_freed = false;
+        node.io_state = points::converter::render_node_io_state::none;
+      }
+    }
+    cds->resident_cpu_used = 0;
+    cds->virtual_promoted_last = 0;
+    cds->virtual_nodes_drawn_last = 0;
+    cds->last_virtual_promoted = -1;
+  }
+}
+
+uint8_t points_converter_data_source_get_enable_virtual_subtrees(struct points_converter_data_source_t *cds)
+{
+  return cds->enable_virtual_subtrees ? 1 : 0;
+}
+
+void points_converter_data_source_get_virtual_stats(struct points_converter_data_source_t *cds,
+  uint32_t *promoted, uint64_t *gpu_bytes, uint64_t *resident_cpu_bytes, uint32_t *nodes_drawn)
+{
+  if (promoted)
+    *promoted = uint32_t(cds->virtual_promoted_last);
+  if (gpu_bytes)
+    *gpu_bytes = uint64_t(cds->virtual_gpu_used);
+  if (resident_cpu_bytes)
+    *resident_cpu_bytes = uint64_t(cds->resident_cpu_used);
+  if (nodes_drawn)
+    *nodes_drawn = uint32_t(cds->virtual_nodes_drawn_last);
 }
 
 struct points_data_source_t points_converter_data_source_get_bbox_data_source(struct points_converter_data_source_t *cds)

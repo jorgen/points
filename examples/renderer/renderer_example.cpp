@@ -231,7 +231,8 @@ int main(int argc, char **argv)
     &points_environment_data_source_destroy);
   points_renderer_add_data_source(renderer.get(), points_environment_data_source_get(environment.get()));
 
-  float screen_fraction_threshold = 0.5f;
+  float screen_fraction_threshold = 0.65f;
+  float render_density_px = 0.8f;
   int gpu_memory_budget_mb = 64;
   bool show_bounding_boxes = false;
   bool debug_transitions = false;
@@ -517,6 +518,10 @@ int main(int argc, char **argv)
     if (ImGui::SliderFloat("Screen Fraction Threshold", &screen_fraction_threshold, 0.01f, 1.0f, "%.2f", ImGuiSliderFlags_Logarithmic))
     {
       points_converter_data_source_set_pixel_error_threshold(converter_points.get(), double(screen_fraction_threshold));
+    }
+    if (ImGui::SliderFloat("Render Density (px)", &render_density_px, 0.5f, 6.0f, "%.1f"))
+    {
+      points_converter_data_source_set_render_density_px(converter_points.get(), double(render_density_px));
     }
     if (ImGui::SliderInt("GPU Memory Budget (MB)", &gpu_memory_budget_mb, 64, 4096))
     {

@@ -58,6 +58,7 @@ struct virtual_frame_t
   double render_density_px = 1.0;       // Density (px) slider -> uniform on-screen point spacing
   double attr_min = 0.0;                // attribute contrast-stretch range (intensity normalization)
   double attr_max = 1.0;
+  bool any_animating = false;           // OUT: a virtual node is materializing or fading -> keep requesting frames
 };
 
 // Decode a loaded spanning leaf into a resident source: keep its morton-sorted codes + one morton-order r32x3

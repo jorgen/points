@@ -92,6 +92,7 @@ export function App() {
             setActiveAttribute={renderer.setActiveAttribute}
             controls={renderer.controls}
             setControl={renderer.setControl}
+            getVirtualStats={renderer.getVirtualStats}
             resetView={renderer.resetView}
             pointsRendered={renderer.pointsRendered}
             aabb={renderer.aabb}

@@ -18,6 +18,12 @@ export interface ViewControls {
   renderDensityPx: number;
   /** GPU memory budget in MB. */
   gpuMemoryBudgetMb: number;
+  /** Per-frame GPU upload budget in MB (how fast refinement converges after a move). */
+  uploadBudgetMb: number;
+  /** Max concurrent in-flight IO requests. */
+  maxInFlightIo: number;
+  /** Virtual subnodes (render-time balanced LOD for spanning leaves). */
+  enableVirtualSubtrees: boolean;
   /** Per-node bounding-box overlay. */
   showBoundingBoxes: boolean;
 }
@@ -30,6 +36,9 @@ export const DEFAULT_CONTROLS: ViewControls = {
   pixelErrorThreshold: 0.65,
   renderDensityPx: 0.8,
   gpuMemoryBudgetMb: 512,
+  uploadBudgetMb: 6,
+  maxInFlightIo: 64,
+  enableVirtualSubtrees: true,
   showBoundingBoxes: false,
 };
 
@@ -39,7 +48,18 @@ function applyControls(r: Renderer, c: ViewControls) {
   r.setPixelErrorThreshold(c.pixelErrorThreshold);
   r.setRenderDensityPx(c.renderDensityPx);
   r.setGpuMemoryBudgetMb(c.gpuMemoryBudgetMb);
+  r.setUploadBudgetPerFrameMb(c.uploadBudgetMb);
+  r.setMaxInFlightIo(c.maxInFlightIo);
+  r.setEnableVirtualSubtrees(c.enableVirtualSubtrees);
   r.setShowBoundingBoxes(c.showBoundingBoxes);
+}
+
+/** Live virtual-subnode telemetry (polled per frame for the diagnostics panel). */
+export interface VirtualStats {
+  promoted: number;
+  gpuBytes: number;
+  residentCpuBytes: number;
+  nodesDrawn: number;
 }
 
 export interface RendererState {
@@ -52,6 +72,7 @@ export interface RendererState {
   aabb: Aabb | null;
   controls: ViewControls;
   setControl: <K extends keyof ViewControls>(key: K, value: ViewControls[K]) => void;
+  getVirtualStats: () => VirtualStats | null;
   resetView: () => void;
 }
 
@@ -394,10 +415,31 @@ export function usePointCloudRenderer(
       case 'gpuMemoryBudgetMb':
         r.setGpuMemoryBudgetMb(value as number);
         break;
+      case 'uploadBudgetMb':
+        r.setUploadBudgetPerFrameMb(value as number);
+        break;
+      case 'maxInFlightIo':
+        r.setMaxInFlightIo(value as number);
+        break;
+      case 'enableVirtualSubtrees':
+        r.setEnableVirtualSubtrees(value as boolean);
+        break;
       case 'showBoundingBoxes':
         r.setShowBoundingBoxes(value as boolean);
         break;
     }
+  }, []);
+
+  // Poll virtual-subnode telemetry for the diagnostics panel.
+  const getVirtualStats = useCallback((): VirtualStats | null => {
+    const r = rendererRef.current;
+    if (!r) return null;
+    return {
+      promoted: r.getVirtualPromoted(),
+      gpuBytes: r.getVirtualGpuBytes(),
+      residentCpuBytes: r.getResidentCpuBytes(),
+      nodesDrawn: r.getVirtualNodesDrawn(),
+    };
   }, []);
 
   const resetView = useCallback(() => rendererRef.current?.resetView(), []);
@@ -412,6 +454,7 @@ export function usePointCloudRenderer(
     aabb,
     controls,
     setControl,
+    getVirtualStats,
     resetView,
   };
 }

@@ -105,5 +105,8 @@ struct points_converter_data_source_t
   size_t cpu_resident_budget = 256 * 1024 * 1024; // over this -> un-promote the farthest leaf (fall back to monolith)
   uint32_t virtual_frame_counter = 0;        // monotonic per-frame counter (virtual selection + TTL age)
   int last_virtual_promoted = -1;            // report promotions only on change (avoid per-frame console spam)
+  int virtual_promoted_last = 0;             // stats: promoted spanning leaves last frame
+  int virtual_nodes_drawn_last = 0;          // stats: virtual nodes drawn last frame
+  bool virtual_animating = false;            // a resident build / materialize / fade is pending -> keep ticking
   std::vector<float> virtual_lod_random_offsets; // deterministic per-cell pick, identical to the converter's
 };

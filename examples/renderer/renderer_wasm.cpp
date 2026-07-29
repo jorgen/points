@@ -220,6 +220,58 @@ public:
     mark_dirty();
   }
 
+  // Streaming throughput (R22): how fast refinement converges after a camera move. Matters most on the
+  // S3-latency browser deployment where they were previously frozen at 6 MB / 64.
+  void setUploadBudgetPerFrameMb(double mb)
+  {
+    if (mb < 0.0)
+      mb = 0.0;
+    points_converter_data_source_set_upload_budget_per_frame(_cds, static_cast<size_t>(mb) * 1024u * 1024u);
+    mark_dirty();
+  }
+  void setMaxInFlightIo(int n)
+  {
+    if (n < 1)
+      n = 1;
+    points_converter_data_source_set_max_in_flight_io(_cds, n);
+    mark_dirty();
+  }
+
+  // --- virtual subnodes (A/B toggle + telemetry) ---
+  void setEnableVirtualSubtrees(bool on)
+  {
+    points_converter_data_source_set_enable_virtual_subtrees(_cds, on ? 1 : 0);
+    mark_dirty();
+  }
+  bool getEnableVirtualSubtrees()
+  {
+    return points_converter_data_source_get_enable_virtual_subtrees(_cds) != 0;
+  }
+  double getVirtualPromoted()
+  {
+    uint32_t p = 0;
+    points_converter_data_source_get_virtual_stats(_cds, &p, nullptr, nullptr, nullptr);
+    return double(p);
+  }
+  double getVirtualGpuBytes()
+  {
+    uint64_t b = 0;
+    points_converter_data_source_get_virtual_stats(_cds, nullptr, &b, nullptr, nullptr);
+    return double(b);
+  }
+  double getResidentCpuBytes()
+  {
+    uint64_t b = 0;
+    points_converter_data_source_get_virtual_stats(_cds, nullptr, nullptr, &b, nullptr);
+    return double(b);
+  }
+  double getVirtualNodesDrawn()
+  {
+    uint32_t d = 0;
+    points_converter_data_source_get_virtual_stats(_cds, nullptr, nullptr, nullptr, &d);
+    return double(d);
+  }
+
   // --- scene overlays ---
   void setShowBoundingBoxes(bool show)
   {
@@ -442,6 +494,14 @@ EMSCRIPTEN_BINDINGS(points_render)
     .function("setPixelErrorThreshold", &renderer_wasm_t::setPixelErrorThreshold)
     .function("setRenderDensityPx", &renderer_wasm_t::setRenderDensityPx)
     .function("setGpuMemoryBudgetMb", &renderer_wasm_t::setGpuMemoryBudgetMb)
+    .function("setUploadBudgetPerFrameMb", &renderer_wasm_t::setUploadBudgetPerFrameMb)
+    .function("setMaxInFlightIo", &renderer_wasm_t::setMaxInFlightIo)
+    .function("setEnableVirtualSubtrees", &renderer_wasm_t::setEnableVirtualSubtrees)
+    .function("getEnableVirtualSubtrees", &renderer_wasm_t::getEnableVirtualSubtrees)
+    .function("getVirtualPromoted", &renderer_wasm_t::getVirtualPromoted)
+    .function("getVirtualGpuBytes", &renderer_wasm_t::getVirtualGpuBytes)
+    .function("getResidentCpuBytes", &renderer_wasm_t::getResidentCpuBytes)
+    .function("getVirtualNodesDrawn", &renderer_wasm_t::getVirtualNodesDrawn)
     .function("setShowBoundingBoxes", &renderer_wasm_t::setShowBoundingBoxes)
     .function("dispose", &renderer_wasm_t::dispose);
 
