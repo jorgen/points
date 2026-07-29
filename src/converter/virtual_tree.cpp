@@ -375,9 +375,15 @@ static void process_virtual_node(virtual_node_t &v, const resident_source_t &src
     {
       // Unified GPU budget (R7): admit a virtual upload only if real (this frame) + virtual (running) + this
       // node fit. The walk is additive root->frontier, so coarse ancestors are admitted before fine octants.
-      const uint32_t astride = (src.data_handler->data_info[1].data && src.point_count) ? uint32_t(src.data_handler->data_info[1].size / src.point_count) : 0;
+      const auto &afmt = src.data_handler->point_format[1];
+      uint32_t astride = (src.data_handler->data_info[1].data && src.point_count) ? uint32_t(src.data_handler->data_info[1].size / src.point_count) : 0;
+      if (astride && attribute_should_normalize(afmt.type, afmt.components, f.attr_min, f.attr_max))
+        astride = uint32_t(afmt.components) * uint32_t(sizeof(float)); // normalized attrs upload widened to r32 (bug #3)
       const size_t est_bytes = size_t(v.draw_count) * (3u * sizeof(float) + astride + 1u) + sizeof(v.camera_view);
-      if (f.gpu_memory_budget == 0 || f.real_gpu_used + *f.gpu_memory_used + est_bytes <= f.gpu_memory_budget)
+      // Don't count this leaf's own still-resident monolith against its own cut (bug #1): real_gpu_used includes
+      // it while unfreed, so the cut could never grow into the space its monolith will vacate -> deadlock.
+      const size_t real_less_own = f.real_gpu_used > f.own_monolith_bytes ? f.real_gpu_used - f.own_monolith_bytes : 0;
+      if (f.gpu_memory_budget == 0 || real_less_own + *f.gpu_memory_used + est_bytes <= f.gpu_memory_budget)
         upload_virtual_node(v, src, f);
     }
     if (v.gpu_state == render_node_gpu_state::uploaded)
@@ -447,16 +453,24 @@ void process_virtual_trees(render_list_t &render_list, virtual_frame_t &f)
     if (node.fade_state == render_node_fade_state::fade_out)
     {
       // Departing (R10): let the monolith's own crossfade play; don't also draw the virtual cut (double draw).
+      // KNOWN COSMETIC LIMITATION (review bug #4): if R3 already freed the monolith, there's nothing to fade,
+      // so this node's detail vanishes in one frame. The additive coarser ancestors keep drawing, so it's a
+      // density pop on zoom-out, never a blank hole (and it's off-screen when the departure is a frustum exit).
+      // A proper fix is a virtual-cut fade-out, deferred as a larger crossfade feature.
       node.draw_suppressed = false;
       continue;
     }
+    f.own_monolith_bytes = node.monolith_freed ? 0 : node.gpu_memory_size; // bug #1: exclude from this cut's gate
     walk_virtual(*node.virtual_root, *node.resident, f, frustum);
     virtual_cut_stats_t cut;
     process_virtual_node(*node.virtual_root, *node.resident, f, cut);
     // R16: replace the monolith only when the WHOLE selected cut is uploaded (frontier-complete), so the
     // handoff never briefly shows a coarser/partially-loaded cut than the monolith already had.
     const bool cut_complete = cut.selected > 0 && cut.uploaded == cut.selected;
-    f.any_animating = f.any_animating || cut.animating || !cut_complete; // keep ticking until the cut settles
+    // Keep ticking only on genuine progress (materialize/fade in flight), NOT on a mere incomplete cut: a cut
+    // stalled by a saturated budget is static state (re-armed by camera motion), so pegging is_animating on
+    // !cut_complete would busy-loop the on-demand renderer forever (bug #1).
+    f.any_animating = f.any_animating || cut.animating;
     node.virtual_cut_live_frames = cut_complete ? node.virtual_cut_live_frames + 1 : 0;
     node.draw_suppressed = cut_complete || node.monolith_freed;
     if (node.virtual_cut_live_frames >= f.monolith_free_after_frames && node.gpu_state == render_node_gpu_state::uploaded && !node.monolith_freed)

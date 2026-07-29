@@ -34,6 +34,16 @@
 using namespace points;
 using namespace points::converter;
 
+// Estimate a leaf's resident_source_t CPU footprint from its data_handler (matches build_resident_source's
+// cpu_bytes), so in-flight async builds count against the CPU-resident budget before they finalize (bug #2).
+static size_t estimate_resident_cpu(const dyn_points_data_handler_t &h)
+{
+  size_t bytes = h.data_info[0].size + size_t(h.header.point_count) * 3u * sizeof(float);
+  if (h.data_info[1].data)
+    bytes += h.data_info[1].size;
+  return bytes;
+}
+
 points_converter_data_source_t::points_converter_data_source_t(const std::string &a_url, render::callback_manager_t &a_callbacks)
   : url(a_url)
   , processor(a_url, file_existence_requirement_t::exist, error)
@@ -209,7 +219,8 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         {
           node.virtual_root = make_virtual_root(*node.resident, node.walker_data.tight_aabb, node.walker_data.aabb);
           node.is_virtual_source = true;
-          resident_cpu_used += node.resident->cpu_bytes;
+          // resident_cpu_used is recomputed authoritatively below (counts residents + in-flight builds), so no
+          // increment here -- the estimate charged at kick-off already persisted across the build.
         }
         continue;
       }
@@ -233,6 +244,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
       // to the handler; ~data_source / destroy_render_node spin-waits resident_ready before freeing the node.
       node.resident_building = true;
       node.resident_ready.store(false, std::memory_order_relaxed);
+      resident_cpu_used += estimate_resident_cpu(*node.resident_handler); // charge now so later nodes this frame see it (bug #2)
       render_node_t *np_raw = &node;
       auto handler = node.resident_handler;
       tree_config_t tc = tree_config;
@@ -271,12 +283,17 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         break;
       }
 
-    // R5: CPU-resident budget. Recompute the pinned total, then un-promote farthest-first until under budget --
-    // the evicted leaf falls back to its monolith (reload it if R3 had freed it).
+    // R5: CPU-resident budget. Recompute the pinned total (finalized residents + in-flight async builds, whose
+    // pending_resident is already allocated -- bug #2), then un-promote farthest-first until under budget; the
+    // evicted leaf falls back to its monolith (reload it if R3 had freed it).
     resident_cpu_used = 0;
     for (auto &np : render_list)
+    {
       if (np->is_virtual_source && np->resident)
         resident_cpu_used += np->resident->cpu_bytes;
+      else if (np->resident_building && np->resident_handler)
+        resident_cpu_used += estimate_resident_cpu(*np->resident_handler);
+    }
     while (resident_cpu_used > cpu_resident_budget)
     {
       render_node_t *farthest = nullptr;

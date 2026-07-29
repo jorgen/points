@@ -47,6 +47,8 @@ struct virtual_frame_t
   size_t gpu_memory_budget = 0;
   size_t *gpu_memory_used = nullptr;    // running total of virtual-node GPU bytes (shared across frames)
   size_t real_gpu_used = 0;             // monolith GPU bytes this frame -> the shared budget admission gate
+  size_t own_monolith_bytes = 0;        // the current source leaf's still-resident monolith (reclaimable) -> not
+                                        //   counted against its own cut, else the cut can never grow (deadlock)
   uint32_t virtual_min_points = 1;
   uint32_t frame_index = 0;             // monotonic per-frame counter (selection + TTL eviction age)
   uint32_t evict_ttl_frames = 30;       // hold an unselected virtual node this many frames before freeing it
