@@ -53,9 +53,12 @@ struct virtual_node_t
                                       //   last_selected_frame == frame_index; deferred-evicted after a TTL)
   bool subdivided_last_frame = false; // fed back into should_subdivide as hysteresis (mirrors the real walker)
 
-  // Owned drawable product (produced on convert_pool, dropped after upload).
-  std::shared_ptr<uint8_t[]> vertex_data;
-  std::shared_ptr<uint8_t[]> attribute_data;
+  // Owned drawable product (produced on convert_pool, dropped after upload). Same coarse->fine LOD ordering +
+  // rep_level as a stored node, so a virtual node draws through the identical per-point-LOD + crossfade path.
+  std::shared_ptr<uint8_t[]> vertex_data;    // reordered r32x3, coarse->fine
+  std::shared_ptr<uint8_t[]> attribute_data; // reordered, matching perm
+  std::shared_ptr<uint8_t[]> rep_level_data; // u8, reordered representative level (per-point density cull)
+  std::array<uint32_t, 64> prefix_count = {}; // prefix_count[W+1] = draw count for render grid width W
   uint32_t draw_count = 0;
   std::atomic<bool> convert_done{false};
 
@@ -65,8 +68,8 @@ struct virtual_node_t
   float fade_ms = 0.0f;
 
   points_draw_type_t draw_type = points_dyn_points_1;
-  points_buffer_t gpu_buffers[3] = {}; // [0]=vertex [1]=color [2]=camera uniform (no rep_level -- flat draw)
-  points_draw_buffer_t draw_list[3] = {};
+  points_buffer_t gpu_buffers[4] = {}; // [0]=vertex [1]=color [2]=camera uniform [3]=rep_level
+  points_draw_buffer_t draw_list[6] = {};
   points_buffer_t params_buffer = {};
   glm::vec4 params_data = {1.0f, 1.0f, 0.0f, 0.0f};
   glm::mat4 camera_view = {};

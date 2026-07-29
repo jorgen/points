@@ -26,8 +26,96 @@
 #include <points/converter/converter_data_source.h>
 #include <points/render/buffer.h>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstring>
+#include <memory>
+#include <vector>
+
 namespace points::converter
 {
+
+// Rescale an attribute buffer to normalized r32 in [0,1] over [global_min, global_max]. Shared by the stored
+// upload path and the virtual-node upload so intensity/scalar attributes get the same contrast stretch (else a
+// promoted region drawn in native u16 renders near-black -- a brightness seam vs its neighbours).
+inline std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data, uint32_t data_size, points_type_t type, points_components_t components,
+                                                               uint32_t point_count, double global_min, double global_max, uint32_t &out_size)
+{
+  double range = global_max - global_min;
+  if (range <= 0.0)
+    range = 1.0;
+  const double inv_range = 1.0 / range;
+  const uint32_t comp_count = static_cast<uint32_t>(components);
+  out_size = point_count * comp_count * uint32_t(sizeof(float));
+  auto result = std::make_shared<uint8_t[]>(out_size);
+  auto *dst = reinterpret_cast<float *>(result.get());
+  auto *src = static_cast<const uint8_t *>(data);
+
+  int type_size = 1;
+  switch (type)
+  {
+  case points_type_u8: case points_type_i8: type_size = 1; break;
+  case points_type_u16: case points_type_i16: type_size = 2; break;
+  case points_type_u32: case points_type_i32: case points_type_r32: type_size = 4; break;
+  case points_type_u64: case points_type_i64: case points_type_r64: type_size = 8; break;
+  default: type_size = 1; break;
+  }
+  const uint32_t elem_size = uint32_t(type_size) * comp_count;
+  const uint32_t actual_count = std::min(point_count, elem_size ? data_size / elem_size : 0u);
+  for (uint32_t i = 0; i < actual_count; i++)
+  {
+    for (uint32_t c = 0; c < comp_count; c++)
+    {
+      const uint8_t *elem = src + i * elem_size + c * uint32_t(type_size);
+      double val = 0.0;
+      switch (type)
+      {
+      case points_type_u8:  { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+      case points_type_i8:  { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+      case points_type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+      case points_type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+      case points_type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+      case points_type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+      case points_type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
+      case points_type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+      case points_type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+      case points_type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
+      default: break;
+      }
+      float normalized = static_cast<float>((val - global_min) * inv_range);
+      normalized = normalized < 0.0f ? 0.0f : (normalized > 1.0f ? 1.0f : normalized);
+      dst[i * comp_count + c] = normalized;
+    }
+  }
+  return result;
+}
+
+// Whether an attribute needs the [min,max] contrast stretch. u16x3 (packed RGB) is drawn GL-normalized as-is.
+inline bool attribute_should_normalize(points_type_t type, points_components_t components, double attr_min, double attr_max)
+{
+  return (attr_min < attr_max) && !(type == points_type_u16 && components == points_components_3);
+}
+
+// Draw count for a coarse->fine LOD-ordered node: the prefix down to the finest level its nearest point needs,
+// from target on-screen point spacing (render_density_px). Shared by stored + virtual nodes.
+inline uint32_t lod_draw_size_from_prefix(const std::array<uint32_t, 64> &prefix_count, uint32_t point_count, double cached_distance, double proj_yy, int viewport_height, double tree_scale, double render_density_px)
+{
+  if (point_count == 0)
+    return 0;
+  if (cached_distance <= 0.0 || tree_scale <= 0.0)
+    return point_count;
+  const double px_per_meter = proj_yy * 0.5 * double(viewport_height) / cached_distance;
+  if (px_per_meter <= 0.0)
+    return point_count;
+  const double cells = (render_density_px / px_per_meter) / tree_scale;
+  const int idx = int(std::floor(std::log2(std::max(cells, 1e-9))));
+  if (idx < 0)
+    return point_count;
+  uint32_t draw = prefix_count[size_t(idx > 63 ? 63 : idx)];
+  draw = draw < 1 ? 1 : draw;
+  return draw > point_count ? point_count : draw;
+}
 
 struct dyn_points_data_handler_t
 {
@@ -242,11 +330,12 @@ constexpr int lod_order_max_level = 63;
 // perm orders points coarse->fine; prefix_count[W+1] is the draw count for width W. rep_level_out receives the
 // per-point representative level REORDERED to match perm (rep_level_out[j] == rep_level[perm[j]]), so it can be
 // uploaded 1:1 with the reordered vertex/attribute buffers and used for a per-point LOD test in the shader.
+// Core coarse->fine ordering over an arbitrary morton-sorted array (not tied to a data_handler). Shared by the
+// stored-node path (build_lod_order) AND the renderer's virtual-node materialize, so a virtual node's per-point
+// LOD ordering + rep_level are produced by the exact same scheme as a stored node's.
 template <typename MORTON_TYPE>
-inline void build_lod_order(const dyn_points_data_handler_t &data_handler, std::array<uint32_t, 64> &prefix_count, std::vector<uint32_t> &perm, std::vector<uint8_t> &rep_level_out)
+inline void build_lod_order_from_mortons(const MORTON_TYPE *morton_array, uint32_t point_count, std::array<uint32_t, 64> &prefix_count, std::vector<uint32_t> &perm, std::vector<uint8_t> &rep_level_out)
 {
-  const auto *morton_array = static_cast<const MORTON_TYPE *>(data_handler.data_info[0].data);
-  const uint32_t point_count = data_handler.header.point_count;
   perm.resize(point_count);
   rep_level_out.clear();
   prefix_count = {};
@@ -288,6 +377,12 @@ inline void build_lod_order(const dyn_points_data_handler_t &data_handler, std::
     suffix += hist[k];
     prefix_count[size_t(k)] = suffix;
   }
+}
+
+template <typename MORTON_TYPE>
+inline void build_lod_order(const dyn_points_data_handler_t &data_handler, std::array<uint32_t, 64> &prefix_count, std::vector<uint32_t> &perm, std::vector<uint8_t> &rep_level_out)
+{
+  build_lod_order_from_mortons<MORTON_TYPE>(static_cast<const MORTON_TYPE *>(data_handler.data_info[0].data), data_handler.header.point_count, prefix_count, perm, rep_level_out);
 }
 
 // Reorder a tightly-packed point buffer (stride bytes/point) into permutation order: out[j] = src[perm[j]].

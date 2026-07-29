@@ -53,6 +53,10 @@ struct virtual_frame_t
   uint32_t monolith_free_after_frames = 30; // free a promoted leaf's monolith after the cut is stably complete
   float delta_ms = 16.0f;               // frame time (virtual fade advance)
   float fade_duration_ms = 300.0f;
+  int viewport_height = 1080;           // per-point LOD submit bound (same as the real emit)
+  double render_density_px = 1.0;       // Density (px) slider -> uniform on-screen point spacing
+  double attr_min = 0.0;                // attribute contrast-stretch range (intensity normalization)
+  double attr_max = 1.0;
 };
 
 // Decode a loaded spanning leaf into a resident source: keep its morton-sorted codes + one morton-order r32x3
@@ -82,7 +86,7 @@ void process_virtual_trees(render_list_t &render_list, virtual_frame_t &frame);
 
 // Emit flat draw groups (lod_density_scale=0 -> the shader keeps all points) for selected+uploaded virtual
 // nodes, refreshing each node's camera uniform. Returns the number of virtual nodes drawn.
-int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, uint64_t &points_rendered);
+int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, int viewport_height, double render_density_px, float fade_duration_ms, uint64_t &points_rendered);
 
 // Destroy a virtual subtree children-first, spin-waiting each in-flight materialize before freeing.
 void destroy_virtual_subtree(std::unique_ptr<virtual_node_t> &root, render::callback_manager_t &callbacks, size_t *gpu_memory_used);

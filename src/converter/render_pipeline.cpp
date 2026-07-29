@@ -176,63 +176,7 @@ render_list_t build_render_list(
   return new_list;
 }
 
-static std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data, uint32_t data_size, points_type_t type, points_components_t components,
-                                                                uint32_t point_count, double global_min, double global_max,
-                                                                uint32_t &out_size)
-{
-  double range = global_max - global_min;
-  if (range <= 0.0)
-    range = 1.0;
-  double inv_range = 1.0 / range;
-
-  uint32_t comp_count = static_cast<uint32_t>(components);
-  out_size = point_count * comp_count * sizeof(float);
-  auto result = std::make_shared<uint8_t[]>(out_size);
-  auto *dst = reinterpret_cast<float *>(result.get());
-  auto *src = static_cast<const uint8_t *>(data);
-
-  int type_size = 0;
-  switch (type)
-  {
-  case points_type_u8: case points_type_i8: type_size = 1; break;
-  case points_type_u16: case points_type_i16: type_size = 2; break;
-  case points_type_u32: case points_type_i32: case points_type_r32: type_size = 4; break;
-  case points_type_u64: case points_type_i64: case points_type_r64: type_size = 8; break;
-  default: type_size = 1; break;
-  }
-
-  uint32_t elem_size = static_cast<uint32_t>(type_size) * comp_count;
-  uint32_t actual_count = std::min(point_count, data_size / elem_size);
-
-  for (uint32_t i = 0; i < actual_count; i++)
-  {
-    for (uint32_t c = 0; c < comp_count; c++)
-    {
-      const uint8_t *elem = src + i * elem_size + c * type_size;
-      double val = 0.0;
-      switch (type)
-      {
-      case points_type_u8:  { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-      case points_type_i8:  { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-      case points_type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-      case points_type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-      case points_type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-      case points_type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-      case points_type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
-      case points_type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-      case points_type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-      case points_type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
-      default: break;
-      }
-      float normalized = static_cast<float>((val - global_min) * inv_range);
-      if (normalized < 0.0f) normalized = 0.0f;
-      if (normalized > 1.0f) normalized = 1.0f;
-      dst[i * comp_count + c] = normalized;
-    }
-  }
-
-  return result;
-}
+// normalize_attribute_to_float moved to point_buffer_render_helper.hpp (shared with the virtual-node upload).
 
 // Fetch decompressed data from the loader and store on the node.
 // This does morton decode + attribute extraction (CPU-heavy).
@@ -331,7 +275,9 @@ io_upload_stats_t process_io_and_upload(
         upload_list.push_back({i, node.cached_distance});
       break;
     case render_node_io_state::none:
-      if (node.gpu_state == render_node_gpu_state::none && node.fade_state != render_node_fade_state::fade_out)
+      // monolith_freed: a live virtual cut represents this leaf; don't reload its monolith (R3). On un-promotion
+      // the promoter clears monolith_freed + io_state so it reloads here.
+      if (node.gpu_state == render_node_gpu_state::none && node.fade_state != render_node_fade_state::fade_out && !node.monolith_freed)
         load_list.push_back({i, node.cached_distance});
       break;
     }
@@ -469,46 +415,15 @@ void update_fades(
   }
 }
 
-// prefix_count[idx] clamped to a drawable [1, point_count]. idx < 0 => full node (non-morton / degenerate).
-static uint32_t lod_prefix_draw_size(const render_node_t &node, int idx)
-{
-  if (idx < 0)
-    return node.point_count;
-  uint32_t draw_size = node.prefix_count[size_t(idx)];
-  if (draw_size < 1)
-    draw_size = 1;
-  if (draw_size > node.point_count)
-    draw_size = node.point_count;
-  return draw_size;
-}
-
-// Per-point LOD SUBMIT BOUND. The visible density is now decided per point in the shader (each point culled
-// by its own distance); this only bounds how many points we submit so the shader has everything it might draw.
-// The finest level any part of the node needs is set by the NEAREST point (node.cached_distance): submit the
-// prefix down to that level (prefix_count[floor(idx_cont)]). Points farther than the nearest are included
-// (they have coarser rep_levels, earlier in the prefix) and get culled per-point; points finer than the
-// nearest need are excluded. The shader uses view depth (gl_Position.w <= true distance) so at screen edges it
-// over-draws the submitted prefix rather than under-drawing it -- no gaps.
+// Per-point LOD SUBMIT BOUND. The visible density is decided per point in the shader (each point culled by its
+// own distance); this only bounds how many points we submit so the shader has everything it might draw. The
+// finest level any part of the node needs is set by the NEAREST point (node.cached_distance). Shared core in
+// lod_draw_size_from_prefix (point_buffer_render_helper.hpp), reused by the virtual-node emit.
 static uint32_t compute_lod_draw_size(const render_node_t &node, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, int viewport_height, double render_density_px)
 {
   if (!node.has_lod_order || node.point_count == 0)
     return node.point_count;
-  const double distance = node.cached_distance;
-  if (distance <= 0.0)
-    return node.point_count;
-  const double px_per_meter = camera.projection[1][1] * 0.5 * double(viewport_height) / distance;
-  if (px_per_meter <= 0.0 || tree_config.scale <= 0.0)
-    return node.point_count;
-  const double cell_world = render_density_px / px_per_meter;
-  const double cells = cell_world / tree_config.scale;
-  const double idx_cont = std::log2(std::max(cells, 1e-9));
-  const int max_idx = int(node.prefix_count.size()) - 1; // 63
-  int idx_lo = int(std::floor(idx_cont));
-  if (idx_lo < 0) // closer than the finest cell -> submit the whole node
-    return node.point_count;
-  if (idx_lo > max_idx)
-    idx_lo = max_idx;
-  return lod_prefix_draw_size(node, idx_lo);
+  return lod_draw_size_from_prefix(node.prefix_count, node.point_count, node.cached_distance, camera.projection[1][1], viewport_height, tree_config.scale, render_density_px);
 }
 
 int emit_draws(

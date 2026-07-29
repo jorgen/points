@@ -141,64 +141,91 @@ void split_octants(virtual_node_t &node, const resident_source_t &src, const tre
   node.children_built = true;
 }
 
-static void materialize_leaf(virtual_node_t &node, const resident_source_t &src)
+// Produce a virtual node's drawable buffers, reordered coarse->fine with a per-point rep_level + prefix_count,
+// exactly like a stored node (build_lod_order): the node's points are one representative per maskWidth cell
+// (interior) or every point (maskWidth==0, the finest), then LOD-ordered so the shader's per-point density cull
+// + node crossfade work identically to the real path. Runs on a convert_pool worker (reads only immutable src).
+template <typename T, size_t C>
+static void materialize_typed(virtual_node_t &node, const resident_source_t &src, const std::vector<float> &offs)
 {
-  const uint32_t n = node.src_count;
-  const uint32_t vstride = 3u * uint32_t(sizeof(float));
-  node.vertex_data = std::make_shared<uint8_t[]>(size_t(n) * vstride);
-  std::memcpy(node.vertex_data.get(), src.decoded_vertex.get() + size_t(node.first_index) * vstride, size_t(n) * vstride);
+  using MT = morton::morton_t<T, C>;
+  const int maskWidth = lod_quantize_mask_width(node.level);
+  const MT *window = reinterpret_cast<const MT *>(src.data_handler->data_info[0].data) + node.first_index;
 
-  const auto &ainfo = src.data_handler->data_info[1];
-  if (ainfo.data && ainfo.size && src.point_count)
+  // 1) Window-local indices of the drawn points (morton-sorted) + their native-frame mortons for the ordering.
+  std::vector<uint32_t> rep_local;
+  std::vector<MT> rep_mortons;
+  if (maskWidth == 0)
   {
-    const uint32_t astride = ainfo.size / src.point_count;
-    node.attribute_data = std::make_shared<uint8_t[]>(size_t(n) * astride);
-    std::memcpy(node.attribute_data.get(), static_cast<const uint8_t *>(ainfo.data) + size_t(node.first_index) * astride, size_t(n) * astride);
+    rep_local.resize(node.src_count);
+    rep_mortons.resize(node.src_count);
+    for (uint32_t i = 0; i < node.src_count; i++)
+    {
+      rep_local[i] = i;
+      rep_mortons[i] = window[i];
+    }
   }
-  node.draw_count = n;
-}
+  else
+  {
+    const uint32_t code_size = morton_type_size(src.morton_type);
+    points_converter_buffer_t source_buf(static_cast<uint8_t *>(src.data_handler->data_info[0].data) + size_t(node.first_index) * code_size, node.src_count * code_size);
+    using M192 = morton::morton192_t;
+    std::vector<morton_to_lod_t<M192::component_type, M192::component_count::value>> reps;
+    input_data_id_t dummy_id{0, 0};
+    find_indices_to_quantize(dummy_id, node.octant_min, src.morton_type, source_buf, offset_in_subset_t(node.first_index), point_count_t(node.src_count), maskWidth, offs, reps);
+    const uint32_t m = uint32_t(reps.size());
+    rep_local.resize(m);
+    rep_mortons.resize(m);
+    for (uint32_t k = 0; k < m; k++)
+    {
+      const uint32_t local = uint32_t(reps[k].index.data) - node.first_index;
+      rep_local[k] = local;
+      rep_mortons[k] = window[local];
+    }
+  }
 
-static void materialize_interior(virtual_node_t &node, const resident_source_t &src, const std::vector<float> &offs)
-{
-  const int maskWidth = lod_quantize_mask_width(node.level); // shared with the converter's LOD generator
-  const uint32_t code_size = morton_type_size(src.morton_type);
-  points_converter_buffer_t source_buf(static_cast<uint8_t *>(src.data_handler->data_info[0].data) + size_t(node.first_index) * code_size, node.src_count * code_size);
+  // 2) Coarse->fine LOD order over the reps (shared scheme -> rep_level + prefix identical to a stored node).
+  std::array<uint32_t, 64> prefix_count;
+  std::vector<uint32_t> perm;
+  std::vector<uint8_t> rep_level;
+  build_lod_order_from_mortons<MT>(rep_mortons.data(), uint32_t(rep_mortons.size()), prefix_count, perm, rep_level);
 
-  using M192 = morton::morton192_t;
-  std::vector<morton_to_lod_t<M192::component_type, M192::component_count::value>> reps;
-  input_data_id_t dummy_id{0, 0};
-  find_indices_to_quantize(dummy_id, node.octant_min, src.morton_type, source_buf, offset_in_subset_t(node.first_index), point_count_t(node.src_count), maskWidth, offs, reps);
-
-  const uint32_t m = uint32_t(reps.size());
+  // 3) Gather the reordered vertex / attribute / rep_level buffers.
+  const uint32_t n = uint32_t(rep_local.size());
   const uint32_t vstride = 3u * uint32_t(sizeof(float));
-  node.vertex_data = std::make_shared<uint8_t[]>(size_t(m) * vstride);
   const uint8_t *dv = src.decoded_vertex.get();
-  for (uint32_t j = 0; j < m; j++)
-    std::memcpy(node.vertex_data.get() + size_t(j) * vstride, dv + size_t(reps[j].index.data) * vstride, vstride);
-
   const auto &ainfo = src.data_handler->data_info[1];
-  if (ainfo.data && ainfo.size && src.point_count)
+  const bool has_attr = ainfo.data && ainfo.size && src.point_count;
+  const uint32_t astride = has_attr ? uint32_t(ainfo.size / src.point_count) : 0;
+  const uint8_t *av = has_attr ? static_cast<const uint8_t *>(ainfo.data) : nullptr;
+
+  node.vertex_data = std::make_shared<uint8_t[]>(size_t(n) * vstride);
+  node.rep_level_data = std::make_shared<uint8_t[]>(size_t(n));
+  if (has_attr)
+    node.attribute_data = std::make_shared<uint8_t[]>(size_t(n) * astride);
+
+  for (uint32_t j = 0; j < n; j++)
   {
-    const uint32_t astride = ainfo.size / src.point_count;
-    node.attribute_data = std::make_shared<uint8_t[]>(size_t(m) * astride);
-    const uint8_t *av = static_cast<const uint8_t *>(ainfo.data);
-    for (uint32_t j = 0; j < m; j++)
-      std::memcpy(node.attribute_data.get() + size_t(j) * astride, av + size_t(reps[j].index.data) * astride, astride);
+    const uint32_t global = node.first_index + rep_local[perm[j]];
+    std::memcpy(node.vertex_data.get() + size_t(j) * vstride, dv + size_t(global) * vstride, vstride);
+    if (has_attr)
+      std::memcpy(node.attribute_data.get() + size_t(j) * astride, av + size_t(global) * astride, astride);
+    node.rep_level_data[j] = rep_level[j];
   }
-  node.draw_count = m;
+  node.prefix_count = prefix_count;
+  node.draw_count = n;
 }
 
 void materialize_virtual_node(virtual_node_t &node, const resident_source_t &src, const std::vector<float> &lod_random_offsets)
 {
-  // Every virtual node draws at its level's LOD, exactly like a stored LOD node: one representative per
-  // maskWidth=max(0,lod-9) morton cell. LOD is additive (the walker draws root->frontier), so a far leaf's
-  // root draws a coarse subsample and finer octants add in as the camera approaches. maskWidth==0 (level<=9,
-  // the finest) means every point is its own cell -> draw them all (fast path).
-  const int maskWidth = lod_quantize_mask_width(node.level);
-  if (maskWidth == 0)
-    materialize_leaf(node, src);
-  else
-    materialize_interior(node, src, lod_random_offsets);
+  switch (src.morton_type)
+  {
+  case points_type_m32: materialize_typed<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(node, src, lod_random_offsets); break;
+  case points_type_m64: materialize_typed<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(node, src, lod_random_offsets); break;
+  case points_type_m128: materialize_typed<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(node, src, lod_random_offsets); break;
+  case points_type_m192: materialize_typed<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(node, src, lod_random_offsets); break;
+  default: break;
+  }
 }
 
 // ------------------------------------------------------------------ per-frame walk / upload / emit / evict
@@ -210,6 +237,8 @@ static void evict_virtual_node(virtual_node_t &v, render::callback_manager_t &ca
     for (auto &b : v.gpu_buffers)
       if (b.user_ptr)
         callbacks.do_destroy_buffer(b);
+    if (v.params_buffer.user_ptr)
+      callbacks.do_destroy_buffer(v.params_buffer);
     if (gpu_memory_used)
       *gpu_memory_used -= v.gpu_memory_size;
     v.gpu_state = render_node_gpu_state::none;
@@ -217,23 +246,37 @@ static void evict_virtual_node(virtual_node_t &v, render::callback_manager_t &ca
   v.mat_state = virtual_mat_state::none;
   v.vertex_data.reset();
   v.attribute_data.reset();
+  v.rep_level_data.reset();
   v.gpu_memory_size = 0;
 }
 
 static void upload_virtual_node(virtual_node_t &v, const resident_source_t &src, const virtual_frame_t &f)
 {
-  const uint32_t vbytes = v.draw_count * 3u * uint32_t(sizeof(float));
+  const uint32_t n = v.draw_count;
+  const uint32_t vbytes = n * 3u * uint32_t(sizeof(float));
   f.callbacks->do_create_buffer(v.gpu_buffers[0], points_buffer_type_vertex);
   f.callbacks->do_initialize_buffer(v.gpu_buffers[0], points_type_r32, points_components_3, int(vbytes), v.vertex_data.get());
 
+  // Color: same contrast stretch as the real path (R6) -- else intensity/scalar attrs render near-black on
+  // promoted regions. RGB (u16x3) is drawn GL-normalized as-is.
   uint32_t abytes = 0;
   f.callbacks->do_create_buffer(v.gpu_buffers[1], points_buffer_type_vertex);
   if (v.attribute_data && src.point_count && src.data_handler->data_info[1].size)
   {
     const auto attr_fmt = src.data_handler->point_format[1];
-    const uint32_t astride = src.data_handler->data_info[1].size / src.point_count;
-    abytes = v.draw_count * astride;
-    f.callbacks->do_initialize_buffer(v.gpu_buffers[1], attr_fmt.type, attr_fmt.components, int(abytes), v.attribute_data.get());
+    const uint32_t astride = uint32_t(src.data_handler->data_info[1].size / src.point_count);
+    abytes = n * astride;
+    if (attribute_should_normalize(attr_fmt.type, attr_fmt.components, f.attr_min, f.attr_max))
+    {
+      uint32_t norm_size = 0;
+      auto norm = normalize_attribute_to_float(v.attribute_data.get(), abytes, attr_fmt.type, attr_fmt.components, n, f.attr_min, f.attr_max, norm_size);
+      f.callbacks->do_initialize_buffer(v.gpu_buffers[1], points_type_r32, attr_fmt.components, int(norm_size), norm.get());
+      abytes = norm_size;
+    }
+    else
+    {
+      f.callbacks->do_initialize_buffer(v.gpu_buffers[1], attr_fmt.type, attr_fmt.components, int(abytes), v.attribute_data.get());
+    }
   }
 
   const auto offset = glm::dvec3(f.tree_config->offset[0], f.tree_config->offset[1], f.tree_config->offset[2]) + glm::dvec3(src.decode_offset[0], src.decode_offset[1], src.decode_offset[2]);
@@ -241,12 +284,21 @@ static void upload_virtual_node(virtual_node_t &v, const resident_source_t &src,
   f.callbacks->do_create_buffer(v.gpu_buffers[2], points_buffer_type_uniform);
   f.callbacks->do_initialize_buffer(v.gpu_buffers[2], points_type_r32, points_components_4x4, sizeof(v.camera_view), &v.camera_view);
 
-  v.gpu_memory_size = vbytes + abytes + uint32_t(sizeof(v.camera_view));
+  // rep_level (u8, one per point) -> per-point density cull in the shader (R19: the Density slider now thins
+  // promoted regions the same as everything else).
+  f.callbacks->do_create_buffer(v.gpu_buffers[3], points_buffer_type_vertex);
+  f.callbacks->do_initialize_buffer(v.gpu_buffers[3], points_type_u8, points_components_1, int(n), v.rep_level_data.get());
+
+  v.draw_type = (src.data_handler->point_format[1].components == points_components_3) ? points_dyn_points_3 : points_dyn_points_1;
+  v.gpu_memory_size = vbytes + abytes + n + uint32_t(sizeof(v.camera_view));
   v.gpu_state = render_node_gpu_state::uploaded;
+  v.fade_state = render_node_fade_state::fade_in; // crossfade in (R17)
+  v.fade_ms = 0.0f;
   if (f.gpu_memory_used)
     *f.gpu_memory_used += v.gpu_memory_size;
   v.vertex_data.reset(); // GPU has it now; the resident source stays for other virtual nodes
   v.attribute_data.reset();
+  v.rep_level_data.reset();
 }
 
 struct virtual_cut_stats_t
@@ -304,7 +356,18 @@ static void process_virtual_node(virtual_node_t &v, const resident_source_t &src
     if (v.mat_state == virtual_mat_state::materialized && v.gpu_state == render_node_gpu_state::none)
       upload_virtual_node(v, src, f);
     if (v.gpu_state == render_node_gpu_state::uploaded)
+    {
       cut.uploaded++;
+      if (v.fade_state == render_node_fade_state::fade_in) // crossfade in (R17)
+      {
+        v.fade_ms += f.delta_ms;
+        if (v.fade_ms >= f.fade_duration_ms)
+        {
+          v.fade_ms = f.fade_duration_ms;
+          v.fade_state = render_node_fade_state::steady;
+        }
+      }
+    }
   }
   else if (v.mat_state != virtual_mat_state::none)
   {
@@ -318,6 +381,23 @@ static void process_virtual_node(virtual_node_t &v, const resident_source_t &src
   for (auto &c : v.children)
     if (c)
       process_virtual_node(*c, src, f, cut);
+}
+
+// R3: free the promoted leaf's own monolith GPU buffers once the virtual cut has been stably covering it. The
+// additive virtual cut always keeps coverage (ancestors stay resident), so the monolith is pure waste while
+// suppressed. io_state is reset so an un-promotion (CPU eviction / A-B off) reloads it cleanly from disk; the
+// IO scan skips monolith_freed nodes so they are NOT re-loaded while the cut is live.
+static void free_monolith(render_node_t &node, render::callback_manager_t &callbacks)
+{
+  for (auto &b : node.gpu_buffers)
+    if (b.user_ptr)
+      callbacks.do_destroy_buffer(b);
+  if (node.params_buffer.user_ptr)
+    callbacks.do_destroy_buffer(node.params_buffer);
+  node.gpu_state = render_node_gpu_state::none;
+  node.io_state = render_node_io_state::none;
+  node.monolith_freed = true;
+  node.gpu_memory_size = 0;
 }
 
 void process_virtual_trees(render_list_t &render_list, virtual_frame_t &f)
@@ -342,41 +422,95 @@ void process_virtual_trees(render_list_t &render_list, virtual_frame_t &f)
     // handoff never briefly shows a coarser/partially-loaded cut than the monolith already had.
     const bool cut_complete = cut.selected > 0 && cut.uploaded == cut.selected;
     node.virtual_cut_live_frames = cut_complete ? node.virtual_cut_live_frames + 1 : 0;
-    node.draw_suppressed = cut_complete;
+    node.draw_suppressed = cut_complete || node.monolith_freed;
+    if (node.virtual_cut_live_frames >= f.monolith_free_after_frames && node.gpu_state == render_node_gpu_state::uploaded && !node.monolith_freed)
+      free_monolith(node, *f.callbacks); // R3
   }
 }
 
-static void emit_virtual_node(virtual_node_t &v, const resident_source_t &src, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, uint64_t &points_rendered, int &drawn)
+struct virtual_emit_ctx_t
 {
-  if (v.last_selected_frame == frame_index && v.gpu_state == render_node_gpu_state::uploaded && v.draw_count > 0)
+  render::callback_manager_t *callbacks;
+  const render::frame_camera_cpp_t *camera;
+  const tree_config_t *tree_config;
+  points_to_render_t *to_render;
+  uint32_t frame_index;
+  int viewport_height;
+  double render_density_px;
+  float fade_duration_ms;
+  float lod_px_scale;      // per-frame per-point-LOD constants (identical to the real emit)
+  float lod_density_scale;
+};
+
+static void emit_virtual_node(virtual_node_t &v, const resident_source_t &src, const virtual_emit_ctx_t &e, uint64_t &points_rendered, int &drawn)
+{
+  if (v.last_selected_frame == e.frame_index && v.gpu_state == render_node_gpu_state::uploaded && v.draw_count > 0)
   {
-    const auto offset = glm::dvec3(tree_config.offset[0], tree_config.offset[1], tree_config.offset[2]) + glm::dvec3(src.decode_offset[0], src.decode_offset[1], src.decode_offset[2]);
-    v.camera_view = glm::mat4(camera.projection * glm::translate(camera.view, offset));
-    callbacks.do_modify_buffer(v.gpu_buffers[2], 0, sizeof(v.camera_view), &v.camera_view);
+    const auto offset = glm::dvec3(e.tree_config->offset[0], e.tree_config->offset[1], e.tree_config->offset[2]) + glm::dvec3(src.decode_offset[0], src.decode_offset[1], src.decode_offset[2]);
+    v.camera_view = glm::mat4(e.camera->projection * glm::translate(e.camera->view, offset));
+    e.callbacks->do_modify_buffer(v.gpu_buffers[2], 0, sizeof(v.camera_view), &v.camera_view);
+
+    // Same per-point LOD submit bound + shader density cull as the real path (R19: the Density slider now
+    // thins promoted regions too, instead of the old lod_density_scale=0 keep-all).
+    const uint32_t draw_size = lod_draw_size_from_prefix(v.prefix_count, v.draw_count, v.cached_distance, e.camera->projection[1][1], e.viewport_height, e.tree_config->scale, e.render_density_px);
 
     v.draw_list[0] = {points_dyn_points_bm_vertex, v.gpu_buffers[0].user_ptr};
     v.draw_list[1] = {points_dyn_points_bm_color, v.gpu_buffers[1].user_ptr};
     v.draw_list[2] = {points_dyn_points_bm_camera, v.gpu_buffers[2].user_ptr};
-    // lod_density_scale = 0 -> shader W is very negative -> keeps all points (flat draw; no rep_level needed).
-    points_draw_group_t draw_group = {v.draw_type, v.draw_list, 3, int(v.draw_count), v.level, 1.0f, 0.0f};
-    points_to_render_add_render_group(to_render, draw_group);
-    points_rendered += v.draw_count;
+    if (v.fade_state == render_node_fade_state::fade_in)
+    {
+      // Whole-node crossfade in (R17) via the same crossfade draw + params alpha the real nodes use.
+      float alpha = v.fade_ms / e.fade_duration_ms;
+      alpha = alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha);
+      const bool is_mono = (v.draw_type == points_dyn_points_1);
+      v.params_data = glm::vec4(alpha, 1.0f, is_mono ? 1.0f : 0.0f, is_mono ? 1.0f : 0.0f);
+      if (!v.params_buffer.user_ptr)
+      {
+        e.callbacks->do_create_buffer(v.params_buffer, points_buffer_type_uniform);
+        e.callbacks->do_initialize_buffer(v.params_buffer, points_type_r32, points_components_4, sizeof(v.params_data), &v.params_data);
+      }
+      else
+        e.callbacks->do_modify_buffer(v.params_buffer, 0, sizeof(v.params_data), &v.params_data);
+      v.draw_list[3] = {points_dyn_points_bm_old_color, v.gpu_buffers[1].user_ptr};
+      v.draw_list[4] = {points_dyn_points_bm_params, v.params_buffer.user_ptr};
+      v.draw_list[5] = {points_dyn_points_bm_replevel, v.gpu_buffers[3].user_ptr};
+      points_draw_group_t draw_group = {points_dyn_points_crossfade, v.draw_list, 6, int(draw_size), v.level, e.lod_px_scale, e.lod_density_scale};
+      points_to_render_add_render_group(e.to_render, draw_group);
+    }
+    else
+    {
+      v.draw_list[3] = {points_dyn_points_bm_replevel, v.gpu_buffers[3].user_ptr};
+      points_draw_group_t draw_group = {v.draw_type, v.draw_list, 4, int(draw_size), v.level, e.lod_px_scale, e.lod_density_scale};
+      points_to_render_add_render_group(e.to_render, draw_group);
+    }
+    points_rendered += draw_size;
     drawn++;
   }
   for (auto &c : v.children)
     if (c)
-      emit_virtual_node(*c, src, callbacks, camera, tree_config, to_render, frame_index, points_rendered, drawn);
+      emit_virtual_node(*c, src, e, points_rendered, drawn);
 }
 
-int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, uint64_t &points_rendered)
+int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, int viewport_height, double render_density_px, float fade_duration_ms, uint64_t &points_rendered)
 {
   int drawn = 0;
+  virtual_emit_ctx_t e;
+  e.callbacks = &callbacks;
+  e.camera = &camera;
+  e.tree_config = &tree_config;
+  e.to_render = to_render;
+  e.frame_index = frame_index;
+  e.viewport_height = viewport_height;
+  e.render_density_px = render_density_px;
+  e.fade_duration_ms = fade_duration_ms;
+  e.lod_px_scale = float(camera.projection[1][1] * 0.5 * double(viewport_height));
+  e.lod_density_scale = tree_config.scale > 0.0 ? float(render_density_px / tree_config.scale) : 0.0f;
   for (auto &np : render_list)
   {
     auto &node = *np;
     if (!node.is_virtual_source || !node.virtual_root || !node.resident)
       continue;
-    emit_virtual_node(*node.virtual_root, *node.resident, callbacks, camera, tree_config, to_render, frame_index, points_rendered, drawn);
+    emit_virtual_node(*node.virtual_root, *node.resident, e, points_rendered, drawn);
   }
   return drawn;
 }
