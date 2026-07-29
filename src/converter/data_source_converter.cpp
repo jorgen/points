@@ -270,9 +270,18 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     vf.delta_ms = delta_ms;
     vf.fade_duration_ms = fade_duration_ms;
     vf.viewport_height = frame_viewport_height;
-    // Don't subdivide finer than the real renderer's finest level last frame (one-frame lag); never finer than
-    // the full-detail level (below it maskWidth is 0 -> every point already drawn, so it only adds nodes).
-    vf.subdivide_floor_lod = std::max(prev_min_real_lod, lod_quantize_full_detail_level);
+    // Floor the virtual subdivision at THIS frame's finest real-node lod. Phase 3 above already processed the
+    // real render list (gpu_state / walker_data.lod / frustum_visible are current), so there is NO one-frame
+    // lag: never invent detail finer than the real octree renderer is actually showing this frame, and never
+    // finer than the full-detail level (below it maskWidth is 0 -> every point already drawn, so descending
+    // only multiplies nodes). No real node drawing -> refine to full detail.
+    int min_real_lod = std::numeric_limits<int>::max();
+    for (auto &np : render_list)
+      if (!np->is_virtual_source && np->gpu_state == render_node_gpu_state::uploaded && np->walker_data.frustum_visible)
+        min_real_lod = std::min(min_real_lod, np->walker_data.lod);
+    vf.subdivide_floor_lod = min_real_lod == std::numeric_limits<int>::max()
+                                 ? lod_quantize_full_detail_level
+                                 : std::max(min_real_lod, lod_quantize_full_detail_level);
     vf.render_density_px = frame_render_density_px;
     vf.attr_min = current_attr_min;
     vf.attr_max = current_attr_max;
@@ -325,12 +334,8 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     std::vector<node_bbox_t> loose_boxes;
     std::vector<node_bbox_t> tight_boxes;
     int loading = 0, converting = 0, uploaded = 0, fading_in = 0, fading_out = 0;
-    int min_real_lod = std::numeric_limits<int>::max();
     for (auto &np : render_list)
     {
-      // Finest (lowest) lod a REAL (non-promoted) node is actually rendering -> next frame's virtual floor.
-      if (!np->is_virtual_source && np->gpu_state == render_node_gpu_state::uploaded && np->walker_data.frustum_visible)
-        min_real_lod = std::min(min_real_lod, np->walker_data.lod);
       if (np->fade_state != render_node_fade_state::fade_out)
       {
         tight_aabb_accumulator.min = glm::min(tight_aabb_accumulator.min, np->walker_data.tight_aabb.min);
@@ -359,10 +364,6 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     frame_timings.nodes_uploaded = uploaded;
     frame_timings.nodes_fading_in = fading_in;
     frame_timings.nodes_fading_out = fading_out;
-    // Feed this frame's finest real-node lod to the next frame's virtual subdivision floor (one-frame lag). No
-    // real node drawing -> keep the previous floor rather than collapsing to full detail.
-    if (min_real_lod != std::numeric_limits<int>::max())
-      prev_min_real_lod = min_real_lod;
   }
 
   // Phase 5: Emit draws

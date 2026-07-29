@@ -471,15 +471,23 @@ void process_virtual_trees(render_list_t &render_list, virtual_frame_t &f)
     walk_virtual(*node.virtual_root, *node.resident, f, frustum);
     virtual_cut_stats_t cut;
     process_virtual_node(*node.virtual_root, *node.resident, f, cut);
-    // R16: replace the monolith only when the WHOLE selected cut is uploaded (frontier-complete), so the
-    // handoff never briefly shows a coarser/partially-loaded cut than the monolith already had.
-    const bool cut_complete = cut.selected > 0 && cut.uploaded == cut.selected;
-    // Keep ticking only on genuine progress (materialize/fade in flight), NOT on a mere incomplete cut: a cut
-    // stalled by a saturated budget is static state (re-armed by camera motion), so pegging is_animating on
-    // !cut_complete would busy-loop the on-demand renderer forever (bug #1).
+    // Suppress the monolith on COVERAGE, not completeness. The cut is ADDITIVE root->frontier, and the root is
+    // the WHOLE leaf at its coarsest LOD, so once the root is uploaded AND fully faded in the entire leaf region
+    // is covered at full opacity -- we hide the leaf's own monolith and let finer frontier nodes refine on top
+    // as they arrive. The old rule (whole selected cut uploaded) reverted to the full-res monolith every time a
+    // zoom extended the frontier to a not-yet-loaded finer node -> a repeating full-leaf FLICKER; and it handed
+    // off against a from-zero finer node -> a brief opacity DIP. Gating on the faded root fixes both: coverage
+    // is guaranteed and the reveal is at full opacity. virtual_cut_live_frames now counts COVERED frames, so R3
+    // frees the redundant monolith during a sustained zoom instead of never (it used to reset on every frontier
+    // extension). Un-promotion / A-B-off / departure reset draw_suppressed elsewhere.
+    const virtual_node_t &vroot = *node.virtual_root;
+    const bool cut_covered = vroot.gpu_state == render_node_gpu_state::uploaded && vroot.fade_state == render_node_fade_state::steady;
+    // Keep ticking only on genuine progress (materialize/fade in flight): cut.animating covers a decode in
+    // flight or a node still fading in. NOT gated on coverage -- a covered-but-static cut is idle state
+    // (re-armed by camera motion), so pegging is_animating on !covered would busy-loop the renderer (bug #1).
     f.any_animating = f.any_animating || cut.animating;
-    node.virtual_cut_live_frames = cut_complete ? node.virtual_cut_live_frames + 1 : 0;
-    node.draw_suppressed = cut_complete || node.monolith_freed;
+    node.virtual_cut_live_frames = cut_covered ? node.virtual_cut_live_frames + 1 : 0;
+    node.draw_suppressed = cut_covered || node.monolith_freed;
     if (node.virtual_cut_live_frames >= f.monolith_free_after_frames && node.gpu_state == render_node_gpu_state::uploaded && !node.monolith_freed)
       free_monolith(node, *f.callbacks); // R3
   }

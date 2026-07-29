@@ -57,9 +57,9 @@ struct virtual_frame_t
   float delta_ms = 16.0f;               // frame time (virtual fade advance)
   float fade_duration_ms = 300.0f;
   int viewport_height = 1080;           // per-point LOD submit bound (same as the real emit)
-  int subdivide_floor_lod = 9;          // don't subdivide a virtual node finer than the real renderer's finest
-                                        //   level last frame (also caps recursion so a dense cluster can't
-                                        //   recurse past level 0 into negative morton levels -> abort)
+  int subdivide_floor_lod = 9;          // don't subdivide a virtual node finer than THIS frame's finest real
+                                        //   render node (also caps recursion so a dense cluster can't recurse
+                                        //   past level 0 into negative morton levels -> abort)
   double render_density_px = 1.0;       // Density (px) slider -> uniform on-screen point spacing
   double attr_min = 0.0;                // attribute contrast-stretch range (intensity normalization)
   double attr_max = 1.0;
