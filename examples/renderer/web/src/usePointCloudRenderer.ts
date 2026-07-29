@@ -27,8 +27,8 @@ export interface ViewControls {
 export const DEFAULT_CONTROLS: ViewControls = {
   pointSize: 0.05,
   lodScaleBase: 1.1,
-  pixelErrorThreshold: 1.0,
-  renderDensityPx: 1.5,
+  pixelErrorThreshold: 0.65,
+  renderDensityPx: 0.8,
   gpuMemoryBudgetMb: 512,
   showBoundingBoxes: false,
 };
