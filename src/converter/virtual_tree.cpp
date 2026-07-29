@@ -188,9 +188,14 @@ static void materialize_interior(virtual_node_t &node, const resident_source_t &
   node.draw_count = m;
 }
 
-void materialize_virtual_node(virtual_node_t &node, const resident_source_t &src, bool is_leaf, const std::vector<float> &lod_random_offsets)
+void materialize_virtual_node(virtual_node_t &node, const resident_source_t &src, const std::vector<float> &lod_random_offsets)
 {
-  if (is_leaf)
+  // Every virtual node draws at its level's LOD, exactly like a stored LOD node: one representative per
+  // maskWidth=max(0,lod-9) morton cell. LOD is additive (the walker draws root->frontier), so a far leaf's
+  // root draws a coarse subsample and finer octants add in as the camera approaches. maskWidth==0 (level<=9,
+  // the finest) means every point is its own cell -> draw them all (fast path).
+  const int maskWidth = std::max(0, node.level - 3 * 3);
+  if (maskWidth == 0)
     materialize_leaf(node, src);
   else
     materialize_interior(node, src, lod_random_offsets);
@@ -261,23 +266,17 @@ static void walk_virtual(virtual_node_t &v, const resident_source_t &src, const 
   v.selected_this_frame = true;
 
   const bool subdivide = v.src_count > f.virtual_min_points && should_subdivide(*f.lod_params, v.loose_aabb, false);
-  const bool want_leaf = !subdivide;
 
-  // If the leaf/interior role flipped since materialization, re-materialize (evict what we have; enqueue below).
-  if (v.mat_state == virtual_mat_state::materialized && want_leaf != v.is_leaf)
-    evict_virtual_node(v, *f.callbacks, f.gpu_memory_used);
-
+  // Materialize once (level-driven, so the result never changes for this node -> no re-materialize on flip).
   if (v.mat_state == virtual_mat_state::none)
   {
-    v.is_leaf = want_leaf;
     v.mat_state = virtual_mat_state::materializing;
     v.convert_done.store(false, std::memory_order_relaxed);
     virtual_node_t *vp = &v;
     const resident_source_t *sp = &src;
     const std::vector<float> *offs = f.lod_random_offsets;
-    const bool as_leaf = want_leaf;
-    f.convert_pool->enqueue([vp, sp, offs, as_leaf] {
-      materialize_virtual_node(*vp, *sp, as_leaf, *offs);
+    f.convert_pool->enqueue([vp, sp, offs] {
+      materialize_virtual_node(*vp, *sp, *offs);
       vp->convert_done.store(true, std::memory_order_release);
     });
   }

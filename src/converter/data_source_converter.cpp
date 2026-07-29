@@ -177,6 +177,11 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   {
     if (virtual_lod_random_offsets.empty())
       virtual_lod_random_offsets = make_lod_random_offsets();
+    // Promote EVERY spanning leaf reached by the walker (not just should_subdivide ones): the whole point is
+    // that a far/small spanning leaf is drawn full-res (the dense-patch inversion) and needs a coarse LOD.
+    // A leaf is worth promoting only if it has a coarser representation to offer (maskWidth = lod_span-9 > 0);
+    // compact leaves keep the cheap monolith. Cap promotions/frame so the one-time decodes don't hitch.
+    int promotions_left = int(virtual_max_promotions_per_frame);
     for (auto &np : render_list)
     {
       auto &node = *np;
@@ -184,8 +189,14 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         continue;
       if (node.point_count <= virtual_min_points || !node.walker_data.is_leaf)
         continue;
-      if (!should_subdivide(lod_params, node.walker_data.aabb, false))
+      if (node.resident_handler->header.lod_span <= 9)
+      {
+        node.resident_handler.reset(); // compact leaf: no coarser LOD to offer, never promote it
         continue;
+      }
+      if (promotions_left <= 0)
+        continue; // ramp the rest over subsequent frames
+      --promotions_left;
       node.resident = build_resident_source(node.resident_handler, tree_config);
       node.resident_handler.reset(); // the resident took its own ref to the data_handler
       node.virtual_root = make_virtual_root(*node.resident, node.walker_data.tight_aabb, node.walker_data.aabb);
@@ -246,7 +257,19 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   uint64_t pts_rendered = 0;
   frame_timings.nodes_drawn = emit_draws(render_list, callbacks, camera, tree_config, to_render, fade_duration_ms, frame_viewport_height, frame_render_density_px, pts_rendered);
   if (enable_virtual_subtrees)
+  {
     frame_timings.nodes_drawn += emit_virtual_draws(render_list, callbacks, camera, tree_config, to_render, pts_rendered);
+    // Report virtual-subnode activity only when it changes, so it's a verifiable signal without per-frame spam.
+    int promoted = 0;
+    for (auto &np : render_list)
+      if (np->is_virtual_source)
+        promoted++;
+    if (promoted != last_virtual_promoted)
+    {
+      fmt::print(stderr, "[virtual] promoted spanning leaves = {} (gpu {} KB)\n", promoted, virtual_gpu_used / 1024);
+      last_virtual_promoted = promoted;
+    }
+  }
   points_rendered_last_frame = pts_rendered;
   auto t_after_emit = clock::now();
 

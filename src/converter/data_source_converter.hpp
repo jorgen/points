@@ -96,6 +96,8 @@ struct points_converter_data_source_t
   // Virtual subnodes: promote spanning leaves to a render-time balanced LOD tree. A/B toggle on one camera path.
   bool enable_virtual_subtrees = true;
   uint32_t virtual_min_points = 256;         // don't subdivide tiny leaves
+  uint32_t virtual_max_promotions_per_frame = 4; // ramp the one-time resident decodes so they don't hitch
   size_t virtual_gpu_used = 0;               // bytes held by uploaded virtual nodes (stat; not yet a hard budget)
+  int last_virtual_promoted = -1;            // report promotions only on change (avoid per-frame console spam)
   std::vector<float> virtual_lod_random_offsets; // deterministic per-cell pick, identical to the converter's
 };
