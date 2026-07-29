@@ -130,15 +130,7 @@ render::loaded_node_data_t native_node_data_loader_t::get_data(render::load_hand
     }
   }
 
-  struct impl_data_t
-  {
-    std::shared_ptr<dyn_points_data_handler_t> data_handler;
-    std::shared_ptr<uint8_t[]> vertex_data;
-    std::shared_ptr<uint8_t[]> attribute_data;
-    std::shared_ptr<uint8_t[]> rep_level_data;
-  };
-
-  auto impl = std::make_shared<impl_data_t>();
+  auto impl = std::make_shared<loaded_node_impl_data_t>();
   impl->data_handler = std::move(req.data_handler);
   impl->vertex_data = std::move(tmp.data[0]);
   impl->attribute_data = std::move(tmp.data[1]);

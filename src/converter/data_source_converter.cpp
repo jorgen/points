@@ -18,7 +18,9 @@
 #include "data_source_converter.hpp"
 #include "data_source.hpp"
 #include "input_header.hpp"
+#include "lod_quantize.hpp" // make_lod_random_offsets (same scheme as the converter)
 #include "native_node_data_loader.hpp"
+#include "virtual_tree.hpp" // build_resident_source, make_virtual_root, process_virtual_trees, emit_virtual_draws
 #include <points/common/format.h>
 #include <points/converter/converter_data_source.h>
 
@@ -155,7 +157,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   auto tree_config = processor.tree_config();
   auto io_stats = process_io_and_upload(render_list, camera_position, tree_config,
       callbacks, node_loader.get(), convert_pool, camera, max_io_in_flight, max_new_io_per_frame,
-      frame_upload_budget, gpu_memory_budget, current_attr_min, current_attr_max);
+      frame_upload_budget, gpu_memory_budget, current_attr_min, current_attr_max, enable_virtual_subtrees);
   frame_timings.io_in_flight = io_stats.io_in_flight;
   frame_timings.scan_classify_ms = io_stats.scan_classify_ms;
   frame_timings.schedule_io_ms = io_stats.schedule_io_ms;
@@ -167,6 +169,41 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   // Phase 4: Update fades
   update_fades(render_list, delta_ms, fade_duration_ms);
   auto t_after_fade = clock::now();
+
+  // Phase 4.5: Virtual subnodes. Promote uploaded spanning leaves (is_leaf + should_subdivide) whose morton
+  // data was salvaged into resident_handler, then walk each virtual octree (materialize/upload/evict). A live
+  // cut sets draw_suppressed so emit_draws skips the leaf's own monolith.
+  if (enable_virtual_subtrees)
+  {
+    if (virtual_lod_random_offsets.empty())
+      virtual_lod_random_offsets = make_lod_random_offsets();
+    for (auto &np : render_list)
+    {
+      auto &node = *np;
+      if (node.is_virtual_source || !node.resident_handler || node.gpu_state != render_node_gpu_state::uploaded)
+        continue;
+      if (node.point_count <= virtual_min_points || !node.walker_data.is_leaf)
+        continue;
+      if (!should_subdivide(lod_params, node.walker_data.aabb, false))
+        continue;
+      node.resident = build_resident_source(node.resident_handler, tree_config);
+      node.resident_handler.reset(); // the resident took its own ref to the data_handler
+      node.virtual_root = make_virtual_root(*node.resident, node.walker_data.tight_aabb, node.walker_data.aabb);
+      node.is_virtual_source = true;
+    }
+    virtual_frame_t vf;
+    vf.camera = &camera;
+    vf.camera_position = camera_position;
+    vf.tree_config = &tree_config;
+    vf.lod_params = &lod_params;
+    vf.callbacks = &callbacks;
+    vf.convert_pool = &convert_pool;
+    vf.lod_random_offsets = &virtual_lod_random_offsets;
+    vf.gpu_memory_budget = gpu_memory_budget;
+    vf.gpu_memory_used = &virtual_gpu_used;
+    vf.virtual_min_points = virtual_min_points;
+    process_virtual_trees(render_list, vf);
+  }
 
   // Collect bounding boxes and tight AABB, count stats
   {
@@ -208,6 +245,8 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   // Phase 5: Emit draws
   uint64_t pts_rendered = 0;
   frame_timings.nodes_drawn = emit_draws(render_list, callbacks, camera, tree_config, to_render, fade_duration_ms, frame_viewport_height, frame_render_density_px, pts_rendered);
+  if (enable_virtual_subtrees)
+    frame_timings.nodes_drawn += emit_virtual_draws(render_list, callbacks, camera, tree_config, to_render, pts_rendered);
   points_rendered_last_frame = pts_rendered;
   auto t_after_emit = clock::now();
 

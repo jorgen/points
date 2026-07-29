@@ -54,6 +54,11 @@ struct virtual_frame_t
 // header's tight span (the same cell the decode uses), so the octant split stays consistent with the decode.
 std::shared_ptr<resident_source_t> build_resident_source(std::shared_ptr<dyn_points_data_handler_t> data_handler, const tree_config_t &tree_config);
 
+// Wrap a whole resident leaf as the root of its virtual octree (first_index=0, src_count=point_count,
+// level=leaf_lod, octant_min=node_min). tight/loose come from the promoted leaf's walker aabbs. draw_type is
+// inferred from the color attribute's component count.
+std::unique_ptr<virtual_node_t> make_virtual_root(const resident_source_t &src, const node_aabb_t &tight_aabb, const node_aabb_t &loose_aabb);
+
 // Build `node`'s up to 8 octant children (index windows + tight/loose bboxes + level = node.level-1). Cheap
 // index math over the immutable resident codes; cached via node.children_built. No-op if already built.
 void split_octants(virtual_node_t &node, const resident_source_t &src, const tree_config_t &tree_config);

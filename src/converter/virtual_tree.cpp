@@ -103,6 +103,20 @@ static void split_octants_typed(virtual_node_t &node, const resident_source_t &s
                              });
 }
 
+std::unique_ptr<virtual_node_t> make_virtual_root(const resident_source_t &src, const node_aabb_t &tight_aabb, const node_aabb_t &loose_aabb)
+{
+  auto root = std::make_unique<virtual_node_t>();
+  root->first_index = 0;
+  root->src_count = src.point_count;
+  root->level = src.leaf_lod;
+  root->octant_min = src.node_min;
+  root->tight_aabb = tight_aabb;
+  root->loose_aabb = loose_aabb;
+  const bool rgb = src.data_handler->point_format[1].components == points_components_3;
+  root->draw_type = rgb ? points_dyn_points_3 : points_dyn_points_1;
+  return root;
+}
+
 void split_octants(virtual_node_t &node, const resident_source_t &src, const tree_config_t &tree_config)
 {
   if (node.children_built)

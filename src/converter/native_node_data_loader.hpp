@@ -42,6 +42,16 @@ struct pending_request_t
   tree_config_t tree_config;
 };
 
+// Backing store held alive by loaded_node_data_t::_impl_data. Exposed so a promoted spanning leaf can recover
+// its dyn_points_data_handler_t (the pre-reorder morton codes + attributes) before loaded_data is released.
+struct loaded_node_impl_data_t
+{
+  std::shared_ptr<dyn_points_data_handler_t> data_handler;
+  std::shared_ptr<uint8_t[]> vertex_data;
+  std::shared_ptr<uint8_t[]> attribute_data;
+  std::shared_ptr<uint8_t[]> rep_level_data;
+};
+
 class native_node_data_loader_t final : public render::node_data_loader_t
 {
 public:

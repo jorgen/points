@@ -80,7 +80,8 @@ io_upload_stats_t process_io_and_upload(
     int max_new_io_per_frame,
     size_t max_upload_bytes,
     size_t gpu_memory_budget,
-    double attr_min, double attr_max);
+    double attr_min, double attr_max,
+    bool promote_leaves);
 
 void update_fades(
     render_list_t &render_list,

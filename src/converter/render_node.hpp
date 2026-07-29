@@ -31,7 +31,8 @@
 namespace points::converter
 {
 
-struct resident_source_t; // full type in resident_source.hpp (shared_ptr member only needs a forward decl)
+struct resident_source_t;         // full type in resident_source.hpp (shared_ptr member only needs a forward decl)
+struct dyn_points_data_handler_t; // full type in point_buffer_render_helper.hpp
 
 struct render_node_t
 {
@@ -68,6 +69,9 @@ struct render_node_t
   // Virtual-subnode anchor. When this node is a spanning leaf promoted to a virtual source, `resident` keeps
   // its morton data in memory and `virtual_root` is the cached virtual octree grown from it (owning its own
   // per-node buffers). `draw_suppressed` turns off this leaf's own monolith draw once its virtual cut is live.
+  // The pre-reorder morton data, salvaged from loaded_data before its release() (leaves only). Kept until the
+  // leaf first qualifies for subdivision, then consumed by build_resident_source (which takes its own ref).
+  std::shared_ptr<dyn_points_data_handler_t> resident_handler;
   std::shared_ptr<resident_source_t> resident;
   std::unique_ptr<virtual_node_t> virtual_root;
   bool is_virtual_source = false;

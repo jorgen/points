@@ -92,4 +92,10 @@ struct points_converter_data_source_t
   bool show_bounding_boxes = false;
   bool debug_transitions = false;
   points::converter::node_set_t previously_subdivided;
+
+  // Virtual subnodes: promote spanning leaves to a render-time balanced LOD tree. A/B toggle on one camera path.
+  bool enable_virtual_subtrees = true;
+  uint32_t virtual_min_points = 256;         // don't subdivide tiny leaves
+  size_t virtual_gpu_used = 0;               // bytes held by uploaded virtual nodes (stat; not yet a hard budget)
+  std::vector<float> virtual_lod_random_offsets; // deterministic per-cell pick, identical to the converter's
 };

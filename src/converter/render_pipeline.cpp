@@ -18,8 +18,9 @@
 #include "render_pipeline.hpp"
 
 #include "data_source.hpp"
-#include "native_node_data_loader.hpp"
+#include "native_node_data_loader.hpp" // loaded_node_impl_data_t (salvage data_handler on promotion)
 #include "renderer.hpp"
+#include "virtual_tree.hpp" // destroy_virtual_subtree
 
 #include <vio/thread_pool.h>
 
@@ -70,6 +71,14 @@ void destroy_render_node(render_node_t &node, render::callback_manager_t &callba
   }
   if (node.params_buffer.user_ptr)
     callbacks.do_destroy_buffer(node.params_buffer);
+  // Tear down any virtual subtree children-first (spin-waits in-flight materialize) before freeing the resident
+  // it reads from. Ordering guarantees no materialize job dereferences a freed resident_source.
+  if (node.virtual_root)
+    destroy_virtual_subtree(node.virtual_root, callbacks, nullptr);
+  node.resident.reset();
+  node.resident_handler.reset();
+  node.is_virtual_source = false;
+  node.draw_suppressed = false;
   node.gpu_state = render_node_gpu_state::none;
   node.io_state = render_node_io_state::none;
 }
@@ -263,7 +272,8 @@ io_upload_stats_t process_io_and_upload(
     int max_new_io_per_frame,
     size_t max_upload_bytes,
     size_t gpu_memory_budget,
-    double attr_min, double attr_max)
+    double attr_min, double attr_max,
+    bool promote_leaves)
 {
   using clock = std::chrono::high_resolution_clock;
   auto to_ms = [](auto d) { return std::chrono::duration<double, std::milli>(d).count(); };
@@ -413,6 +423,13 @@ io_upload_stats_t process_io_and_upload(
     callbacks.do_initialize_buffer(node.params_buffer, points_type_r32, points_components_4, sizeof(node.params_data), &node.params_data);
 
     node.gpu_state = render_node_gpu_state::uploaded;
+    // A spanning leaf may later want virtual subdivision, which needs the pre-reorder morton codes. Salvage the
+    // data_handler (already in memory, about to be freed) before release; promotion decides per-frame.
+    if (promote_leaves && node.walker_data.is_leaf && !node.resident_handler && node.loaded_data._impl_data)
+    {
+      auto impl = std::static_pointer_cast<loaded_node_impl_data_t>(node.loaded_data._impl_data);
+      node.resident_handler = impl->data_handler;
+    }
     node.loaded_data.release();
     auto tg1 = clock::now();
     gpu_transfer_total += to_ms(tg1 - tg0);
@@ -519,6 +536,8 @@ int emit_draws(
     auto &node = *np;
     if (node.gpu_state != render_node_gpu_state::uploaded)
       continue;
+    if (node.draw_suppressed) // a live virtual cut replaces this leaf's own monolith draw
+      continue;
     if (!node.walker_data.frustum_visible)
       continue;
     if (node.fade_state != render_node_fade_state::steady)
@@ -551,6 +570,8 @@ int emit_draws(
   {
     auto &node = *np;
     if (node.gpu_state != render_node_gpu_state::uploaded)
+      continue;
+    if (node.draw_suppressed) // a live virtual cut replaces this leaf's own monolith draw
       continue;
     if (node.fade_state == render_node_fade_state::steady)
       continue;
