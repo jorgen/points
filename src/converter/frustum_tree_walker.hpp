@@ -177,6 +177,10 @@ public:
 
 bool should_subdivide(const lod_params_t &params, const node_aabb_t &aabb, bool was_subdivided = false);
 
+// Halve `parent` into octant `child_index`'s sub-cube (bit i of child_index selects the high half on axis i).
+// Shared with the virtual subdivision so a virtual node's loose cube matches the real walker's.
+node_aabb_t make_aabb_from_child_index(const node_aabb_t &parent, int child_index);
+
 void walk_tree_direct(const tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker);
 
 } // namespace points::converter

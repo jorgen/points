@@ -76,7 +76,7 @@ struct tree_walker_possible_nodes_t
   bool is_completely_inside_frustum;
 };
 
-static node_aabb_t make_aabb_from_child_index(const node_aabb_t &parent, int child_index)
+node_aabb_t make_aabb_from_child_index(const node_aabb_t &parent, int child_index)
 {
   node_aabb_t aabb;
   aabb.min = parent.min;

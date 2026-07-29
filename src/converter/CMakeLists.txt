@@ -63,6 +63,7 @@ set(sources
         data_source_node_bbox.cpp
         frustum_tree_walker.cpp
         render_pipeline.cpp
+        virtual_tree.cpp
         native_node_data_loader.cpp
         blob_manager.cpp
         input_data_source_registry.cpp
