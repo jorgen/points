@@ -20,34 +20,18 @@
 #include "buffer.hpp"
 #include "frustum_tree_walker.hpp"
 #include "node_data_loader.hpp"
+#include "render_node_states.hpp"
+#include "virtual_node.hpp"
 
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <memory>
 
 namespace points::converter
 {
 
-enum class render_node_io_state : uint8_t
-{
-  none,
-  loading,
-  converting,
-  loaded,
-};
-
-enum class render_node_gpu_state : uint8_t
-{
-  none,
-  uploaded,
-};
-
-enum class render_node_fade_state : uint8_t
-{
-  fade_in,
-  steady,
-  fade_out,
-};
+struct resident_source_t; // full type in resident_source.hpp (shared_ptr member only needs a forward decl)
 
 struct render_node_t
 {
@@ -80,6 +64,14 @@ struct render_node_t
   // draw count for render grid width k-1. Copied from loaded_data at convert time (survives the release()).
   std::array<uint32_t, 64> prefix_count = {};
   bool has_lod_order = false;
+
+  // Virtual-subnode anchor. When this node is a spanning leaf promoted to a virtual source, `resident` keeps
+  // its morton data in memory and `virtual_root` is the cached virtual octree grown from it (owning its own
+  // per-node buffers). `draw_suppressed` turns off this leaf's own monolith draw once its virtual cut is live.
+  std::shared_ptr<resident_source_t> resident;
+  std::unique_ptr<virtual_node_t> virtual_root;
+  bool is_virtual_source = false;
+  bool draw_suppressed = false;
 };
 
 struct frame_timings_t
