@@ -73,6 +73,11 @@ struct render_node_t
   // leaf first qualifies for subdivision, then consumed by build_resident_source (which takes its own ref).
   std::shared_ptr<dyn_points_data_handler_t> resident_handler;
   std::shared_ptr<resident_source_t> resident;
+  // R11: the resident decode runs on convert_pool. `resident_building` means a job is in flight; it fills
+  // `pending_resident` and sets `resident_ready`, which the promoter then finalizes into `resident`.
+  std::shared_ptr<resident_source_t> pending_resident;
+  std::atomic<bool> resident_ready{false};
+  bool resident_building = false;
   std::unique_ptr<virtual_node_t> virtual_root;
   bool is_virtual_source = false;
   bool draw_suppressed = false;

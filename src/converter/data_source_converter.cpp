@@ -67,6 +67,18 @@ points_converter_data_source_t::points_converter_data_source_t(const std::string
   last_frame_time = std::chrono::high_resolution_clock::now();
 }
 
+points_converter_data_source_t::~points_converter_data_source_t()
+{
+  // Runs before members destruct (esp. convert_pool, which is declared after render_list and would otherwise
+  // drain queued jobs against already-freed nodes). destroy_render_node spin-waits each in-flight convert /
+  // materialize job, tears down virtual subtrees, and frees all GPU buffers -- fixing both the native
+  // shutdown use-after-free and the GPU-buffer leak on data-source destroy/reload.
+  for (auto &np : render_list)
+    if (np)
+      destroy_render_node(*np, callbacks, node_loader.get(), &virtual_gpu_used);
+  render_list.clear();
+}
+
 void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camera, points_to_render_t *to_render)
 {
   using clock = std::chrono::high_resolution_clock;
@@ -181,11 +193,25 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     // that a far/small spanning leaf is drawn full-res (the dense-patch inversion) and needs a coarse LOD.
     // A leaf is worth promoting only if it has a coarser representation to offer (maskWidth = lod_span-9 > 0);
     // compact leaves keep the cheap monolith. Cap promotions/frame so the one-time decodes don't hitch.
-    int promotions_left = int(virtual_max_promotions_per_frame);
+    int builds_left = int(virtual_max_promotions_per_frame);
     for (auto &np : render_list)
     {
       auto &node = *np;
-      if (node.is_virtual_source || !node.resident_handler || node.gpu_state != render_node_gpu_state::uploaded)
+      // Finalize an async resident build (R11): the decode ran on convert_pool; wire up the virtual root now.
+      if (node.resident_building && node.resident_ready.load(std::memory_order_acquire))
+      {
+        node.resident_building = false;
+        node.resident = std::move(node.pending_resident);
+        node.resident_handler.reset();
+        if (node.resident)
+        {
+          node.virtual_root = make_virtual_root(*node.resident, node.walker_data.tight_aabb, node.walker_data.aabb);
+          node.is_virtual_source = true;
+          resident_cpu_used += node.resident->cpu_bytes;
+        }
+        continue;
+      }
+      if (node.is_virtual_source || node.resident_building || !node.resident_handler || node.gpu_state != render_node_gpu_state::uploaded)
         continue;
       if (node.point_count <= virtual_min_points || !node.walker_data.is_leaf)
       {
@@ -197,14 +223,21 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         node.resident_handler.reset(); // compact leaf: maskWidth(lod_span)==0, no coarser LOD to offer
         continue;
       }
-      if (promotions_left <= 0 || resident_cpu_used >= cpu_resident_budget)
+      if (builds_left <= 0 || resident_cpu_used >= cpu_resident_budget)
         continue; // ramp over frames; and don't promote while over the CPU-resident budget (R5)
-      --promotions_left;
-      node.resident = build_resident_source(node.resident_handler, tree_config);
-      node.resident_handler.reset(); // the resident took its own ref to the data_handler
-      node.virtual_root = make_virtual_root(*node.resident, node.walker_data.tight_aabb, node.walker_data.aabb);
-      node.is_virtual_source = true;
-      resident_cpu_used += node.resident->cpu_bytes;
+      --builds_left;
+      // Kick the resident decode onto convert_pool (R11) -- keeps the ~1-2ms/leaf morton decode off the render
+      // thread. The job captures &node (stable: build_render_list moves the unique_ptr, not the object) + a ref
+      // to the handler; ~data_source / destroy_render_node spin-waits resident_ready before freeing the node.
+      node.resident_building = true;
+      node.resident_ready.store(false, std::memory_order_relaxed);
+      render_node_t *np_raw = &node;
+      auto handler = node.resident_handler;
+      tree_config_t tc = tree_config;
+      convert_pool.enqueue([np_raw, handler, tc] {
+        np_raw->pending_resident = build_resident_source(handler, tc);
+        np_raw->resident_ready.store(true, std::memory_order_release);
+      });
     }
     virtual_frame_t vf;
     vf.camera = &camera;

@@ -37,6 +37,9 @@
 struct points_converter_data_source_t
 {
   points_converter_data_source_t(const std::string &url, points::render::callback_manager_t &callback_manager);
+  // R14: drain in-flight convert/materialize jobs and free every GPU buffer BEFORE members tear down (the
+  // convert_pool is destroyed after render_list, so without this its drain would run jobs against freed nodes).
+  ~points_converter_data_source_t();
 
   void add_to_frame(points_frame_camera_t *camera, points_to_render_t *to_render);
 

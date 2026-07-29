@@ -55,6 +55,13 @@ void destroy_render_node(render_node_t &node, render::callback_manager_t &callba
     while (!node.convert_done.load(std::memory_order_acquire))
       std::this_thread::yield();
   }
+  // R11: a resident-build job may be in flight writing node.pending_resident; wait before freeing the node.
+  if (node.resident_building)
+  {
+    while (!node.resident_ready.load(std::memory_order_acquire))
+      std::this_thread::yield();
+    node.resident_building = false;
+  }
   if (node.load_handle != render::invalid_load_handle)
   {
     node_loader->cancel(node.load_handle);
