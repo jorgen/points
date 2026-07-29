@@ -459,35 +459,35 @@ void process_virtual_trees(render_list_t &render_list, virtual_frame_t &f)
       continue;
     if (node.fade_state == render_node_fade_state::fade_out)
     {
-      // Departing (R10): let the monolith's own crossfade play; don't also draw the virtual cut (double draw).
-      // KNOWN COSMETIC LIMITATION (review bug #4): if R3 already freed the monolith, there's nothing to fade,
-      // so this node's detail vanishes in one frame. The additive coarser ancestors keep drawing, so it's a
-      // density pop on zoom-out, never a blank hole (and it's off-screen when the departure is a frustum exit).
-      // A proper fix is a virtual-cut fade-out, deferred as a larger crossfade feature.
-      node.draw_suppressed = false;
+      // Departing: KEEP the monolith suppressed. It was never on screen (promoted leaves never draw their own
+      // full-res monolith), so unsuppressing it here to "fade it out" would make the full leaf APPEAR out of
+      // nowhere -- the exact artifact this design removes. We skip the walk, so the cut stops being selected
+      // and vanishes; the additive coarser ancestors keep covering the region (a density pop on zoom-out,
+      // never a blank hole; off-screen when the departure is a frustum exit). A virtual-cut fade-out is a
+      // possible future polish.
       continue;
     }
     f.own_monolith_bytes = node.monolith_freed ? 0 : node.gpu_memory_size; // bug #1: exclude from this cut's gate
     walk_virtual(*node.virtual_root, *node.resident, f, frustum);
     virtual_cut_stats_t cut;
     process_virtual_node(*node.virtual_root, *node.resident, f, cut);
-    // Suppress the monolith on COVERAGE, not completeness. The cut is ADDITIVE root->frontier, and the root is
-    // the WHOLE leaf at its coarsest LOD, so once the root is uploaded AND fully faded in the entire leaf region
-    // is covered at full opacity -- we hide the leaf's own monolith and let finer frontier nodes refine on top
-    // as they arrive. The old rule (whole selected cut uploaded) reverted to the full-res monolith every time a
-    // zoom extended the frontier to a not-yet-loaded finer node -> a repeating full-leaf FLICKER; and it handed
-    // off against a from-zero finer node -> a brief opacity DIP. Gating on the faded root fixes both: coverage
-    // is guaranteed and the reveal is at full opacity. virtual_cut_live_frames now counts COVERED frames, so R3
-    // frees the redundant monolith during a sustained zoom instead of never (it used to reset on every frontier
-    // extension). Un-promotion / A-B-off / departure reset draw_suppressed elsewhere.
+    // A promoted spanning leaf is NEVER drawn as its own full-res monolith. The octree is ADDITIVE, so the
+    // coarser ancestor nodes already cover the leaf's footprint while its virtual cut materializes, and the cut
+    // then refines the region coarse->fine (down to the floor = this frame's finest real lod, where it draws
+    // every point). Drawing the monolith at all -- even briefly at promotion, or reverting to it when a zoom
+    // extends the cut's frontier to a not-yet-loaded node -- shows the full-res leaf "before the virtual nodes",
+    // the artifact we're removing. So suppress unconditionally while promoted (phase 4.5 already suppressed it
+    // the frame its data was salvaged, before it was even is_virtual_source). Un-promotion / A-B-off / departure
+    // reset draw_suppressed elsewhere. cut_covered (root uploaded + faded) gates only R3's monolith-free timer:
+    // hold the suppressed-but-resident monolith as a cheap un-promote fallback until the cut genuinely covers.
     const virtual_node_t &vroot = *node.virtual_root;
     const bool cut_covered = vroot.gpu_state == render_node_gpu_state::uploaded && vroot.fade_state == render_node_fade_state::steady;
     // Keep ticking only on genuine progress (materialize/fade in flight): cut.animating covers a decode in
-    // flight or a node still fading in. NOT gated on coverage -- a covered-but-static cut is idle state
-    // (re-armed by camera motion), so pegging is_animating on !covered would busy-loop the renderer (bug #1).
+    // flight or a node still fading in. A covered-but-static cut is idle state (re-armed by camera motion), so
+    // pegging is_animating on it would busy-loop the renderer (bug #1).
     f.any_animating = f.any_animating || cut.animating;
     node.virtual_cut_live_frames = cut_covered ? node.virtual_cut_live_frames + 1 : 0;
-    node.draw_suppressed = cut_covered || node.monolith_freed;
+    node.draw_suppressed = true; // promoted -> monolith never drawn (ancestors + virtual cut carry the region)
     if (node.virtual_cut_live_frames >= f.monolith_free_after_frames && node.gpu_state == render_node_gpu_state::uploaded && !node.monolith_freed)
       free_monolith(node, *f.callbacks); // R3
   }

@@ -237,6 +237,12 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         node.resident_handler.reset(); // compact leaf: maskWidth(lod_span)==0, no coarser LOD to offer
         continue;
       }
+      // This IS a promotable spanning leaf -> never draw its full-res monolith. Suppress it NOW (phase 4.5, before
+      // emit_draws): the octree is additive so the coarser ancestor nodes already cover the leaf's footprint while
+      // its virtual cut materializes, then the cut refines it coarse->fine. Set before the per-frame build cap so a
+      // leaf still waiting its turn to promote isn't flashed at full res either. (Un-promotion / A-B-off / departure
+      // reset draw_suppressed elsewhere; a leaf that stops being promotable falls back to its monolith there.)
+      node.draw_suppressed = true;
       if (builds_left <= 0 || resident_cpu_used >= cpu_resident_budget)
         continue; // ramp over frames; and don't promote while over the CPU-resident budget (R5)
       --builds_left;
@@ -557,7 +563,13 @@ void points_converter_data_source_set_enable_virtual_subtrees(struct points_conv
     {
       auto &node = *np;
       if (!node.is_virtual_source)
+      {
+        // A promotable leaf is suppressed the moment it's recognized -- possibly BEFORE its promotion completes
+        // (per-frame build cap, in-flight resident build). Unsuppress those too or they'd stay invisible forever
+        // with virtual off. (An in-flight build finalizes on the next turn-on; pending_resident just parks.)
+        node.draw_suppressed = false;
         continue;
+      }
       if (node.virtual_root)
         points::converter::destroy_virtual_subtree(node.virtual_root, cds->callbacks, &cds->virtual_gpu_used);
       node.resident.reset();

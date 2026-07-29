@@ -88,7 +88,8 @@ void materialize_virtual_node(virtual_node_t &node, const resident_source_t &src
 
 // Per-frame: for each is_virtual_source render node, walk virtual_root (frustum + should_subdivide +
 // nearest-distance), materialize newly-selected nodes on the convert_pool, upload the ready ones under the
-// shared GPU budget, and evict the unselected. Sets render_node_t::draw_suppressed when a cut is live.
+// shared GPU budget, and evict the unselected. Keeps render_node_t::draw_suppressed set while promoted (a
+// promoted leaf's own full-res monolith is never drawn; ancestors + the additive cut carry the region).
 void process_virtual_trees(render_list_t &render_list, virtual_frame_t &frame);
 
 // Emit flat draw groups (lod_density_scale=0 -> the shader keeps all points) for selected+uploaded virtual
