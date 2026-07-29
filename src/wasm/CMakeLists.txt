@@ -130,6 +130,7 @@ add_executable(points_render_wasm
     ${_conv}/data_source_converter.cpp
     ${_conv}/data_source_node_bbox.cpp
     ${_conv}/render_pipeline.cpp
+    ${_conv}/virtual_tree.cpp
     ${_conv}/frustum_tree_walker.cpp
     ${_conv}/native_node_data_loader.cpp
     ${_conv}/blob_manager.cpp
