@@ -108,5 +108,8 @@ struct points_converter_data_source_t
   int virtual_promoted_last = 0;             // stats: promoted spanning leaves last frame
   int virtual_nodes_drawn_last = 0;          // stats: virtual nodes drawn last frame
   bool virtual_animating = false;            // a resident build / materialize / fade is pending -> keep ticking
+  int prev_min_real_lod = 9;                 // finest (lowest) lod a real node rendered last frame -> the virtual
+                                             //   subdivision floor this frame (one-frame lag), so virtual nodes
+                                             //   never go finer than the real octree renderer actually shows
   std::vector<float> virtual_lod_random_offsets; // deterministic per-cell pick, identical to the converter's
 };

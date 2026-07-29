@@ -121,6 +121,8 @@ void split_octants(virtual_node_t &node, const resident_source_t &src, const tre
 {
   if (node.children_built)
     return;
+  if (node.level <= 0)
+    return; // defensive: children would be at a negative morton level (out-of-bounds child-mask writes)
   switch (src.morton_type)
   {
   case points_type_m32:
@@ -318,7 +320,12 @@ static void walk_virtual(virtual_node_t &v, const resident_source_t &src, const 
 
   // Hysteresis (R2), mirroring the real walker: a node subdivided last frame uses a lower threshold, so a node
   // parked at the LOD boundary doesn't flip selected/unselected (and re-quantize) every frame under motion.
-  const bool subdivide = v.src_count > f.virtual_min_points && should_subdivide(*f.lod_params, v.loose_aabb, v.subdivided_last_frame);
+  // FLOOR the recursion at subdivide_floor_lod = max(prev frame's finest real-node lod, full-detail level): the
+  // virtual tree must never invent LOD finer than the real octree renderer is actually showing, and below the
+  // full-detail level maskWidth is already 0 (every point drawn). This also stops a dense cluster of coincident
+  // points -- which keeps landing in one octant so src_count never drops -- from recursing the level past 0 into
+  // NEGATIVE morton levels (out-of-bounds child-mask writes -> hard abort when zoomed close).
+  const bool subdivide = v.level > f.subdivide_floor_lod && v.src_count > f.virtual_min_points && should_subdivide(*f.lod_params, v.loose_aabb, v.subdivided_last_frame);
   v.subdivided_last_frame = subdivide;
 
   if (v.mat_state == virtual_mat_state::none)
