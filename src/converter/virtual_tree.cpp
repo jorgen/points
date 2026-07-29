@@ -160,7 +160,7 @@ static void materialize_leaf(virtual_node_t &node, const resident_source_t &src)
 
 static void materialize_interior(virtual_node_t &node, const resident_source_t &src, const std::vector<float> &offs)
 {
-  const int maskWidth = std::max(0, node.level - 3 * 3); // == the converter's max(0, lod-9)
+  const int maskWidth = lod_quantize_mask_width(node.level); // shared with the converter's LOD generator
   const uint32_t code_size = morton_type_size(src.morton_type);
   points_converter_buffer_t source_buf(static_cast<uint8_t *>(src.data_handler->data_info[0].data) + size_t(node.first_index) * code_size, node.src_count * code_size);
 
@@ -194,7 +194,7 @@ void materialize_virtual_node(virtual_node_t &node, const resident_source_t &src
   // maskWidth=max(0,lod-9) morton cell. LOD is additive (the walker draws root->frontier), so a far leaf's
   // root draws a coarse subsample and finer octants add in as the camera approaches. maskWidth==0 (level<=9,
   // the finest) means every point is its own cell -> draw them all (fast path).
-  const int maskWidth = std::max(0, node.level - 3 * 3);
+  const int maskWidth = lod_quantize_mask_width(node.level);
   if (maskWidth == 0)
     materialize_leaf(node, src);
   else

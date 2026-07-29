@@ -33,6 +33,19 @@
 namespace points::converter
 {
 
+// maskWidth = max(0, lod - lod_quantize_full_detail_level). At/below this octree level a node's morton cell is
+// a single point (every point is its own representative -> the finest LOD draws all points). 3 morton bits per
+// axis * 3 axes = 9. Shared by the converter LOD generator, the virtual-node materialization, AND the
+// promotion gate (promote a leaf only if lod_span > this, i.e. it has a genuinely coarser representation).
+inline constexpr int lod_quantize_full_detail_level = 3 * 3;
+
+// maskWidth for an octree/virtual node at `lod`: how many low morton bits to collapse when picking one
+// representative per cell. Keeps the converter and the renderer's virtual LOD byte-identical.
+inline constexpr int lod_quantize_mask_width(int lod)
+{
+  return lod > lod_quantize_full_detail_level ? lod - lod_quantize_full_detail_level : 0;
+}
+
 template <typename T, size_t N>
 struct morton_to_lod_t
 {

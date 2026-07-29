@@ -188,10 +188,13 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
       if (node.is_virtual_source || !node.resident_handler || node.gpu_state != render_node_gpu_state::uploaded)
         continue;
       if (node.point_count <= virtual_min_points || !node.walker_data.is_leaf)
-        continue;
-      if (node.resident_handler->header.lod_span <= 9)
       {
-        node.resident_handler.reset(); // compact leaf: no coarser LOD to offer, never promote it
+        node.resident_handler.reset(); // too small / not a leaf -> never promotes; drop the salvaged CPU dup
+        continue;
+      }
+      if (node.resident_handler->header.lod_span <= lod_quantize_full_detail_level)
+      {
+        node.resident_handler.reset(); // compact leaf: maskWidth(lod_span)==0, no coarser LOD to offer
         continue;
       }
       if (promotions_left <= 0)
