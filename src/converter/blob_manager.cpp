@@ -247,6 +247,25 @@ uint32_t free_blob_manager_t::calculate_serialized_size() const
   return size;
 }
 
+void free_blob_manager_t::serialize_payload(uint8_t *data) const
+{
+  auto page_count = uint32_t(_free_sections_by_page.size());
+  memcpy(data, &_next_offset, sizeof(_next_offset));
+  data += sizeof(_next_offset);
+  memcpy(data, &page_count, sizeof(page_count));
+  data += sizeof(page_count);
+  for (auto &[page_number, sections] : _free_sections_by_page)
+  {
+    memcpy(data, &page_number, sizeof(page_number));
+    data += sizeof(page_number);
+    auto free_sections_in_page_count = uint32_t(sections.size());
+    memcpy(data, &free_sections_in_page_count, sizeof(free_sections_in_page_count));
+    data += sizeof(free_sections_in_page_count);
+    memcpy(data, sections.data(), sections.size() * sizeof(sections.front()));
+    data += sections.size() * sizeof(sections.front());
+  }
+}
+
 serialized_free_blob_manager_t free_blob_manager_t::serialize()
 {
   serialized_free_blob_manager_t serialized = {};
@@ -270,25 +289,93 @@ serialized_free_blob_manager_t free_blob_manager_t::serialize()
   assert(serialized.offset > 0);
 
   serialized.data = std::make_shared<uint8_t[]>(serialized.size);
-
-  auto page_count = uint32_t(_free_sections_by_page.size());
-
-  uint8_t *data = serialized.data.get();
-  memcpy(data, &_next_offset, sizeof(_next_offset));
-  data += sizeof(_next_offset);
-  memcpy(data, &page_count, sizeof(page_count));
-  data += sizeof(page_count);
-  for (auto &[page_number, sections] : _free_sections_by_page)
-  {
-    memcpy(data, &page_number, sizeof(page_number));
-    data += sizeof(page_number);
-    auto free_sections_in_page_count = uint32_t(sections.size());
-    memcpy(data, &free_sections_in_page_count, sizeof(free_sections_in_page_count));
-    data += sizeof(free_sections_in_page_count);
-    memcpy(data, sections.data(), sections.size() * sizeof(sections.front()));
-    data += sections.size() * sizeof(sections.front());
-  }
+  serialize_payload(serialized.data.get());
   return serialized;
+}
+
+serialized_free_blob_manager_t free_blob_manager_t::serialize_preallocated(offset_t offset, blob_size_t size)
+{
+  assert(calculate_serialized_size() <= size.data);
+  serialized_free_blob_manager_t serialized = {};
+  serialized.offset = offset.data;
+  serialized.size = size.data;
+  serialized.data = std::make_shared<uint8_t[]>(size.data);
+  serialize_payload(serialized.data.get());
+  return serialized;
+}
+
+bool free_blob_manager_t::claim_blob(offset_t offset, blob_size_t size)
+{
+  if (size.data == 0)
+    return false;
+  const uint64_t begin = offset.data;
+  const uint64_t end = offset.data + size.data;
+  if (begin >= _next_offset.data)
+  {
+    // Tail claim: everything from the old tail up to `begin` becomes a free gap, the claimed
+    // range extends the allocated tail. (In the checkpoint-replay use the gap is always empty.)
+    const uint64_t gap_start = _next_offset.data;
+    _next_offset.data = end;
+    for (uint64_t gap_pos = gap_start; gap_pos < begin;)
+    {
+      const uint64_t page_end = (gap_pos / FREE_BLOB_MANAGER_PAGE_SIZE + 1) * FREE_BLOB_MANAGER_PAGE_SIZE;
+      const uint64_t piece_end = begin < page_end ? begin : page_end;
+      if (!unregister_blob({gap_pos}, {uint32_t(piece_end - gap_pos)}))
+        return false;
+      gap_pos = piece_end;
+    }
+    return true;
+  }
+  if (end > _next_offset.data)
+    return false; // straddles the tail: not a shape register_blob ever produces
+  // Interior claim: carve [begin, end) out of the free sections, page by page (sections never
+  // span pages, mirroring unregister_blob's insertion).
+  for (uint64_t pos = begin; pos < end;)
+  {
+    const page_t page = page_t(pos / FREE_BLOB_MANAGER_PAGE_SIZE);
+    const uint64_t page_end = uint64_t(page + 1) * FREE_BLOB_MANAGER_PAGE_SIZE;
+    const uint64_t piece_end = end < page_end ? end : page_end;
+    auto page_it = _free_sections_by_page.find(page);
+    if (page_it == _free_sections_by_page.end())
+      return false;
+    auto &sections = page_it->second;
+    bool carved = false;
+    for (uint32_t i = 0; i < uint32_t(sections.size()); i++)
+    {
+      auto &section = sections[i];
+      const uint64_t s_begin = section.offset.data;
+      const uint64_t s_end = s_begin + section.size.data;
+      if (pos < s_begin || piece_end > s_end)
+        continue;
+      if (pos == s_begin && piece_end == s_end)
+      {
+        sections.erase(sections.begin() + i);
+        if (sections.empty())
+          _free_sections_by_page.erase(page_it);
+      }
+      else if (pos == s_begin)
+      {
+        section.offset.data = piece_end;
+        section.size.data = uint32_t(s_end - piece_end);
+      }
+      else if (piece_end == s_end)
+      {
+        section.size.data = uint32_t(pos - s_begin);
+      }
+      else
+      {
+        section.size.data = uint32_t(pos - s_begin);
+        section_t tail_piece{{piece_end}, {uint32_t(s_end - piece_end)}};
+        sections.insert(sections.begin() + i + 1, tail_piece);
+      }
+      carved = true;
+      break;
+    }
+    if (!carved)
+      return false;
+    pos = piece_end;
+  }
+  return true;
 }
 
 points_error_t free_blob_manager_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)

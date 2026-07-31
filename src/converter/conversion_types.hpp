@@ -23,6 +23,7 @@
 #include "morton.hpp"
 
 #include <fmt/core.h>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -159,6 +160,24 @@ inline void storage_header_initialize(storage_header_t &header)
   morton::morton_init_min(header.morton_max);
   morton::morton_init_max(header.morton_min);
   header.lod_span = 255;
+}
+
+// Split a serialized points blob (a storage_header_t followed by the point bytes) into the header + a view of
+// the point data. Storage-free -- it only reads the buffer -- so the decode path and a decode Web Worker can
+// call it without pulling in the storage handler. (Moved here from storage_handler.hpp.)
+inline bool deserialize_points(const points_converter_buffer_t &data, storage_header_t &header, points_converter_buffer_t &point_data, points_error_t &error)
+{
+  if (data.size < sizeof(header))
+  {
+    error.code = 2;
+    error.msg = "Invalid input size";
+    return false;
+  }
+  auto input_bytes = static_cast<uint8_t *>(data.data);
+  memcpy(&header, input_bytes, sizeof(header));
+  point_data.size = data.size - sizeof(header);
+  point_data.data = input_bytes + sizeof(header);
+  return true;
 }
 
 struct points_t

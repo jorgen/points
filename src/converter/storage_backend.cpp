@@ -24,6 +24,12 @@
 #endif
 
 #include <vio/objstore/create_object_store.h>
+#ifndef __EMSCRIPTEN__
+#include <vio/objstore/http_cache.h>
+#include <vio/objstore/http_object_store.h> // set_default_http_cache
+#endif
+
+#include <cstdlib>
 
 namespace points::converter
 {
@@ -43,6 +49,18 @@ std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url
     return std::make_unique<packed_file_backend_t>(parsed.path, event_loop, error);
 #endif
   }
+
+#ifndef __EMSCRIPTEN__
+  // Turn on the persistent HTTP cache for network object stores so repeat reads of (immutable) blobs are
+  // served from local disk instead of the network. Browser-like defaults (OS cache dir, 1 GiB), overridable
+  // via VIO_HTTP_CACHE_DIR / VIO_HTTP_CACHE_MAX_BYTES; set VIO_HTTP_CACHE_DISABLE to turn it off. Installed
+  // once as the process-global default (magic-static, thread-safe); http_io_manager adopts it on construction.
+  if ((parsed.scheme == "s3" || parsed.scheme == "az" || parsed.scheme == "azure" || parsed.scheme == "http" || parsed.scheme == "https") && !std::getenv("VIO_HTTP_CACHE_DISABLE"))
+  {
+    static vio::objstore::http_cache_t s_http_cache;
+    vio::objstore::set_default_http_cache(&s_http_cache);
+  }
+#endif
 
   // Object-per-blob over a vio object store (dir:// / mem:// / s3:// / az://), selected by the scheme.
   // Credentials/endpoint/region resolve from `connection` first, then the AWS_*/AZURE_* environment.

@@ -49,13 +49,18 @@ static constexpr float default_fade_duration_ms = 300.0f;
 
 bool render_node_less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs);
 
+// True if a departed node still has a worker job in flight (convert / resident-build / virtual materialize).
+// destroy_render_node would spin-wait on such a node; the render list defers it instead (see build_render_list).
+bool node_is_busy(const render_node_t &node);
+
 render_list_t build_render_list(
     const std::vector<tree_walker_data_t> &walker_nodes,
     render_list_t &&previous_list,
     float fade_duration_ms,
     render::callback_manager_t &callbacks,
     render::node_data_loader_t *node_loader,
-    size_t *virtual_gpu_used);
+    size_t *virtual_gpu_used,
+    render_list_t &deferred_destroy);
 
 struct io_upload_stats_t
 {
@@ -83,7 +88,8 @@ io_upload_stats_t process_io_and_upload(
     size_t gpu_memory_budget,
     double attr_min, double attr_max,
     bool promote_leaves,
-    size_t virtual_gpu_used);
+    size_t virtual_gpu_used,
+    std::vector<render::loaded_node_data_t> *reap_sink);
 
 void update_fades(
     render_list_t &render_list,

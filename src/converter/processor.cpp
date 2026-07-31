@@ -28,7 +28,7 @@
 
 namespace points::converter
 {
-processor_t::processor_t(std::string url, file_existence_requirement_t existence_requirement, points_error_t &error)
+processor_t::processor_t(std::string url, file_existence_requirement_t existence_requirement, points_error_t &error, const destination_config_t &destination)
   : _url(std::move(url))
   , _thread_pool(int(std::thread::hardware_concurrency()))
   , _runtime_callbacks({})
@@ -57,10 +57,34 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
   , _read_sort_budget(uint64_t(1) << 30)
   , _read_sort_active_approximate_size(0)
 {
+  _destination = destination;
   _event_loop.add_about_to_block_listener(this);
+
+  // Each checkpoint embeds an input-registry snapshot in the registry blob (v2) so a resumed
+  // conversion can skip re-added done inputs and restore the done-morton watermark. serialize()
+  // locks internally; the provider runs on the tree loop. Installed before any file can be added,
+  // so no checkpoint can precede it.
+  _tree_handler.set_input_registry_snapshot_provider([this] { return _input_data_source_registry.serialize(); });
+
+  // Cache-tier pressure: when the storage backend can only be relieved by a checkpoint (pending
+  // remote facts need their durable flip before eviction may punch), route the request to the tree
+  // loop's non-promoting checkpoint entry. Fired from the storage loop; request_checkpoint is a
+  // pipe post (thread-safe). Rearmed in handle_index_write_done.
+  _storage_handler.set_checkpoint_request_callback([this] { _tree_handler.request_checkpoint(); });
 
   if (error.code != 0)
     return;
+
+#ifndef __EMSCRIPTEN__
+  if (!_destination.url.empty())
+  {
+    // Destination mode: residency tracking + spill/destination reads on the cache backend. Must be
+    // configured before the index is read below (a reopened cache restores its residency table).
+    error = _storage_handler.configure_cache_tier(_destination.cache_max_bytes, _destination.url, _destination.connection);
+    if (error.code != 0)
+      return;
+  }
+#endif
 
   if (existence_requirement == file_existence_requirement_t::exist)
   {
@@ -98,8 +122,104 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
     error = _tree_handler.deserialize_tree_registry(tree_registry_buffer, tree_registry_blobs_size);
     if (error.code != 0)
       return;
+    // Resume (registry v2): restore the input registry (skip re-added done inputs, keep morton
+    // bounds) and the done-morton watermark, so incremental LOD/finality continues where the last
+    // checkpoint left off instead of restarting from zero. v1 files have no snapshot (empty).
+    auto &snapshot = _tree_handler.tree_registry().input_registry_snapshot;
+    if (!snapshot.empty())
+    {
+      error = _input_data_source_registry.deserialize(snapshot.data(), uint32_t(snapshot.size()));
+      if (error.code != 0)
+        return;
+      _lod_done_morton = _tree_handler.tree_registry().lod_watermark;
+      _current_lod_target_morton = _lod_done_morton;
+    }
     _tree_handler.request_root();
   }
+
+#ifndef __EMSCRIPTEN__
+  if (!_destination.url.empty())
+  {
+    // Spill liveness/orphan GC (no-op on a fresh cache), then stand up the uploader against the
+    // bucket. The dataset uuid ties the two: an existing bucket claimed by a different cache
+    // generation is refused at bootstrap.
+    error = _storage_handler.run_spill_bootstrap();
+    if (error.code != 0)
+      return;
+    uint8_t uuid[16];
+    _storage_handler.ensure_dataset_uuid(uuid);
+    _upload_handler = std::make_unique<upload_handler_t>(_destination.url, _destination.connection, _storage_handler, _thread_pool, uuid, error);
+    if (error.code != 0)
+      return;
+    error = _upload_handler->bootstrap();
+    if (error.code != 0)
+      return;
+    // The bucket is authoritative for what is uploaded: seed tree states from its manifests (also
+    // clears provisional band assignments the cache recorded for bands that never committed).
+    _tree_handler.restore_uploaded_trees(_upload_handler->uploaded_tree_bands());
+    _upload_handler->set_on_band_committed([this](uint32_t band_id, std::vector<uint32_t> tree_ids, const morton::morton192_t &watermark) {
+      _tree_handler.mark_band_uploaded(band_id, std::move(tree_ids));
+      if (_upload_callbacks.band_committed)
+      {
+        uint64_t done_morton[3] = {watermark.data[0], watermark.data[1], watermark.data[2]};
+        _upload_callbacks.band_committed(_upload_callback_user_ptr, band_id, done_morton);
+      }
+      auto stats = _upload_handler->stats();
+      if (_upload_callbacks.progress)
+        _upload_callbacks.progress(_upload_callback_user_ptr, stats.bytes_uploaded, stats.bands_committed);
+      if (stats.complete && _upload_callbacks.done)
+        _upload_callbacks.done(_upload_callback_user_ptr);
+      _event_loop.run_in_loop([] {}); // wake the processor loop so idle/wait states re-evaluate
+    });
+    _upload_handler->set_on_error([this](const points_error_t &upload_error, bool parked) {
+      if (_upload_callbacks.error)
+        _upload_callbacks.error(_upload_callback_user_ptr, &upload_error, parked ? 1 : 0);
+      _event_loop.run_in_loop([] {});
+    });
+    _tree_handler.set_band_sink([this](band_job_t &&job) { _upload_handler->enqueue_band(std::move(job)); }, _upload_handler->committed_band_count(), _upload_handler->stats().complete);
+  }
+#endif // __EMSCRIPTEN__
+}
+
+processor_t::~processor_t()
+{
+  // Ordered teardown. The default member-destruction order joins each event-loop thread LAST (each is
+  // declared before the state its handlers touch) and drains the shared _thread_pool LAST -- but the pool's
+  // parked tasks read via the storage loop and post results to the tree loop, so draining it after those
+  // loops (and their pipes / registry / cache) are gone is a use-after-free / mutex-EINVAL race. Do it
+  // explicitly here, while every member is still alive, honoring these invariants:
+  //   (1) stop generating new pool tasks, (2) drain the pool while the storage + tree loops are still alive
+  //   (parked reads complete on the storage loop and post to the tree loop), (3) only then stop those loops.
+  // stop_and_join() and thread_pool::join() are idempotent, so the subsequent member destructors are no-ops.
+
+#ifndef __EMSCRIPTEN__
+  // (0) Uploader first: its band coroutines read the cache via the storage loop and park waits on
+  //     the shared pool, so it must fully drain (or be parked on errors -- drained() covers both)
+  //     and stop BEFORE the pool is joined or the storage loop goes away.
+  if (_upload_handler)
+  {
+    _upload_handler->wait_drained();
+    _upload_handler->stop();
+  }
+#endif
+
+  // (1) No more scheduling. Detach the main-loop about-to-block hook (input file scheduling) and stop the
+  //     tree loop from enqueuing new tree-load tasks. Both run while their loops are still alive.
+  _event_loop.remove_about_to_block_listener(this);
+  _tree_handler.begin_shutdown();
+
+  // (2) Drain + join the shared pool. Its parked tree-load tasks wait_for_read() on the storage loop and
+  //     post the decoded tree to the tree loop -- both are still running here.
+  _thread_pool.join();
+
+  // (3) No worker references storage/tree state now. Stop those loops before their backend / read cache /
+  //     registry / event pipes are destroyed.
+  _tree_handler.stop_loop();
+  _storage_handler.stop_loop();
+
+  // (4) Stop the remaining loops (input reader loop, then the main processor loop).
+  _input_event_loop_thread.stop_and_join();
+  _thread_with_event_loop.stop_and_join();
 }
 
 void processor_t::add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files)
@@ -134,10 +254,62 @@ void processor_t::request_aabb(std::function<void(double[3], double[3])> callbac
   _tree_handler.request_aabb(callback);
 }
 
-void processor_t::wait_idle()
+void processor_t::wait_local_complete()
 {
   std::unique_lock<std::mutex> lock(_idle_mutex);
   _idle_condition.wait(lock, [this] { return _idle; });
+}
+
+void processor_t::wait_idle()
+{
+  // Full quiesce: conversion done (cache is a complete valid JLP), then every committed
+  // checkpoint's band emission has been evaluated on the tree loop (the processor can observe the
+  // commit before the tree loop hands the band to the uploader -- the handshake closes that gap),
+  // then the upload backlog drained (or parked on persistent errors -- the cache keeps everything
+  // for a later resume).
+  wait_local_complete();
+#ifndef __EMSCRIPTEN__
+  if (_upload_handler)
+  {
+    _tree_handler.wait_band_emissions();
+    _upload_handler->wait_drained();
+    // Final quiesce sequence (skipped when nothing ever committed). First checkpoint: the terminal
+    // band's facts (blobs uploaded -> pack ids, spill derefs) live only in memory until a
+    // checkpoint persists the residency table; its post-commit sweep deletes dead spill segments
+    // and punches/evicts uploaded bytes, settling the cache at/under its cap and the bucket free
+    // of spill trash. Second checkpoint: a CLEAN snapshot of that settled state (no destructive
+    // action follows it, so reopen skips the crash-safety demotion and local bytes stay locally
+    // readable -- the cache remains a self-sufficient render source).
+    if (_tree_handler.commits_seen() > 0)
+    {
+      // Barrier first: the last band's upload facts are posted to the storage loop asynchronously;
+      // the checkpoint must serialize a residency table that already contains them, or their spill
+      // segments stay referenced (and undeletable) in the snapshot.
+      _storage_handler.drain_posted_events();
+      _tree_handler.checkpoint_and_wait();
+      _storage_handler.set_clean_shutdown_next_checkpoint();
+      _tree_handler.checkpoint_and_wait();
+    }
+  }
+#endif
+}
+
+bool processor_t::upload_active() const
+{
+#ifdef __EMSCRIPTEN__
+  return false;
+#else
+  return _upload_handler && !_upload_handler->drained();
+#endif
+}
+
+upload_stats_t processor_t::upload_stats() const
+{
+#ifdef __EMSCRIPTEN__
+  return {};
+#else
+  return _upload_handler ? _upload_handler->stats() : upload_stats_t{};
+#endif
 }
 
 void processor_t::about_to_block()
@@ -174,7 +346,10 @@ void processor_t::handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>
   file_refs.reserve(new_files.size());
   for (auto &new_file : new_files)
   {
-    auto input_ref = _input_data_source_registry.register_file(std::move(new_file.first), new_file.second);
+    bool already_done = false;
+    auto input_ref = _input_data_source_registry.register_file(std::move(new_file.first), new_file.second, &already_done);
+    if (already_done)
+      continue; // resume: this input fully landed in a committed checkpoint of an earlier session
     file_refs.emplace_back(input_ref.input_id, input_ref.name);
   }
   {
@@ -263,6 +438,8 @@ void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_
 
 void processor_t::handle_sub_added(input_data_id_t &&event)
 {
+  if (std::getenv("POINTS_DEBUG_CHAIN"))
+    fmt::print(stderr, "[sched] sub_added file={}\n", event.data);
   _input_data_source_registry.handle_sub_added(event);
 }
 
@@ -283,17 +460,29 @@ void processor_t::handle_file_errors(file_error_t &&error)
 
 void processor_t::handle_file_reading_done(input_data_id_t &&file)
 {
+  if (std::getenv("POINTS_DEBUG_CHAIN"))
+    fmt::print(stderr, "[sched] reading_done file={}\n", file.data);
   _read_sort_active_approximate_size -= _input_data_source_registry.get_approximate_size(file);
   _input_data_source_registry.handle_reading_done(file);
 }
 
 void processor_t::handle_index_write_done()
 {
+  if (std::getenv("POINTS_DEBUG_CHAIN"))
+    fmt::print(stderr, "[sched] index_write_done generating={} committed={} target={}\n", _generating_lod, _tree_handler.last_committed_watermark().data[0], _current_lod_target_morton.data[0]);
+  // Every committed checkpoint (pass-concluding or cache-pressure) re-arms the pressure request.
+  _storage_handler.rearm_checkpoint_request();
+  // A cache-pressure checkpoint can commit while a LOD pass is still generating; it carries the
+  // PREVIOUS watermark, so it must not conclude the in-flight pass (that would advance
+  // _lod_done_morton past unserialized state and stall/duplicate LOD scheduling).
+  const bool was_generating = _generating_lod;
+  if (was_generating && _tree_handler.last_committed_watermark() < _current_lod_target_morton)
+    return;
   _lod_done_morton = _current_lod_target_morton;
   _generating_lod = false;
   _perf_stats.conversion_end = perf_stats_t::clock_t::now();
   maybe_start_lod();
-  if (!_generating_lod)
+  if (!_generating_lod && was_generating)
   {
     if (_runtime_callbacks.done)
       _runtime_callbacks.done(_runtime_callback_user_ptr);
@@ -320,12 +509,19 @@ void processor_t::handle_points_written(const storage_header_t &header, attribut
 
 void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
 {
+  if (std::getenv("POINTS_DEBUG_CHAIN"))
+    fmt::print(stderr, "[sched] tree_done file={}\n", event.data);
   _input_data_source_registry.handle_tree_done_with_input(event);
   maybe_start_lod();
 }
 
 void processor_t::maybe_start_lod()
 {
+  if (std::getenv("POINTS_DEBUG_CHAIN"))
+  {
+    auto dm = _input_data_source_registry.get_done_morton();
+    fmt::print(stderr, "[sched] maybe_start_lod generating={} done_morton={} lod_done={}\n", _generating_lod, dm ? dm->data[0] : 0, _lod_done_morton.data[0]);
+  }
   if (_generating_lod)
     return;
   auto done_morton = _input_data_source_registry.get_done_morton();

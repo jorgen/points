@@ -28,6 +28,9 @@ class input_storage_map_t
 public:
   void add_storage(input_data_id_t id, attributes_id_t attributes_id, std::vector<storage_location_t> &&storage);
   std::pair<attributes_id_t, std::vector<storage_location_t>> dereference(input_data_id_t id);
+  // As dereference, but when the last reference drops the locations are recorded as discarded
+  // (see take_discarded) instead of handed to the caller. For call sites that abandon the blobs.
+  void dereference_discard(input_data_id_t id);
   std::pair<attributes_id_t, std::vector<storage_location_t>> info(input_data_id_t id) const;
   attributes_id_t attribute_id(input_data_id_t id) const;
   [[nodiscard]] storage_location_t location(input_data_id_t id, int attribute_index) const;
@@ -47,6 +50,22 @@ public:
   {
     for (auto &[id, value] : _map)
       fn(value.storage);
+  }
+
+  // Blobs no longer referenced by this map: locations replaced by add_storage (LOD regeneration)
+  // or dropped by dereference_discard. Drained by the tree handler into the next checkpoint's
+  // freed list -- the backend returns the space to the allocator only after that checkpoint
+  // commits, so the previous checkpoint's references stay readable until superseded atomically.
+  std::vector<storage_location_t> take_discarded()
+  {
+    return std::move(_discarded);
+  }
+  void restore_discarded(std::vector<storage_location_t> &&discarded)
+  {
+    if (_discarded.empty())
+      _discarded = std::move(discarded);
+    else
+      _discarded.insert(_discarded.end(), discarded.begin(), discarded.end());
   }
 
   uint32_t serialized_size() const;
@@ -73,6 +92,7 @@ private:
     uint32_t ref_count;
   };
   ankerl::unordered_dense::map<input_data_id_t, value_t, hash> _map;
+  std::vector<storage_location_t> _discarded;
 };
 
 class deref_on_destruct_t
@@ -88,7 +108,7 @@ public:
   {
     for (auto id : _ids)
     {
-      _map.dereference(id);
+      _map.dereference_discard(id); // dropped blobs feed the next checkpoint's freed list
     }
   }
 

@@ -21,7 +21,9 @@
 #include <points/converter/converter.h>
 #include <points/converter/converter_data_source.h>
 
+#include <cctype>
 #include <cmath>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -136,56 +138,136 @@ int main(int argc, char **argv)
   auto camera = create_unique_ptr(points_camera_create(), &points_camera_destroy);
   gl_renderer points_gl_renderer(renderer.get(), camera.get());
 
-  std::string cache_path;
-  if (argc > 1)
-  {
-    cache_path = argv[1];
-  }
-  else
-  {
-    struct dialog_state
-    {
-      std::string result;
-      bool done = false;
-    };
-    dialog_state state;
-    SDL_DialogFileFilter filters[] = {{"Points files", "jlp"}};
-    SDL_ShowOpenFileDialog(
-      [](void *ud, const char *const *files, int) {
-        auto *s = static_cast<dialog_state *>(ud);
-        if (files && *files)
-          s->result = *files;
-        s->done = true;
-      },
-      &state, window, filters, 1, nullptr, false);
-    while (!state.done)
-    {
-      SDL_Event ev;
-      while (SDL_PollEvent(&ev))
-      {
-        if (ev.type == SDL_EVENT_QUIT)
-          return 0;
-      }
-      SDL_Delay(10);
-    }
-    if (state.result.empty())
-      return 0;
-    cache_path = state.result;
-  }
-
   points_aabb_t aabb;
 
   auto error = create_unique_ptr(points_error_create(), &points_error_destroy);
   bool render_converter_points = true;
-  auto converter_points = create_unique_ptr(points_converter_data_source_create(cache_path.c_str(), uint32_t(cache_path.size()), error.get(), renderer.get()), &points_converter_data_source_destroy);
-  if (!converter_points)
+
+  // Dataset selection. A dataset is either a local .jlp file (a bare path or file://) or a cloud object
+  // store addressed by URL: s3://bucket/prefix or az://container/prefix. Cloud credentials / endpoint /
+  // region come from the connection string (semicolon-separated key=value; see vio connection_string.h),
+  // e.g. "anonymous=true;region=eu-north-1" for a public S3 bucket, or "account=...;account_key=..." /
+  // "account=...;sas=..." for Azure.
+  //
+  // CLI: renderer_example [url] [connection]. With no arguments the dialog below opens pre-filled with a
+  // public sample dataset; a url on the command line loads straight away.
+  static const char *k_default_url = "s3://limilind-public/points/palac_moszna";
+  static const char *k_default_connection = "anonymous=true;region=eu-north-1";
+
+  char url_buf[1024];
+  char conn_buf[1024];
   {
-    int code;
-    const char *str;
-    size_t str_len;
-    points_error_get_info(error.get(), &code, &str, &str_len);
-    fprintf(stderr, "Failed to create converter_data_source: %d - %s\n", code, str);
-    exit(1);
+    std::string init_url = (argc > 1) ? argv[1] : k_default_url;
+    std::string init_conn = (argc > 2) ? std::string(argv[2]) : (init_url == k_default_url ? std::string(k_default_connection) : std::string());
+    snprintf(url_buf, sizeof(url_buf), "%s", init_url.c_str());
+    snprintf(conn_buf, sizeof(conn_buf), "%s", init_conn.c_str());
+  }
+
+  auto converter_points = create_unique_ptr((points_converter_data_source_t *)nullptr, &points_converter_data_source_destroy);
+  std::string load_error;
+
+  auto try_open = [&]() -> bool {
+    std::string url = url_buf;
+    std::string conn = conn_buf;
+    // A public S3 bucket takes no credentials; default the connection to anonymous when the user left the
+    // field empty. Azure and private buckets need an explicit connection string.
+    if (conn.empty() && url.rfind("s3://", 0) == 0)
+      conn = "anonymous=true";
+    converter_points.reset(points_converter_data_source_create_with_connection(
+      url.c_str(), uint32_t(url.size()), conn.c_str(), uint32_t(conn.size()), error.get(), renderer.get()));
+    if (!converter_points)
+    {
+      int code;
+      const char *str;
+      size_t str_len;
+      points_error_get_info(error.get(), &code, &str, &str_len);
+      load_error.assign(str, str_len);
+      fprintf(stderr, "Failed to open dataset '%s': %d - %s\n", url.c_str(), code, str);
+      return false;
+    }
+    return true;
+  };
+
+  // The native file-open dialog is async; its captureless callback writes the chosen path straight into
+  // url_buf (and clears the connection, since local files carry no credentials).
+  struct browse_state_t
+  {
+    char *url_buf;
+    size_t url_cap;
+    char *conn_buf;
+  };
+  browse_state_t browse{url_buf, sizeof(url_buf), conn_buf};
+
+  bool do_load = (argc > 1); // a url on the command line loads immediately; otherwise wait for the dialog
+  while (true)
+  {
+    SDL_Event ev;
+    while (SDL_PollEvent(&ev))
+    {
+      ImGui_ImplSDL3_ProcessEvent(&ev);
+      if (ev.type == SDL_EVENT_QUIT)
+        return 0;
+      if (ev.window.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && ev.window.windowID == SDL_GetWindowID(window))
+        return 0;
+    }
+
+    if (do_load)
+    {
+      do_load = false;
+      if (try_open())
+        break;
+    }
+
+    SDL_GetWindowSizeInPixels(window, &width, &height);
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::SetNextWindowPos(ImVec2(width * 0.5f, height * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::Begin("Open dataset", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::TextUnformatted("Local .jlp file, or a cloud object store:");
+    ImGui::BulletText("s3://bucket/prefix");
+    ImGui::BulletText("az://container/prefix");
+    ImGui::PushItemWidth(440);
+    ImGui::InputText("URL", url_buf, sizeof(url_buf));
+    ImGui::InputTextWithHint("Connection", "anonymous=true;region=eu-north-1", conn_buf, sizeof(conn_buf));
+    ImGui::PopItemWidth();
+    ImGui::TextDisabled("Cloud only. Public bucket: anonymous=true. Azure: account=...;account_key=... or ...;sas=...");
+    if (ImGui::Button("Browse local file..."))
+    {
+      SDL_DialogFileFilter filters[] = {{"Points files", "jlp"}};
+      SDL_ShowOpenFileDialog(
+        [](void *ud, const char *const *files, int) {
+          auto *b = static_cast<browse_state_t *>(ud);
+          if (files && *files)
+          {
+            snprintf(b->url_buf, b->url_cap, "%s", *files);
+            b->conn_buf[0] = '\0';
+          }
+        },
+        &browse, window, filters, 1, nullptr, false);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Open"))
+      do_load = true;
+    ImGui::SameLine();
+    if (ImGui::Button("Quit"))
+      return 0;
+    if (!load_error.empty())
+    {
+      ImGui::Spacing();
+      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Failed to open:");
+      ImGui::TextWrapped("%s", load_error.c_str());
+    }
+    ImGui::End();
+
+    ImGui::Render();
+    glViewport(0, 0, width, height);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    SDL_GL_SwapWindow(window);
   }
 
   uint32_t attribute_count = points_converter_data_attribute_count(converter_points.get());
@@ -199,7 +281,40 @@ int main(int argc, char **argv)
       attribute_names[i].assign(buffer, str_size);
     }
   }
-  int selected_attribute = 1;
+  // Default colored attribute, matching the WebGL renderer's precedence (web/src/usePointCloudRenderer.ts):
+  // 'rgb', then 'intensity', then the first attribute that isn't the coordinates ('xyz'), else the first
+  // name ('xyz'). The attribute list places 'xyz' first. Matching is case-insensitive.
+  auto pick_default_attribute = [](const std::vector<std::string> &names) -> int {
+    auto ieq = [](const std::string &a, const char *b) {
+      if (a.size() != std::strlen(b))
+        return false;
+      for (size_t i = 0; i < a.size(); i++)
+        if (std::tolower((unsigned char)a[i]) != (unsigned char)b[i])
+          return false;
+      return true;
+    };
+    int intensity = -1, first_non_xyz = -1;
+    for (int i = 0; i < int(names.size()); i++)
+    {
+      if (ieq(names[i], "rgb"))
+        return i;
+      if (intensity < 0 && ieq(names[i], "intensity"))
+        intensity = i;
+      if (first_non_xyz < 0 && !ieq(names[i], "xyz"))
+        first_non_xyz = i;
+    }
+    if (intensity >= 0)
+      return intensity;
+    if (first_non_xyz >= 0)
+      return first_non_xyz;
+    return 0;
+  };
+  int selected_attribute = pick_default_attribute(attribute_names);
+  if (!attribute_names.empty())
+  {
+    auto &name = attribute_names[selected_attribute];
+    points_converter_data_set_rendered_attribute(converter_points.get(), name.c_str(), uint32_t(name.size()));
+  }
   {
     struct aabb_callback_state_t
     {
@@ -233,7 +348,11 @@ int main(int argc, char **argv)
 
   float screen_fraction_threshold = 0.65f;
   float render_density_px = 0.8f;
-  int gpu_memory_budget_mb = 64;
+  // 512 MB (was 64): a bigger resident budget cuts the eviction/re-upload churn that a low budget forces on
+  // every camera move -- the main lever, together with non-blocking eviction, against interaction stutter.
+  int gpu_memory_budget_mb = 512;
+  // Streaming is network-latency-bound (each blob is a separate GET), so more concurrent reads hide latency.
+  int max_in_flight_io = 128;
   bool show_bounding_boxes = false;
   bool debug_transitions = false;
 
@@ -241,6 +360,7 @@ int main(int argc, char **argv)
   points_renderer_add_data_source(renderer.get(), points_converter_data_source_get_bbox_data_source(converter_points.get()));
   points_converter_data_source_set_viewport(converter_points.get(), width, height);
   points_converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
+  points_converter_data_source_set_max_in_flight_io(converter_points.get(), max_in_flight_io);
 
   std::vector<uint32_t> storage_ids;
   std::vector<uint32_t> storage_subs;
@@ -526,6 +646,10 @@ int main(int argc, char **argv)
     if (ImGui::SliderInt("GPU Memory Budget (MB)", &gpu_memory_budget_mb, 64, 4096))
     {
       points_converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
+    }
+    if (ImGui::SliderInt("Max In-Flight IO", &max_in_flight_io, 8, 512))
+    {
+      points_converter_data_source_set_max_in_flight_io(converter_points.get(), max_in_flight_io);
     }
     if (ImGui::Checkbox("Show Bounding Boxes", &show_bounding_boxes))
     {

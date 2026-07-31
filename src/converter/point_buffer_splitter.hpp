@@ -33,9 +33,9 @@ void verify_points_range(const read_only_points_t &points, int start_index, int 
 {
   morton::morton_t<T, C> morton_current;
   morton::morton_t<T, C> morton_previous = {};
-  int count_less = 0;
-  int count_greater = 0;
-  int wrong_order = 0;
+  [[maybe_unused]] int count_less = 0;
+  [[maybe_unused]] int count_greater = 0;
+  [[maybe_unused]] int wrong_order = 0;
   morton::morton_t<T, C> local_min;
   morton::morton_downcast(min, local_min);
   morton::morton_t<T, C> local_max;
@@ -68,7 +68,7 @@ void verify_points_less_than(const tree_config_t &tree_config, const read_only_p
   morton::morton_t<T, C> local_max;
   convert_world_morton_to_local(max, local_max);
   const auto *morton_begin = static_cast<const morton::morton_t<T, C> *>(points.data.data);
-  int count = 0;
+  [[maybe_unused]] int count = 0;
 
   for (int i = start_index; i < end_index; i++)
   {

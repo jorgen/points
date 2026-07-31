@@ -21,8 +21,13 @@
 #include "lod_quantize.hpp" // make_lod_random_offsets (same scheme as the converter)
 #include "native_node_data_loader.hpp"
 #include "virtual_tree.hpp" // build_resident_source, make_virtual_root, process_virtual_trees, emit_virtual_draws
+#ifdef __EMSCRIPTEN__
+#include "worker_node_data_loader.hpp" // decode-worker loader (used when the web app installs a worker pool)
+#endif
 #include <points/common/format.h>
 #include <points/converter/converter_data_source.h>
+
+#include <vio/objstore/create_object_store.h> // apply_connection_override, clear_*_config_override
 
 #include <algorithm>
 #include <chrono>
@@ -63,7 +68,16 @@ points_converter_data_source_t::points_converter_data_source_t(const std::string
 
   bbox_data_source = std::make_unique<node_bbox_data_source_t>(callbacks);
 
+#ifdef __EMSCRIPTEN__
+  // On the web, route decode through a pool of Web Workers when the app installed one (globalThis
+  // .__pointsDecodePool); otherwise fall back to decoding inline on the main thread.
+  if (decode_worker_pool_available())
+    node_loader = std::make_unique<worker_node_data_loader_t>(processor.storage_handler());
+  else
+    node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler());
+#else
   node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler());
+#endif
 
   // Read compression stats for attribute normalization
   attribute_stats = processor.storage_handler().get_compression_stats();
@@ -88,6 +102,12 @@ points_converter_data_source_t::~points_converter_data_source_t()
     if (np)
       destroy_render_node(*np, callbacks, node_loader.get(), &virtual_gpu_used);
   render_list.clear();
+  // Nodes deferred from the non-blocking eviction path. At shutdown a spin-wait is acceptable, so the
+  // blocking destroy_render_node drains any still-in-flight job before the convert_pool is torn down.
+  for (auto &np : pending_destroy)
+    if (np)
+      destroy_render_node(*np, callbacks, node_loader.get(), &virtual_gpu_used);
+  pending_destroy.clear();
 }
 
 void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camera, points_to_render_t *to_render)
@@ -171,8 +191,24 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   auto t_after_tree_walk = clock::now();
 
   // Phase 2: Build render list
+  // Non-blocking eviction: retire nodes deferred from earlier frames whose worker jobs have now finished,
+  // and re-park the ones still decoding. This keeps the main thread from ever spin-waiting on a convert.
+  if (!pending_destroy.empty())
+  {
+    render_list_t still_busy;
+    still_busy.reserve(pending_destroy.size());
+    for (auto &np : pending_destroy)
+    {
+      if (np && node_is_busy(*np))
+        still_busy.push_back(std::move(np));
+      else if (np)
+        destroy_render_node(*np, callbacks, node_loader.get(), &virtual_gpu_used);
+    }
+    pending_destroy = std::move(still_busy);
+  }
+
   render_list = build_render_list(walker_subsets, std::move(render_list),
-      fade_duration_ms, callbacks, node_loader.get(), &virtual_gpu_used);
+      fade_duration_ms, callbacks, node_loader.get(), &virtual_gpu_used, pending_destroy);
   frame_timings.render_list_size = int(render_list.size());
   auto t_after_build = clock::now();
 
@@ -180,7 +216,13 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   auto tree_config = processor.tree_config();
   auto io_stats = process_io_and_upload(render_list, camera_position, tree_config,
       callbacks, node_loader.get(), convert_pool, camera, max_io_in_flight, max_new_io_per_frame,
-      frame_upload_budget, gpu_memory_budget, current_attr_min, current_attr_max, enable_virtual_subtrees, virtual_gpu_used);
+      frame_upload_budget, gpu_memory_budget, current_attr_min, current_attr_max, enable_virtual_subtrees, virtual_gpu_used, &cpu_reap_queue);
+  // Free this frame's dead decoded CPU buffers on a worker (their dtor cascade is ~140 render-thread samples).
+  if (!cpu_reap_queue.empty())
+  {
+    convert_pool.enqueue_detached([reaped = std::move(cpu_reap_queue)]() {});
+    cpu_reap_queue.clear();
+  }
   frame_timings.io_in_flight = io_stats.io_in_flight;
   frame_timings.scan_classify_ms = io_stats.scan_classify_ms;
   frame_timings.schedule_io_ms = io_stats.schedule_io_ms;
@@ -205,6 +247,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     // A leaf is worth promoting only if it has a coarser representation to offer (maskWidth = lod_span-9 > 0);
     // compact leaves keep the cheap monolith. Cap promotions/frame so the one-time decodes don't hitch.
     int builds_left = int(virtual_max_promotions_per_frame);
+    bool recovery_fired = false; // a recovery reload was kicked this frame -> keep the dirty-driven host ticking
     for (auto &np : render_list)
     {
       auto &node = *np;
@@ -225,8 +268,41 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         }
         continue;
       }
+      // R5 recovery: a leaf un-promoted by the CPU budget kept its (still-uploaded) monolith but genuinely
+      // freed its salvage handler, and the salvage lift only runs on a fresh upload -- so it can never
+      // re-promote through the normal path. Once budget headroom returns, free the monolith and reset io so
+      // the IO scan reloads it: the additive octree's coarser ancestors cover the leaf during the reload
+      // exactly like the initial load, the fresh upload re-lifts the handler, and promotion proceeds. The
+      // hysteresis must include THIS leaf's own resident estimate (mortons + r32x3 decode + attrs, computable
+      // from walker formats without the handler): gating on the aggregate alone lets a leaf whose resident
+      // exceeds budget/4 defeat the 3/4 band and ping-pong evict<->reload forever. An oversized leaf that can
+      // never fit the band simply stays on its monolith -- the stable, intended fallback. fade_out nodes are
+      // departing: destroying their monolith mid-crossfade would pop the region off screen (and the reload
+      // would never run; build_render_list destroys non-uploaded fade-outs).
+      const size_t resident_estimate =
+        size_t(node.point_count) * (size_t(size_for_format(node.walker_data.format[0].type, node.walker_data.format[0].components)) + 3u * sizeof(float) +
+                                    (node.walker_data.locations[1].size > 0 ? size_t(size_for_format(node.walker_data.format[1].type, node.walker_data.format[1].components)) : 0u));
+      if (node.salvage_lost && !node.resident_handler && !node.resident_building && node.walker_data.frustum_visible &&
+          node.fade_state != render_node_fade_state::fade_out &&
+          node.gpu_state == render_node_gpu_state::uploaded && node.io_state == render_node_io_state::loaded &&
+          builds_left > 0 && resident_cpu_used + resident_estimate <= cpu_resident_budget * 3 / 4)
+      {
+        --builds_left;             // a reload leads to a resident build soon; count it against the ramp
+        node.salvage_lost = false; // one-shot; re-armed only by another R5 eviction
+        recovery_fired = true;     // the reload starts NEXT frame's IO scan -> tick the host until it kicks in
+        for (auto &b : node.gpu_buffers)
+          if (b.user_ptr)
+            callbacks.do_destroy_buffer(b);
+        if (node.params_buffer.user_ptr)
+          callbacks.do_destroy_buffer(node.params_buffer);
+        node.gpu_state = render_node_gpu_state::none;
+        node.io_state = render_node_io_state::none;
+        node.gpu_memory_size = 0;
+        continue;
+      }
       if (node.is_virtual_source || node.resident_building || !node.resident_handler || node.gpu_state != render_node_gpu_state::uploaded)
         continue;
+      node.salvage_lost = false; // handler present again (fresh upload lifted it) -> recovery no longer pending
       if (node.point_count <= virtual_min_points || !node.walker_data.is_leaf)
       {
         node.resident_handler.reset(); // too small / not a leaf -> never promotes; drop the salvaged CPU dup
@@ -276,25 +352,26 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     vf.delta_ms = delta_ms;
     vf.fade_duration_ms = fade_duration_ms;
     vf.viewport_height = frame_viewport_height;
-    // Floor the virtual subdivision at THIS frame's finest real-node lod. Phase 3 above already processed the
-    // real render list (gpu_state / walker_data.lod / frustum_visible are current), so there is NO one-frame
-    // lag: never invent detail finer than the real octree renderer is actually showing this frame, and never
-    // finer than the full-detail level (below it maskWidth is 0 -> every point already drawn, so descending
-    // only multiplies nodes). No real node drawing -> refine to full detail.
-    int min_real_lod = std::numeric_limits<int>::max();
-    for (auto &np : render_list)
-      if (!np->is_virtual_source && np->gpu_state == render_node_gpu_state::uploaded && np->walker_data.frustum_visible)
-        min_real_lod = std::min(min_real_lod, np->walker_data.lod);
-    vf.subdivide_floor_lod = min_real_lod == std::numeric_limits<int>::max()
-                                 ? lod_quantize_full_detail_level
-                                 : std::max(min_real_lod, lod_quantize_full_detail_level);
+    // Floor the virtual subdivision at the full-detail level. A promoted leaf's virtual tree exists precisely to
+    // refine its own points independent of what other real geometry is on screen, so the floor must be a fixed
+    // property of the leaf (level 9, below which maskWidth is 0 -> every point already drawn), NOT the finest
+    // real-node lod currently in frustum. The old min-over-real-nodes clamp collapsed at extreme zoom: the octree
+    // is additive, so zooming into a single promoted leaf leaves only its own COARSER ancestors frustum-visible
+    // (the leaf itself is is_virtual_source, excluded); min_real_lod then rose above the virtual root's level
+    // (= leaf_lod = lod_span), the subdivide gate v.level > floor went false at the root, and the whole cut
+    // collapsed to one coarse whole-leaf node that never refined again. should_subdivide's screen-space test
+    // still gates real per-frame depth; split_octants' level<=0 guard remains the crash backstop from 5ab5436,
+    // so the min-over-real clamp is no longer needed for safety.
+    vf.subdivide_floor_lod = lod_quantize_full_detail_level;
     vf.render_density_px = frame_render_density_px;
     vf.attr_min = current_attr_min;
     vf.attr_max = current_attr_max;
     process_virtual_trees(render_list, vf);
     // Keep the on-demand renderer ticking while any resident build / materialize / fade is pending, so async
-    // virtual work completes even when the camera is idle (e.g. right after flipping the A/B toggle).
-    virtual_animating = vf.any_animating;
+    // virtual work completes even when the camera is idle (e.g. right after flipping the A/B toggle). A fired
+    // R5 recovery counts too: its reload only enters the IO scan NEXT frame, and on the dirty-driven wasm host
+    // nothing else would schedule that frame.
+    virtual_animating = vf.any_animating || recovery_fired;
     for (auto &np : render_list)
       if (np->resident_building)
       {
@@ -317,7 +394,9 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     {
       render_node_t *farthest = nullptr;
       for (auto &np : render_list)
-        if (np->is_virtual_source && np->resident && (!farthest || np->cached_distance > farthest->cached_distance))
+        // Skip a subtree still materializing on the convert pool: destroy_virtual_subtree would spin-wait the
+        // main thread. Leaving it over-budget for a frame (until its job finishes) is the non-blocking choice.
+        if (np->is_virtual_source && np->resident && !(np->virtual_root && virtual_subtree_has_inflight(*np->virtual_root)) && (!farthest || np->cached_distance > farthest->cached_distance))
           farthest = np.get();
       if (!farthest)
         break;
@@ -327,6 +406,10 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
       farthest->resident_handler.reset(); // genuinely free the data_handler CPU (unlike a toggle-off, which keeps it)
       farthest->is_virtual_source = false;
       farthest->draw_suppressed = false;
+      // This leaf is proven-promotable but now has no salvage handler, and the lift only runs on a fresh
+      // upload. Mark it so the promoter can free+reload its monolith to re-acquire the handler once budget
+      // headroom returns — otherwise it is stranded on its full-res monolith forever (zoom-out repro).
+      farthest->salvage_lost = true;
       if (farthest->monolith_freed) // R3 freed it -> reload the monolith so the node is drawable again
       {
         farthest->monolith_freed = false;
@@ -412,17 +495,50 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   frame_timings.total_ms = to_ms(t_end - t_start);
 }
 
-struct points_converter_data_source_t *points_converter_data_source_create(const char *url, uint32_t url_len, points_error_t *error, struct points_renderer_t *renderer)
+struct points_converter_data_source_t *points_converter_data_source_create_with_connection(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, points_error_t *error, struct points_renderer_t *renderer)
 {
   if (!error)
     return nullptr;
-  auto ret = std::make_unique<points_converter_data_source_t>(std::string(url, url_len), renderer->callbacks);
+  std::string url_str(url, url_len);
+
+  // Install the connection string (credentials/endpoint/region) for the dataset URL's provider before the
+  // storage backend is created inside the data source's processor. A no-op for local (file/dir/mem) URLs.
+  bool applied = false;
+  if (connection && connection_len > 0)
+  {
+    auto result = vio::objstore::apply_connection_override(url_str, std::string_view(connection, connection_len));
+    if (!result)
+    {
+      error->code = result.error().code != 0 ? result.error().code : -1;
+      error->msg = result.error().msg;
+      return nullptr;
+    }
+    applied = true;
+  }
+
+  auto ret = std::make_unique<points_converter_data_source_t>(url_str, renderer->callbacks);
+
+  // The override was consumed when the backend was created (its bucket/prefix are baked in), so clear it
+  // now; leaving it set would leak into a later create with a different URL in the same process.
+  if (applied)
+  {
+    vio::objstore::clear_s3_config_override();
+#ifndef __EMSCRIPTEN__
+    vio::objstore::clear_azure_config_override();
+#endif
+  }
+
   if (ret->error.code != 0)
   {
     *error = ret->error;
     return nullptr;
   }
   return ret.release();
+}
+
+struct points_converter_data_source_t *points_converter_data_source_create(const char *url, uint32_t url_len, points_error_t *error, struct points_renderer_t *renderer)
+{
+  return points_converter_data_source_create_with_connection(url, url_len, nullptr, 0, error, renderer);
 }
 
 void points_converter_data_source_destroy(struct points_converter_data_source_t *converter_data_source)
@@ -585,6 +701,20 @@ void points_converter_data_source_set_enable_virtual_subtrees(struct points_conv
     cds->virtual_promoted_last = 0;
     cds->virtual_nodes_drawn_last = 0;
     cds->last_virtual_promoted = -1;
+  }
+  else
+  {
+    // Turn-on: a leaf loaded WHILE virtual was off never had its salvage handler lifted (want_salvage is off at
+    // load time, and the decoded CPU buffers were reaped after upload) -- on both the native and worker paths it
+    // could never promote. Arm the R5-recovery reload for those; leaves whose handler the turn-off path kept
+    // re-promote instantly without it. (A reloaded compact/too-small leaf is rejected once and stays monolith.)
+    for (auto &np : cds->render_list)
+    {
+      auto &node = *np;
+      if (node.walker_data.is_leaf && !node.resident_handler && !node.is_virtual_source && !node.resident_building &&
+          node.point_count > cds->virtual_min_points && node.gpu_state == points::converter::render_node_gpu_state::uploaded)
+        node.salvage_lost = true;
+    }
   }
 }
 

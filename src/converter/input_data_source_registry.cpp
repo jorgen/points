@@ -17,8 +17,10 @@
 ************************************************************************/
 #include "input_data_source_registry.hpp"
 
+#include "memory_writer.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 
+#include <cstring>
 #include <mutex>
 
 namespace points::converter
@@ -38,18 +40,42 @@ input_data_source_registry_t::input_data_source_registry_t()
 {
 }
 
+// Process-wide id counter (ids are registry-keyed; sharing across instances only skips values).
+// On resume, ensure_next_input_id_above bumps it past every persisted id so re-registered and new
+// files never collide with ids already referenced by the tree's storage maps.
+static uint32_t g_next_input_id = 0;
+
 input_data_id_t get_next_input_id()
 {
-  static uint32_t next_input_id = 0;
   input_data_id_t ret;
-  ret.data = next_input_id++;
+  ret.data = g_next_input_id++;
   ret.sub = 0;
   return ret;
 }
 
-input_data_reference_t input_data_source_registry_t::register_file(std::unique_ptr<char[]> &&name, uint32_t name_length)
+void ensure_next_input_id_above(uint32_t max_seen_id)
+{
+  if (g_next_input_id <= max_seen_id)
+    g_next_input_id = max_seen_id + 1;
+}
+
+input_data_reference_t input_data_source_registry_t::register_file(std::unique_ptr<char[]> &&name, uint32_t name_length, bool *already_done)
 {
   std::unique_lock<std::mutex> lock(_mutex);
+  if (already_done)
+    *already_done = false;
+  // Resume: a re-added input whose earlier run fully completed (per the restored snapshot) is
+  // skipped -- re-reading it would duplicate its points in the tree. Matched by name.
+  for (auto &kv : _registry)
+  {
+    auto &item = kv.second;
+    if (item.name_length == name_length && memcmp(item.name.get(), name.get(), name_length) == 0)
+    {
+      if (already_done && item.read_finished && item.inserted_into_tree == item.sub_count)
+        *already_done = true;
+      return {item.input_id, {item.name.get(), item.name_length}};
+    }
+  }
   auto input_id = get_next_input_id();
   auto &item = _registry[input_id.data];
   // morton_min is a min-accumulator in handle_sorted_points; it must start at the max
@@ -150,6 +176,12 @@ bool input_data_source_registry_t::all_inserted_into_tree() const
 std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_to_process()
 {
   std::unique_lock<std::mutex> lock(_mutex);
+  // Min-heap on input_order (the morton of each file's pre-init aabb-min corner): files must be
+  // dispatched in rising min-morton order or the done-morton watermark (and everything built on
+  // it: incremental LOD, subtree finalization, upload) is meaningless. The SAME comparator must
+  // be used by make_heap and pop_heap — pop_heap with the default uint32_t compare re-heapifies
+  // by raw file id and silently breaks the ordering.
+  auto input_order_cmp = [&](uint32_t a, uint32_t b) { return _registry[a].input_order > _registry[b].input_order; };
   if (_unsorted_input_sources_dirty)
   {
     _unsorted_input_sources_dirty = false;
@@ -161,12 +193,12 @@ std::optional<input_data_next_input_t> input_data_source_registry_t::next_input_
         _unsorted_input_sources.push_back(item.first);
       }
     }
-    std::make_heap(_unsorted_input_sources.begin(), _unsorted_input_sources.end(), [&](uint32_t a, uint32_t b) { return _registry[a].input_order > _registry[b].input_order; });
+    std::make_heap(_unsorted_input_sources.begin(), _unsorted_input_sources.end(), input_order_cmp);
   }
   if (_unsorted_input_sources.empty())
     return {};
 
-  std::pop_heap(_unsorted_input_sources.begin(), _unsorted_input_sources.end());
+  std::pop_heap(_unsorted_input_sources.begin(), _unsorted_input_sources.end(), input_order_cmp);
   auto id = _unsorted_input_sources.back();
   _unsorted_input_sources.pop_back();
   _sorted_input_sources.push_back(id);
@@ -205,18 +237,42 @@ std::optional<morton::morton192_t> input_data_source_registry_t::get_done_morton
   }
   if (_done_prefix_index == 0)
     return {};
-  // If there are still files after the done prefix (sorted or unsorted),
-  // return morton_min of the next not-done file as the boundary
+
+  // Everything STRICTLY below the returned boundary is final: no current or future input can add
+  // a point there. This is the correctness anchor for incremental LOD, subtree finalization and
+  // upload, so the boundary must be a true lower bound on every point of every not-done file.
+  morton::morton192_t boundary;
+  memset(&boundary, 0xFF, sizeof(boundary));
   if (_done_prefix_index < _sorted_input_sources.size())
-    return _registry[_sorted_input_sources[_done_prefix_index]].morton_min;
-  // All sorted files are done — but if unsorted files remain, can't LOD yet
-  // (they haven't been assigned morton codes and could land anywhere)
-  if (!_unsorted_input_sources.empty() || _unsorted_input_sources_dirty)
+  {
+    auto &next = _registry[_sorted_input_sources[_done_prefix_index]];
+    // morton_min is a min-ACCUMULATOR seeded all-0xFF; it only becomes meaningful once the file's
+    // first sorted chunk lands. input_order (morton of the pre-init aabb-min corner) is a true
+    // lower bound on every point in the file (morton is monotone per coordinate, so the min
+    // corner's code <= any point's code in the box). Take the min so an in-flight file whose
+    // chunks haven't streamed yet never lets the watermark overclaim. A file without a found
+    // pre-init min has input_order 0 -> boundary 0 -> no progress until it's done: conservative.
+    boundary = next.morton_min < next.input_order ? next.morton_min : next.input_order;
+  }
+  // Clamp by every registered-but-undispatched file too: a file added mid-conversion can carry a
+  // LOWER min-morton than anything currently in flight (the heap only orders what exists at
+  // dispatch time). Skipping this made the boundary overclaim regions such a file later writes
+  // into. Registered files without a pre-init result yet have input_order 0 (value-initialized),
+  // which conservatively pins the boundary at 0 until their bounds are known. Iterate _registry
+  // directly (not _unsorted_input_sources, which may be stale under the dirty flag); O(#files)
+  // per call, called per file-completion / index-write, negligible.
+  for (auto &kv : _registry)
+  {
+    auto &item = kv.second;
+    if (!item.read_started && item.input_order < boundary)
+      boundary = item.input_order;
+  }
+  // Boundary 0 proves nothing final; report "no watermark" instead of a zero-advance.
+  morton::morton192_t zero;
+  memset(&zero, 0, sizeof(zero));
+  if (!(zero < boundary))
     return {};
-  // All files done — return max possible morton to LOD everything
-  morton::morton192_t all_max;
-  memset(&all_max, 0xFF, sizeof(all_max));
-  return all_max;
+  return boundary;
 }
 
 input_data_source_t input_data_source_registry_t::get(input_data_id_t input_id)
@@ -230,6 +286,170 @@ input_data_source_t input_data_source_registry_t::get(input_data_id_t input_id)
   ret.name = {item.name.get(), item.name_length};
   ret.public_header = item.public_header;
   return ret;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Registry-blob v2 input-registry section ('ISR1'). Persists exactly what resume needs: per file
+// the name (match key for re-added inputs), morton order/bounds, sub/inserted counts and read
+// flags; plus the sorted dispatch order and done-prefix so the done-morton watermark restores.
+// Not persisted: storage_locations / public_header / attribute_id (the tree's storage maps and
+// attributes_configs already hold everything a DONE file contributed; a not-done file is re-read).
+static constexpr uint32_t k_input_registry_magic = 0x31525349u; // 'ISR1' little-endian
+
+std::vector<uint8_t> input_data_source_registry_t::serialize() const
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+
+  uint32_t size = 0;
+  size += sizeof(k_input_registry_magic);
+  size += sizeof(uint32_t); // file count
+  for (auto &kv : _registry)
+  {
+    size += sizeof(uint32_t);                        // id
+    size += sizeof(uint32_t) + kv.second.name_length; // name
+    size += 3 * uint32_t(sizeof(morton::morton192_t)); // input_order, morton_min, morton_max
+    size += 2 * uint32_t(sizeof(uint32_t));          // sub_count, inserted_into_tree
+    size += 2 * uint32_t(sizeof(uint8_t));           // read_started, read_finished
+  }
+  size += sizeof(uint32_t) + uint32_t(_sorted_input_sources.size()) * uint32_t(sizeof(uint32_t));
+  size += sizeof(uint32_t); // done prefix index
+
+  std::vector<uint8_t> out(size);
+  uint8_t *ptr = out.data();
+  uint8_t *end_ptr = ptr + out.size();
+  bool ok = write_memory(ptr, end_ptr, k_input_registry_magic);
+  ok = ok && write_memory(ptr, end_ptr, uint32_t(_registry.size()));
+  for (auto &kv : _registry)
+  {
+    auto &item = kv.second;
+    ok = ok && write_memory(ptr, end_ptr, kv.first);
+    ok = ok && write_memory(ptr, end_ptr, item.name_length);
+    if (ok && item.name_length)
+    {
+      if (ptr + item.name_length > end_ptr)
+        ok = false;
+      else
+      {
+        memcpy(ptr, item.name.get(), item.name_length);
+        ptr += item.name_length;
+      }
+    }
+    ok = ok && write_memory(ptr, end_ptr, item.input_order);
+    ok = ok && write_memory(ptr, end_ptr, item.morton_min);
+    ok = ok && write_memory(ptr, end_ptr, item.morton_max);
+    ok = ok && write_memory(ptr, end_ptr, item.sub_count);
+    ok = ok && write_memory(ptr, end_ptr, item.inserted_into_tree);
+    ok = ok && write_memory(ptr, end_ptr, uint8_t(item.read_started ? 1 : 0));
+    ok = ok && write_memory(ptr, end_ptr, uint8_t(item.read_finished ? 1 : 0));
+  }
+  ok = ok && write_memory(ptr, end_ptr, uint32_t(_sorted_input_sources.size()));
+  ok = ok && write_vec_type(ptr, end_ptr, _sorted_input_sources);
+  ok = ok && write_memory(ptr, end_ptr, _done_prefix_index);
+  assert(ok && ptr == end_ptr);
+  if (!ok)
+    return {};
+  return out;
+}
+
+points_error_t input_data_source_registry_t::deserialize(const uint8_t *data, uint32_t size)
+{
+  std::unique_lock<std::mutex> lock(_mutex);
+  const uint8_t *ptr = data;
+  const uint8_t *end_ptr = data + size;
+  const points_error_t invalid = {1, "Invalid input registry data"};
+
+  uint32_t magic = 0;
+  if (!read_memory(ptr, end_ptr, magic) || magic != k_input_registry_magic)
+    return invalid;
+  uint32_t file_count = 0;
+  if (!read_memory(ptr, end_ptr, file_count))
+    return invalid;
+
+  _registry.clear();
+  _input_data_with_sub_parts = 0;
+  _input_data_inserted_to_tree = 0;
+  _input_data_id_done_count = 0;
+  uint32_t max_id = 0;
+  for (uint32_t i = 0; i < file_count; i++)
+  {
+    uint32_t id = 0;
+    if (!read_memory(ptr, end_ptr, id))
+      return invalid;
+    auto &item = _registry[id];
+    item.input_id = {id, 0};
+    if (!read_memory(ptr, end_ptr, item.name_length))
+      return invalid;
+    if (ptr + item.name_length > end_ptr)
+      return invalid;
+    item.name.reset(new char[item.name_length]);
+    memcpy(item.name.get(), ptr, item.name_length);
+    ptr += item.name_length;
+    uint8_t read_started = 0;
+    uint8_t read_finished = 0;
+    bool ok = read_memory(ptr, end_ptr, item.input_order);
+    ok = ok && read_memory(ptr, end_ptr, item.morton_min);
+    ok = ok && read_memory(ptr, end_ptr, item.morton_max);
+    ok = ok && read_memory(ptr, end_ptr, item.sub_count);
+    ok = ok && read_memory(ptr, end_ptr, item.inserted_into_tree);
+    ok = ok && read_memory(ptr, end_ptr, read_started);
+    ok = ok && read_memory(ptr, end_ptr, read_finished);
+    if (!ok)
+      return invalid;
+    item.read_started = read_started != 0;
+    item.read_finished = read_finished != 0;
+    _input_data_with_sub_parts += item.sub_count;
+    _input_data_inserted_to_tree += item.inserted_into_tree;
+    if (item.read_finished)
+      _input_data_id_done_count++;
+    if (id > max_id)
+      max_id = id;
+  }
+  uint32_t sorted_count = 0;
+  if (!read_memory(ptr, end_ptr, sorted_count))
+    return invalid;
+  if (!read_vec_type(ptr, end_ptr, _sorted_input_sources, sorted_count))
+    return invalid;
+  if (!read_memory(ptr, end_ptr, _done_prefix_index))
+    return invalid;
+
+  // A file that was dispatched but not finished when the snapshot was taken must be re-read from
+  // scratch on resume: its already-written chunks were only referenced by tree state committed in
+  // the same checkpoint (consistent), but the READ never completed -- clear its dispatch flag so
+  // next_input_to_process re-enqueues it, and drop it from the sorted (dispatched) list. Its
+  // partial counters stay: sub_count/inserted_into_tree recorded at checkpoint describe chunks the
+  // committed tree DOES contain. NOTE (phase 7 wires the full resume flow): re-reading a partially
+  // inserted file would duplicate those chunks -- the resume path must instead either re-add such
+  // files with a fresh id after truncating their partial state, or (v1) refuse resume when a
+  // partially-read file exists. Kept conservative here; the format just records the truth.
+  std::vector<uint32_t> still_sorted;
+  still_sorted.reserve(_sorted_input_sources.size());
+  uint32_t new_done_prefix = 0;
+  for (uint32_t i = 0; i < uint32_t(_sorted_input_sources.size()); i++)
+  {
+    auto id = _sorted_input_sources[i];
+    auto it = _registry.find(id);
+    if (it == _registry.end())
+      return invalid;
+    auto &item = it->second;
+    const bool done = item.read_finished && item.inserted_into_tree == item.sub_count;
+    if (done)
+    {
+      still_sorted.push_back(id);
+      if (i < _done_prefix_index)
+        new_done_prefix = uint32_t(still_sorted.size());
+    }
+    else
+    {
+      item.read_started = false;
+    }
+  }
+  _sorted_input_sources = std::move(still_sorted);
+  _done_prefix_index = new_done_prefix;
+  _unsorted_input_sources = {};
+  _unsorted_input_sources_dirty = true;
+
+  ensure_next_input_id_above(max_id);
+  return {};
 }
 
 } // namespace points::converter

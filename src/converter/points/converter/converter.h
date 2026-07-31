@@ -122,6 +122,36 @@ struct points_converter_runtime_callbacks_t
   points_converter_done_callback_t done;
 };
 
+/* Destination-upload callbacks. A SEPARATE struct (not an extension of runtime_callbacks_t, which
+ * is passed by value -- growing it would silently break the ABI of every existing caller). All
+ * callbacks fire on internal threads; keep them cheap and thread-safe. */
+typedef void (*points_converter_upload_progress_callback_t)(void *user_ptr, uint64_t bytes_uploaded, uint32_t bands_committed);
+/* A band of finalized subtrees committed at the destination; everything strictly below done_morton
+ * (a 192-bit morton code, 3x64 little-endian) is durably readable there. */
+typedef void (*points_converter_band_committed_callback_t)(void *user_ptr, uint32_t band_id, const uint64_t done_morton[3]);
+typedef void (*points_converter_upload_error_callback_t)(void *user_ptr, const struct points_error_t *error, uint8_t parked);
+typedef void (*points_converter_upload_done_callback_t)(void *user_ptr);
+
+struct points_converter_upload_callbacks_t
+{
+  points_converter_upload_progress_callback_t progress;
+  points_converter_band_committed_callback_t band_committed;
+  points_converter_upload_error_callback_t error;
+  points_converter_upload_done_callback_t done;
+};
+
+struct points_converter_upload_state_t
+{
+  uint64_t bytes_uploaded;
+  uint32_t bands_committed;
+  uint32_t packs_written;
+  uint8_t upload_parked;      /* retries exhausted; resume by reopening later */
+  uint8_t destination_complete;
+  uint64_t cache_resident_bytes;
+  uint64_t cache_max_bytes;
+  uint64_t cache_spilled_bytes;
+};
+
 struct points_converter_buffer_callbacks_t
 {
   int tmp;
@@ -214,6 +244,35 @@ POINTS_CONVERTER_EXPORT struct points_converter_t *points_converter_create(const
 // dataset can be written directly to a cloud store. `connection` may be null/empty for local outputs or
 // when credentials come from the environment. `open_file_semantics` is typically truncate.
 POINTS_CONVERTER_EXPORT struct points_converter_t *points_converter_create_with_connection(const char *url, uint64_t url_size, const char *connection, uint64_t connection_size, enum points_converter_open_file_semantics_t open_file_semantics, struct points_error_t **error);
+
+// Destination mode: convert into a LOCAL cache file (`cache_path`, a bare path or file:// URL) while
+// finalized subtrees upload incrementally to `destination_url` (s3:// az:// dir://; JLP2 layout).
+// The cache stays a valid, renderable JLP at every checkpoint; blobs already uploaded are evicted
+// from it under the cache cap (see points_converter_set_cache_max_bytes), and when the disk runs out
+// mid-conversion, unfinished data spills to the destination's spill/ area and is fetched back on
+// demand. A null/empty destination degrades to points_converter_create. `connection` carries the
+// destination's credentials (null/empty = environment). Reopening the same cache+destination resumes:
+// committed bands are never re-uploaded (a destination belonging to a different dataset generation is
+// refused via the embedded uuid).
+POINTS_CONVERTER_EXPORT struct points_converter_t *points_converter_create_with_destination(const char *cache_path, uint64_t cache_path_size, const char *destination_url, uint64_t destination_url_size, const char *connection, uint64_t connection_size,
+                                                                                            enum points_converter_open_file_semantics_t open_file_semantics, struct points_error_t **error);
+
+// Cache-file resident-bytes cap for destination mode. 0 = unlimited (the default). Callable any
+// time; lowering it triggers eviction/spill passes.
+POINTS_CONVERTER_EXPORT void points_converter_set_cache_max_bytes(struct points_converter_t *converter, uint64_t max_bytes);
+
+// In-RAM decompressed read-cache budget (default 256MB). Also the seam a render/query consumer tunes.
+POINTS_CONVERTER_EXPORT void points_converter_set_read_cache_bytes(struct points_converter_t *converter, uint64_t max_bytes);
+
+POINTS_CONVERTER_EXPORT void points_converter_set_upload_callbacks(struct points_converter_t *converter, struct points_converter_upload_callbacks_t callbacks, void *user_ptr);
+
+// Snapshot of upload/cache-tier state (approximate counters; safe any time). Returns false when the
+// converter has no destination configured.
+POINTS_CONVERTER_EXPORT bool points_converter_get_upload_state(struct points_converter_t *converter, struct points_converter_upload_state_t *state);
+
+// Wait until conversion is complete and the cache file is a fully checkpointed, valid JLP --
+// uploads may still be in flight (contrast points_converter_wait_idle, which also drains them).
+POINTS_CONVERTER_EXPORT void points_converter_wait_local_complete(struct points_converter_t *converter);
 
 POINTS_CONVERTER_EXPORT void points_converter_destroy(struct points_converter_t *destroy);
 

@@ -17,7 +17,12 @@
 ************************************************************************/
 #include "object_backend.hpp"
 
+#include "bucket_format.hpp"
+
+#include <algorithm>
+#include <cassert>
 #include <condition_variable>
+#include <cstring>
 
 #include <fmt/core.h>
 
@@ -116,6 +121,7 @@ vio::task_t<points_error_t> object_backend_t::probe_exists(bool &out)
 {
   auto r = co_await _io->object_info(k_manifest_name);
   out = r.has_value() && r->exists;
+  _manifest_size = out ? r->size : 0; // 128 = legacy superblock, 256 = JLP2 root manifest
   co_return points_error_t{};
 }
 
@@ -139,9 +145,16 @@ bool object_backend_t::exists() const
 
 points_error_t object_backend_t::open_for_write(bool truncate)
 {
+  // A JLP2 bucket is read-only through this backend: its writers (upload_handler_t, jlp_copy) drive
+  // the io_manager directly with pack/band/manifest ordering that checkpoint_t cannot express.
+  // Truncate is allowed -- the fresh legacy manifest atomically supersedes the JLP2 one (stale packs
+  // become orphans, same contract as legacy truncate).
+  if (_jlp2 && !truncate)
+    return {1, "This destination holds a JLP2 dataset; it cannot be appended to through this backend. Convert with points_converter_create_with_destination or copy with jlp_copy instead."};
   if (truncate)
   {
     std::unique_lock<std::mutex> lock(_mutex);
+    _jlp2 = false;
     _next_id = 0;
     _attributes_location = {};
     _stats_location = {};
@@ -163,25 +176,75 @@ vio::task_t<points_error_t> object_backend_t::read_location(storage_location_t l
     co_return points_error_t{};
   }
   buf = std::make_unique<uint8_t[]>(loc.size);
-  auto r = co_await _io->read_object(object_name(loc.file_id, loc.offset), buf.get(), io_range_t{0, int64_t(loc.size)});
+  // JLP2: verbatim pack addressing, one ranged GET into "data/{file_id:08x}". Legacy: whole object.
+  auto r = _jlp2 ? co_await _io->read_object(bucket_pack_name(loc.file_id), buf.get(), io_range_t{int64_t(loc.offset), int64_t(loc.size)})
+                 : co_await _io->read_object(object_name(loc.file_id, loc.offset), buf.get(), io_range_t{0, int64_t(loc.size)});
   size = loc.size;
   if (!r.has_value())
     co_return to_points_error(r.error());
+  if (r.value() != loc.size)
+    co_return points_error_t{1, "Short read of metadata object"};
   co_return points_error_t{};
 }
 
 vio::task_t<points_error_t> object_backend_t::do_read_index(index_load_t &out)
 {
-  auto manifest = std::make_shared<uint8_t[]>(k_serialized_index_size);
-  auto mr = co_await _io->read_object(k_manifest_name, manifest.get(), io_range_t{0, int64_t(k_serialized_index_size)});
+  // The "manifest" object name is shared by both layouts; sniff by content. Sizes differ (128-byte
+  // legacy superblock vs 256-byte JLP2 root manifest), so size the read from a HEAD instead of
+  // relying on stores clamping an over-long range.
+  static_assert(k_root_manifest_size > k_serialized_index_size);
+  auto info = co_await _io->object_info(k_manifest_name);
+  if (!info.has_value())
+    co_return to_points_error(info.error());
+  if (!info->exists)
+    co_return points_error_t{1, "No manifest object at the dataset url"};
+  _manifest_size = info->size;
+  auto manifest_bytes = uint32_t(std::min<uint64_t>(info->size, k_root_manifest_size));
+  auto manifest = std::make_shared<uint8_t[]>(manifest_bytes);
+  auto mr = co_await _io->read_object(k_manifest_name, manifest.get(), io_range_t{0, int64_t(manifest_bytes)});
   if (!mr.has_value())
     co_return to_points_error(mr.error());
+  manifest_bytes = uint32_t(std::min<uint64_t>(mr.value(), manifest_bytes));
+
+  uint32_t magic;
+  if (manifest_bytes < sizeof(magic))
+    co_return points_error_t{1, "Manifest object is too small"};
+  memcpy(&magic, manifest.get(), sizeof(magic));
+  if (magic == k_root_manifest_magic)
+  {
+    // JLP2 bucket. Read-only here: the root manifest's metadata slots are only populated once the
+    // terminal band committed; before that there is no registry to read, so refuse cleanly.
+    root_manifest_t root;
+    auto err = deserialize_root_manifest(manifest.get(), manifest_bytes, root);
+    if (err.code != 0)
+      co_return err;
+    if (!root.complete)
+      co_return points_error_t{1, "JLP2 dataset is incomplete: the conversion that writes it has not finished uploading. Retry when it completes (or resume the parked upload)."};
+    _jlp2 = true;
+    out.free_blobs.reset();
+    out.free_blobs_size = 0;
+    err = co_await read_location(root.attribute_configs, out.attribute_configs, out.attribute_configs_size);
+    if (err.code != 0)
+      co_return err;
+    err = co_await read_location(root.tree_registry, out.tree_registry, out.tree_registry_size);
+    if (err.code != 0)
+      co_return err;
+    err = co_await read_location(root.compression_stats, out.stats, out.stats_size);
+    if (err.code != 0)
+      co_return err;
+    err = co_await read_location(root.perf_stats, out.perf, out.perf_size);
+    if (err.code != 0)
+      co_return err;
+    co_return points_error_t{};
+  }
 
   storage_location_t free_blobs;
   storage_location_t attribute_configs;
   storage_location_t tree_registry;
   storage_location_t compression_stats;
   storage_location_t perf_stats;
+  if (manifest_bytes < k_serialized_index_size)
+    co_return points_error_t{1, "Manifest object is too small"};
   auto err = deserialize_index(manifest.get(), k_serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats);
   if (err.code != 0)
     co_return err;
@@ -224,8 +287,10 @@ points_error_t object_backend_t::restore_allocator(const std::unique_ptr<uint8_t
   return {}; // object mode has no packed free-list; the id counter comes from the manifest.
 }
 
-void object_backend_t::allocate_blob(uint32_t size, storage_location_t &out)
+void object_backend_t::allocate_blob(uint32_t size, blob_kind_t kind, storage_location_t &out)
 {
+  (void)kind; // object mode is remote already; kind only matters for the local cached backend
+  assert(!_jlp2 && "JLP2 buckets are read-only through object_backend_t (open_for_write refuses)");
   out = next_location(size);
 }
 
@@ -239,7 +304,10 @@ vio::task_t<points_error_t> object_backend_t::write_allocated(storage_location_t
 
 vio::task_t<points_error_t> object_backend_t::read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read)
 {
-  auto r = co_await _io->read_object(object_name(location.file_id, location.offset), dst, io_range_t{0, int64_t(location.size)});
+  // JLP2: one ranged GET inside the pack object; legacy: the blob IS the object (offset is the high
+  // half of the blob-id counter there, never a byte offset -- the interpretations must never mix).
+  auto r = _jlp2 ? co_await _io->read_object(bucket_pack_name(location.file_id), dst, io_range_t{int64_t(location.offset), int64_t(location.size)})
+                 : co_await _io->read_object(object_name(location.file_id, location.offset), dst, io_range_t{0, int64_t(location.size)});
   if (!r.has_value())
     co_return to_points_error(r.error());
   bytes_read = uint32_t(r.value());

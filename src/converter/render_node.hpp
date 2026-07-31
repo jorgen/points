@@ -87,6 +87,11 @@ struct render_node_t
   // un-promotion the node resets io_state=none to reload.
   uint32_t virtual_cut_live_frames = 0;
   bool monolith_freed = false;
+  // R5 recovery: this proven-promotable leaf lost its salvage handler (CPU-budget un-promotion genuinely frees
+  // the data_handler; a leaf loaded while virtual was toggled off never had one). Since the salvage lift only
+  // runs on a fresh upload, the promoter must free the monolith and reload to re-acquire the handler once
+  // budget headroom returns — without this flag the leaf is stranded on its full-res monolith forever.
+  bool salvage_lost = false;
 };
 
 struct frame_timings_t

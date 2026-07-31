@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <object_backend.hpp>
+#include <packed_file_backend.hpp>
 #include <storage_backend.hpp>
 #include <index_format.hpp>
 #include <conversion_types.hpp>
@@ -101,11 +102,11 @@ static std::vector<uint8_t> backend_write_and_reopen(const std::string &url, vio
     REQUIRE(backend);
     REQUIRE(backend->open_for_write(true).code == 0);
 
-    backend->allocate_blob(uint32_t(blob0.size()), loc0);
+    backend->allocate_blob(uint32_t(blob0.size()), points::converter::storage_backend_t::blob_kind_t::data, loc0);
     REQUIRE(run_task(loop, [&]() { return backend->write_allocated(loc0, make_bytes(blob0)); }).code == 0);
-    backend->allocate_blob(uint32_t(blob1.size()), loc1);
+    backend->allocate_blob(uint32_t(blob1.size()), points::converter::storage_backend_t::blob_kind_t::data, loc1);
     REQUIRE(run_task(loop, [&]() { return backend->write_allocated(loc1, make_bytes(blob1)); }).code == 0);
-    backend->allocate_blob(uint32_t(registry.size()), reg_loc);
+    backend->allocate_blob(uint32_t(registry.size()), points::converter::storage_backend_t::blob_kind_t::metadata, reg_loc);
     REQUIRE(run_task(loop, [&]() { return backend->write_allocated(reg_loc, make_bytes(registry)); }).code == 0);
 
     checkpoint_t cp;
@@ -178,9 +179,9 @@ TEST_CASE("mem:// object backend round trip (single session)")
   auto attrs = pattern(50, 5);
 
   storage_location_t loc, reg_loc;
-  backend->allocate_blob(uint32_t(blob.size()), loc);
+  backend->allocate_blob(uint32_t(blob.size()), points::converter::storage_backend_t::blob_kind_t::data, loc);
   REQUIRE(run_task(loop, [&]() { return backend->write_allocated(loc, make_bytes(blob)); }).code == 0);
-  backend->allocate_blob(uint32_t(registry.size()), reg_loc);
+  backend->allocate_blob(uint32_t(registry.size()), points::converter::storage_backend_t::blob_kind_t::metadata, reg_loc);
   REQUIRE(run_task(loop, [&]() { return backend->write_allocated(reg_loc, make_bytes(registry)); }).code == 0);
 
   checkpoint_t cp;
@@ -266,7 +267,7 @@ TEST_CASE("object backend: failed manifest write leaves the previous dataset int
 
   auto do_checkpoint = [&](const std::vector<uint8_t> &attrs, const std::vector<uint8_t> &reg) {
     storage_location_t reg_loc;
-    backend.allocate_blob(uint32_t(reg.size()), reg_loc);
+    backend.allocate_blob(uint32_t(reg.size()), points::converter::storage_backend_t::blob_kind_t::metadata, reg_loc);
     REQUIRE(run_task(loop, [&]() { return backend.write_allocated(reg_loc, make_bytes(reg)); }).code == 0);
     checkpoint_t cp;
     cp.tree_registry = reg_loc;
@@ -316,7 +317,7 @@ storage_location_t do_registry_checkpoint(storage_backend_t &backend, vio::event
 {
   auto reg = pattern(reg_size, seed);
   storage_location_t reg_loc;
-  backend.allocate_blob(reg_size, reg_loc);
+  backend.allocate_blob(reg_size, points::converter::storage_backend_t::blob_kind_t::metadata, reg_loc);
   REQUIRE(run_task(loop, [&]() { return backend.write_allocated(reg_loc, make_bytes(reg)); }).code == 0);
   checkpoint_t cp;
   cp.tree_registry = reg_loc;
@@ -379,6 +380,437 @@ TEST_CASE("packed backend does not leak registry blobs across checkpoints")
   auto size = std::filesystem::file_size(path, ec);
   REQUIRE(!ec);
   REQUIRE(size < 30000);
+
+  std::remove(path);
+}
+
+TEST_CASE("index extras round-trip and legacy zeros decode as absent")
+{
+  using namespace points::converter;
+  // With extras: everything must survive the 128-byte block.
+  index_extras_t extras;
+  extras.residency_table = {0, 512, 8192};
+  for (int i = 0; i < 16; i++)
+    extras.dataset_uuid[i] = uint8_t(i + 1);
+  extras.version_flags = 0x0102;
+  storage_location_t free_blobs = {0, 10, 100}, attrs = {0, 20, 200}, registry = {0, 30, 300}, stats = {0, 40, 400}, perf = {0, 50, 500};
+  auto blob = serialize_index(k_serialized_index_size, free_blobs, attrs, registry, stats, perf, &extras);
+
+  storage_location_t r_free = {}, r_attrs = {}, r_reg = {}, r_stats = {}, r_perf = {};
+  index_extras_t r_extras;
+  auto err = deserialize_index(blob.get(), k_serialized_index_size, r_free, r_attrs, r_reg, r_stats, r_perf, &r_extras);
+  REQUIRE(err.code == 0);
+  REQUIRE(r_reg.offset == 300);
+  REQUIRE(r_extras.residency_table.offset == 8192);
+  REQUIRE(r_extras.residency_table.size == 512);
+  REQUIRE(memcmp(r_extras.dataset_uuid, extras.dataset_uuid, 16) == 0);
+  REQUIRE(r_extras.version_flags == 0x0102);
+
+  // Legacy writer (no extras): the spare bytes are zero and must decode as absent.
+  auto legacy = serialize_index(k_serialized_index_size, free_blobs, attrs, registry, stats, perf);
+  index_extras_t l_extras;
+  err = deserialize_index(legacy.get(), k_serialized_index_size, r_free, r_attrs, r_reg, r_stats, r_perf, &l_extras);
+  REQUIRE(err.code == 0);
+  REQUIRE(l_extras.residency_table.size == 0);
+  REQUIRE(l_extras.residency_table.offset == 0);
+  uint8_t zero_uuid[16] = {};
+  REQUIRE(memcmp(l_extras.dataset_uuid, zero_uuid, 16) == 0);
+  REQUIRE(l_extras.version_flags == 0);
+}
+
+// ---------------- cache tier: residency persists across checkpoints and reopens ----------------
+
+TEST_CASE("packed cache tier: residency round-trips through checkpoint + reopen")
+{
+  vio::thread_with_event_loop_t loop_thread;
+  auto &loop = loop_thread.event_loop();
+  const char *path = "test_cache_tier_packed.jlp";
+  std::remove(path);
+
+  using packed_t = points::converter::packed_file_backend_t;
+  storage_location_t blob_a = {}, blob_b = {};
+  uint8_t uuid[16];
+  for (int i = 0; i < 16; i++)
+    uuid[i] = uint8_t(0xA0 + i);
+
+  {
+    points_error_t err;
+    packed_t backend(path, loop, err);
+    REQUIRE(err.code == 0);
+    backend.enable_cache_tier(/*cap=*/0);
+    backend.set_dataset_uuid(uuid);
+    REQUIRE(backend.open_for_write(true).code == 0);
+
+    auto a = pattern(4096, 11);
+    auto b = pattern(4096, 22);
+    backend.allocate_blob(uint32_t(a.size()), points::converter::storage_backend_t::blob_kind_t::data, blob_a);
+    backend.allocate_blob(uint32_t(b.size()), points::converter::storage_backend_t::blob_kind_t::data, blob_b);
+    REQUIRE(run_task(loop, [&]() { return backend.write_allocated(blob_a, make_bytes(a)); }).code == 0);
+    REQUIRE(run_task(loop, [&]() { return backend.write_allocated(blob_b, make_bytes(b)); }).code == 0);
+    REQUIRE(backend.residency()->resident_bytes() >= 8192);
+
+    // blob_a acquires a remote copy; not evictable until a checkpoint commits the fact.
+    backend.residency()->mark_uploaded(blob_a.offset, blob_a.size, /*remote_id=*/42);
+    REQUIRE(backend.residency()->pick_evict_victim() == nullptr);
+    // Orderly teardown: this checkpoint is the clean one.
+    backend.set_clean_shutdown_next_checkpoint();
+    do_registry_checkpoint(backend, loop, 64, 5);
+    auto *victim = backend.residency()->pick_evict_victim();
+    REQUIRE(victim != nullptr);
+    REQUIRE(victim->offset == blob_a.offset);
+    REQUIRE(victim->remote_id == 42);
+  }
+
+  // Reopen WITHOUT pre-enabling the tier: the superblock extras restore it, clean shutdown keeps
+  // the local_uploaded state (no demotion), and the uuid survives.
+  {
+    points_error_t err;
+    packed_t backend(path, loop, err);
+    REQUIRE(err.code == 0);
+    REQUIRE(backend.exists());
+    index_load_t load;
+    REQUIRE(backend.read_index(load).code == 0);
+    REQUIRE(backend.restore_allocator(load.free_blobs, load.free_blobs_size).code == 0);
+    REQUIRE(backend.open_for_write(false).code == 0);
+    REQUIRE(backend.cache_tier_enabled());
+    REQUIRE(memcmp(backend.dataset_uuid(), uuid, 16) == 0);
+    auto *entry = backend.residency()->find(blob_a.offset);
+    REQUIRE(entry != nullptr);
+    REQUIRE(entry->state == points::converter::blob_residency_state_t::local_uploaded);
+    REQUIRE(entry->durable); // persisted facts are durable by construction
+    REQUIRE(backend.residency()->find(blob_b.offset) == nullptr); // plain LOCAL: no entry
+
+    // Mid-session (unclean) checkpoint, then reopen: local_uploaded demotes to remote_uploaded.
+    do_registry_checkpoint(backend, loop, 64, 6);
+  }
+  {
+    points_error_t err;
+    packed_t backend(path, loop, err);
+    REQUIRE(err.code == 0);
+    index_load_t load;
+    REQUIRE(backend.read_index(load).code == 0);
+    REQUIRE(backend.restore_allocator(load.free_blobs, load.free_blobs_size).code == 0);
+    REQUIRE(backend.open_for_write(false).code == 0);
+    REQUIRE(backend.cache_tier_enabled());
+    auto *entry = backend.residency()->find(blob_a.offset);
+    REQUIRE(entry != nullptr);
+    REQUIRE(entry->state == points::converter::blob_residency_state_t::remote_uploaded);
+  }
+
+  std::remove(path);
+}
+
+TEST_CASE("packed classic mode: no residency table, extras stay zero")
+{
+  vio::thread_with_event_loop_t loop_thread;
+  auto &loop = loop_thread.event_loop();
+  const char *path = "test_classic_packed.jlp";
+  std::remove(path);
+  {
+    points_error_t err;
+    points::converter::packed_file_backend_t backend(path, loop, err);
+    REQUIRE(err.code == 0);
+    REQUIRE(backend.open_for_write(true).code == 0);
+    do_registry_checkpoint(backend, loop, 64, 9);
+  }
+  {
+    points_error_t err;
+    points::converter::packed_file_backend_t backend(path, loop, err);
+    REQUIRE(err.code == 0);
+    index_load_t load;
+    REQUIRE(backend.read_index(load).code == 0);
+    REQUIRE(backend.restore_allocator(load.free_blobs, load.free_blobs_size).code == 0);
+    REQUIRE(backend.open_for_write(false).code == 0);
+    REQUIRE(!backend.cache_tier_enabled()); // zero extras -> tier stays dormant
+  }
+  std::remove(path);
+}
+
+// ---------------- cache tier: spill + eviction under a hard cap ----------------
+
+namespace
+{
+// Forwards to a shared memory store so two backend "sessions" can see the same bucket (mem:// gives
+// each open a fresh store; crash/reopen tests need persistence).
+class shared_memory_io_t : public vio::objstore::io_manager_t
+{
+public:
+  explicit shared_memory_io_t(std::shared_ptr<vio::objstore::memory_io_manager_t> inner)
+    : _inner(std::move(inner))
+  {
+  }
+  vio::task_t<std::expected<uint64_t, vio::error_t>> read_object(std::string name, uint8_t *dst, vio::objstore::io_range_t range) override
+  {
+    return _inner->read_object(std::move(name), dst, range);
+  }
+  vio::task_t<std::expected<void, vio::error_t>> write_object(std::string name, std::shared_ptr<uint8_t[]> data, uint64_t size) override
+  {
+    return _inner->write_object(std::move(name), std::move(data), size);
+  }
+  vio::task_t<std::expected<vio::objstore::object_info_t, vio::error_t>> object_info(std::string name) override
+  {
+    return _inner->object_info(std::move(name));
+  }
+  vio::task_t<std::expected<void, vio::error_t>> remove_object(std::string name) override
+  {
+    return _inner->remove_object(std::move(name));
+  }
+
+private:
+  std::shared_ptr<vio::objstore::memory_io_manager_t> _inner;
+};
+} // namespace
+
+TEST_CASE("packed cache tier: hard cap diverts writes to spill, reads stay transparent")
+{
+  vio::thread_with_event_loop_t loop_thread;
+  auto &loop = loop_thread.event_loop();
+  const char *path = "test_spill_packed.jlp";
+  std::remove(path);
+  auto bucket = std::make_shared<vio::objstore::memory_io_manager_t>();
+
+  auto a = pattern(10240, 1);
+  auto b = pattern(10240, 2);
+  storage_location_t loc_a = {}, loc_b = {};
+  {
+    points_error_t err;
+    points::converter::packed_file_backend_t backend(path, loop, err);
+    REQUIRE(err.code == 0);
+    backend.enable_cache_tier(/*cap=*/16 * 1024);
+    backend.enable_spill(std::make_unique<shared_memory_io_t>(bucket), "spill/", /*segment target*/ 32 * 1024);
+    REQUIRE(backend.open_for_write(true).code == 0);
+
+    backend.allocate_blob(uint32_t(a.size()), points::converter::storage_backend_t::blob_kind_t::data, loc_a);
+    REQUIRE(run_task(loop, [&]() { return backend.write_allocated(loc_a, make_bytes(a)); }).code == 0);
+    // Second data blob exceeds the hard cap -> born remote_spilled, resident bytes unchanged.
+    backend.allocate_blob(uint32_t(b.size()), points::converter::storage_backend_t::blob_kind_t::data, loc_b);
+    REQUIRE(run_task(loop, [&]() { return backend.write_allocated(loc_b, make_bytes(b)); }).code == 0);
+    auto *entry_b = backend.residency()->find(loc_b.offset);
+    REQUIRE(entry_b != nullptr);
+    REQUIRE(entry_b->state == points::converter::blob_residency_state_t::remote_spilled);
+    REQUIRE(backend.residency()->resident_bytes() < 16 * 1024);
+
+    // Reads are transparent for both: local pread for a, buffered/remote spill read for b.
+    std::vector<uint8_t> got_a(a.size()), got_b(b.size());
+    uint32_t br = 0;
+    REQUIRE(run_task(loop, [&]() { return backend.read_blob(loc_a, got_a.data(), br); }).code == 0);
+    REQUIRE(memcmp(got_a.data(), a.data(), a.size()) == 0);
+    REQUIRE(run_task(loop, [&]() { return backend.read_blob(loc_b, got_b.data(), br); }).code == 0);
+    REQUIRE(memcmp(got_b.data(), b.data(), b.size()) == 0);
+
+    // Checkpoint flushes the open segment; the persisted table references it; reopen reads it back.
+    do_registry_checkpoint(backend, loop, 64, 3);
+    std::fill(got_b.begin(), got_b.end(), 0);
+    REQUIRE(run_task(loop, [&]() { return backend.read_blob(loc_b, got_b.data(), br); }).code == 0);
+    REQUIRE(memcmp(got_b.data(), b.data(), b.size()) == 0);
+  }
+
+  // Reopen: spilled blob still readable through the restored table + segment object.
+  {
+    points_error_t err;
+    points::converter::packed_file_backend_t backend(path, loop, err);
+    REQUIRE(err.code == 0);
+    backend.enable_cache_tier(16 * 1024);
+    backend.enable_spill(std::make_unique<shared_memory_io_t>(bucket), "spill/", 32 * 1024);
+    index_load_t load;
+    REQUIRE(backend.read_index(load).code == 0);
+    REQUIRE(backend.restore_allocator(load.free_blobs, load.free_blobs_size).code == 0);
+    REQUIRE(backend.open_for_write(false).code == 0);
+    REQUIRE(run_task(loop, [&]() { return backend.spill_bootstrap(); }).code == 0);
+    std::vector<uint8_t> got_b(b.size());
+    uint32_t br = 0;
+    REQUIRE(run_task(loop, [&]() { return backend.read_blob(loc_b, got_b.data(), br); }).code == 0);
+    REQUIRE(memcmp(got_b.data(), b.data(), b.size()) == 0);
+  }
+  std::remove(path);
+}
+
+TEST_CASE("packed cache tier: eviction punches uploaded blobs after their checkpoint")
+{
+  vio::thread_with_event_loop_t loop_thread;
+  auto &loop = loop_thread.event_loop();
+  const char *path = "test_evict_packed.jlp";
+  std::remove(path);
+
+  points_error_t err;
+  points::converter::packed_file_backend_t backend(path, loop, err);
+  REQUIRE(err.code == 0);
+  // Cap sized so two 10KB blobs (20480 resident) sit ABOVE the soft watermark (cap - cap/8 = 19712)
+  // without tripping the hard cap at allocation -> pressure exists, eviction runs post-checkpoint.
+  backend.enable_cache_tier(22 * 1024);
+  REQUIRE(backend.open_for_write(true).code == 0);
+
+  auto a = pattern(10240, 7);
+  auto b = pattern(10240, 8);
+  storage_location_t loc_a = {}, loc_b = {};
+  backend.allocate_blob(uint32_t(a.size()), points::converter::storage_backend_t::blob_kind_t::data, loc_a);
+  REQUIRE(run_task(loop, [&]() { return backend.write_allocated(loc_a, make_bytes(a)); }).code == 0);
+  backend.allocate_blob(uint32_t(b.size()), points::converter::storage_backend_t::blob_kind_t::data, loc_b);
+  REQUIRE(run_task(loop, [&]() { return backend.write_allocated(loc_b, make_bytes(b)); }).code == 0);
+
+  // Both uploaded (e.g. their band committed); facts become durable at the next checkpoint.
+  backend.residency()->mark_uploaded(loc_a.offset, loc_a.size, 100);
+  backend.residency()->mark_uploaded(loc_b.offset, loc_b.size, 101);
+  REQUIRE(backend.wants_checkpoint()); // over soft, nothing durable yet
+  const uint64_t resident_before = backend.residency()->resident_bytes();
+  do_registry_checkpoint(backend, loop, 64, 4); // post-commit: durable flip + eviction pass
+
+  // The pass punched at least one victim (LRU order: a first).
+  auto *entry_a = backend.residency()->find(loc_a.offset);
+  REQUIRE(entry_a != nullptr);
+  const bool punch_worked = entry_a->state == points::converter::blob_residency_state_t::remote_uploaded;
+  if (punch_worked)
+  {
+    REQUIRE(backend.residency()->resident_bytes() < resident_before);
+    // Reading an evicted blob without a destination resolver is a clear error, not garbage.
+    std::vector<uint8_t> got(a.size());
+    uint32_t br = 0;
+    REQUIRE(run_task(loop, [&]() { return backend.read_blob(loc_a, got.data(), br); }).code != 0);
+  }
+  else
+  {
+    WARN("hole punch unsupported on this filesystem -- eviction degraded to mark-only");
+  }
+  std::remove(path);
+}
+
+TEST_CASE("packed cache tier: spill-existing pass moves local blobs out and punches after checkpoint")
+{
+  vio::thread_with_event_loop_t loop_thread;
+  auto &loop = loop_thread.event_loop();
+  const char *path = "test_spill_existing_packed.jlp";
+  std::remove(path);
+  auto bucket = std::make_shared<vio::objstore::memory_io_manager_t>();
+
+  points_error_t err;
+  points::converter::packed_file_backend_t backend(path, loop, err);
+  REQUIRE(err.code == 0);
+  // Cap: 3 x 10KB blobs = 30720 resident, over soft (32768 * 7/8 = 28672) while every allocation
+  // stays under the hard cap (max prefix 30720 <= 32768) so all three land LOCAL.
+  backend.enable_cache_tier(32 * 1024);
+  backend.enable_spill(std::make_unique<shared_memory_io_t>(bucket), "spill/", 64 * 1024);
+  REQUIRE(backend.open_for_write(true).code == 0);
+
+  auto a = pattern(10240, 31);
+  auto b = pattern(10240, 32);
+  auto c = pattern(10240, 33);
+  storage_location_t loc_a = {}, loc_b = {}, loc_c = {};
+  for (auto [buf, loc] : {std::pair{&a, &loc_a}, std::pair{&b, &loc_b}, std::pair{&c, &loc_c}})
+  {
+    backend.allocate_blob(uint32_t(buf->size()), points::converter::storage_backend_t::blob_kind_t::data, *loc);
+    REQUIRE(run_task(loop, [&]() { return backend.write_allocated(*loc, make_bytes(*buf)); }).code == 0);
+  }
+
+  // Nothing uploaded -> eviction has no victims; the spill-existing pass must relieve pressure,
+  // taking the HIGHEST offsets first (needed latest by LOD).
+  REQUIRE(run_task(loop, [&]() { return backend.run_spill_pass(); }).code == 0);
+  auto *entry_c = backend.residency()->find(loc_c.offset);
+  REQUIRE(entry_c != nullptr);
+  REQUIRE(entry_c->state == points::converter::blob_residency_state_t::local_spilled);
+  REQUIRE(backend.residency()->find(loc_a.offset) == nullptr); // lowest offset spared
+
+  // Still readable from local bytes while the spill fact is pending.
+  std::vector<uint8_t> got(c.size());
+  uint32_t br = 0;
+  REQUIRE(run_task(loop, [&]() { return backend.read_blob(loc_c, got.data(), br); }).code == 0);
+  REQUIRE(memcmp(got.data(), c.data(), c.size()) == 0);
+
+  // Checkpoint: fact turns durable, post-commit punch drops the local bytes (if punch works here).
+  const uint64_t resident_before = backend.residency()->resident_bytes();
+  do_registry_checkpoint(backend, loop, 64, 12);
+  entry_c = backend.residency()->find(loc_c.offset);
+  REQUIRE(entry_c != nullptr);
+  if (entry_c->state == points::converter::blob_residency_state_t::remote_spilled)
+  {
+    REQUIRE(backend.residency()->resident_bytes() < resident_before);
+    // And the read now comes from the spill segment.
+    std::fill(got.begin(), got.end(), 0);
+    REQUIRE(run_task(loop, [&]() { return backend.read_blob(loc_c, got.data(), br); }).code == 0);
+    REQUIRE(memcmp(got.data(), c.data(), c.size()) == 0);
+  }
+  else
+  {
+    WARN("hole punch unsupported -- spilled blob kept local (degraded mode)");
+  }
+  std::remove(path);
+}
+
+TEST_CASE("packed cache tier: freeing tracked blobs removes entries, derefs segments, never recycles offsets")
+{
+  vio::thread_with_event_loop_t loop_thread;
+  auto &loop = loop_thread.event_loop();
+  const char *path = "test_freed_tracked.jlp";
+  std::remove(path);
+  auto bucket = std::make_shared<vio::objstore::memory_io_manager_t>();
+
+  points_error_t err;
+  points::converter::packed_file_backend_t backend(path, loop, err);
+  REQUIRE(err.code == 0);
+  backend.enable_cache_tier(/*cap=*/16 * 1024);
+  backend.enable_spill(std::make_unique<shared_memory_io_t>(bucket), "spill/", /*segment target*/ 32 * 1024);
+  REQUIRE(backend.open_for_write(true).code == 0);
+
+  auto a = pattern(10240, 1);
+  auto b = pattern(10240, 2);
+  storage_location_t loc_a = {}, loc_b = {};
+  backend.allocate_blob(uint32_t(a.size()), points::converter::storage_backend_t::blob_kind_t::data, loc_a);
+  REQUIRE(run_task(loop, [&]() { return backend.write_allocated(loc_a, make_bytes(a)); }).code == 0);
+  // b exceeds the hard cap -> born remote_spilled into segment 0.
+  backend.allocate_blob(uint32_t(b.size()), points::converter::storage_backend_t::blob_kind_t::data, loc_b);
+  REQUIRE(run_task(loop, [&]() { return backend.write_allocated(loc_b, make_bytes(b)); }).code == 0);
+  // a gets uploaded -> local_uploaded (tracked with local bytes).
+  backend.note_blob_uploaded(loc_a.offset, loc_a.size, /*remote_id*/ 0x1234);
+  REQUIRE(backend.residency()->find(loc_a.offset) != nullptr);
+  REQUIRE(backend.residency()->find(loc_b.offset) != nullptr);
+
+  // Checkpoint 1: facts durable, spill segment flushed + journaled.
+  do_registry_checkpoint(backend, loop, 64, 3);
+  shared_memory_io_t probe(bucket);
+  auto segment_exists = [&](bool &exists) {
+    return run_task(loop, [&]() -> vio::task_t<points_error_t> {
+      auto info = co_await probe.object_info("spill/seg_00000001");
+      exists = info.has_value() && info->exists;
+      co_return points_error_t{};
+    });
+  };
+  bool seg_exists = false;
+  REQUIRE(segment_exists(seg_exists).code == 0);
+  REQUIRE(seg_exists);
+
+  // Checkpoint 2 frees BOTH tracked blobs (superseded-LOD style).
+  {
+    auto reg = pattern(64, 4);
+    storage_location_t reg_loc;
+    backend.allocate_blob(64, points::converter::storage_backend_t::blob_kind_t::metadata, reg_loc);
+    REQUIRE(run_task(loop, [&]() { return backend.write_allocated(reg_loc, make_bytes(reg)); }).code == 0);
+    checkpoint_t cp;
+    cp.tree_registry = reg_loc;
+    cp.attribute_configs = make_bytes(pattern(16, 1));
+    cp.attribute_configs_size = 16;
+    cp.stats = make_bytes(pattern(8, 2));
+    cp.stats_size = 8;
+    cp.perf = make_bytes(pattern(12, 3));
+    cp.perf_size = 12;
+    cp.freed.push_back(loc_a);
+    cp.freed.push_back(loc_b);
+    REQUIRE(run_task(loop, [&]() { return backend.write_index(std::move(cp)); }).code == 0);
+  }
+
+  // Entries gone; the orphaned spill segment was swept by the same checkpoint.
+  REQUIRE(backend.residency()->find(loc_a.offset) == nullptr);
+  REQUIRE(backend.residency()->find(loc_b.offset) == nullptr);
+  REQUIRE(segment_exists(seg_exists).code == 0);
+  REQUIRE(!seg_exists);
+
+  // Freed-while-tracked offsets never return to the allocator: fresh allocations of the same sizes
+  // land elsewhere (a recycled offset would alias the stale remote copy through the old table).
+  storage_location_t loc_c = {}, loc_d = {};
+  backend.allocate_blob(uint32_t(a.size()), points::converter::storage_backend_t::blob_kind_t::data, loc_c);
+  backend.allocate_blob(uint32_t(b.size()), points::converter::storage_backend_t::blob_kind_t::data, loc_d);
+  REQUIRE(loc_c.offset != loc_a.offset);
+  REQUIRE(loc_c.offset != loc_b.offset);
+  REQUIRE(loc_d.offset != loc_a.offset);
+  REQUIRE(loc_d.offset != loc_b.offset);
 
   std::remove(path);
 }

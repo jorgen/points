@@ -75,6 +75,14 @@ struct points_converter_data_source_t
   std::unique_ptr<points::render::node_data_loader_t> node_loader;
   vio::thread_pool_t convert_pool{std::max(2u, std::thread::hardware_concurrency() / 2)};
   points::converter::render_list_t render_list;
+  // Departed nodes whose worker job (convert / resident-build / virtual materialize) is still in flight.
+  // build_render_list parks them here instead of spin-waiting; add_to_frame retries them each frame. This
+  // is what makes camera-move eviction non-blocking on the main thread.
+  points::converter::render_list_t pending_destroy;
+  // Decoded CPU buffers from nodes uploaded this frame, handed off to be freed on a convert_pool worker
+  // instead of on the render thread (freeing MB-sized shared_ptr[] cascades was the top main-thread cost).
+  // Render-thread-only (only add_to_frame touches it), so no lock.
+  std::vector<points::render::loaded_node_data_t> cpu_reap_queue;
 
   uint64_t points_rendered_last_frame = 0;
   points::converter::frame_timings_t frame_timings;

@@ -79,11 +79,23 @@ public:
 
   [[nodiscard]] offset_t register_blob(blob_size_t size);
   [[nodiscard]] bool unregister_blob(offset_t original_offset, blob_size_t size);
+  // Mark the EXACT range [offset, offset+size) allocated. The range must be free (inside free
+  // sections and/or at/past the tail). Used to replay another manager's allocation onto a copy
+  // (checkpoint serialization snapshot) so both agree on the range.
+  [[nodiscard]] bool claim_blob(offset_t offset, blob_size_t size);
   size_t get_free_sections_count() const;
   size_t get_pages_count() const;
   section_t get_free_section(page_t page, size_t n) const;
   offset_t get_file_size() const;
   uint32_t calculate_serialized_size() const;
   serialized_free_blob_manager_t serialize();
+  // As serialize(), but the blob's own location was already claimed (claim_blob) by the caller --
+  // no self-registration. calculate_serialized_size() must fit `size`.
+  serialized_free_blob_manager_t serialize_preallocated(offset_t offset, blob_size_t size);
+
+private:
+  void serialize_payload(uint8_t *data) const;
+
+public:
   [[nodiscard]] points_error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
 };

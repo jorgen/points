@@ -120,6 +120,20 @@ struct tree_t
   input_storage_map_t storage_map;
 };
 
+// Per-tree lifecycle for incremental finalization/upload (registry v2). `building`: the tree may
+// still receive points or LOD writes. `final`: its morton_max is proven below a committed
+// done-morton watermark, so no current or future input can touch it -- the tree (blobs, serialized
+// form, storage map) is immutable from that checkpoint on. `uploaded`: informational mirror of the
+// destination-bucket state (the bucket's manifests are authoritative; this may lag one checkpoint).
+enum class tree_state_t : uint8_t
+{
+  building = 0,
+  final = 1,
+  uploaded = 2,
+};
+// tree_band value for "not assigned to an upload band yet".
+inline constexpr uint32_t tree_band_none = 0xFFFFFFFFu;
+
 struct tree_registry_t
 {
   tree_registry_t() = default;
@@ -136,9 +150,20 @@ struct tree_registry_t
   tree_id_t root = {};
   tree_config_t tree_config;
   uint64_t current_lod_node_id = uint64_t(1) << 63;
+  // The done-morton watermark as of the last committed checkpoint (registry v2): restores
+  // _lod_done_morton / finality decisions on resume. Zero = nothing final yet.
+  morton::morton192_t lod_watermark = {};
   std::vector<std::unique_ptr<tree_t>> data;
   std::vector<storage_location_t> locations;
   std::vector<uint8_t> tree_id_initialized;
+  // Parallel to `locations`, indexed by tree id (registry v2; defaulted for v1 files).
+  std::vector<uint8_t> tree_state;  // tree_state_t values
+  std::vector<uint32_t> tree_band;  // upload band id, tree_band_none until banded
+  // Opaque serialized input_data_source_registry snapshot, persisted inside the registry blob so a
+  // resumed conversion can skip re-added done inputs and restore the watermark. Refreshed by the
+  // tree handler right before each checkpoint (via the processor-installed provider); handed back
+  // to the processor after deserialize.
+  std::vector<uint8_t> input_registry_snapshot;
 
   tree_t *get(tree_id_t id)
   {

@@ -99,4 +99,9 @@ int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &c
 // Destroy a virtual subtree children-first, spin-waiting each in-flight materialize before freeing.
 void destroy_virtual_subtree(std::unique_ptr<virtual_node_t> &root, render::callback_manager_t &callbacks, size_t *gpu_memory_used);
 
+// True if any node in the subtree still has a materialize job in flight on the convert pool. Used by the
+// render pipeline to DEFER (rather than block on) destroying a departed node whose virtual cut is still
+// decoding -- destroy_virtual_subtree would otherwise spin-wait on the main thread.
+bool virtual_subtree_has_inflight(const virtual_node_t &root);
+
 } // namespace points::converter

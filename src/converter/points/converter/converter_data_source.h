@@ -32,6 +32,15 @@ extern "C" {
 
 struct points_converter_data_source_t;
 POINTS_CONVERTER_EXPORT struct points_converter_data_source_t *points_converter_data_source_create(const char *url, uint32_t url_len, struct points_error_t *error, struct points_renderer_t *renderer);
+
+// As points_converter_data_source_create, but first applies `connection` (a vendor connection string --
+// credentials / endpoint / region; same grammar/keys as points_converter_create_with_connection, see vio
+// connection_string.h) for the dataset URL's provider, so a dataset can be streamed directly from a cloud
+// store (s3://bucket/prefix, az://container/prefix). `connection` may be null/empty for local files
+// (file://, bare paths) or when credentials come from the AWS_*/AZURE_* environment; for a public bucket
+// pass "anonymous=true" (optionally with "region=..."). A no-op for local/dir/mem URLs.
+POINTS_CONVERTER_EXPORT struct points_converter_data_source_t *points_converter_data_source_create_with_connection(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, struct points_error_t *error, struct points_renderer_t *renderer);
+
 POINTS_CONVERTER_EXPORT void points_converter_data_source_destroy(struct points_converter_data_source_t *converter_data_source);
 POINTS_CONVERTER_EXPORT struct points_data_source_t points_converter_data_source_get(struct points_converter_data_source_t *converter_data_source);
 

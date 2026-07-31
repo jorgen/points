@@ -68,7 +68,7 @@ std::shared_ptr<resident_source_t> build_resident_source(std::shared_ptr<dyn_poi
   dyn_points_draw_buffer_t tmp;
   tmp.point_count = src->point_count;
   tmp.data_handler = data_handler;
-  convert_points_to_vertex_data(tree_config, *data_handler, tmp);
+  convert_points_to_vertex_data(tree_config, data_handler->as_decode_input(), tmp);
   src->decoded_vertex = tmp.data[0];
   src->decode_offset = tmp.offset;
 
@@ -597,6 +597,16 @@ void destroy_virtual_subtree(std::unique_ptr<virtual_node_t> &root, render::call
     return;
   destroy_virtual_node_recursive(*root, callbacks, gpu_memory_used);
   root.reset();
+}
+
+bool virtual_subtree_has_inflight(const virtual_node_t &node)
+{
+  if (node.mat_state == virtual_mat_state::materializing && !node.convert_done.load(std::memory_order_acquire))
+    return true;
+  for (const auto &c : node.children)
+    if (c && virtual_subtree_has_inflight(*c))
+      return true;
+  return false;
 }
 
 } // namespace points::converter

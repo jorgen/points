@@ -28,6 +28,14 @@ void converter_progress_callback_t(void *user_data, float progress)
              stats.sort.operation_count,
              stats.source_write.operation_count,
              stats.overall_mbps);
+  // Destination mode only (returns false otherwise): the incremental-upload side of the pipeline.
+  points_converter_upload_state_t upload = {};
+  if (points_converter_get_upload_state(data->converter, &upload))
+  {
+    fmt::print(stderr, "  up: {:.1f} MB / {} bands{}", double(upload.bytes_uploaded) / (1024.0 * 1024.0), upload.bands_committed, upload.upload_parked ? " [PARKED]" : "");
+    if (upload.cache_max_bytes)
+      fmt::print(stderr, "  cache: {:.0f}/{:.0f} MB", double(upload.cache_resident_bytes) / (1024.0 * 1024.0), double(upload.cache_max_bytes) / (1024.0 * 1024.0));
+  }
 }
 
 void converter_warning_callback_t(void *user_data, const char *message)
@@ -57,6 +65,21 @@ void converter_done_callback_t(void *user_data)
 {
   (void)user_data;
   fmt::print(stderr, "\n");
+}
+
+void upload_error_callback_t(void *user_data, const struct points_error_t *error, uint8_t parked)
+{
+  auto *data = static_cast<callback_data_t *>(user_data);
+  if (parked)
+    data->had_errors = true; // parked = upload gave up (resume by reopening later)
+  auto error_str = get_error_string(error);
+  fmt::print(stderr, "\nUpload error{}: {}\n", parked ? " (parked)" : "", error_str);
+}
+
+void upload_done_callback_t(void *user_data)
+{
+  (void)user_data;
+  fmt::print(stderr, "\nUpload complete\n");
 }
 
 template <typename T, typename Deleter>
@@ -206,11 +229,31 @@ struct args_t
 {
   std::vector<std::string> input;
   std::string output;
-  std::string connection; // --connection spec (inline / @file / env:VAR) for a cloud output URL
+  std::string connection;        // --connection spec (inline / @file / env:VAR) for a cloud output URL
+  std::string cache;             // --cache: explicit local cache file for a cloud output (destination mode)
+  uint64_t cache_max_bytes = 0;  // --cache-max-bytes: resident cap for the cache file; 0 = unlimited
   points_converter_compression_t compression;
   bool inspect = false;
   uint32_t node_point_limit = 0; // points per node / blob-size lever; 0 = converter default
 };
+
+// Byte counts accept an optional K/M/G suffix (binary units).
+uint64_t parse_byte_size(const char *str)
+{
+  char *end = nullptr;
+  uint64_t value = std::strtoull(str, &end, 10);
+  if (end && *end)
+  {
+    switch (*end)
+    {
+    case 'k': case 'K': value <<= 10; break;
+    case 'm': case 'M': value <<= 20; break;
+    case 'g': case 'G': value <<= 30; break;
+    default: break;
+    }
+  }
+  return value;
+}
 
 bool parse_arguments(int argc, char *argv[], args_t &args)
 {
@@ -252,6 +295,20 @@ bool parse_arguments(int argc, char *argv[], args_t &args)
         return false;
       args.node_point_limit = static_cast<uint32_t>(std::strtoul(value, nullptr, 10));
     }
+    else if (std::strcmp(argv[i], "--cache") == 0)
+    {
+      const char *value = need_value(argv[i]);
+      if (!value)
+        return false;
+      args.cache = value;
+    }
+    else if (std::strcmp(argv[i], "--cache-max-bytes") == 0)
+    {
+      const char *value = need_value(argv[i]);
+      if (!value)
+        return false;
+      args.cache_max_bytes = parse_byte_size(value);
+    }
     else if (std::strcmp(argv[i], "-i") == 0 || std::strcmp(argv[i], "--inspect") == 0)
     {
       args.inspect = true;
@@ -267,7 +324,9 @@ bool parse_arguments(int argc, char *argv[], args_t &args)
 
 int main(int argc, char **argv)
 {
-  args_t args = {{}, "out.jlp", "", points_converter_compression_zstd, false};
+  args_t args;
+  args.output = "out.jlp";
+  args.compression = points_converter_compression_zstd;
   if (!parse_arguments(argc, argv, args))
     return 1;
 
@@ -318,7 +377,12 @@ int main(int argc, char **argv)
     }
   }
   points_error_t *create_error = nullptr;
-  auto converter = create_unique_ptr(points_converter_create_with_connection(args.output.data(), args.output.size(), connection.data(), connection.size(), points_open_file_semantics_truncate, &create_error), &points_converter_destroy);
+  // --cache pins an explicit local cache file for a cloud destination; without it a cloud URL still
+  // converts through an implicit cache in the OS cache dir (create_with_connection reroutes).
+  auto converter = args.cache.empty()
+                     ? create_unique_ptr(points_converter_create_with_connection(args.output.data(), args.output.size(), connection.data(), connection.size(), points_open_file_semantics_truncate, &create_error), &points_converter_destroy)
+                     : create_unique_ptr(points_converter_create_with_destination(args.cache.data(), args.cache.size(), args.output.data(), args.output.size(), connection.data(), connection.size(), points_open_file_semantics_truncate, &create_error),
+                                         &points_converter_destroy);
   if (!converter)
   {
     if (create_error)
@@ -329,10 +393,16 @@ int main(int argc, char **argv)
     }
     return 1;
   }
+  if (args.cache_max_bytes)
+    points_converter_set_cache_max_bytes(converter.get(), args.cache_max_bytes);
   callback_data_t cb_data;
   cb_data.converter = converter.get();
   points_converter_runtime_callbacks_t runtime_callbacks = {&converter_progress_callback_t, &converter_warning_callback_t, &converter_error_callback_t, &converter_done_callback_t};
   points_converter_set_runtime_callbacks(converter.get(), runtime_callbacks, &cb_data);
+  points_converter_upload_callbacks_t upload_callbacks = {};
+  upload_callbacks.error = &upload_error_callback_t;
+  upload_callbacks.done = &upload_done_callback_t;
+  points_converter_set_upload_callbacks(converter.get(), upload_callbacks, &cb_data);
   points_converter_set_compression(converter.get(), args.compression);
   if (args.node_point_limit > 0)
     points_converter_set_node_point_limit(converter.get(), args.node_point_limit);

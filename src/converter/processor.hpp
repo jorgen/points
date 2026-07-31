@@ -59,11 +59,21 @@ enum class file_existence_requirement_t
   can_exist,
 };
 
+// Destination mode: convert into a local cache file (the primary `url`) while finalized subtrees
+// upload incrementally to `url`'s bucket in the JLP2 layout. Empty url = classic local-only mode.
+struct destination_config_t
+{
+  std::string url;               // s3:// az:// dir:// mem://; empty = no destination
+  std::string connection;        // provider connection string (may be empty: env credentials)
+  uint64_t cache_max_bytes = 0;  // resident-bytes cap for the cache file; 0 = unlimited
+};
+
 class frustum_tree_walker_t;
 class processor_t : public vio::about_to_block_t
 {
 public:
-  processor_t(std::string url, file_existence_requirement_t existence_requirement, points_error_t &error);
+  processor_t(std::string url, file_existence_requirement_t existence_requirement, points_error_t &error, const destination_config_t &destination = {});
+  ~processor_t();
   points_error_t upgrade_to_write(bool truncate);
   void set_pre_init_tree_config(const tree_config_t &tree_config);
   void set_pre_init_node_point_limit(uint32_t node_point_limit);
@@ -76,7 +86,22 @@ public:
   uint32_t attrib_name_registry_count();
   uint32_t attrib_name_registry_get(uint32_t index, char *name, uint32_t buffer_size);
 
+  // Full quiesce: conversion pipeline idle AND (destination mode) the uploader drained/parked --
+  // after this the dataset is durable at the destination (unless parked on errors).
   void wait_idle();
+  // Conversion-only quiesce: the cache file is a complete valid JLP; uploads may still be running.
+  void wait_local_complete();
+  bool upload_active() const;
+  upload_stats_t upload_stats() const;
+  bool is_idle()
+  {
+    std::unique_lock<std::mutex> lock(_idle_mutex);
+    return _idle;
+  }
+  bool configuration_initialized()
+  {
+    return _tree_handler.configuration_initialized();
+  }
 
   void about_to_block() override;
 
@@ -122,6 +147,26 @@ private:
   input_data_source_registry_t _input_data_source_registry;
   attributes_configs_t _attributes_configs;
   tree_handler_t _tree_handler;
+  // Destination mode (native only; null in classic local-only conversions).
+  destination_config_t _destination;
+#ifndef __EMSCRIPTEN__
+  std::unique_ptr<upload_handler_t> _upload_handler;
+#endif
+  points_converter_upload_callbacks_t _upload_callbacks = {};
+  void *_upload_callback_user_ptr = nullptr;
+
+public:
+  void set_upload_callbacks(const points_converter_upload_callbacks_t &callbacks, void *user_ptr)
+  {
+    _upload_callbacks = callbacks;
+    _upload_callback_user_ptr = user_ptr;
+  }
+  void set_cache_max_bytes(uint64_t cap_bytes)
+  {
+    _storage_handler.set_cache_max_bytes(cap_bytes);
+  }
+
+private:
 
   vio::event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
 

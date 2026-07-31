@@ -113,6 +113,14 @@ public:
   tree_lod_generator_t(vio::event_loop_t &loop, vio::thread_pool_t &thread_pool, tree_registry_t &tree_cache, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &lod_done);
   void generate_lods(tree_id_t &tree_id, const morton::morton192_t &max);
 
+  // Resume: seed the already-LOD'd floor from the persisted registry watermark, so the first pass
+  // of a reopened conversion doesn't re-walk (and re-LOD) nodes below it -- those belong to trees
+  // that may already be finalized (immutable).
+  void restore_lod_complete_morton(const morton::morton192_t &m)
+  {
+    _lod_complete_morton = m;
+  }
+
   void iterate_workers();
 
   void add_worker_done(lod_worker_batch_t &batch)

@@ -382,7 +382,7 @@ static val points_read_node(int handle)
   dh.done = 1;
 
   dyn_points_draw_buffer_t draw;
-  convert_points_to_vertex_data(ds.tree_registry.tree_config, dh, draw);
+  convert_points_to_vertex_data(ds.tree_registry.tree_config, dh.as_decode_input(), draw);
 
   uint32_t point_count = header.point_count;
   const float *xyz = reinterpret_cast<const float *>(draw.data[0].get());

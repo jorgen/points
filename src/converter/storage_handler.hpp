@@ -36,7 +36,9 @@
 #include "tree.hpp"
 #include <ankerl/unordered_dense.h>
 
+#include <atomic>
 #include <functional>
+#include <future>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -98,6 +100,8 @@ struct read_request_t
   points_converter_buffer_t buffer_info;
   points_error_t error;
 
+  bool raw = false; // when set, read() returns the COMPRESSED bytes as-is (no decompress) -- used by the
+                    // wasm decode-worker path, which decompresses off the main thread.
   bool _done = false;
   std::atomic_bool _cancelled{false};
   std::mutex _mutex;
@@ -131,6 +135,9 @@ class storage_handler_t
 public:
   storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written, vio::event_pipe_t<points_error_t> &storage_error_pipe, points_error_t &error);
   ~storage_handler_t();
+  // Join the storage loop thread. Idempotent. Called by the processor's ordered teardown (and the destructor)
+  // before _backend / _read_cache / the event pipes an in-flight read touches are destroyed.
+  void stop_loop();
   [[nodiscard]] bool file_exists() const
   {
     return _backend && _backend->exists();
@@ -146,13 +153,46 @@ public:
   void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, points_error_t &&error)> done);
   void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> done);
 
-  std::shared_ptr<read_request_t> read(storage_location_t location);
+  std::shared_ptr<read_request_t> read(storage_location_t location, bool raw = false);
 
   void register_input_file_size(uint32_t file_id, uint64_t size_bytes);
   void set_compressor(compression_method_t method);
   void set_compression_level(int level);
   void set_read_cache_size(uint64_t max_bytes);
   void set_on_write_progress(std::function<void()> cb) { _on_write_progress = std::move(cb); }
+  // Cache-tier pressure: invoked (from the storage loop) at most once per arm when the backend
+  // reports that only a checkpoint can relieve pressure. rearm after the checkpoint completes.
+  void set_checkpoint_request_callback(std::function<void()> cb) { _on_checkpoint_request = std::move(cb); }
+  void rearm_checkpoint_request() { _checkpoint_requested.store(false, std::memory_order_release); }
+  // Upload tier: a band committed; mark its blobs uploaded in the cache tier (thread-safe; hops to
+  // the storage loop). Each pair is (cache blob offset, bucket pack location).
+  void note_blobs_uploaded(std::vector<std::pair<uint64_t, storage_location_t>> &&blobs);
+  // Block until every already-posted storage-loop task has run (FIFO barrier). NOT wasm-safe
+  // (single-threaded); destination-mode teardown only.
+  void drain_posted_events();
+
+  // ---- cache-tier configuration (destination mode; requires a LOCAL packed cache file) ----
+  // Enable residency tracking (cap 0 = track only) and, when destination_url is non-empty, the
+  // spill area + destination reads on that bucket. Call at bootstrap, before read_index/open.
+  [[nodiscard]] points_error_t configure_cache_tier(uint64_t cap_bytes, const std::string &destination_url, const std::string &connection);
+  // Runtime cap adjustment (thread-safe; lowering triggers a reclaim pass on the storage loop).
+  void set_cache_max_bytes(uint64_t cap_bytes);
+  // Returns the dataset uuid, generating + installing a fresh one if the cache has none yet.
+  // Only valid in destination mode (packed backend).
+  void ensure_dataset_uuid(uint8_t (&out)[16]);
+  // After read_index/restore_allocator at bootstrap: replay spill liveness + GC orphan segments.
+  [[nodiscard]] points_error_t run_spill_bootstrap();
+  // Mark the next checkpoint as the orderly-teardown one (keeps local_* residency on reopen).
+  void set_clean_shutdown_next_checkpoint();
+  struct cache_tier_stats_t
+  {
+    uint64_t resident_bytes = 0;
+    uint64_t cap_bytes = 0;
+    uint32_t tracked_blobs = 0;
+    uint64_t spilled_bytes = 0;
+  };
+  // Approximate (unsynchronized counters); false when no cache tier is configured.
+  bool get_cache_tier_stats(cache_tier_stats_t &out) const;
 
   const compression_stats_t &get_compression_stats() const { return _compression_stats; }
   const perf_stats_t::deserialized_perf_stats_t &get_deserialized_perf_stats() const { return _deserialized_perf_stats; }
@@ -179,11 +219,14 @@ private:
   vio::thread_with_event_loop_t _event_loop_thread;
   vio::event_loop_t &_event_loop;
   std::unique_ptr<storage_backend_t> _backend;
+  std::atomic<int> _reads_in_flight{0}; // do_read_request coroutines currently holding the backend/a connection
 
   attributes_configs_t &_attributes_configs;
 
   perf_stats_t &_perf_stats;
   std::function<void()> _on_write_progress;
+  std::function<void()> _on_checkpoint_request;
+  std::atomic<bool> _checkpoint_requested{false};
   compression_stats_t _compression_stats;
   perf_stats_t::deserialized_perf_stats_t _deserialized_perf_stats{};
   std::set<uint32_t> _seen_input_files;
@@ -202,20 +245,8 @@ private:
   std::mutex _mutex;
 };
 
-static bool deserialize_points(const points_converter_buffer_t &data, storage_header_t &header, points_converter_buffer_t &point_data, points_error_t &error)
-{
-  if (data.size < sizeof(header))
-  {
-    error.code = 2;
-    error.msg = "Invalid input size";
-    return false;
-  }
-  auto input_bytes = static_cast<uint8_t *>(data.data);
-  memcpy(&header, input_bytes, sizeof(header));
-  point_data.size = data.size - sizeof(header);
-  point_data.data = input_bytes + sizeof(header);
-  return true;
-}
+// deserialize_points moved to conversion_types.hpp (storage-free) so the decode path / a decode worker can
+// use it without pulling this header.
 
 struct read_only_points_t
 {
@@ -224,6 +255,10 @@ struct read_only_points_t
     , read_request(storage_handler.read(location))
   {
     read_request->wait_for_read();
+    // A failed read leaves data/header empty; callers MUST check `error` before dereferencing.
+    error = read_request->error;
+    if (error.code != 0)
+      return;
     deserialize_points(read_request->buffer_info, header, data, error);
   }
   ~read_only_points_t()
@@ -245,6 +280,10 @@ struct read_attribute_t
     , read_request(a_storage_handler.read(a_location))
   {
     read_request->wait_for_read();
+    // A failed read leaves data empty; callers MUST check `error` before dereferencing.
+    error = read_request->error;
+    if (error.code != 0)
+      return;
     data = read_request->buffer_info;
   }
 

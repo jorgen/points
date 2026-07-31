@@ -27,6 +27,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <filesystem>
 #include <vector>
 
 using namespace points::converter;
@@ -50,6 +51,51 @@ struct points_converter_t *points_converter_create(const char *url, uint64_t url
 
 struct points_converter_t *points_converter_create_with_connection(const char *url, uint64_t url_size, const char *connection, uint64_t connection_size, enum points_converter_open_file_semantics_t semantics, points_error_t **error)
 {
+  // Cloud destinations route through an IMPLICIT local cache + incremental JLP2 upload: one
+  // conversion pipeline (local IO for LOD reads, resumable, band uploads) instead of the retired
+  // direct object-per-blob write mode. The cache lives in $POINTS_CACHE_DIR (or the OS cache dir)
+  // named by a hash of the destination URL, capped via $POINTS_CACHE_MAX_BYTES (0/unset = uncapped).
+  // Local URLs (file:// / bare paths / dir:// / mem://) keep the classic single-store behavior.
+  {
+    std::string url_string(url, url_size);
+    auto scheme_end = url_string.find("://");
+    if (scheme_end != std::string::npos)
+    {
+      auto scheme = url_string.substr(0, scheme_end);
+      if (scheme == "s3" || scheme == "az" || scheme == "azure" || scheme == "http" || scheme == "https")
+      {
+        std::string cache_dir;
+        if (const char *env_dir = std::getenv("POINTS_CACHE_DIR"))
+          cache_dir = env_dir;
+        else if (const char *home = std::getenv("HOME"))
+#ifdef __APPLE__
+          cache_dir = std::string(home) + "/Library/Caches/points";
+#else
+          cache_dir = std::string(home) + "/.cache/points";
+#endif
+        else
+          cache_dir = ".points-cache";
+        std::error_code ec;
+        std::filesystem::create_directories(cache_dir, ec);
+        // Stable cache identity per destination URL (fnv1a); resuming the same destination reuses
+        // the same cache file, and the embedded uuid guards against mixups.
+        uint64_t hash = 1469598103934665603ull;
+        for (char c : url_string)
+          hash = (hash ^ uint8_t(c)) * 1099511628211ull;
+        char name[32];
+        snprintf(name, sizeof(name), "%016llx.jlp", static_cast<unsigned long long>(hash));
+        std::string cache_path = cache_dir + "/" + name;
+        auto *converter = points_converter_create_with_destination(cache_path.c_str(), cache_path.size(), url, url_size, connection, connection_size, semantics, error);
+        if (converter)
+        {
+          if (const char *env_cap = std::getenv("POINTS_CACHE_MAX_BYTES"))
+            points_converter_set_cache_max_bytes(converter, strtoull(env_cap, nullptr, 10));
+        }
+        return converter;
+      }
+    }
+  }
+
   // Install the connection string (credentials/endpoint/region) for the output URL's provider before the
   // storage backend is created inside points_converter_create. A no-op for local (file/dir/mem) URLs.
   bool applied = false;
@@ -77,6 +123,80 @@ struct points_converter_t *points_converter_create_with_connection(const char *u
     vio::objstore::clear_azure_config_override();
   }
   return converter;
+}
+
+struct points_converter_t *points_converter_create_with_destination(const char *cache_path, uint64_t cache_path_size, const char *destination_url, uint64_t destination_url_size, const char *connection, uint64_t connection_size,
+                                                                    enum points_converter_open_file_semantics_t semantics, points_error_t **error)
+{
+  if (!destination_url || destination_url_size == 0)
+    return points_converter_create(cache_path, cache_path_size, semantics, error);
+  std::string cache(cache_path, cache_path_size);
+  // The cache must be a local packed file: reject remote schemes early with a clear error.
+  auto scheme_end = cache.find("://");
+  if (scheme_end != std::string::npos && cache.compare(0, scheme_end, "file") != 0)
+  {
+    if (error)
+    {
+      *error = new points_error_t();
+      (*error)->code = 1;
+      (*error)->msg = "cache_path must be a local file path (the destination is where the dataset uploads)";
+    }
+    return nullptr;
+  }
+  points::converter::destination_config_t destination;
+  destination.url.assign(destination_url, destination_url_size);
+  if (connection && connection_size)
+    destination.connection.assign(connection, connection_size);
+  auto *converter = new points_converter_t(cache_path, cache_path_size, semantics, destination);
+  if (converter->error.code != 0)
+  {
+    if (error)
+    {
+      *error = new points_error_t();
+      (*error)->code = converter->error.code;
+      (*error)->msg = converter->error.msg;
+    }
+    delete converter;
+    return nullptr;
+  }
+  return converter;
+}
+
+void points_converter_set_cache_max_bytes(points_converter_t *converter, uint64_t max_bytes)
+{
+  converter->processor.set_cache_max_bytes(max_bytes);
+}
+
+void points_converter_set_read_cache_bytes(points_converter_t *converter, uint64_t max_bytes)
+{
+  converter->processor.storage_handler().set_read_cache_size(max_bytes);
+}
+
+void points_converter_set_upload_callbacks(points_converter_t *converter, points_converter_upload_callbacks_t callbacks, void *user_ptr)
+{
+  converter->processor.set_upload_callbacks(callbacks, user_ptr);
+}
+
+bool points_converter_get_upload_state(points_converter_t *converter, points_converter_upload_state_t *state)
+{
+  memset(state, 0, sizeof(*state));
+  auto upload = converter->processor.upload_stats();
+  state->bytes_uploaded = upload.bytes_uploaded;
+  state->bands_committed = upload.bands_committed;
+  state->packs_written = upload.packs_written;
+  state->upload_parked = upload.parked ? 1 : 0;
+  state->destination_complete = upload.complete ? 1 : 0;
+  points::converter::storage_handler_t::cache_tier_stats_t cache = {};
+  const bool have_cache = converter->processor.storage_handler().get_cache_tier_stats(cache);
+  state->cache_resident_bytes = cache.resident_bytes;
+  state->cache_max_bytes = cache.cap_bytes;
+  state->cache_spilled_bytes = cache.spilled_bytes;
+  return have_cache;
+}
+
+void points_converter_wait_local_complete(points_converter_t *converter)
+{
+  converter->processor.wait_local_complete();
 }
 
 void points_converter_destroy(points_converter_t *destroy)
@@ -141,7 +261,9 @@ points_converter_conversion_status_t points_converter_status(points_converter_t 
 {
   if (converter->processor.has_errors())
     return points_conversion_status_error;
-  return converter->status;
+  if (!converter->processor.is_idle() || converter->processor.upload_active())
+    return points_conversion_status_in_progress;
+  return points_conversion_status_completed;
 }
 
 static void fill_converter_stats(const compression_stats_t &src, points_converter_stats_t *dst)

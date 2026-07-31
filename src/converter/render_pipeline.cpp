@@ -90,13 +90,25 @@ void destroy_render_node(render_node_t &node, render::callback_manager_t &callba
   node.io_state = render_node_io_state::none;
 }
 
+bool node_is_busy(const render_node_t &node)
+{
+  if (node.io_state == render_node_io_state::converting && !node.convert_done.load(std::memory_order_acquire))
+    return true;
+  if (node.resident_building && !node.resident_ready.load(std::memory_order_acquire))
+    return true;
+  if (node.virtual_root && virtual_subtree_has_inflight(*node.virtual_root))
+    return true;
+  return false;
+}
+
 render_list_t build_render_list(
     const std::vector<tree_walker_data_t> &walker_nodes,
     render_list_t &&previous_list,
     float fade_duration_ms,
     render::callback_manager_t &callbacks,
     render::node_data_loader_t *node_loader,
-    size_t *virtual_gpu_used)
+    size_t *virtual_gpu_used,
+    render_list_t &deferred_destroy)
 {
   render_list_t new_list;
   new_list.reserve(walker_nodes.size() + 16);
@@ -126,6 +138,12 @@ render_list_t build_render_list(
       if (pnode.gpu_state == render_node_gpu_state::uploaded && pnode.fade_ms < fade_duration_ms)
       {
         new_list.push_back(std::move(*pit));
+      }
+      else if (node_is_busy(pnode))
+      {
+        // A worker is still decoding this departed node; destroying it now would spin-wait the main thread.
+        // Defer it -- the data source drains pending_destroy each frame once the job finishes.
+        deferred_destroy.push_back(std::move(*pit));
       }
       else
       {
@@ -173,6 +191,10 @@ render_list_t build_render_list(
     if (pnode.gpu_state == render_node_gpu_state::uploaded && pnode.fade_ms < fade_duration_ms)
     {
       new_list.push_back(std::move(*pit));
+    }
+    else if (node_is_busy(pnode))
+    {
+      deferred_destroy.push_back(std::move(*pit)); // still decoding: defer (see above)
     }
     else
     {
@@ -226,7 +248,8 @@ io_upload_stats_t process_io_and_upload(
     size_t gpu_memory_budget,
     double attr_min, double attr_max,
     bool promote_leaves,
-    size_t virtual_gpu_used)
+    size_t virtual_gpu_used,
+    std::vector<render::loaded_node_data_t> *reap_sink)
 {
   using clock = std::chrono::high_resolution_clock;
   auto to_ms = [](auto d) { return std::chrono::duration<double, std::milli>(d).count(); };
@@ -309,6 +332,9 @@ io_upload_stats_t process_io_and_upload(
     std::memcpy(req.format, node.walker_data.format, sizeof(req.format));
     std::memcpy(req.locations, node.walker_data.locations, sizeof(req.locations));
     req.tree_config = tree_config;
+    // Only leaves (with promotion on) can become virtual subnodes, so only they need the salvage blobs shipped
+    // back by the wasm worker loader; interior nodes skip the extra transfer.
+    req.want_salvage = promote_leaves && node.walker_data.is_leaf;
     node.load_handle = node_loader->request_load(&req, sizeof(req));
     node.io_state = render_node_io_state::loading;
     stats.io_in_flight++;
@@ -386,7 +412,19 @@ io_upload_stats_t process_io_and_upload(
     {
       auto impl = std::static_pointer_cast<loaded_node_impl_data_t>(node.loaded_data._impl_data);
       node.resident_handler = impl->data_handler;
+      // Worker-loader path: the load was REQUESTED while promotion was off (want_salvage false), so no salvage
+      // blobs came back and the lift is empty even though promotion is on now. Arm the R5-recovery reload so
+      // the promoter re-acquires the handler; otherwise this leaf is stranded on its full-res monolith. (The
+      // native loader always carries the handler in _impl_data, so this never arms there.)
+      if (!node.resident_handler)
+        node.salvage_lost = true;
     }
+    // The decoded CPU buffers (several MB of shared_ptr[]) were copied into GL above and are dead now. Freeing
+    // them here would cascade ~loaded_node_impl_data_t / ~read_request_t on the render thread (the largest
+    // non-GL cost in the frame profile). Hand them to a reap sink drained on a worker instead; releasing the
+    // moved-from node clears its now-stale raw pointers.
+    if (reap_sink)
+      reap_sink->push_back(std::move(node.loaded_data));
     node.loaded_data.release();
     auto tg1 = clock::now();
     gpu_transfer_total += to_ms(tg1 - tg0);

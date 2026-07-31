@@ -117,11 +117,40 @@ inline uint32_t lod_draw_size_from_prefix(const std::array<uint32_t, 64> &prefix
   return draw > point_count ? point_count : draw;
 }
 
+// The storage-free input to the decode (decompress happens upstream). This is the whole contract the CPU
+// decode needs -- the owning decompressed buffers + their layout -- with NO dependency on read_request_t,
+// the storage handler, or an event loop. It is what makes the decode extractable: it can be built from a
+// native read (dyn_points_data_handler_t::as_decode_input) or, in a Web Worker, straight from bytes handed
+// over postMessage. `buffers[i]` owns the bytes; `data_info[i]` is the (ptr,size) view into `buffers[i]`.
+struct decode_input_t
+{
+  storage_header_t header{};
+  point_format_t point_format[4]{};
+  std::shared_ptr<uint8_t[]> buffers[4];
+  points_converter_buffer_t data_info[4]{};
+};
+
 struct dyn_points_data_handler_t
 {
   dyn_points_data_handler_t(const point_format_t (&a_point_format)[4])
     : point_format{a_point_format[0], a_point_format[1], a_point_format[2], a_point_format[3]}
   {
+  }
+
+  // Snapshot the decode inputs (owning buffers + layout) after the reads have completed. The convert/decode
+  // routines take this instead of the whole handler, so they carry no storage/loop dependency.
+  decode_input_t as_decode_input() const
+  {
+    decode_input_t in;
+    in.header = header;
+    for (int i = 0; i < 4; ++i)
+    {
+      in.point_format[i] = point_format[i];
+      in.data_info[i] = data_info[i];
+      if (i < int(read_request.size()) && read_request[i])
+        in.buffers[i] = read_request[i]->buffer;
+    }
+    return in;
   }
 
   void cancel_requests()
@@ -224,14 +253,14 @@ struct dyn_points_draw_buffer_t
 };
 
 template <typename MORTON_TYPE, typename DECODED_T>
-void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const dyn_points_data_handler_t &data_handler, points_converter_buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
+void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const decode_input_t &in, points_converter_buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
                                           std::shared_ptr<uint8_t[]> &vertex_data)
 {
-  assert(data_handler.read_request[0]);
-  assert(data_handler.data_info[0].size % sizeof(MORTON_TYPE) == 0);
-  assert(data_handler.header.point_count == data_handler.data_info[0].size / sizeof(MORTON_TYPE));
-  auto *morton_array = static_cast<MORTON_TYPE *>(data_handler.data_info[0].data);
-  auto point_count = data_handler.header.point_count;
+  assert(in.data_info[0].data);
+  assert(in.data_info[0].size % sizeof(MORTON_TYPE) == 0);
+  assert(in.header.point_count == in.data_info[0].size / sizeof(MORTON_TYPE));
+  auto *morton_array = static_cast<MORTON_TYPE *>(in.data_info[0].data);
+  auto point_count = in.header.point_count;
 
   // Output is always packed float3 (r32x3, 12 bytes); DECODED_T only picks the morton decode width. Sizing
   // by sizeof(DECODED_T) over-allocates (m128/m192) or under-allocates+overflows (m32), so size by float3.
@@ -242,9 +271,9 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   auto vertex_data_ptr = vertex_data.get();
   auto *decoded_array = reinterpret_cast<std::array<float, 3> *>(vertex_data_ptr);
 
-  auto mask = morton::morton_negate(morton::morton_mask_create<uint64_t, 3>(data_handler.header.lod_span));
+  auto mask = morton::morton_negate(morton::morton_mask_create<uint64_t, 3>(in.header.lod_span));
 
-  morton::morton192_t morton_min = morton::morton_and(data_handler.header.morton_min, mask);
+  morton::morton192_t morton_min = morton::morton_and(in.header.morton_min, mask);
 
   uint64_t min_int[3];
   morton::decode(morton_min, min_int);
@@ -271,11 +300,10 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   }
 }
 
-inline void convert_points_to_vertex_data(const tree_config_t &tree_config, const dyn_points_data_handler_t &data_handler, dyn_points_draw_buffer_t &draw_buffer)
+inline void convert_points_to_vertex_data(const tree_config_t &tree_config, const decode_input_t &in, dyn_points_draw_buffer_t &draw_buffer)
 {
-  assert(data_handler.read_request[0]);
-  auto pformat = data_handler.header.point_format;
-  auto &point_request = *data_handler.read_request[0];
+  assert(in.data_info[0].data);
+  auto pformat = in.header.point_format;
   switch (pformat.type)
   {
   case points_type_u8:
@@ -288,36 +316,36 @@ inline void convert_points_to_vertex_data(const tree_config_t &tree_config, cons
   case points_type_u64:
   case points_type_i64:
   case points_type_r64: {
-    draw_buffer.data[0].reset(new uint8_t[point_request.buffer_info.size]);
-    draw_buffer.data_info[0] = points_converter_buffer_t(draw_buffer.data[0].get(), point_request.buffer_info.size);
+    draw_buffer.data[0].reset(new uint8_t[in.data_info[0].size]);
+    draw_buffer.data_info[0] = points_converter_buffer_t(draw_buffer.data[0].get(), in.data_info[0].size);
     draw_buffer.format[0] = pformat;
-    memcpy(draw_buffer.data[0].get(), point_request.buffer_info.data, point_request.buffer_info.size);
+    memcpy(draw_buffer.data[0].get(), in.data_info[0].data, in.data_info[0].size);
     break;
   }
   case points_type_m32:
-    convert_points_to_vertex_data_morton<morton::morton32_t, std::array<uint16_t, 3>>(tree_config, data_handler, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    convert_points_to_vertex_data_morton<morton::morton32_t, std::array<uint16_t, 3>>(tree_config, in, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
     draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
     break;
   case points_type_m64:
-    convert_points_to_vertex_data_morton<morton::morton64_t, std::array<uint32_t, 3>>(tree_config, data_handler, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    convert_points_to_vertex_data_morton<morton::morton64_t, std::array<uint32_t, 3>>(tree_config, in, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
     draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
     break;
   case points_type_m128:
-    convert_points_to_vertex_data_morton<morton::morton128_t, std::array<uint64_t, 3>>(tree_config, data_handler, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    convert_points_to_vertex_data_morton<morton::morton128_t, std::array<uint64_t, 3>>(tree_config, in, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
     draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
     break;
   case points_type_m192:
-    convert_points_to_vertex_data_morton<morton::morton192_t, std::array<uint64_t, 3>>(tree_config, data_handler, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
+    convert_points_to_vertex_data_morton<morton::morton192_t, std::array<uint64_t, 3>>(tree_config, in, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
     draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
     break;
   }
 }
-inline void convert_attribute_to_draw_buffer_data(const dyn_points_data_handler_t &data_handler, dyn_points_draw_buffer_t &draw_buffer, int data_slot)
+inline void convert_attribute_to_draw_buffer_data(const decode_input_t &in, dyn_points_draw_buffer_t &draw_buffer, int data_slot)
 {
-  draw_buffer.draw_type = data_handler.point_format[1].components == points_components_3 ? points_dyn_points_3 : points_dyn_points_1;
-  draw_buffer.data[data_slot] = data_handler.read_request[1]->buffer;
-  draw_buffer.data_info[data_slot] = draw_buffer.data_handler->data_info[data_slot];
-  draw_buffer.format[data_slot] = draw_buffer.data_handler->point_format[data_slot];
+  draw_buffer.draw_type = in.point_format[1].components == points_components_3 ? points_dyn_points_3 : points_dyn_points_1;
+  draw_buffer.data[data_slot] = in.buffers[data_slot];
+  draw_buffer.data_info[data_slot] = in.data_info[data_slot];
+  draw_buffer.format[data_slot] = in.point_format[data_slot];
 }
 
 // Runtime per-node LOD (Approach B). Points arrive morton-sorted; a point i starts a new grid cell of width

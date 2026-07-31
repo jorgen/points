@@ -20,18 +20,24 @@
 // s3://, az://). The heavy point data (compressed blobs) is transferred VERBATIM -- never decoded or
 // re-compressed -- and re-allocated in the destination's own layout, so it works across every format
 // pair. Only the small index/trees are deserialized (to enumerate what to copy) and re-serialized (to
-// carry the new blob locations). Credentials come from a per-side connection string (inline / @file /
-// env:VAR) or the standard AWS_*/AZURE_* environment.
+// carry the new blob locations). Sources may be packed files, legacy object datasets, or JLP2 buckets;
+// object destinations are always written in the JLP2 layout (packs + band + root manifest, see
+// bucket_format.hpp). Credentials come from a per-side connection string (inline / @file / env:VAR) or
+// the standard AWS_*/AZURE_* environment.
 
 #include <points/converter/connection_cli.h>
 
+#include "bucket_format.hpp"
 #include "conversion_types.hpp"
 #include "error.hpp"
 #include "input_storage_map.hpp"
+#include "packed_file_backend.hpp"
 #include "storage_backend.hpp"
 #include "tree.hpp"
+#include "url.hpp"
 
 #include <vio/event_loop.h>
+#include <vio/objstore/create_object_store.h>
 #include <vio/task.h>
 
 #include <fmt/printf.h>
@@ -39,9 +45,11 @@
 #include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -68,7 +76,8 @@ void print_usage(const char *prog)
              "\n"
              "Copy a jlp point-cloud dataset between storage locations (a packed .jlp file, dir://,\n"
              "mem://, s3://, az://). Compressed blobs are transferred verbatim (no re-encode) and\n"
-             "re-laid-out for the destination format.\n"
+             "re-laid-out for the destination format. Sources may be packed files, legacy object\n"
+             "datasets or JLP2 buckets; object destinations are always written as JLP2 buckets.\n"
              "\n"
              "Options:\n"
              "  -s, --source-connection <spec>       connection string for the source store\n"
@@ -179,12 +188,10 @@ points_error_t run_on_loop_blocking(vio::event_loop_t &loop, Factory factory)
 // A blob is uniquely identified by (file_id, offset); `size` is its length, not part of identity.
 using blob_key_t = std::pair<uint32_t, uint64_t>;
 
-// The copy itself, run on the event-loop thread. src/dst/load/registry outlive it (main blocks).
-vio::task_t<points_error_t> do_copy(storage_backend_t *src, storage_backend_t *dst, index_load_t *load, tree_registry_t *registry, uint64_t *blob_count, uint64_t *tree_count)
+// Step 1 of every copy: read + deserialize each tree from the source; collect the unique data-blob
+// locations they reference. std::map keeps the blob order deterministic.
+vio::task_t<points_error_t> collect_source(storage_backend_t *src, tree_registry_t *registry, std::vector<std::pair<uint32_t, std::shared_ptr<tree_t>>> &trees, std::map<blob_key_t, storage_location_t> &unique_blobs)
 {
-  // 1. Read + deserialize each tree; collect the unique data-blob locations they reference.
-  std::vector<std::pair<uint32_t, std::shared_ptr<tree_t>>> trees;
-  std::map<blob_key_t, storage_location_t> unique_blobs;
   for (uint32_t i = 0; i < registry->locations.size(); ++i)
   {
     const storage_location_t loc = registry->locations[i];
@@ -206,6 +213,17 @@ vio::task_t<points_error_t> do_copy(storage_backend_t *src, storage_backend_t *d
     });
     trees.emplace_back(i, std::move(tree));
   }
+  co_return points_error_t{};
+}
+
+// The copy itself, run on the event-loop thread. src/dst/load/registry outlive it (main blocks).
+vio::task_t<points_error_t> do_copy(storage_backend_t *src, storage_backend_t *dst, index_load_t *load, tree_registry_t *registry, uint64_t *blob_count, uint64_t *tree_count)
+{
+  // 1. Enumerate trees + the unique data blobs they reference.
+  std::vector<std::pair<uint32_t, std::shared_ptr<tree_t>>> trees;
+  std::map<blob_key_t, storage_location_t> unique_blobs;
+  if (auto e = co_await collect_source(src, registry, trees, unique_blobs); e.code != 0)
+    co_return e;
 
   // 2. Copy each unique data blob verbatim into the destination; remember old -> new location.
   std::map<blob_key_t, storage_location_t> remap;
@@ -216,7 +234,7 @@ vio::task_t<points_error_t> do_copy(storage_backend_t *src, storage_backend_t *d
     if (auto e = co_await src->read_blob(src_loc, buffer.get(), bytes_read); e.code != 0)
       co_return e;
     storage_location_t new_loc;
-    dst->allocate_blob(src_loc.size, new_loc);
+    dst->allocate_blob(src_loc.size, storage_backend_t::blob_kind_t::data, new_loc);
     if (auto e = co_await dst->write_allocated(new_loc, buffer); e.code != 0)
       co_return e;
     remap[key] = new_loc;
@@ -238,19 +256,28 @@ vio::task_t<points_error_t> do_copy(storage_backend_t *src, storage_backend_t *d
     if (!serialized.data)
       co_return points_error_t{-1, "failed to serialize tree"};
     storage_location_t tree_loc;
-    dst->allocate_blob(uint32_t(serialized.size), tree_loc);
+    dst->allocate_blob(uint32_t(serialized.size), storage_backend_t::blob_kind_t::metadata, tree_loc);
     if (auto e = co_await dst->write_allocated(tree_loc, serialized.data); e.code != 0)
       co_return e;
     registry->locations[i] = tree_loc;
     ++*tree_count;
   }
 
-  // 4. Serialize + write the tree registry.
+  // 4. Serialize + write the tree registry. The copy is not bound to any bucket (no dataset uuid /
+  //    residency travels with it), so bucket-mirror states must not dangle: demote uploaded -> final
+  //    and clear band assignments.
+  for (size_t i = 0; i < registry->tree_state.size(); ++i)
+  {
+    if (registry->tree_state[i] == uint8_t(tree_state_t::uploaded))
+      registry->tree_state[i] = uint8_t(tree_state_t::final);
+    if (i < registry->tree_band.size())
+      registry->tree_band[i] = tree_band_none;
+  }
   auto serialized_registry = tree_registry_serialize(*registry);
   if (!serialized_registry.data)
     co_return points_error_t{-1, "failed to serialize tree registry"};
   storage_location_t registry_loc;
-  dst->allocate_blob(uint32_t(serialized_registry.size), registry_loc);
+  dst->allocate_blob(uint32_t(serialized_registry.size), storage_backend_t::blob_kind_t::metadata, registry_loc);
   if (auto e = co_await dst->write_allocated(registry_loc, serialized_registry.data); e.code != 0)
     co_return e;
 
@@ -265,6 +292,173 @@ vio::task_t<points_error_t> do_copy(storage_backend_t *src, storage_backend_t *d
   checkpoint.perf = std::shared_ptr<uint8_t[]>(load->perf.release());
   checkpoint.perf_size = load->perf_size;
   co_return co_await dst->write_index(std::move(checkpoint));
+}
+
+static points_error_t to_points_error(const vio::error_t &e)
+{
+  return points_error_t{e.code != 0 ? e.code : -1, e.msg};
+}
+
+// Flush the accumulated pack buffer as object "data/{pack_id:08x}". No-op for a header-only/empty
+// buffer; always leaves `pack` empty.
+vio::task_t<points_error_t> jlp2_flush_pack(vio::objstore::io_manager_t *io, std::vector<uint8_t> &pack, uint32_t pack_id, uint64_t *pack_count)
+{
+  if (pack.size() <= k_pack_header_size)
+  {
+    pack.clear();
+    co_return points_error_t{};
+  }
+  const uint64_t size = pack.size();
+  auto data = std::make_shared<uint8_t[]>(size);
+  memcpy(data.get(), pack.data(), size);
+  pack.clear();
+  auto r = co_await io->write_object(bucket_pack_name(pack_id), std::move(data), size);
+  if (!r.has_value())
+    co_return to_points_error(r.error());
+  ++*pack_count;
+  co_return points_error_t{};
+}
+
+// HEAD the root manifest to decide whether an object destination already holds a dataset.
+vio::task_t<points_error_t> jlp2_probe_manifest(vio::objstore::io_manager_t *io, bool *exists)
+{
+  auto r = co_await io->object_info(bucket_root_manifest_name());
+  if (!r.has_value())
+    co_return to_points_error(r.error());
+  *exists = r->exists;
+  co_return points_error_t{};
+}
+
+// Copy into a JLP2 bucket: whole blobs packed into ~32MB immutable pack objects (verbatim bytes,
+// storage_location_t = {pack_id, in-pack offset, size}), one band manifest covering everything, then
+// the root manifest (complete=1) as the atomic commit point. Mirrors upload_handler_t's framing and
+// commit order (packs < band < root); deterministic packing means a re-run overwrites its own
+// orphans. A fresh uuid is minted by the caller -- a copy is a new dataset generation, resumable by
+// no cache.
+vio::task_t<points_error_t> do_copy_jlp2(storage_backend_t *src, vio::objstore::io_manager_t *io, index_load_t *load, tree_registry_t *registry, const uint8_t (&uuid)[16], uint64_t *blob_count, uint64_t *tree_count, uint64_t *pack_count)
+{
+  // 1. Enumerate trees + the unique data blobs they reference.
+  std::vector<std::pair<uint32_t, std::shared_ptr<tree_t>>> trees;
+  std::map<blob_key_t, storage_location_t> unique_blobs;
+  if (auto e = co_await collect_source(src, registry, trees, unique_blobs); e.code != 0)
+    co_return e;
+
+  // 2. Pack assembly (mirrors upload_handler_t::process_band).
+  constexpr uint32_t pack_target_bytes = 32u << 20;
+  std::vector<uint8_t> pack;
+  pack.reserve(pack_target_bytes + (1u << 20));
+  uint32_t pack_id = 0;
+  auto append_bytes = [&](const uint8_t *bytes, uint32_t size) -> storage_location_t {
+    if (pack.empty())
+    {
+      pack_header_t header; // band_id stays 0: the whole copy is one band
+      pack.resize(k_pack_header_size);
+      memcpy(pack.data(), &header, sizeof(header));
+    }
+    storage_location_t location;
+    location.file_id = pack_id;
+    location.offset = pack.size();
+    location.size = size;
+    pack.insert(pack.end(), bytes, bytes + size);
+    return location;
+  };
+  auto flush_if_full = [&]() -> vio::task_t<points_error_t> {
+    if (pack.size() < pack_target_bytes)
+      co_return points_error_t{};
+    auto e = co_await jlp2_flush_pack(io, pack, pack_id, pack_count);
+    if (e.code == 0)
+      ++pack_id;
+    co_return e;
+  };
+
+  // 3. Data blobs, verbatim.
+  std::map<blob_key_t, storage_location_t> remap;
+  std::vector<uint8_t> blob_bytes;
+  for (const auto &[key, src_loc] : unique_blobs)
+  {
+    blob_bytes.resize(src_loc.size);
+    uint32_t bytes_read = 0;
+    if (auto e = co_await src->read_blob(src_loc, blob_bytes.data(), bytes_read); e.code != 0)
+      co_return e;
+    remap[key] = append_bytes(blob_bytes.data(), src_loc.size);
+    ++*blob_count;
+    if (auto e = co_await flush_if_full(); e.code != 0)
+      co_return e;
+  }
+
+  // 4. Trees: remap the storage maps to pack locations (preserving ref_counts, as in do_copy),
+  //    re-serialize, append. The registry mirrors the bucket state: everything uploaded, band 0.
+  band_manifest_t band;
+  for (auto &[i, tree] : trees)
+  {
+    tree->storage_map.remap_storage([&](std::vector<storage_location_t> &storage) {
+      for (auto &s : storage)
+        if (s.size != 0)
+          s = remap.at(blob_key_t{s.file_id, s.offset});
+    });
+    auto serialized = tree_serialize(*tree);
+    if (!serialized.data)
+      co_return points_error_t{-1, "failed to serialize tree"};
+    auto tree_loc = append_bytes(serialized.data.get(), uint32_t(serialized.size));
+    registry->locations[i] = tree_loc;
+    if (i < registry->tree_state.size())
+      registry->tree_state[i] = uint8_t(tree_state_t::uploaded);
+    if (i < registry->tree_band.size())
+      registry->tree_band[i] = 0;
+    band.trees.push_back(band_tree_entry_t{i, tree_loc});
+    ++*tree_count;
+    if (auto e = co_await flush_if_full(); e.code != 0)
+      co_return e;
+  }
+
+  // 5. Registry + the metadata payloads (verbatim) into the final pack. Unlike incremental uploads,
+  //    a copy has the source's stats/perf at hand, so the bucket carries them too.
+  auto serialized_registry = tree_registry_serialize(*registry);
+  if (!serialized_registry.data)
+    co_return points_error_t{-1, "failed to serialize tree registry"};
+  auto registry_loc = append_bytes(serialized_registry.data.get(), uint32_t(serialized_registry.size));
+  storage_location_t attributes_loc = load->attribute_configs_size ? append_bytes(load->attribute_configs.get(), load->attribute_configs_size) : storage_location_t{};
+  storage_location_t stats_loc = load->stats_size ? append_bytes(load->stats.get(), load->stats_size) : storage_location_t{};
+  storage_location_t perf_loc = load->perf_size ? append_bytes(load->perf.get(), load->perf_size) : storage_location_t{};
+  if (auto e = co_await jlp2_flush_pack(io, pack, pack_id, pack_count); e.code != 0)
+    co_return e;
+  ++pack_id;
+
+  // 6. Band manifest (band 0 covers the whole dataset; terminal watermark). The dedup table stays
+  //    empty: it maps cache-file offsets for resumed uploads, and no cache references a copy.
+  band.band_id = 0;
+  memcpy(band.dataset_uuid, uuid, sizeof(band.dataset_uuid));
+  band.watermark.data[0] = band.watermark.data[1] = band.watermark.data[2] = ~uint64_t(0);
+  band.first_pack_id = 0;
+  band.next_pack_id = pack_id;
+  if (load->attribute_configs_size)
+    band.attributes_configs_snapshot.assign(load->attribute_configs.get(), load->attribute_configs.get() + load->attribute_configs_size);
+  auto band_bytes = serialize_band_manifest(band);
+  if (band_bytes.empty())
+    co_return points_error_t{-1, "failed to serialize band manifest"};
+  {
+    auto data = std::make_shared<uint8_t[]>(band_bytes.size());
+    memcpy(data.get(), band_bytes.data(), band_bytes.size());
+    auto r = co_await io->write_object(bucket_band_name(0), std::move(data), band_bytes.size());
+    if (!r.has_value())
+      co_return to_points_error(r.error());
+  }
+
+  // 7. Root manifest LAST -- the commit point.
+  root_manifest_t root;
+  memcpy(root.dataset_uuid, uuid, sizeof(root.dataset_uuid));
+  root.complete = 1;
+  root.band_count = 1;
+  root.next_pack_id = pack_id;
+  root.tree_registry = registry_loc;
+  root.attribute_configs = attributes_loc;
+  root.compression_stats = stats_loc;
+  root.perf_stats = perf_loc;
+  auto root_data = serialize_root_manifest(root);
+  auto r = co_await io->write_object(bucket_root_manifest_name(), std::move(root_data), k_root_manifest_size);
+  if (!r.has_value())
+    co_return to_points_error(r.error());
+  co_return points_error_t{};
 }
 
 } // namespace
@@ -305,21 +499,55 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  auto dst = create_storage_backend(args.dest_url, dest_connection, loop, err);
-  if (!dst || err.code != 0)
+  // Object-store destinations are written in the JLP2 layout (driving the io_manager directly with
+  // pack/band/root ordering); only local packed files still go through the storage_backend interface.
+  const auto parsed_dest = parse_url(args.dest_url);
+  const bool dest_is_object = !parsed_dest.scheme.empty() && parsed_dest.scheme != "file";
+
+  std::unique_ptr<storage_backend_t> dst;
+  std::unique_ptr<vio::objstore::io_manager_t> dest_io;
+  if (dest_is_object)
   {
-    fmt::print(stderr, "cannot open destination '{}': {}\n", args.dest_url, err.msg);
-    return 1;
+    auto io = vio::objstore::create_io_manager(args.dest_url, dest_connection, loop);
+    if (!io.has_value())
+    {
+      fmt::print(stderr, "cannot open destination '{}': {}\n", args.dest_url, io.error().msg);
+      return 1;
+    }
+    dest_io = std::move(io.value());
+    bool dest_exists = false;
+    err = run_on_loop_blocking(loop, [io_ptr = dest_io.get(), exists = &dest_exists]() -> vio::task_t<points_error_t> { return jlp2_probe_manifest(io_ptr, exists); });
+    if (err.code != 0)
+    {
+      fmt::print(stderr, "cannot probe destination '{}': {}\n", args.dest_url, err.msg);
+      return 1;
+    }
+    if (dest_exists && !args.force)
+    {
+      fmt::print(stderr, "destination already exists (use --force to overwrite): {}\n", args.dest_url);
+      return 1;
+    }
+    // --force replaces the manifests; superseded packs from the previous dataset become orphan
+    // objects (no list op yet), same contract as the legacy object truncate.
   }
-  if (dst->exists() && !args.force)
+  else
   {
-    fmt::print(stderr, "destination already exists (use --force to overwrite): {}\n", args.dest_url);
-    return 1;
-  }
-  if (err = dst->open_for_write(true); err.code != 0)
-  {
-    fmt::print(stderr, "cannot open destination for writing: {}\n", err.msg);
-    return 1;
+    dst = create_storage_backend(args.dest_url, dest_connection, loop, err);
+    if (!dst || err.code != 0)
+    {
+      fmt::print(stderr, "cannot open destination '{}': {}\n", args.dest_url, err.msg);
+      return 1;
+    }
+    if (dst->exists() && !args.force)
+    {
+      fmt::print(stderr, "destination already exists (use --force to overwrite): {}\n", args.dest_url);
+      return 1;
+    }
+    if (err = dst->open_for_write(true); err.code != 0)
+    {
+      fmt::print(stderr, "cannot open destination for writing: {}\n", err.msg);
+      return 1;
+    }
   }
 
   index_load_t load{};
@@ -327,6 +555,27 @@ int main(int argc, char **argv)
   {
     fmt::print(stderr, "cannot read source index: {}\n", err.msg);
     return 1;
+  }
+
+  // A capped cache may have evicted blob bytes to ITS destination bucket (residency table in the
+  // superblock extras). jlp_copy attaches no destination reads, so refuse up front with a pointer at
+  // the complete source instead of failing on the first evicted blob mid-copy.
+  if (src->is_packed_file())
+  {
+    auto *packed = static_cast<packed_file_backend_t *>(src.get());
+    if (auto *residency = packed->residency())
+    {
+      uint64_t evicted = 0;
+      residency->for_each([&](const blob_residency_entry_t &e) {
+        if (!residency->has_local_bytes(e))
+          evicted++;
+      });
+      if (evicted != 0)
+      {
+        fmt::print(stderr, "source cache is missing {} blobs locally (evicted/spilled to its destination bucket); copy from the destination bucket url instead\n", evicted);
+        return 1;
+      }
+    }
   }
 
   tree_registry_t registry;
@@ -338,11 +587,27 @@ int main(int argc, char **argv)
 
   uint64_t blob_count = 0;
   uint64_t tree_count = 0;
+  uint64_t pack_count = 0;
   storage_backend_t *src_ptr = src.get();
-  storage_backend_t *dst_ptr = dst.get();
-  points_error_t copy_err = run_on_loop_blocking(loop, [src_ptr, dst_ptr, load_ptr = &load, registry_ptr = &registry, blobs = &blob_count, treees = &tree_count]() -> vio::task_t<points_error_t> {
-    return do_copy(src_ptr, dst_ptr, load_ptr, registry_ptr, blobs, treees);
-  });
+  points_error_t copy_err;
+  if (dest_is_object)
+  {
+    // A copy is a new dataset generation: mint a fresh uuid (no cache can resume onto it).
+    uint8_t uuid[16];
+    std::random_device rd;
+    for (auto &b : uuid)
+      b = uint8_t(rd());
+    copy_err = run_on_loop_blocking(loop, [src_ptr, io_ptr = dest_io.get(), load_ptr = &load, registry_ptr = &registry, &uuid, blobs = &blob_count, trees = &tree_count, packs = &pack_count]() -> vio::task_t<points_error_t> {
+      return do_copy_jlp2(src_ptr, io_ptr, load_ptr, registry_ptr, uuid, blobs, trees, packs);
+    });
+  }
+  else
+  {
+    storage_backend_t *dst_ptr = dst.get();
+    copy_err = run_on_loop_blocking(loop, [src_ptr, dst_ptr, load_ptr = &load, registry_ptr = &registry, blobs = &blob_count, treees = &tree_count]() -> vio::task_t<points_error_t> {
+      return do_copy(src_ptr, dst_ptr, load_ptr, registry_ptr, blobs, treees);
+    });
+  }
   if (copy_err.code != 0)
   {
     fmt::print(stderr, "copy failed: {}\n", copy_err.msg);
@@ -350,6 +615,11 @@ int main(int argc, char **argv)
   }
 
   if (!args.quiet)
-    fmt::print("Copied {} data blobs + {} trees: {} -> {}\n", blob_count, tree_count, args.source_url, args.dest_url);
+  {
+    if (dest_is_object)
+      fmt::print("Copied {} data blobs + {} trees into {} packs: {} -> {} (JLP2)\n", blob_count, tree_count, pack_count, args.source_url, args.dest_url);
+    else
+      fmt::print("Copied {} data blobs + {} trees: {} -> {}\n", blob_count, tree_count, args.source_url, args.dest_url);
+  }
   return 0;
 }

@@ -1,5 +1,30 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { loadPointsRender, type Aabb, type Connection, type Renderer } from './pointsRender';
+import { installDecodeWorkerPool } from './decodeWorkerPool';
+
+// Install the off-main-thread decode pool iff its wasm module was built and copied to public/. Probing the
+// artifact keeps it a safe opt-in: a render-only build (no points_decode_worker.mjs) transparently falls back
+// to inline decode. Runs at most once; the wasm data source reads globalThis.__pointsDecodePool on create.
+let decodePoolProbe: Promise<void> | null = null;
+function ensureDecodeWorkerPool(): Promise<void> {
+  if (!decodePoolProbe) {
+    decodePoolProbe = (async () => {
+      try {
+        const url = new URL('points_decode_worker.mjs', document.baseURI).href;
+        const res = await fetch(url, { method: 'HEAD' });
+        if (res.ok) {
+          installDecodeWorkerPool();
+          console.info('[points] off-main-thread decode enabled');
+        } else {
+          console.info('[points] decode worker module absent — using inline decode');
+        }
+      } catch {
+        console.info('[points] decode worker probe failed — using inline decode');
+      }
+    })();
+  }
+  return decodePoolProbe;
+}
 
 /** DOM id of the canvas the renderer draws into (used as the Emscripten WebGL context selector). */
 export const CANVAS_ID = 'points-cloud-canvas';
@@ -137,6 +162,11 @@ export function usePointCloudRenderer(
       let renderer: Renderer | null = null;
       try {
         const mod = await loadPointsRender();
+        if (cancelled) return;
+
+        // Stand up the decode-worker pool (if built) before createRenderer: the data source reads
+        // globalThis.__pointsDecodePool at construction to pick the worker vs. inline decode path.
+        await ensureDecodeWorkerPool();
         if (cancelled) return;
 
         renderer = await mod.createRenderer('#' + CANVAS_ID, connection.url, connection.connectionString);

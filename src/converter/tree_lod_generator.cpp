@@ -623,6 +623,10 @@ static void quantize_attributres(storage_handler_t &cache, const child_storage_m
       if (attr_mapping.source_index < 0)
         continue;
       read_attribute_t source_attrib_data(cache, storage_info.locations[attr_mapping.source_index]);
+      // A failed source read (e.g. unreachable destination for a spilled blob) already flagged the
+      // conversion through the storage error pipe; skip the contribution instead of dereferencing.
+      if (source_attrib_data.error.code != 0)
+        continue;
       copy_attribute_for_input(*inputs_it, indecies, attr_mapping.source_format, source_attrib_data.data, lod_attrib_mapping.destination[destination_buffer_index], buffers.buffers[destination_buffer_index]);
     }
   }
@@ -633,6 +637,9 @@ static void quantize_subset(storage_handler_t &cache, const points_subset_t &sub
                             std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   read_only_points_t subset_data(cache, storage_info.locations[0]);
+  // Failed read: conversion is flagged (storage error pipe); contribute nothing rather than crash.
+  if (subset_data.error.code != 0)
+    return;
   offset_in_subset_t offset;
   point_count_t point_count;
   if (subset.count.data == uint32_t(0))
@@ -827,6 +834,10 @@ static void adjust_tree_after_lod(tree_registry_t &tree_cache, std::vector<lod_t
     tree_t *tree = tree_cache.get(adjust_data.tree_id);
     if (adjust_data.nodes[level].empty())
       continue;
+    // A finalized tree's LOD was fully generated in (or before) its finalizing pass; writing LOD
+    // data into it now means the watermark/finality logic is broken -- fail loudly (the upload
+    // and eviction tiers treat finalized trees as immutable).
+    assert(tree_cache.tree_state[adjust_data.tree_id.data] == uint8_t(tree_state_t::building) && "LOD write into finalized tree");
     // Writing LOD point counts / storage locations mutates the tree's serialized state, so mark it dirty.
     // Otherwise a tree that was already serialized-and-cleaned by an earlier (empty) LOD pass — which
     // happens with multi-file input, where LOD is first triggered on a partial done-morton watermark

@@ -68,12 +68,21 @@ struct input_data_next_input_t
   uint64_t approximate_point_count;
 };
 
+// Hand out the next input-file id from the process-wide counter (also used by register_file).
+input_data_id_t get_next_input_id();
+// Bump the process-wide input-id counter past every persisted id (resume): ids already referenced
+// by the tree's storage maps must never be handed out again.
+void ensure_next_input_id_above(uint32_t max_seen_id);
+
 class input_data_source_registry_t
 {
 public:
   input_data_source_registry_t();
 
-  input_data_reference_t register_file(std::unique_ptr<char[]> &&name, uint32_t name_length);
+  // Registers (or, on resume, re-finds by name) an input file. `already_done` (optional out) is set
+  // when the file completed in an earlier session per the restored snapshot -- the caller must then
+  // skip reading it (its points are already in the committed tree).
+  input_data_reference_t register_file(std::unique_ptr<char[]> &&name, uint32_t name_length, bool *already_done = nullptr);
   void register_pre_init_result(const tree_config_t &tree_config, input_data_id_t id, bool found_min, double (&min)[3], uint64_t approximate_point_count, uint8_t approximate_point_size_bytes, uint64_t input_file_size_bytes);
   void handle_input_init(input_data_id_t id, attributes_id_t attributes_id, points_converter_header_t public_header);
   void handle_sub_added(input_data_id_t id);
@@ -90,6 +99,14 @@ public:
   std::optional<morton::morton192_t> get_done_morton();
 
   input_data_source_t get(input_data_id_t input_id);
+
+  // Snapshot/restore for the registry-blob v2 input-registry section (resume support): persists
+  // file names, morton bounds/order, sub/inserted counts and read flags plus the sorted dispatch
+  // order + done prefix, so a reopened conversion can skip re-added done inputs and restore the
+  // done-morton watermark. Both lock internally; serialize() is called from the tree loop via the
+  // processor-installed provider right before each checkpoint.
+  std::vector<uint8_t> serialize() const;
+  [[nodiscard]] points_error_t deserialize(const uint8_t *data, uint32_t size);
 
 private:
   mutable std::mutex _mutex;

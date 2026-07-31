@@ -6,10 +6,15 @@
 #include <vio/event_pipe.h>
 #include <vio/thread_pool.h>
 
+#include "bucket_format.hpp"
 #include "conversion_types.hpp"
 #include "input_data_source_registry.hpp"
 #include "storage_handler.hpp"
+#include "tree_handler.hpp"
 #include "tree_lod_generator.hpp"
+#include "upload_handler.hpp"
+
+#include <vio/objstore/memory_object_store.h>
 #include <attributes_configs.hpp>
 #include <input_header.hpp>
 #include <morton.hpp>
@@ -72,6 +77,8 @@ struct tree_test_infrastructure : vio::about_to_block_t
   void handle_index_written()
   {
     fmt::print("index written\n");
+    if (on_index_written)
+      on_index_written();
   }
   void handle_file_error(const points_error_t &&error)
   {
@@ -109,6 +116,8 @@ struct tree_test_infrastructure : vio::about_to_block_t
   vio::event_pipe_t<points_error_t> cache_file_error;
   points::converter::perf_stats_t perf_stats;
   points::converter::storage_handler_t cache_file_handler;
+
+  std::function<void()> on_index_written; // optional test hook, fired per checkpoint commit
 
   uint32_t next_input_id = 0;
   bool write_done_state = false;
@@ -608,36 +617,43 @@ TEST_CASE("get_done_morton returns all-max when all files done" * doctest::test_
   REQUIRE(result->data[2] == expected.data[2]);
 }
 
-TEST_CASE("get_done_morton returns empty when unsorted files remain" * doctest::test_suite("[incremental_lod]"))
+TEST_CASE("get_done_morton clamps by undispatched files" * doctest::test_suite("[incremental_lod]"))
 {
+  // An undispatched file with KNOWN pre-init bounds no longer blocks the watermark outright: its
+  // input_order (morton of the aabb-min corner) is a true lower bound on every point it can ever
+  // contribute, so the boundary clamps to it instead. A registered file with UNKNOWN bounds
+  // (no pre-init yet -> input_order 0) still blocks everything.
   points::converter::input_data_source_registry_t registry;
   auto tree_config = create_tree_config(0.001, 0.0);
 
   auto ref1 = register_test_file(registry, "file1.las");
   auto ref2 = register_test_file(registry, "file2.las");
-  auto ref3 = register_test_file(registry, "file3.las");
 
   pre_init_test_file(registry, tree_config, ref1.input_id, 10.0);
   pre_init_test_file(registry, tree_config, ref2.input_id, 20.0);
-  // Don't pre-init ref3 — it stays in unsorted
 
-  // Pop 2 sorted ones
+  // Dispatch and finish ONLY the first (lowest-morton) file; ref2 stays undispatched.
   auto next1 = registry.next_input_to_process();
-  auto next2 = registry.next_input_to_process();
   REQUIRE(next1.has_value());
-  REQUIRE(next2.has_value());
-
+  REQUIRE(next1->id.data == ref1.input_id.data);
   mark_file_done(registry, next1->id);
-  mark_file_done(registry, next2->id);
 
-  // All sorted files are done but ref3 hasn't been pre-inited.
-  // However, ref3 was registered and has read_started=false, so
-  // it will be in the unsorted heap after the dirty flag is resolved.
-  // The dirty flag is set by register_file, so next call to
-  // next_input_to_process would rebuild the unsorted list including ref3.
-  // But since _unsorted_input_sources_dirty is true, get_done_morton returns {}.
+  // Prefix [ref1] is done; undispatched ref2 clamps the boundary to its aabb-min morton.
   auto result = registry.get_done_morton();
-  REQUIRE(!result.has_value());
+  REQUIRE(result.has_value());
+  points::converter::morton::morton192_t expected_clamp;
+  double pos2[3] = {20.0, 0.0, 0.0}; // matches pre_init_test_file's {min_x, 0, 0}
+  points::converter::convert_pos_to_morton(tree_config.scale, tree_config.offset, pos2, expected_clamp);
+  REQUIRE(result->data[0] == expected_clamp.data[0]);
+  REQUIRE(result->data[1] == expected_clamp.data[1]);
+  REQUIRE(result->data[2] == expected_clamp.data[2]);
+
+  // Now register a file WITHOUT pre-init: its lower bound is unknown (input_order 0), which must
+  // pin the boundary to "nothing provably final" until its bounds arrive.
+  auto ref3 = register_test_file(registry, "file3.las");
+  (void)ref3;
+  auto blocked = registry.get_done_morton();
+  REQUIRE(!blocked.has_value());
 }
 
 TEST_CASE("LOD with restricted morton boundary skips nodes outside range" * doctest::test_suite("[incremental_lod]"))
@@ -787,6 +803,405 @@ TEST_CASE("Two-pass incremental LOD matches single-pass" * doctest::test_suite("
     REQUIRE(root_collection.point_count > 0);
     REQUIRE(root_collection.point_count == single_root_point_count);
   }
+}
+
+TEST_CASE("tree registry v2 round-trip preserves state, watermark and snapshot" * doctest::test_suite("[registry_v2]"))
+{
+  points::converter::tree_registry_t registry(1000, create_tree_config(0.001, 0.0));
+  registry.current_id = 3;
+  registry.root = points::converter::tree_id_t(1);
+  registry.current_lod_node_id = (uint64_t(1) << 63) + 42; // must survive (v1 dropped it)
+  memset(&registry.lod_watermark, 0x3C, sizeof(registry.lod_watermark));
+  registry.locations.resize(3);
+  registry.locations[1] = {0, 128, 4096};
+  registry.tree_state = {uint8_t(points::converter::tree_state_t::final), uint8_t(points::converter::tree_state_t::building), uint8_t(points::converter::tree_state_t::uploaded)};
+  registry.tree_band = {7, points::converter::tree_band_none, 9};
+  registry.input_registry_snapshot = {1, 2, 3, 4, 5};
+
+  auto serialized = points::converter::tree_registry_serialize(registry);
+  REQUIRE(serialized.data != nullptr);
+
+  auto buffer = std::make_unique<uint8_t[]>(serialized.size);
+  memcpy(buffer.get(), serialized.data.get(), serialized.size);
+  points::converter::tree_registry_t restored;
+  auto error = points::converter::tree_registry_deserialize(buffer, uint32_t(serialized.size), restored);
+  REQUIRE(error.code == 0);
+
+  REQUIRE(restored.node_limit == registry.node_limit);
+  REQUIRE(restored.current_id == registry.current_id);
+  REQUIRE(restored.root.data == registry.root.data);
+  REQUIRE(restored.current_lod_node_id == registry.current_lod_node_id);
+  REQUIRE(memcmp(&restored.lod_watermark, &registry.lod_watermark, sizeof(registry.lod_watermark)) == 0);
+  REQUIRE(restored.locations.size() == 3);
+  REQUIRE(restored.locations[1].offset == 4096);
+  REQUIRE(restored.tree_state == registry.tree_state);
+  REQUIRE(restored.tree_band == registry.tree_band);
+  REQUIRE(restored.input_registry_snapshot == registry.input_registry_snapshot);
+}
+
+TEST_CASE("tree registry v1 blob deserializes with defaulted v2 state" * doctest::test_suite("[registry_v2]"))
+{
+  // Hand-build a v1 blob (no magic; first u32 is node_limit) and check the v2 fields default.
+  const uint32_t node_limit = 200000;
+  const uint32_t current_id = 2;
+  const points::converter::tree_id_t root(0);
+  const auto tree_config = create_tree_config(0.001, 0.0);
+  points::converter::storage_location_t locations[2] = {{0, 64, 1024}, {0, 32, 2048}};
+  const uint32_t count = 2;
+
+  const uint32_t size = sizeof(node_limit) + sizeof(current_id) + sizeof(root) + sizeof(tree_config) + sizeof(count) + sizeof(locations);
+  auto buffer = std::make_unique<uint8_t[]>(size);
+  uint8_t *p = buffer.get();
+  memcpy(p, &node_limit, sizeof(node_limit)); p += sizeof(node_limit);
+  memcpy(p, &current_id, sizeof(current_id)); p += sizeof(current_id);
+  memcpy(p, &root, sizeof(root)); p += sizeof(root);
+  memcpy(p, &tree_config, sizeof(tree_config)); p += sizeof(tree_config);
+  memcpy(p, &count, sizeof(count)); p += sizeof(count);
+  memcpy(p, locations, sizeof(locations)); p += sizeof(locations);
+  REQUIRE(p == buffer.get() + size);
+
+  points::converter::tree_registry_t restored;
+  auto error = points::converter::tree_registry_deserialize(buffer, size, restored);
+  REQUIRE(error.code == 0);
+  REQUIRE(restored.node_limit == node_limit);
+  REQUIRE(restored.locations.size() == 2);
+  REQUIRE(restored.tree_state.size() == 2);
+  REQUIRE(restored.tree_state[0] == uint8_t(points::converter::tree_state_t::building));
+  REQUIRE(restored.tree_band.size() == 2);
+  REQUIRE(restored.tree_band[0] == points::converter::tree_band_none);
+  REQUIRE(restored.input_registry_snapshot.empty());
+  REQUIRE(restored.current_lod_node_id == uint64_t(1) << 63);
+}
+
+TEST_CASE("input registry snapshot round-trips and restores dispatch state" * doctest::test_suite("[registry_v2]"))
+{
+  points::converter::input_data_source_registry_t registry;
+  auto tree_config = create_tree_config(0.001, 0.0);
+
+  auto ref1 = register_test_file(registry, "done.las");
+  auto ref2 = register_test_file(registry, "inflight.las");
+  auto ref3 = register_test_file(registry, "waiting.las");
+  pre_init_test_file(registry, tree_config, ref1.input_id, 10.0);
+  pre_init_test_file(registry, tree_config, ref2.input_id, 20.0);
+  pre_init_test_file(registry, tree_config, ref3.input_id, 30.0);
+
+  // Dispatch ref1 + ref2 (rising morton); finish only ref1; ref3 stays undispatched.
+  auto next1 = registry.next_input_to_process();
+  auto next2 = registry.next_input_to_process();
+  REQUIRE(next1.has_value());
+  REQUIRE(next2.has_value());
+  REQUIRE(next1->id.data == ref1.input_id.data);
+  REQUIRE(next2->id.data == ref2.input_id.data);
+  mark_file_done(registry, next1->id);
+  auto watermark_before = registry.get_done_morton();
+  REQUIRE(watermark_before.has_value());
+
+  auto snapshot = registry.serialize();
+  REQUIRE(!snapshot.empty());
+
+  points::converter::input_data_source_registry_t restored;
+  auto error = restored.deserialize(snapshot.data(), uint32_t(snapshot.size()));
+  REQUIRE(error.code == 0);
+
+  // The done prefix survives: the watermark is identical to the pre-snapshot one.
+  auto watermark_after = restored.get_done_morton();
+  REQUIRE(watermark_after.has_value());
+  REQUIRE(watermark_after->data[0] == watermark_before->data[0]);
+  REQUIRE(watermark_after->data[1] == watermark_before->data[1]);
+  REQUIRE(watermark_after->data[2] == watermark_before->data[2]);
+
+  // ref2 was dispatched-but-unfinished at snapshot time -> it must be re-dispatchable (re-read
+  // from scratch); ref3 was never dispatched -> also dispatchable; ref1 is done -> never again.
+  // Rising-morton order: ref2 (20) pops before ref3 (30).
+  auto redo = restored.next_input_to_process();
+  REQUIRE(redo.has_value());
+  REQUIRE(redo->id.data == ref2.input_id.data);
+  auto waiting = restored.next_input_to_process();
+  REQUIRE(waiting.has_value());
+  REQUIRE(waiting->id.data == ref3.input_id.data);
+  REQUIRE(!restored.next_input_to_process().has_value());
+
+  // A fresh id after restore must not collide with any persisted id.
+  auto fresh = points::converter::get_next_input_id();
+  REQUIRE(fresh.data > ref3.input_id.data);
+}
+
+TEST_CASE("finality marking across multi-batch morton-ordered input" * doctest::test_suite("[registry_v2]"))
+{
+  // End-to-end through tree_handler_t: insert two morton-ordered batches, run an incremental LOD
+  // pass with a watermark between them, then the terminal pass. After each checkpoint, every
+  // tree's state must match the rule: final iff morton_max < watermark (or terminal pass).
+  tree_test_infrastructure test_util(256);
+
+  std::mutex sync_mutex;
+  std::condition_variable sync_cv;
+  int checkpoints_seen = 0;
+  int inputs_done = 0;
+  test_util.on_index_written = [&] {
+    std::lock_guard<std::mutex> lock(sync_mutex);
+    checkpoints_seen++;
+    sync_cv.notify_all();
+  };
+  vio::event_pipe_t<points::converter::input_data_id_t> done_input(test_util.event_loop, std::function<void(points::converter::input_data_id_t &&)>([&](points::converter::input_data_id_t &&) {
+    std::lock_guard<std::mutex> lock(sync_mutex);
+    inputs_done++;
+    sync_cv.notify_all();
+  }));
+
+  points::converter::tree_handler_t tree_handler(test_util.worker_thread_pool, test_util.cache_file_handler, test_util.attributes_config, test_util.perf_stats, done_input);
+  tree_handler.set_tree_initialization_config(test_util.tree_config);
+  tree_handler.set_tree_initialization_node_point_limit(256);
+
+  const uint64_t full_max = (uint64_t(1) << (2 * 3 * 5)) - 1; // two magnitudes -> sub-trees exist
+  const uint64_t mid = full_max / 2;
+
+  auto batch1 = create_points(test_util, 0, mid - 1, 256);
+  auto batch2 = create_points(test_util, mid, full_max, 256);
+
+  {
+    auto locations1 = batch1.locations;
+    auto header1 = batch1.header;
+    tree_handler.add_points(std::move(header1), std::move(batch1.attribute_id), std::move(locations1));
+    auto locations2 = batch2.locations;
+    auto header2 = batch2.header;
+    tree_handler.add_points(std::move(header2), std::move(batch2.attribute_id), std::move(locations2));
+    std::unique_lock<std::mutex> lock(sync_mutex);
+    sync_cv.wait(lock, [&] { return inputs_done == 2; });
+  }
+
+  // Pass 1: watermark at batch2's min -- everything strictly below is final.
+  points::converter::morton::morton192_t watermark = {};
+  watermark.data[0] = mid;
+  tree_handler.generate_lod(watermark);
+  {
+    std::unique_lock<std::mutex> lock(sync_mutex);
+    sync_cv.wait(lock, [&] { return checkpoints_seen == 1; });
+  }
+  {
+    auto &registry = tree_handler.tree_registry();
+    int final_count = 0;
+    for (uint32_t i = 0; i < uint32_t(registry.data.size()); i++)
+    {
+      auto *tree = registry.data[i].get();
+      if (!tree)
+        continue;
+      const bool below = tree->morton_max < watermark;
+      const bool is_final = registry.tree_state[i] == uint8_t(points::converter::tree_state_t::final);
+      REQUIRE(is_final == below);
+      if (is_final)
+        final_count++;
+    }
+    // The root tree spans both batches, so it must still be building.
+    REQUIRE(registry.tree_state[registry.root.data] == uint8_t(points::converter::tree_state_t::building));
+    (void)final_count;
+  }
+
+  // Terminal pass: everything becomes final, and the watermark persists into the registry.
+  points::converter::morton::morton192_t terminal;
+  memset(&terminal, 0xFF, sizeof(terminal));
+  tree_handler.generate_lod(terminal);
+  {
+    std::unique_lock<std::mutex> lock(sync_mutex);
+    sync_cv.wait(lock, [&] { return checkpoints_seen == 2; });
+  }
+  {
+    auto &registry = tree_handler.tree_registry();
+    for (uint32_t i = 0; i < uint32_t(registry.data.size()); i++)
+    {
+      if (!registry.data[i])
+        continue;
+      REQUIRE(registry.tree_state[i] == uint8_t(points::converter::tree_state_t::final));
+    }
+    REQUIRE(memcmp(&registry.lod_watermark, &terminal, sizeof(terminal)) == 0);
+  }
+}
+
+template <typename T>
+struct task_result_type;
+template <typename T>
+struct task_result_type<vio::task_t<T>>
+{
+  using type = T;
+};
+
+// Run an io_manager coroutine from the test thread (memory store: loop-agnostic).
+template <typename F>
+static auto bucket_op(vio::event_loop_t &loop, F &&f)
+{
+  using result_t = typename task_result_type<decltype(f())>::type;
+  std::promise<result_t> promise;
+  auto fut = promise.get_future();
+  loop.run_in_loop([&]() -> vio::task_t<void> {
+    return [](std::promise<result_t> &p, F &fn) -> vio::task_t<void> {
+      p.set_value(co_await fn());
+      co_return;
+    }(promise, f);
+  });
+  return fut.get();
+}
+
+TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doctest::test_suite("[upload]"))
+{
+  tree_test_infrastructure test_util(256);
+
+  std::mutex sync_mutex;
+  std::condition_variable sync_cv;
+  int checkpoints_seen = 0;
+  int inputs_done = 0;
+  test_util.on_index_written = [&] {
+    std::lock_guard<std::mutex> lock(sync_mutex);
+    checkpoints_seen++;
+    sync_cv.notify_all();
+  };
+  vio::event_pipe_t<points::converter::input_data_id_t> done_input(test_util.event_loop, std::function<void(points::converter::input_data_id_t &&)>([&](points::converter::input_data_id_t &&) {
+    std::lock_guard<std::mutex> lock(sync_mutex);
+    inputs_done++;
+    sync_cv.notify_all();
+  }));
+
+  points::converter::tree_handler_t tree_handler(test_util.worker_thread_pool, test_util.cache_file_handler, test_util.attributes_config, test_util.perf_stats, done_input);
+  tree_handler.set_tree_initialization_config(test_util.tree_config);
+  tree_handler.set_tree_initialization_node_point_limit(256);
+
+  uint8_t uuid[16];
+  for (int i = 0; i < 16; i++)
+    uuid[i] = uint8_t(0x40 + i);
+  auto bucket = std::make_unique<vio::objstore::memory_io_manager_t>();
+  auto *bucket_raw = bucket.get();
+  points::converter::upload_handler_t uploader(std::move(bucket), test_util.cache_file_handler, test_util.worker_thread_pool, uuid);
+  REQUIRE(uploader.bootstrap().code == 0);
+  uploader.set_on_band_committed([&](uint32_t band_id, std::vector<uint32_t> tree_ids, const points::converter::morton::morton192_t &) { tree_handler.mark_band_uploaded(band_id, std::move(tree_ids)); });
+  tree_handler.set_band_sink([&](points::converter::band_job_t &&job) { uploader.enqueue_band(std::move(job)); }, uploader.committed_band_count(), uploader.stats().complete);
+
+  const uint64_t full_max = (uint64_t(1) << (2 * 3 * 5)) - 1;
+  const uint64_t mid = full_max / 2;
+  auto batch1 = create_points(test_util, 0, mid - 1, 256);
+  auto batch2 = create_points(test_util, mid, full_max, 256);
+  {
+    auto locations1 = batch1.locations;
+    auto header1 = batch1.header;
+    tree_handler.add_points(std::move(header1), std::move(batch1.attribute_id), std::move(locations1));
+    auto locations2 = batch2.locations;
+    auto header2 = batch2.header;
+    tree_handler.add_points(std::move(header2), std::move(batch2.attribute_id), std::move(locations2));
+    std::unique_lock<std::mutex> lock(sync_mutex);
+    sync_cv.wait(lock, [&] { return inputs_done == 2; });
+  }
+
+  // Pass 1 (partial watermark) then the terminal pass; each commit emits a band.
+  points::converter::morton::morton192_t watermark = {};
+  watermark.data[0] = mid;
+  tree_handler.generate_lod(watermark);
+  {
+    std::unique_lock<std::mutex> lock(sync_mutex);
+    sync_cv.wait(lock, [&] { return checkpoints_seen == 1; });
+  }
+  points::converter::morton::morton192_t terminal;
+  memset(&terminal, 0xFF, sizeof(terminal));
+  tree_handler.generate_lod(terminal);
+  {
+    std::unique_lock<std::mutex> lock(sync_mutex);
+    sync_cv.wait(lock, [&] { return checkpoints_seen == 2; });
+  }
+  // Both bands were enqueued by the two commits; wait for the uploader to drain them.
+  for (int i = 0; i < 200 && !(uploader.stats().complete || uploader.stats().parked); i++)
+    std::this_thread::sleep_for(std::chrono::milliseconds(25));
+  auto stats = uploader.stats();
+  REQUIRE(!stats.parked);
+  REQUIRE(stats.complete);
+  REQUIRE(stats.bands_committed >= 1);
+  REQUIRE(stats.bytes_uploaded > 0);
+
+  // ---- Verify the bucket ----
+  auto &loop = test_util.event_loop;
+  // Root manifest: complete, uuid, registry location set.
+  std::vector<uint8_t> root_bytes(points::converter::k_root_manifest_size);
+  {
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_root_manifest_name(), root_bytes.data(), {}); });
+    REQUIRE(read.has_value());
+  }
+  points::converter::root_manifest_t root;
+  REQUIRE(points::converter::deserialize_root_manifest(root_bytes.data(), uint32_t(root_bytes.size()), root).code == 0);
+  REQUIRE(root.complete == 1);
+  REQUIRE(memcmp(root.dataset_uuid, uuid, 16) == 0);
+  REQUIRE(root.band_count == stats.bands_committed);
+  REQUIRE(root.tree_registry.size > 0);
+
+  // Every band manifest parses; collect the dedup table for blob verification.
+  std::vector<points::converter::band_dedup_entry_t> all_blobs;
+  for (uint32_t band = 0; band < root.band_count; band++)
+  {
+    auto info = bucket_op(loop, [&]() { return bucket_raw->object_info(points::converter::bucket_band_name(band)); });
+    REQUIRE(info.has_value());
+    REQUIRE(info.value().exists);
+    std::vector<uint8_t> band_bytes(info.value().size);
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_band_name(band), band_bytes.data(), {}); });
+    REQUIRE(read.has_value());
+    points::converter::band_manifest_t manifest;
+    REQUIRE(points::converter::deserialize_band_manifest(band_bytes.data(), uint32_t(band_bytes.size()), manifest).code == 0);
+    REQUIRE(manifest.band_id == band);
+    for (auto &blob : manifest.blobs)
+      all_blobs.push_back(blob);
+  }
+  REQUIRE(!all_blobs.empty());
+
+  // Every uploaded blob's bytes match the cache's raw bytes (ranged GET inside the pack).
+  for (auto &blob : all_blobs)
+  {
+    auto request = test_util.cache_file_handler.read(points::converter::storage_location_t{0, blob.location.size, blob.cache_offset}, /*raw=*/true);
+    request->wait_for_read();
+    REQUIRE(request->error.code == 0);
+    std::vector<uint8_t> bucket_bytes(blob.location.size);
+    vio::objstore::io_range_t range;
+    range.offset = int64_t(blob.location.offset);
+    range.size = int64_t(blob.location.size);
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_pack_name(blob.location.file_id), bucket_bytes.data(), range); });
+    REQUIRE(read.has_value());
+    REQUIRE(read.value() == blob.location.size);
+    REQUIRE(memcmp(bucket_bytes.data(), request->buffer_info.data, blob.location.size) == 0);
+  }
+
+  // The bucket registry deserializes; every tree location points into a pack and the tree parses.
+  {
+    std::vector<uint8_t> reg_bytes(root.tree_registry.size);
+    vio::objstore::io_range_t range;
+    range.offset = int64_t(root.tree_registry.offset);
+    range.size = int64_t(root.tree_registry.size);
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_pack_name(root.tree_registry.file_id), reg_bytes.data(), range); });
+    REQUIRE(read.has_value());
+    auto buffer = std::make_unique<uint8_t[]>(reg_bytes.size());
+    memcpy(buffer.get(), reg_bytes.data(), reg_bytes.size());
+    points::converter::tree_registry_t bucket_registry;
+    REQUIRE(points::converter::tree_registry_deserialize(buffer, uint32_t(reg_bytes.size()), bucket_registry).code == 0);
+    REQUIRE(bucket_registry.locations.size() == tree_handler.tree_registry().locations.size());
+    for (uint32_t i = 0; i < uint32_t(bucket_registry.locations.size()); i++)
+    {
+      REQUIRE(bucket_registry.tree_state[i] == uint8_t(points::converter::tree_state_t::uploaded));
+      auto &tree_location = bucket_registry.locations[i];
+      REQUIRE(tree_location.size > 0);
+      std::vector<uint8_t> tree_bytes(tree_location.size);
+      vio::objstore::io_range_t tree_range;
+      tree_range.offset = int64_t(tree_location.offset);
+      tree_range.size = int64_t(tree_location.size);
+      auto tree_read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_pack_name(tree_location.file_id), tree_bytes.data(), tree_range); });
+      REQUIRE(tree_read.has_value());
+      points::converter::serialized_tree_t serialized;
+      serialized.size = int(tree_bytes.size());
+      serialized.data = std::make_shared<uint8_t[]>(tree_bytes.size());
+      memcpy(serialized.data.get(), tree_bytes.data(), tree_bytes.size());
+      points::converter::tree_t bucket_tree;
+      points_error_t tree_error = {};
+      REQUIRE(points::converter::tree_deserialize(serialized, bucket_tree, tree_error));
+      // Remapped storage locations must reference packs (file_id < next_pack_id), not the cache.
+      bucket_tree.storage_map.for_each([&](points::converter::input_data_id_t, points::converter::attributes_id_t, const std::vector<points::converter::storage_location_t> &locations) {
+        for (auto &location : locations)
+          if (location.size)
+            REQUIRE(location.file_id < root.next_pack_id);
+      });
+    }
+  }
+
+  uploader.stop();
 }
 
 } // namespace

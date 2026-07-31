@@ -74,6 +74,13 @@ struct storage_backend_t
 {
   virtual ~storage_backend_t() = default;
 
+  // Type tag (no RTTI): true for the local packed-file backend, which is the only one that hosts
+  // the cache tier (residency/spill/eviction).
+  virtual bool is_packed_file() const
+  {
+    return false;
+  }
+
   // ---- bootstrap (constructed on / called from the processor thread) ----
   [[nodiscard]] virtual bool exists() const = 0;
   [[nodiscard]] virtual points_error_t open_for_write(bool truncate) = 0;
@@ -82,9 +89,18 @@ struct storage_backend_t
   [[nodiscard]] virtual points_error_t restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size) = 0;
 
   // ---- data blobs (event-loop thread) ----
+  // What a blob holds, from the storage tier's perspective. `data` blobs (point/attribute payloads)
+  // are candidates for upload/eviction/spill in the cached backend; `metadata` blobs (trees,
+  // registry, stats, residency table) are pinned local forever -- they are rewritten every
+  // checkpoint and reclaimed through the existing checkpoint `freed` path instead.
+  enum class blob_kind_t : uint8_t
+  {
+    data,
+    metadata,
+  };
   // Reserve a location for `size` bytes. Synchronous, no IO. For packed this is register_blob and
   // may return a recycled offset (so the handler must invalidate its read cache before writing).
-  virtual void allocate_blob(uint32_t size, storage_location_t &out) = 0;
+  virtual void allocate_blob(uint32_t size, blob_kind_t kind, storage_location_t &out) = 0;
   virtual vio::task_t<points_error_t> write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data) = 0;
   virtual vio::task_t<points_error_t> read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read) = 0;
 
@@ -92,6 +108,25 @@ struct storage_backend_t
   // Writes the metadata blobs, then the index/manifest LAST, fsyncs, commits internal state, and
   // only then reclaims `freed`. On success the handler posts its index-written event.
   virtual vio::task_t<points_error_t> write_index(checkpoint_t checkpoint) = 0;
+
+  // ---- cache-tier pressure hooks (event-loop thread; no-ops outside the cached local backend) ----
+  // Reclaim local bytes if the tier is over pressure and durable victims exist.
+  virtual void maybe_evict()
+  {
+  }
+  // True when only a checkpoint can relieve pressure (pending remote facts need the durable flip).
+  virtual bool wants_checkpoint() const
+  {
+    return false;
+  }
+  // The uploader committed this blob to the destination's final layout: remote_id encodes
+  // (pack_id << 32) | in-pack offset. Makes the blob evictable once a checkpoint commits the fact.
+  virtual void note_blob_uploaded(uint64_t offset, uint32_t size, uint64_t remote_id)
+  {
+    (void)offset;
+    (void)size;
+    (void)remote_id;
+  }
 };
 
 // Selects the backend from the URL scheme (no scheme / file:// -> packed; dir://, mem://, s3:// ...

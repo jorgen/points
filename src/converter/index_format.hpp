@@ -28,14 +28,28 @@ namespace points::converter
 {
 
 // The dataset index / superblock. A fixed 128-byte block:
-//   magic {'J','L','P',0} followed by 5 storage_location_t (16 bytes each).
+//   magic {'J','L','P',0} followed by 5 storage_location_t (16 bytes each) = 84 bytes,
+// then the extras region in the previously-zeroed spare bytes (fully backward compatible --
+// legacy files carry zeros there, and zero means "absent" for every extra):
+//   offset  84: residency_table storage_location_t (16B; zero = no cache-tier residency table)
+//   offset 100: dataset_uuid (16B; zero = no destination bound -- ties a cache to its bucket)
+//   offset 116: version/flags u32 (zero = legacy semantics)
+//   offset 120: 8 spare bytes.
 // In packed mode it lives at offset 0 of the single file; in object mode it is the
 // content of the "manifest" object. Both backends use these two functions verbatim so
 // the on-disk index layout is identical across storage modes.
 constexpr uint32_t k_serialized_index_size = 128;
 
+struct index_extras_t
+{
+  storage_location_t residency_table = {}; // zero = absent
+  uint8_t dataset_uuid[16] = {};           // zero = none
+  uint32_t version_flags = 0;              // reserved
+};
+static_assert(4 + 6 * sizeof(storage_location_t) + 16 + 4 <= k_serialized_index_size, "index extras must fit the 128-byte superblock");
+
 inline std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, const storage_location_t &free_blobs, const storage_location_t &attribute_configs, const storage_location_t &tree_registry,
-                                                  const storage_location_t &compression_stats, const storage_location_t &perf_stats)
+                                                  const storage_location_t &compression_stats, const storage_location_t &perf_stats, const index_extras_t *extras = nullptr)
 {
   auto serialized_index = std::make_shared<uint8_t[]>(index_size);
   auto *data = serialized_index.get();
@@ -58,12 +72,22 @@ inline std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   data += sizeof(compression_stats);
 
   memcpy(data, &perf_stats, sizeof(perf_stats));
+  data += sizeof(perf_stats);
+
+  if (extras)
+  {
+    memcpy(data, &extras->residency_table, sizeof(extras->residency_table));
+    data += sizeof(extras->residency_table);
+    memcpy(data, extras->dataset_uuid, sizeof(extras->dataset_uuid));
+    data += sizeof(extras->dataset_uuid);
+    memcpy(data, &extras->version_flags, sizeof(extras->version_flags));
+  }
 
   return serialized_index;
 }
 
 [[nodiscard]] inline points_error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry,
-                                                     storage_location_t &compression_stats, storage_location_t &perf_stats)
+                                                     storage_location_t &compression_stats, storage_location_t &perf_stats, index_extras_t *extras = nullptr)
 {
   (void)buffer_size; // buffer size is validated by the caller
   uint8_t magic[] = {'J', 'L', 'P', 0};
@@ -88,6 +112,18 @@ inline std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   ptr += sizeof(compression_stats);
 
   memcpy(&perf_stats, ptr, sizeof(perf_stats));
+  ptr += sizeof(perf_stats);
+
+  if (extras)
+  {
+    // Legacy files carry zeros here (the writer memsets the whole block), which decodes as
+    // "no residency table / no uuid / version 0" -- exactly the absent semantics.
+    memcpy(&extras->residency_table, ptr, sizeof(extras->residency_table));
+    ptr += sizeof(extras->residency_table);
+    memcpy(extras->dataset_uuid, ptr, sizeof(extras->dataset_uuid));
+    ptr += sizeof(extras->dataset_uuid);
+    memcpy(&extras->version_flags, ptr, sizeof(extras->version_flags));
+  }
   return {};
 }
 

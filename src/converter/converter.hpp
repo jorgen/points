@@ -27,8 +27,8 @@
 
 struct points_converter_t
 {
-  points_converter_t(const char *url, uint64_t url_size, enum points_converter_open_file_semantics_t semantics)
-    : processor(std::string(url, url_size), points::converter::file_existence_requirement_t::can_exist, error)
+  points_converter_t(const char *url, uint64_t url_size, enum points_converter_open_file_semantics_t semantics, const points::converter::destination_config_t &destination = {})
+    : processor(std::string(url, url_size), points::converter::file_existence_requirement_t::can_exist, error, destination)
   {
     if (semantics == points_open_file_semantics_read_only)
       return;
@@ -40,7 +40,10 @@ struct points_converter_t
       return;
     // node_point_limit (points per node = read/sort chunk size = blob size lever) defaults to 200k in
     // tree_config_t; override per-conversion with points_converter_set_node_point_limit.
-    processor.set_pre_init_tree_config({0.00025, {-10000, -10000, -10000}});
+    // A REOPENED dataset already carries its configuration in the deserialized registry (resume);
+    // overriding it would corrupt the morton frame every stored coordinate is expressed in.
+    if (!processor.configuration_initialized())
+      processor.set_pre_init_tree_config({0.00025, {-10000, -10000, -10000}});
   }
   points_error_t error;
   points::converter::tree_config_t tree_config;

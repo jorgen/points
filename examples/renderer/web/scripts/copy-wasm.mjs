@@ -11,6 +11,11 @@ const repoRoot = resolve(webRoot, '../../..'); // points/
 
 const FILES = ['points_render.mjs', 'points_render.wasm'];
 
+// Optional pure-CPU decode worker module. When present it enables off-main-thread decode (a pool of these
+// runs behind the worker_node_data_loader); when absent the app decodes inline on the main thread. Copied
+// best-effort so a render-only build still works.
+const OPTIONAL_FILES = ['points_decode_worker.mjs', 'points_decode_worker.wasm'];
+
 const candidates = [
   process.env.POINTS_WASM_DIR,
   resolve(repoRoot, 'cmake-build-wasm/src/wasm'),
@@ -45,6 +50,17 @@ if (!src) {
 const publicDir = join(webRoot, 'public');
 await mkdir(publicDir, { recursive: true });
 for (const f of FILES) {
+  await copyFile(join(src, f), join(publicDir, f));
+  console.log(`[copy-wasm] ${f}  <-  ${src}`);
+}
+
+for (const f of OPTIONAL_FILES) {
+  try {
+    await access(join(src, f));
+  } catch {
+    console.log(`[copy-wasm] (optional) ${f} not built — inline decode will be used`);
+    continue;
+  }
   await copyFile(join(src, f), join(publicDir, f));
   console.log(`[copy-wasm] ${f}  <-  ${src}`);
 }

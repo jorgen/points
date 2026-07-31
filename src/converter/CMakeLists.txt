@@ -65,7 +65,13 @@ set(sources
         render_pipeline.cpp
         virtual_tree.cpp
         native_node_data_loader.cpp
+        node_decode.cpp
         blob_manager.cpp
+        blob_residency.cpp
+        bucket_format.cpp
+        upload_handler.cpp
+        spill_store.cpp
+        file_hole_punch.cpp
         input_data_source_registry.cpp
         input_storage_map.cpp
         compressor.cpp

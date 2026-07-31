@@ -20,6 +20,7 @@
 #include "conversion_types.hpp"
 #include "frustum_tree_walker.hpp"
 #include "node_data_loader.hpp"
+#include "node_decode.hpp" // decode_node + loaded_node_impl_data_t
 #include "point_buffer_render_helper.hpp"
 
 #include <atomic>
@@ -34,6 +35,10 @@ struct native_load_request_t
   point_format_t format[4];
   storage_location_t locations[4];
   tree_config_t tree_config;
+  // Leaf that may be promoted to virtual subnodes: the decode must preserve the pre-reorder morton codes as a
+  // salvage handler. The native loader always has the handler (ignores this); the wasm worker loader uses it to
+  // decide whether to ship the decompressed points+attr blobs back for reconstruction. Off for interior nodes.
+  bool want_salvage = false;
 };
 
 struct pending_request_t
@@ -42,15 +47,7 @@ struct pending_request_t
   tree_config_t tree_config;
 };
 
-// Backing store held alive by loaded_node_data_t::_impl_data. Exposed so a promoted spanning leaf can recover
-// its dyn_points_data_handler_t (the pre-reorder morton codes + attributes) before loaded_data is released.
-struct loaded_node_impl_data_t
-{
-  std::shared_ptr<dyn_points_data_handler_t> data_handler;
-  std::shared_ptr<uint8_t[]> vertex_data;
-  std::shared_ptr<uint8_t[]> attribute_data;
-  std::shared_ptr<uint8_t[]> rep_level_data;
-};
+// loaded_node_impl_data_t (the decode's backing store) now lives in node_decode.hpp alongside decode_node.
 
 class native_node_data_loader_t final : public render::node_data_loader_t
 {

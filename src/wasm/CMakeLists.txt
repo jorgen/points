@@ -11,6 +11,7 @@ add_executable(points_data_wasm
     ${_common}/error.cpp
     # The portable read + decompress subset (no libuv / laszip):
     ${_conv}/object_backend.cpp
+    ${_conv}/bucket_format.cpp
     ${_conv}/compressor.cpp
     ${_conv}/compressor_zstd.cpp
     ${_conv}/compressor_fse.cpp
@@ -133,11 +134,14 @@ add_executable(points_render_wasm
     ${_conv}/virtual_tree.cpp
     ${_conv}/frustum_tree_walker.cpp
     ${_conv}/native_node_data_loader.cpp
+    ${_conv}/worker_node_data_loader.cpp
+    ${_conv}/node_decode.cpp
     ${_conv}/blob_manager.cpp
     ${_conv}/input_data_source_registry.cpp
     ${_conv}/input_storage_map.cpp
     ${_conv}/storage_backend.cpp
     ${_conv}/object_backend.cpp
+    ${_conv}/bucket_format.cpp
     ${_conv}/compressor.cpp
     ${_conv}/compressor_zstd.cpp
     ${_conv}/compressor_fse.cpp
@@ -185,3 +189,44 @@ target_link_options(points_render_wasm PRIVATE
 )
 
 set_target_properties(points_render_wasm PROPERTIES OUTPUT_NAME "points_render" SUFFIX ".mjs")
+
+# ---------------------------------------------------------------------------------------------------------
+# Pure-CPU decode Web Worker module (decompress -> deserialize -> decode_node). No WebGL, no FETCH, no
+# ASYNCIFY -- it only crunches bytes handed to it over postMessage (see examples/renderer/web/src/decodeWorker
+# .ts + decodeWorkerPool.ts, and the as-built notes in decode_worker.cpp). Built + node-smoke-tested under
+# EMSDK; the worker_node_data_loader (src/converter) drives it.
+add_executable(points_decode_worker
+    decode_worker.cpp
+    ${_common}/error.cpp
+    ${_conv}/node_decode.cpp            # the extracted decode seam
+    ${_conv}/compressor.cpp
+    ${_conv}/compressor_zstd.cpp
+    ${_conv}/compressor_fse.cpp
+    ${_conv}/compressor_ans.cpp
+    ${_conv}/byte_shuffle.cpp
+    ${_conv}/compression_preprocess.cpp
+    ${_conv}/tree.cpp                   # storage_header / deserialize_points deps (TODO: extract to trim)
+    ${_conv}/input_storage_map.cpp
+    ${_conv}/attributes_configs.cpp
+)
+target_include_directories(points_decode_worker PRIVATE
+    ${_conv} ${_common} ${_render}
+    ${fmt_SOURCE_DIR}/include ${glm_SOURCE_DIR} ${libmorton_SOURCE_DIR}/include
+    ${unordered_dense_SOURCE_DIR}/include ${zstd_SOURCE_DIR}/lib
+)
+target_compile_definitions(points_decode_worker PRIVATE FMT_HEADER_ONLY=1 ZSTD_DISABLE_ASM=1)
+target_compile_options(points_decode_worker PRIVATE -frtti -include cstdlib --bind -fvisibility=default)
+target_link_libraries(points_decode_worker PRIVATE vio libzstd_static)
+target_link_options(points_decode_worker PRIVATE
+    -frtti
+    "-sDISABLE_EXCEPTION_THROWING=0"
+    --bind
+    "-sALLOW_MEMORY_GROWTH=1"          # note: NO -sFETCH / NO -sASYNCIFY -- pure CPU
+    "-sEXIT_RUNTIME=0"
+    "-sMODULARIZE=1"
+    "-sEXPORT_ES6=1"
+    "-sEXPORT_NAME=PointsDecodeWorker"
+    "-sENVIRONMENT=web,worker,node"
+    "-sSTACK_SIZE=5MB"
+)
+set_target_properties(points_decode_worker PROPERTIES OUTPUT_NAME "points_decode_worker" SUFFIX ".mjs")

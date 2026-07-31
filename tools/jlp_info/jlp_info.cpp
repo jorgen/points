@@ -2,9 +2,132 @@
 #include <points/converter/connection_cli.h>
 #include <points/converter/converter.h>
 
+#include "blob_residency.hpp"
+#include "bucket_format.hpp"
+#include "index_format.hpp"
+#include "url.hpp"
+
+#include <ankerl/unordered_dense.h>
+
+#include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
+
+// ---- cache / destination state sections (private-format introspection) --------------------------
+
+static std::string uuid_hex(const uint8_t (&uuid)[16])
+{
+  std::string out;
+  for (auto b : uuid)
+    out += fmt::format("{:02x}", b);
+  return out;
+}
+
+// Local packed cache: superblock extras (dataset uuid) + blob residency table. Classic files carry
+// neither and print nothing.
+static void print_local_cache_state(const std::string &path)
+{
+  namespace pc = points::converter;
+  FILE *f = fopen(path.c_str(), "rb");
+  if (!f)
+    return;
+  uint8_t superblock[pc::k_serialized_index_size];
+  if (fread(superblock, 1, sizeof(superblock), f) != sizeof(superblock))
+  {
+    fclose(f);
+    return;
+  }
+  pc::storage_location_t free_blobs, attrs, registry, stats, perf;
+  pc::index_extras_t extras;
+  if (pc::deserialize_index(superblock, sizeof(superblock), free_blobs, attrs, registry, stats, perf, &extras).code != 0)
+  {
+    fclose(f);
+    return;
+  }
+  bool has_uuid = false;
+  for (auto b : extras.dataset_uuid)
+    has_uuid = has_uuid || b != 0;
+  if (!has_uuid && extras.residency_table.size == 0)
+  {
+    fclose(f);
+    return;
+  }
+
+  fmt::print("Cache state:\n");
+  if (has_uuid)
+    fmt::print("  Dataset uuid:  {}\n", uuid_hex(extras.dataset_uuid));
+  if (extras.residency_table.size > 0)
+  {
+    std::vector<uint8_t> table(extras.residency_table.size);
+    pc::blob_residency_t residency;
+    if (fseek(f, long(extras.residency_table.offset), SEEK_SET) == 0 && fread(table.data(), 1, table.size(), f) == table.size() && residency.deserialize(table.data(), uint32_t(table.size())).code == 0)
+    {
+      uint64_t count_by_state[5] = {};
+      uint64_t bytes_by_state[5] = {};
+      ankerl::unordered_dense::map<uint32_t, std::pair<uint64_t, uint64_t>> spill_segments; // seg -> {blobs, bytes}
+      residency.for_each([&](const pc::blob_residency_entry_t &e) {
+        auto s = size_t(e.state);
+        if (s < 5)
+        {
+          count_by_state[s]++;
+          bytes_by_state[s] += e.size;
+        }
+        if (e.state == pc::blob_residency_state_t::local_spilled || e.state == pc::blob_residency_state_t::remote_spilled)
+        {
+          auto &seg = spill_segments[uint32_t(e.remote_id >> 32)];
+          seg.first++;
+          seg.second += e.size;
+        }
+      });
+      fmt::print("  Tracked blobs: {}\n", residency.entry_count());
+      auto print_state = [&](size_t idx, const char *name) {
+        if (count_by_state[idx])
+          fmt::print("    {:<16} {:>6} blobs  {:>10.1f} KB\n", name, count_by_state[idx], double(bytes_by_state[idx]) / 1024.0);
+      };
+      print_state(size_t(pc::blob_residency_state_t::local_uploaded), "local+uploaded");
+      print_state(size_t(pc::blob_residency_state_t::remote_uploaded), "evicted");
+      print_state(size_t(pc::blob_residency_state_t::local_spilled), "local+spilled");
+      print_state(size_t(pc::blob_residency_state_t::remote_spilled), "spilled");
+      if (!spill_segments.empty())
+      {
+        fmt::print("  Spill segments referenced:\n");
+        for (auto &[seg, info] : spill_segments)
+          fmt::print("    seg_{:08x}: {} blobs, {:.1f} KB\n", seg, info.first, double(info.second) / 1024.0);
+      }
+    }
+    else
+    {
+      fmt::print("  (failed to read residency table)\n");
+    }
+  }
+  fmt::print("\n");
+  fclose(f);
+}
+
+// dir:// JLP2 bucket: the root manifest is a plain file; print its state. (Cloud buckets are opened
+// through the converter above; their manifest is not re-fetched here.)
+static void print_dir_bucket_state(const std::string &dir_path)
+{
+  namespace pc = points::converter;
+  auto manifest_path = dir_path + "/" + pc::bucket_root_manifest_name();
+  FILE *f = fopen(manifest_path.c_str(), "rb");
+  if (!f)
+    return;
+  uint8_t buffer[pc::k_root_manifest_size];
+  auto bytes = fread(buffer, 1, sizeof(buffer), f);
+  fclose(f);
+  pc::root_manifest_t root;
+  if (pc::deserialize_root_manifest(buffer, uint32_t(bytes), root).code != 0)
+    return;
+  fmt::print("JLP2 destination state:\n");
+  fmt::print("  Dataset uuid:  {}\n", uuid_hex(root.dataset_uuid));
+  fmt::print("  Complete:      {}\n", root.complete ? "yes" : "no (upload in progress or parked)");
+  fmt::print("  Bands:         {}\n", root.band_count);
+  fmt::print("  Packs:         {}\n", root.next_pack_id);
+  fmt::print("\n");
+}
 
 struct converter_handle_t
 {
@@ -145,6 +268,16 @@ int main(int argc, char **argv)
 
     if (argc > 2)
       fmt::print("=== {} ===\n", filename);
+
+    // State sections come first: they read the raw superblock/manifest directly, so they also work
+    // for datasets the full open below would refuse (e.g. an incomplete JLP2 bucket).
+    {
+      auto parsed = points::converter::parse_url(filename);
+      if (parsed.scheme.empty() || parsed.scheme == "file")
+        print_local_cache_state(parsed.path);
+      else if (parsed.scheme == "dir")
+        print_dir_bucket_state(parsed.path);
+    }
 
     points_error_t *err = nullptr;
     converter_handle_t conv(points_converter_create(filename, len, points_open_file_semantics_read_only, &err));

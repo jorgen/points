@@ -27,6 +27,8 @@ tree_t &tree_cache_create_root_tree(tree_registry_t &tree_cache)
   tree_cache.data.emplace_back(new tree_t());
   tree_cache.locations.emplace_back();
   tree_cache.tree_id_initialized.push_back(1);
+  tree_cache.tree_state.push_back(uint8_t(tree_state_t::building));
+  tree_cache.tree_band.push_back(tree_band_none);
   tree_cache.data.back()->id.data = tree_cache.current_id++;
   return *tree_cache.data.back();
 }
@@ -37,6 +39,8 @@ tree_t &tree_cache_add_tree(tree_registry_t &tree_cache, tree_t *(&parent))
   tree_cache.data.emplace_back(new tree_t());
   tree_cache.locations.emplace_back();
   tree_cache.tree_id_initialized.push_back(1);
+  tree_cache.tree_state.push_back(uint8_t(tree_state_t::building));
+  tree_cache.tree_band.push_back(tree_band_none);
   tree_cache.data.back()->id.data = tree_cache.current_id++;
   parent = tree_cache.data[id.data].get();
   return *tree_cache.data.back();
@@ -94,7 +98,6 @@ static void tree_initialize_new_parent(const tree_t &some_child, const morton::m
 
   auto min_max_msb = morton::morton_msb(morton::morton_xor(new_min, new_max));
   new_parent.magnitude = uint8_t(morton::morton_magnitude_from_bit_index(min_max_msb));
-  fmt::print(stderr, "initialize new parent with magnitude {}\n", new_parent.magnitude);
   int lod = morton::morton_magnitude_to_lod(new_parent.magnitude);
   morton::morton192_t new_tree_mask = morton::morton_mask_create<uint64_t, 3>(lod);
   morton::morton192_t new_tree_mask_inv = morton::morton_negate(new_tree_mask);
@@ -157,6 +160,9 @@ static void sub_tree_split_points_to_children(storage_handler_t &cache, input_st
     to_deref.add(p.input_id);
     read_only_points_t p_read(cache, storage_map.location(p.input_id, 0));
     assert(p_read.data.size);
+    // Failed read: conversion is flagged (storage error pipe); skip rather than crash on null data.
+    if (p_read.error.code != 0)
+      continue;
 
     point_buffer_subdivide(p_read, storage_map, p, lod, node_min, children);
   }
@@ -176,6 +182,11 @@ static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_
                                    points_collection_t &&points) // NOLINT(*-no-recursion)
 {
   auto *tree = tree_cache.get(tree_id);
+  // A finalized tree is immutable: its morton_max was proven below a committed done-morton
+  // watermark, so no input may route points into it ever again. Hitting this assert means the
+  // watermark overclaimed (registry ordering bug) -- fail loudly instead of corrupting a tree the
+  // upload/eviction tiers treat as frozen.
+  assert(tree_cache.tree_state[tree_id.data] == uint8_t(tree_state_t::building) && "point insert into finalized tree");
   tree->is_dirty = true;
   assert(tree->id.data < tree_cache.current_id);
   assert(current_level != 0 || tree->morton_min == min);
@@ -337,7 +348,7 @@ static void insert_tree_in_tree(tree_registry_t &tree_registry, tree_id_t &paren
   int lod = morton::morton_magnitude_to_lod(parent->magnitude);
 
   auto current_name = parent->node_ids[0][0];
-  morton::morton192_t new_min = parent->morton_min;
+  [[maybe_unused]] morton::morton192_t new_min = parent->morton_min; // only read inside #ifndef NDEBUG below
   for (int i = 0; i < 4; i++, lod--)
   {
     auto &node = parent->nodes[i][current_skip];
@@ -690,21 +701,41 @@ bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, po
   return true;
 }
 
+// Registry blob v2 ('TRG2'): adds current_lod_node_id (v1 dropped it -- a resumed conversion would
+// reuse LOD input_data_ids and corrupt storage maps), the done-morton watermark, per-tree
+// state/band (incremental finalization/upload), and the opaque input-registry snapshot (resume).
+// v1 blobs (no magic; first u32 is node_limit) still deserialize -- a realistic node_limit can
+// never equal the magic.
+static constexpr uint32_t k_tree_registry_magic_v2 = 0x32475254u; // 'TRG2' little-endian
+
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry)
 {
+  auto tree_registry_count = uint32_t(tree_registry.locations.size());
+  assert(tree_registry.tree_state.size() == tree_registry_count);
+  assert(tree_registry.tree_band.size() == tree_registry_count);
+  auto input_snapshot_size = uint32_t(tree_registry.input_registry_snapshot.size());
+
   uint32_t tree_registry_size = 0;
+  tree_registry_size += sizeof(k_tree_registry_magic_v2);
   tree_registry_size += sizeof(tree_registry.node_limit);
   tree_registry_size += sizeof(tree_registry.current_id);
   tree_registry_size += sizeof(tree_registry.root);
   tree_registry_size += sizeof(tree_registry.tree_config);
-  auto tree_registry_count = uint32_t(tree_registry.locations.size());
+  tree_registry_size += sizeof(tree_registry.current_lod_node_id);
+  tree_registry_size += sizeof(tree_registry.lod_watermark);
   tree_registry_size += sizeof(tree_registry_count);
   tree_registry_size += sizeof(storage_location_t) * tree_registry_count;
+  tree_registry_size += uint32_t(sizeof(uint8_t)) * tree_registry_count;  // tree_state
+  tree_registry_size += uint32_t(sizeof(uint32_t)) * tree_registry_count; // tree_band
+  tree_registry_size += sizeof(input_snapshot_size);
+  tree_registry_size += input_snapshot_size;
 
   auto data = std::make_shared<uint8_t[]>(tree_registry_size);
   uint8_t *ptr = data.get();
   uint8_t *end_ptr = ptr + tree_registry_size;
 
+  if (!write_memory(ptr, end_ptr, k_tree_registry_magic_v2))
+    return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry.node_limit))
     return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry.current_id))
@@ -713,9 +744,21 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
     return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry.tree_config))
     return {nullptr, 0};
+  if (!write_memory(ptr, end_ptr, tree_registry.current_lod_node_id))
+    return {nullptr, 0};
+  if (!write_memory(ptr, end_ptr, tree_registry.lod_watermark))
+    return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry_count))
     return {nullptr, 0};
   if (!write_vec_type(ptr, end_ptr, tree_registry.locations))
+    return {nullptr, 0};
+  if (!write_vec_type(ptr, end_ptr, tree_registry.tree_state))
+    return {nullptr, 0};
+  if (!write_vec_type(ptr, end_ptr, tree_registry.tree_band))
+    return {nullptr, 0};
+  if (!write_memory(ptr, end_ptr, input_snapshot_size))
+    return {nullptr, 0};
+  if (input_snapshot_size && !write_vec_type(ptr, end_ptr, tree_registry.input_registry_snapshot))
     return {nullptr, 0};
   return {std::move(data), int(tree_registry_size)};
 }
@@ -724,19 +767,55 @@ points_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data,
 {
   const uint8_t *ptr = data.get();
   const uint8_t *end_ptr = ptr + data_size;
-  if (!read_memory(ptr, end_ptr, tree_registry.node_limit))
+  uint32_t first_word = 0;
+  if (!read_memory(ptr, end_ptr, first_word))
     return {1, "Invalid tree registry data"};
+  const bool v2 = first_word == k_tree_registry_magic_v2;
+  if (v2)
+  {
+    if (!read_memory(ptr, end_ptr, tree_registry.node_limit))
+      return {1, "Invalid tree registry data"};
+  }
+  else
+  {
+    tree_registry.node_limit = first_word; // v1: no magic, first u32 IS node_limit
+  }
   if (!read_memory(ptr, end_ptr, tree_registry.current_id))
     return {1, "Invalid tree registry data"};
   if (!read_memory(ptr, end_ptr, tree_registry.root))
     return {1, "Invalid tree registry data"};
   if (!read_memory(ptr, end_ptr, tree_registry.tree_config))
     return {1, "Invalid tree registry data"};
+  if (v2)
+  {
+    if (!read_memory(ptr, end_ptr, tree_registry.current_lod_node_id))
+      return {1, "Invalid tree registry data"};
+    if (!read_memory(ptr, end_ptr, tree_registry.lod_watermark))
+      return {1, "Invalid tree registry data"};
+  }
   uint32_t tree_registry_count = 0;
   if (!read_memory(ptr, end_ptr, tree_registry_count))
     return {1, "Invalid tree registry data"};
   if (!read_vec_type(ptr, end_ptr, tree_registry.locations, tree_registry_count))
     return {1, "Invalid tree registry data"};
+  if (v2)
+  {
+    if (!read_vec_type(ptr, end_ptr, tree_registry.tree_state, tree_registry_count))
+      return {1, "Invalid tree registry data"};
+    if (!read_vec_type(ptr, end_ptr, tree_registry.tree_band, tree_registry_count))
+      return {1, "Invalid tree registry data"};
+    uint32_t input_snapshot_size = 0;
+    if (!read_memory(ptr, end_ptr, input_snapshot_size))
+      return {1, "Invalid tree registry data"};
+    if (!read_vec_type(ptr, end_ptr, tree_registry.input_registry_snapshot, input_snapshot_size))
+      return {1, "Invalid tree registry data"};
+  }
+  else
+  {
+    // v1 file: every tree is considered still building, none banded, no snapshot/watermark.
+    tree_registry.tree_state.assign(tree_registry_count, uint8_t(tree_state_t::building));
+    tree_registry.tree_band.assign(tree_registry_count, tree_band_none);
+  }
 
   tree_registry.data.resize(tree_registry_count);
   tree_registry.tree_id_initialized.resize(tree_registry_count);
