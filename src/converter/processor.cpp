@@ -560,6 +560,11 @@ void processor_t::set_pre_init_node_point_limit(uint32_t node_point_limit)
   _tree_handler.set_tree_initialization_node_point_limit(node_point_limit);
 }
 
+void processor_t::set_pre_init_read_chunk_bytes(uint64_t bytes)
+{
+  _tree_handler.set_tree_initialization_read_chunk_bytes(bytes);
+}
+
 void processor_t::set_runtime_callbacks(const points_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr)
 {
   _runtime_callbacks = runtime_callbacks;

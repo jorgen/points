@@ -492,18 +492,17 @@ vio::task_t<points_error_t> packed_file_backend_t::read_blob(storage_location_t 
           bytes_read = location.size;
         co_return err;
       }
-      // remote_uploaded: read from the destination's final layout -- one ranged GET inside the
-      // pack object encoded in remote_id. The spill io_manager IS the destination bucket.
+      // remote_uploaded: read from the destination's final layout -- the blob IS the whole object
+      // data/{object_id:08x} (remote_id = object_id << 32; no Range header, capacity-checked).
+      // The spill io_manager IS the destination bucket.
       if (!_spill_io)
         co_return points_error_t{1, "Blob was evicted to the destination; destination reads not attached"};
-      vio::objstore::io_range_t range;
-      range.offset = int64_t(uint32_t(entry->remote_id & 0xFFFFFFFFu));
-      range.size = int64_t(location.size);
-      auto remote = co_await _spill_io->read_object(bucket_pack_name(uint32_t(entry->remote_id >> 32)), dst, range);
+      assert(uint32_t(entry->remote_id & 0xFFFFFFFFu) == 0 && "dataset objects hold exactly one blob");
+      auto remote = co_await _spill_io->read_object_all(bucket_data_object_name(uint32_t(entry->remote_id >> 32)), dst, location.size);
       if (!remote.has_value())
         co_return points_error_t{int(remote.error().code), remote.error().msg};
       if (remote.value() != location.size)
-        co_return points_error_t{1, "Short read from destination pack"};
+        co_return points_error_t{1, "Destination object size does not match the blob"};
       bytes_read = location.size;
       co_return points_error_t{};
     }

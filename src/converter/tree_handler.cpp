@@ -94,6 +94,7 @@ tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_
   , _attributes_configs(attributes_configs)
   , _perf_stats(perf_stats)
   , _tree_lod_generator(_event_loop, _thread_pool, _tree_registry, _file_cache, _attributes_configs, _perf_stats, _serialize_trees)
+  , _tree_collapse(_event_loop, _thread_pool, _tree_registry, _file_cache, _attributes_configs)
   , add_points(_event_loop, bind(&tree_handler_t::handle_add_points))
   , _generate_lod_pipe(_event_loop, bind(&tree_handler_t::handle_generate_lod))
   , _serialize_trees(_event_loop, bind(&tree_handler_t::handle_serialize_trees))
@@ -190,6 +191,15 @@ void tree_handler_t::set_tree_initialization_node_point_limit(uint32_t limit)
   _pre_init_tree_config.node_point_limit = limit;
 }
 
+void tree_handler_t::set_tree_initialization_read_chunk_bytes(uint64_t bytes)
+{
+  std::unique_lock<std::mutex> lock(_configuration_mutex);
+  assert(!_configuration_initialized);
+  // The reader clamps to [node_point_limit, k_default_max_chunk_points] points; k_hard_max_chunk_points
+  // bounds even deliberately huge requests (decompressed morton spikes scale with chunk size).
+  _pre_init_tree_config.read_chunk_byte_target = bytes;
+}
+
 void tree_handler_t::about_to_block()
 {
 }
@@ -237,7 +247,10 @@ void tree_handler_t::handle_generate_lod(morton::morton192_t &&max)
     _pending_pass_watermark = max;
     _has_pending_pass_watermark = true;
   }
-  _tree_lod_generator.generate_lods(_tree_registry.root, max);
+  // Collapse first: leaves of trees this pass will finalize are already immutable, and the LOD
+  // level-5 sampling below then reads the small per-node units instead of whole ingest chunks.
+  // on_done runs on the tree loop.
+  _tree_collapse.collapse_for_pass(max, [this, max]() { _tree_lod_generator.generate_lods(_tree_registry.root, max); });
 }
 
 void tree_handler_t::set_input_registry_snapshot_provider(std::function<std::vector<uint8_t>()> provider)
@@ -479,7 +492,10 @@ vio::task_t<void> tree_handler_t::do_serialize_trees()
       if (!tree)
         continue;
       auto &state = _tree_registry.tree_state[tree->id.data];
-      if (state == uint8_t(tree_state_t::building) && (terminal_pass || tree->morton_max < _pass_watermark))
+      // leaves_collapsed gates finality: bands must only ever ship per-node units, and a building
+      // tree loaded after its range passed the watermark must not be flipped final by a mid-pass
+      // cache-pressure checkpoint before the collapse phase has seen it.
+      if (state == uint8_t(tree_state_t::building) && tree->leaves_collapsed && (terminal_pass || tree->morton_max < _pass_watermark))
         state = uint8_t(tree_state_t::final);
     }
   }
@@ -651,6 +667,8 @@ void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tre
   assert(tree);
   points_error_t error;
   auto ret = tree_deserialize(data, *tree, error);
+  if (ret)
+    tree_compute_leaves_collapsed(*tree, _tree_registry);
   if (!ret)
   {
     fmt::print("Error deserializing tree registry {}\n", error.msg);

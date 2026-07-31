@@ -77,6 +77,12 @@ struct cache_value_t
   uint32_t compressed_size;
 };
 
+struct decompressed_cache_value_t
+{
+  std::shared_ptr<uint8_t[]> data;
+  uint32_t size;
+};
+
 struct compressed_write_data_t
 {
   int buffer_index;
@@ -153,7 +159,11 @@ public:
   void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, points_error_t &&error)> done);
   void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> done);
 
-  std::shared_ptr<read_request_t> read(storage_location_t location, bool raw = false);
+  // decompress_inline: on a RAM-cache hit of a compressed blob the decompress normally hops to the
+  // shared thread pool (a render-thread latency fix). Callers that ALREADY run on a pool worker and
+  // synchronously wait_for_read (LOD + collapse readers) MUST pass true: with every pool thread
+  // parked in such a wait, the hopped decompress queues behind the waiters and the pool deadlocks.
+  std::shared_ptr<read_request_t> read(storage_location_t location, bool raw = false, bool decompress_inline = false);
 
   void register_input_file_size(uint32_t file_id, uint64_t size_bytes);
   void set_compressor(compression_method_t method);
@@ -241,6 +251,10 @@ private:
   vio::event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;
 
   lru_cache_t<cache_key_t, cache_value_t, cache_key_hash_t> _read_cache;
+  // Decompressed-side cache for the pool readers (LOD sampling, leaf splits, collapse merges):
+  // they re-read the same big ingest chunks many times, and re-inflating a 64MB chunk per read
+  // dominates conversion time. Populated only on the decompress_inline path.
+  lru_cache_t<cache_key_t, decompressed_cache_value_t, cache_key_hash_t> _decompressed_cache;
 
   std::mutex _mutex;
 };
@@ -252,7 +266,7 @@ struct read_only_points_t
 {
   read_only_points_t(storage_handler_t &storage_handler, storage_location_t a_location)
     : location(a_location)
-    , read_request(storage_handler.read(location))
+    , read_request(storage_handler.read(location, /*raw=*/false, /*decompress_inline=*/true))
   {
     read_request->wait_for_read();
     // A failed read leaves data/header empty; callers MUST check `error` before dereferencing.
@@ -277,7 +291,7 @@ struct read_attribute_t
   read_attribute_t(storage_handler_t &a_storage_handler, storage_location_t a_location)
     : storage_handler(a_storage_handler)
     , location(a_location)
-    , read_request(a_storage_handler.read(a_location))
+    , read_request(a_storage_handler.read(a_location, /*raw=*/false, /*decompress_inline=*/true))
   {
     read_request->wait_for_read();
     // A failed read leaves data empty; callers MUST check `error` before dereferencing.

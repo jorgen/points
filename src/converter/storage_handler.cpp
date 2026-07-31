@@ -87,6 +87,7 @@ storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t 
   , _write_blob_locations_and_update_header_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
   , _read_request_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
   , _read_cache(256 * 1024 * 1024)
+  , _decompressed_cache(256 * 1024 * 1024)
 {
   set_compressor(compression_method_t::zstd);
   _backend = create_storage_backend(url, _event_loop, error);
@@ -243,6 +244,7 @@ vio::task_t<void> storage_handler_t::do_write(const std::shared_ptr<uint8_t[]> &
   // hold different data. Invalidate the stale read-cache entry for this (file_id, offset) so a
   // later read does not return the old blob's bytes.
   _read_cache.erase(cache_key_t{location.file_id, location.offset});
+  _decompressed_cache.erase(cache_key_t{location.file_id, location.offset});
   auto error = co_await _backend->write_allocated(location, data);
   if (error.code != 0)
   {
@@ -257,8 +259,8 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
   std::unique_lock<std::mutex> lock(_mutex);
 
   bool is_leaf = input_data_id_is_leaf(header.input_id);
-  if (is_leaf)
-    _seen_input_files.insert(header.input_id.data);
+  if (is_leaf && !input_data_id_is_collapsed_leaf(header.input_id))
+    _seen_input_files.insert(header.input_id.data); // keyed by real input-file ids only
 
   uint64_t uncompressed_total = 0;
   for (auto &buf : attribute_buffers.buffers)
@@ -694,12 +696,12 @@ bool storage_handler_t::get_cache_tier_stats(cache_tier_stats_t &out) const
 void storage_handler_t::note_blobs_uploaded(std::vector<std::pair<uint64_t, storage_location_t>> &&blobs)
 {
   // Hop to the storage loop: the residency table is single-threaded there. remote_id encodes the
-  // bucket pack location as (pack_id << 32) | in-pack offset (pack offsets fit 32 bits by
-  // construction -- packs target ~32MB).
+  // bucket data object as object_id << 32 (one blob per object; the low half stays zero).
   _event_loop.run_in_loop([this, blobs = std::move(blobs)]() {
     for (auto &[cache_offset, bucket_location] : blobs)
     {
-      const uint64_t remote_id = (uint64_t(bucket_location.file_id) << 32) | uint64_t(uint32_t(bucket_location.offset));
+      assert(bucket_location.offset == 0 && "dataset objects hold exactly one blob");
+      const uint64_t remote_id = uint64_t(bucket_location.file_id) << 32;
       _backend->note_blob_uploaded(cache_offset, bucket_location.size, remote_id);
     }
     _backend->maybe_evict();
@@ -717,12 +719,31 @@ void storage_handler_t::drain_posted_events()
   fut.get();
 }
 
-std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t location, bool raw)
+std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t location, bool raw, bool decompress_inline)
 {
   auto ret = std::make_shared<read_request_t>();
   ret->raw = raw;
 
   cache_key_t key{location.file_id, location.offset};
+  if (decompress_inline && !raw)
+  {
+    auto decompressed_hit = _decompressed_cache.get(key);
+    if (decompressed_hit.has_value())
+    {
+      _perf_stats.cache_hits.fetch_add(1, std::memory_order_relaxed);
+      ret->buffer = decompressed_hit->data;
+      ret->buffer_info.data = ret->buffer.get();
+      ret->buffer_info.size = decompressed_hit->size;
+#ifdef __EMSCRIPTEN__
+      complete_read_request(*ret);
+#else
+      std::unique_lock<std::mutex> lock(ret->_mutex);
+      ret->_done = true;
+      ret->_block_for_read.notify_all();
+#endif
+      return ret;
+    }
+  }
   auto cached = _read_cache.get(key);
   if (cached.has_value())
   {
@@ -744,7 +765,7 @@ std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t locat
     }
     const bool compressed = has_compression_magic(cv.compressed_data.get(), cv.compressed_size);
 #ifndef __EMSCRIPTEN__
-    if (compressed)
+    if (compressed && !decompress_inline)
     {
       // read() is called on the RENDER thread from the per-frame scheduler (request_load). Decompressing a
       // cache hit inline here is what spikes "Refine" -- a camera move that re-exposes many still-cached blobs
@@ -778,6 +799,8 @@ std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t locat
         ret->buffer = std::move(decompressed.data);
         ret->buffer_info.data = ret->buffer.get();
         ret->buffer_info.size = decompressed.size;
+        if (decompress_inline)
+          _decompressed_cache.put(key, decompressed_cache_value_t{ret->buffer, ret->buffer_info.size}, ret->buffer_info.size);
       }
       else
       {

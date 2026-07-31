@@ -17,6 +17,8 @@
 ************************************************************************/
 #include "reader.hpp"
 
+#include <algorithm>
+
 #include "input_header.hpp"
 #include "morton.hpp"
 #include "sorter.hpp"
@@ -93,10 +95,16 @@ void get_data_worker_t::work()
   auto attribute_info = attribute_configs.get_format_components(attributes_id);
   input_init_pipe.post_event(std::make_tuple(storage_header.input_id, attributes_id, public_header));
 
-  // Read/sort chunk size = the octree node point limit (one chunk -> one node -> one blob per
-  // attribute). This is the primary lever on stored blob size; configured via
-  // points_converter_set_node_point_limit (default 200k).
-  uint32_t convert_size = point_reader_file.tree_config.node_point_limit;
+  // Read/sort chunk size targets read_chunk_byte_target bytes (default 64 MiB): big chunks
+  // amortize source reads and the morton sort; the octree still subdivides them into
+  // node_point_limit leaves, and leaf collapse rewrites final leaves into per-node units. Never
+  // below node_point_limit (a chunk should fill at least one node), capped so per-chunk memory
+  // spikes stay bounded.
+  uint64_t bytes_per_point = 0;
+  for (auto &format : attribute_info)
+    bytes_per_point += uint64_t(size_for_format(format.type, format.components));
+  uint64_t target_points = point_reader_file.tree_config.read_chunk_byte_target / (bytes_per_point ? bytes_per_point : 1);
+  uint32_t convert_size = uint32_t(std::clamp<uint64_t>(target_points, point_reader_file.tree_config.node_point_limit, k_default_max_chunk_points));
   uint8_t done_read_file = false;
   uint32_t local_points_read;
   uint32_t sub_part = 0;
@@ -106,6 +114,7 @@ void get_data_worker_t::work()
     points_t points;
     points.header = storage_header;
     points.header.input_id.sub = sub_part++;
+    assert(points.header.input_id.sub < (1u << 30) && "reader sub ids must stay clear of the collapsed-leaf id bits");
     points.header.point_count = convert_size;
     points.attributes_id = attributes_id;
     attribute_buffers_initialize(attribute_info, points.buffers, convert_size);

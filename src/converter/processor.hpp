@@ -77,6 +77,7 @@ public:
   points_error_t upgrade_to_write(bool truncate);
   void set_pre_init_tree_config(const tree_config_t &tree_config);
   void set_pre_init_node_point_limit(uint32_t node_point_limit);
+  void set_pre_init_read_chunk_bytes(uint64_t bytes);
   void set_runtime_callbacks(const points_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr);
   void set_converter_callbacks(const points_converter_file_convert_callbacks_t &convert_callbacks);
   void add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files);

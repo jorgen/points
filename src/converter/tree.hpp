@@ -117,6 +117,9 @@ struct tree_t
   tree_id_t id;
   uint8_t magnitude;
   bool is_dirty;
+  // Transient (recomputed on deserialize, never serialized): every leaf collection is a single
+  // whole-unit subset -- the shape collapse produces and finality requires. See tree_collapse.
+  bool leaves_collapsed = false;
   input_storage_map_t storage_map;
 };
 
@@ -150,6 +153,20 @@ struct tree_registry_t
   tree_id_t root = {};
   tree_config_t tree_config;
   uint64_t current_lod_node_id = uint64_t(1) << 63;
+  // Collapsed-leaf unit ids (registry v3; see input_data_id_is_collapsed_leaf). Persisted so a
+  // resumed conversion never reuses an id already bound to storage.
+  uint64_t current_collapsed_node_id = uint64_t(1) << 62;
+  // Registry-global lifetime of each READER-CHUNK unit (registry v3). Chunk units are shared
+  // across trees (subtree moves copy map entries), so a per-tree refcount hitting zero does not
+  // prove the blob is globally unreferenced -- collapse frees a chunk's blobs only when
+  // tree_count drops to zero. point_count is the unit's total (whole-unit subset detection).
+  // Missing entry on a v2-resumed cache = lifetime unknown, never free.
+  struct chunk_ref_t
+  {
+    uint32_t tree_count;
+    uint32_t point_count;
+  };
+  ankerl::unordered_dense::map<input_data_id_t, chunk_ref_t, input_data_id_hash_t> chunk_tree_refs;
   // The done-morton watermark as of the last committed checkpoint (registry v2): restores
   // _lod_done_morton / finality decisions on resume. Zero = nothing final yet.
   morton::morton192_t lod_watermark = {};
@@ -183,6 +200,9 @@ tree_id_t tree_add_points(tree_registry_t &tree_registry, storage_handler_t &cac
 serialized_tree_t tree_serialize(const tree_t &tree);
 
 bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, points_error_t &error);
+
+// Recompute tree_t::leaves_collapsed after deserialization (needs the registry's chunk table).
+void tree_compute_leaves_collapsed(tree_t &tree, const tree_registry_t &tree_registry);
 
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry);
 

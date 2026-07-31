@@ -24,16 +24,16 @@
 // its own event loop:
 //
 //   1. reads each tree blob from the cache, walks its storage map deterministically,
-//   2. reads every not-yet-uploaded data blob (compressed bytes verbatim, raw reads) and packs
-//      whole storage units contiguously into pack objects (~32MB target),
-//   3. remaps the trees' storage maps to the bucket locations and packs the trees too,
-//   4. PUTs: packs -> band manifest -> root manifest (the ONLY mutable object; bands commit
+//   2. reads every not-yet-uploaded data blob (compressed bytes verbatim, raw reads) and PUTs
+//      each as its own immutable object data/{id:08x} (whole-object reads, no ranges),
+//   3. remaps the trees' storage maps to the bucket object locations and uploads the trees too,
+//   4. PUTs: data objects -> band manifest -> root manifest (the ONLY mutable object; bands commit
 //      strictly in order),
 //   5. reports the commit: the cache tier marks the blobs uploaded (-> evictable after their next
 //      checkpoint), the tree registry marks the trees uploaded.
 //
-// The terminal band (all-0xFF watermark) additionally packs the registry (locations remapped to
-// bucket packs) + attributes and flips the root manifest to complete=1 -- after which the bucket
+// The terminal band (all-0xFF watermark) additionally uploads the registry (locations remapped to
+// bucket objects) + attributes and flips the root manifest to complete=1 -- after which the bucket
 // reads exactly like any dataset: manifest -> registry -> trees -> blobs.
 //
 // Retry: each PUT retries with exponential backoff; on exhaustion the uploader parks (conversion
@@ -54,6 +54,8 @@
 #include <ankerl/unordered_dense.h>
 
 #include <atomic>
+#include <cassert>
+#include <coroutine>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -72,7 +74,7 @@ struct band_job_t
   std::vector<std::pair<uint32_t, storage_location_t>> trees;
   // Serialized attributes_configs at job time (band manifests embed it for partial readers).
   std::vector<uint8_t> attributes_snapshot;
-  // Terminal only: the full registry snapshot (v2) whose locations the uploader remaps to packs.
+  // Terminal only: the full registry snapshot (v2) whose locations the uploader remaps to objects.
   serialized_tree_registry_t registry_snapshot = {};
 };
 
@@ -80,7 +82,7 @@ struct upload_stats_t
 {
   uint64_t bytes_uploaded = 0;
   uint32_t bands_committed = 0;
-  uint32_t packs_written = 0;
+  uint32_t objects_written = 0;
   bool parked = false; // retries exhausted; resume later
   bool complete = false;
 };
@@ -130,7 +132,39 @@ private:
   void handle_band(band_job_t &&job);
   vio::task_t<void> process_band(band_job_t job);
   vio::task_t<points_error_t> put_with_retry(std::string name, std::shared_ptr<uint8_t[]> data, uint64_t size);
-  vio::task_t<points_error_t> flush_pack(std::vector<uint8_t> &pack, uint32_t pack_id);
+  // Bounded window of concurrent data-object PUTs (uploader-loop only; coroutines interleave at
+  // co_await points, no threads involved). process_band launches puts through it and must drain
+  // it (wait_for_room(1)) before ANY exit path -- the detached puts reference the window.
+  struct put_window_t
+  {
+    int in_flight = 0;
+    points_error_t first_error = {};
+    std::coroutine_handle<> waiter = {};
+    struct room_awaiter_t
+    {
+      put_window_t &window;
+      int limit;
+      [[nodiscard]] bool await_ready() const
+      {
+        return window.in_flight < limit;
+      }
+      void await_suspend(std::coroutine_handle<> handle)
+      {
+        assert(!window.waiter && "one process_band at a time");
+        window.waiter = handle;
+      }
+      void await_resume() const
+      {
+      }
+    };
+    // Suspend until fewer than `limit` puts are in flight (limit 1 == fully drained).
+    [[nodiscard]] room_awaiter_t wait_for_room(int limit)
+    {
+      return room_awaiter_t{*this, limit};
+    }
+  };
+  // PUT one data object data/{object_id:08x} whose content is exactly `bytes` (copied here).
+  vio::detached_task_t put_data_object_windowed(put_window_t *window, uint32_t object_id, std::shared_ptr<uint8_t[]> data, uint64_t size);
   // Read a cache blob's raw bytes, parking the wait on the pool so the uploader loop stays free.
   vio::task_t<points_error_t> read_cache_blob(storage_location_t location, std::vector<uint8_t> &out);
 
@@ -146,9 +180,8 @@ private:
   // Uploader-loop state.
   ankerl::unordered_dense::map<uint64_t, storage_location_t> _dedup; // cache offset -> bucket location
   ankerl::unordered_dense::map<uint32_t, storage_location_t> _tree_locations;
-  uint32_t _next_pack_id = 0;
+  uint32_t _next_object_id = 0;
   uint32_t _band_count = 0;
-  uint32_t _pack_target_bytes = 32u << 20;
   bool _parked = false;
   bool _band_in_flight = false;
   std::vector<band_job_t> _queued;

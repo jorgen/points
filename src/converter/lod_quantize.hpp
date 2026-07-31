@@ -78,6 +78,13 @@ inline void find_indices_to_quantize(input_data_id_t input_id, const morton::mor
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
   assert(source.size % sizeof(S_M) == 0);
   assert(source_it + point_count.data == source_it + (source.size / sizeof(S_M)));
+  // Clamp the cell mask to what the SOURCE morton type can express. A unit's stored values are
+  // truncations of the absolute code, and its lod span fits the type -- so every point shares the
+  // bits above the type width, and a quantize cell wider than the type groups exactly like the
+  // widest expressible cell. Collapsed leaves are narrow (often m32) while the parent's mask width
+  // comes from the parent lod, so the unclamped mask can exceed the type (mask_create asserts).
+  constexpr int max_mask_for_type = (int(sizeof(S_M) * 8) - 4) / 3;
+  maskWidth = maskWidth < max_mask_for_type ? maskWidth : max_mask_for_type;
   uint32_t range_start = 0;
   S_M currentMaxVal = morton::create_max(maskWidth, *source_it);
   for (uint32_t i = 1; i < point_count.data; i++)

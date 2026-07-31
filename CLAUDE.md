@@ -80,8 +80,11 @@ CMake/                 Build modules and dependency definitions (3rdPartyPackage
 ## Architecture: Converter Pipeline
 
 ```
-Input Files → Reader (chunks ~50K pts) → Sorter (XYZ → Morton, sort, reorder buffers)
-  → Tree Builder (octree subdivision) → LOD Generator (bottom-up sampling)
+Input Files → Reader (byte-targeted chunks, default 64 MiB / ≤8M pts)
+  → Sorter (XYZ → Morton, sort, reorder buffers)
+  → Tree Builder (octree subdivision down to node_point_limit leaves)
+  → Leaf Collapse (at subtree finality: merge leaf subsets into per-node units, free the chunks)
+  → LOD Generator (bottom-up sampling)
   → Storage Handler (preprocess + compress + write to disk)
 ```
 
@@ -90,11 +93,12 @@ Input Files → Reader (chunks ~50K pts) → Sorter (XYZ → Morton, sort, reord
 | File | Role |
 |------|------|
 | `processor.hpp/cpp` | Central orchestrator. Event-driven threading with event pipes, thread pool, and 1GB read/sort memory budget for backpressure. |
-| `reader.hpp/cpp` | `get_data_worker_t` calls user's `convert_data` callback in ~50K-point chunks. `sort_worker_t` takes unsorted output and feeds it to the sorter. |
+| `reader.hpp/cpp` | `get_data_worker_t` calls user's `convert_data` callback in chunks sized to `read_chunk_byte_target` (default 64 MiB, clamped to [node_point_limit, 8M] points). `sort_worker_t` takes unsorted output and feeds it to the sorter. |
 | `sorter.hpp/cpp` | Transforms XYZ coordinates to Morton192 codes (Z-order curve), sorts index array by morton value, reorders all attribute buffers to match. Determines LOD span from morton min/max. |
 | `morton.hpp` | Morton code types (32/64/128/192-bit), encode/decode, LOD calculation, bitwise ops. |
 | `tree.hpp/cpp` | Sparse octree. Each `tree_t` has 5 LOD levels with child bitmasks, skip arrays, and node IDs. Points routed to children by morton code. `tree_registry_t` manages all trees. Serialize/deserialize for persistence. |
 | `tree_handler.hpp/cpp` | Manages tree lifecycle. `tree_initialize()` creates root, `tree_add_points()` subdivides recursively. |
+| `tree_collapse.hpp/cpp` | Leaf collapse at finality: when a subtree drops below the done-morton watermark, each leaf's chunk subsets are k-way-merged into the leaf's own storage unit (collapsed ids, high `sub` bit 30) and the ingest chunks are freed via the checkpoint machinery once no tree references them (`tree_registry_t::chunk_tree_refs`). Runs at the start of each LOD pass; finality is gated on `tree_t::leaves_collapsed`. |
 | `tree_lod_generator.hpp/cpp` | Bottom-up LOD generation. `lod_worker_t` reads child nodes, samples/aggregates, writes lower-resolution buffers. Batched for parallel execution. |
 | `storage_handler.hpp/cpp` | File I/O with compression. `blob_manager_t` tracks free space (100MB pages). `lru_cache_t` for read caching. Async read with condition variable. |
 | `compression_preprocess.hpp/cpp` | Pre-compression transforms: delta encoding (morton/element/component/xor), constant band detection, offset subtraction (f64), decorrelation (u16x3 RGB → G,R-G,B-G), sort with permutation. |
@@ -209,6 +213,14 @@ magic[4]  method  type_size  component_count  flags  uncompressed_size[4]  compr
 ```
 
 Compression methods: none (0), zstd (2), huff0 (3), constant (4), ans (5).
+
+**JLP2 bucket layout** (destination mode, `bucket_format.hpp`): a converted dataset in an object
+store is `manifest` (256B root manifest, the only mutable object), `bands/{band:08}` (immutable
+band manifests) and `data/{id:08x}` — exactly ONE compressed blob per object (a node's attribute
+buffer, a serialized tree, or the terminal registry/attrs). Object size == blob size; every
+dataset read is a whole-object GET (no `Range:` header — `vio read_object_all`). Only the
+cache tier's temporary `spill/` segments use ranged GETs. `store_original_order` survives
+collapse as reordered values but loses chunk attribution.
 
 Preprocessing flags (bitfield):
 - `0x01` delta encoded, `0x02` constant bands, `0x04` offset subtracted, `0x08` sort permutation

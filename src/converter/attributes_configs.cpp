@@ -120,7 +120,7 @@ static void add_missing_attributes(const points_converter_attributes_t &source, 
   }
 }
 
-attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end)
+attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end, bool keep_original_order)
 {
   fixed_capacity_vector_t<attributes_id_t> attribute_ids_sorted(end - begin);
   memcpy(attribute_ids_sorted.begin(), begin, attribute_ids_sorted.capacity() * sizeof(attributes_id_t));
@@ -139,7 +139,8 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
     {
       add_missing_attributes(_attributes_configs[it->data].attributes, target);
     }
-    // Remove original_order — meaningless for LOD buffers
+    // Remove original_order — meaningless for LOD buffers (kept for collapsed leaves)
+    if (!keep_original_order)
     {
       auto &attrs = target.attributes;
       for (int oi = 1; oi < int(attrs.size()); ++oi)

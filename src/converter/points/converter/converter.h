@@ -144,7 +144,7 @@ struct points_converter_upload_state_t
 {
   uint64_t bytes_uploaded;
   uint32_t bands_committed;
-  uint32_t packs_written;
+  uint32_t objects_written;
   uint8_t upload_parked;      /* retries exhausted; resume by reopening later */
   uint8_t destination_complete;
   uint64_t cache_resident_bytes;
@@ -290,6 +290,13 @@ POINTS_CONVERTER_EXPORT void points_converter_set_compression_level(struct point
 // control over stored blob size (one node ~ one compressed blob per attribute). Default 200000. Must be
 // called before points_converter_add_data_file.
 POINTS_CONVERTER_EXPORT void points_converter_set_node_point_limit(struct points_converter_t *converter, uint32_t points);
+
+// Read/sort chunk byte target (default 64 MiB): the converter ingests each input in chunks of about
+// this many bytes (computed from the file's per-point width, never below the node point limit,
+// capped at 8M points per chunk). Larger chunks amortize source reads and sorting; the octree still
+// subdivides to node_point_limit leaves and finalized leaves are rewritten into per-node units.
+// Must be called before points_converter_add_data_file.
+POINTS_CONVERTER_EXPORT void points_converter_set_read_chunk_bytes(struct points_converter_t *converter, uint64_t bytes);
 
 POINTS_CONVERTER_EXPORT void points_converter_add_data_file(struct points_converter_t *converter, struct points_converter_str_buffer *buffers, uint32_t buffer_count);
 

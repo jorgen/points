@@ -55,6 +55,15 @@ inline bool input_data_id_is_leaf(input_data_id_t input)
   return !(input.sub & decltype(input.sub)(1) << 31);
 }
 
+// Collapsed-leaf units (a final leaf's subsets merged into its own per-node unit) come from their
+// own persisted counter seeded 1<<62: bit 31 of .sub stays clear (they ARE leaf data -- stats and
+// perf bucket them as source), bit 30 set keeps them disjoint from reader chunk ids (whose sub
+// counter the reader asserts below 1<<30).
+inline bool input_data_id_is_collapsed_leaf(input_data_id_t input)
+{
+  return (input.sub & 0xC0000000u) == 0x40000000u;
+}
+
 struct file_error_t
 {
   input_data_id_t input_id;
@@ -192,13 +201,20 @@ struct tree_config_t
   double scale = {};
   double offset[3] = {};
   bool store_original_order = false;
-  // Max points per octree node AND the read/sort chunk size: one chunk becomes one node and one
-  // compressed blob per attribute, so this is the primary lever on stored blob size. The default
-  // (200k) keeps the data-heavy attributes (xyz, gps_time) under ~1MB compressed. Fits in the padding
-  // after store_original_order, so sizeof(tree_config_t) is unchanged. Set via
-  // points_converter_set_node_point_limit.
+  // Max points per octree node: subdivision keeps every node at or below this, which is the primary
+  // lever on per-node blob size. The default (200k) keeps the data-heavy attributes (xyz, gps_time)
+  // under ~1MB compressed. Set via points_converter_set_node_point_limit.
   uint32_t node_point_limit = 200000;
+  // Read/sort chunk BYTE target: the reader sizes each input chunk to about this many bytes
+  // (computed from the file's per-point width, clamped to [node_point_limit, k_max_chunk_points]).
+  // Big chunks amortize read+sort; leaf collapse cuts them back to per-node units at finality.
+  // Set via points_converter_set_read_chunk_bytes. (Registry v3 serializes the grown struct.)
+  uint64_t read_chunk_byte_target = 64ull << 20;
 };
+// Chunk point-count clamp: 8M points default cap (a decompressed morton blob is count x up to 24B --
+// keep worst-case read spikes bounded); 16M is the hard ceiling (u32 subset offsets stay far clear).
+inline constexpr uint32_t k_default_max_chunk_points = 8u << 20;
+inline constexpr uint32_t k_hard_max_chunk_points = 16u << 20;
 
 struct offset_t
 {

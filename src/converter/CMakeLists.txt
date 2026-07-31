@@ -57,6 +57,7 @@ set(sources
         pre_init_file_retriever.cpp
         storage_handler.cpp
         tree_handler.cpp
+        tree_collapse.cpp
         tree_lod_generator.cpp
         attributes_configs.cpp
         data_source_converter.cpp

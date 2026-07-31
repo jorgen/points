@@ -169,12 +169,43 @@ static void sub_tree_split_points_to_children(storage_handler_t &cache, input_st
   points = points_collection_t();
 }
 
-static void move_storage_locations_to_subtree(const points_collection_t &collection, tree_t &parent, tree_t &sub_tree)
+static void move_storage_locations_to_subtree(tree_registry_t &tree_cache, const points_collection_t &collection, tree_t &parent, tree_t &sub_tree)
 {
   for (auto &p : collection.data)
   {
+    const bool parent_had = parent.storage_map.contains(p.input_id);
     auto attrib_locations_pair = parent.storage_map.dereference(p.input_id);
-    sub_tree.storage_map.add_storage(p.input_id, attrib_locations_pair.first, std::move(attrib_locations_pair.second));
+    const bool parent_erased = parent_had && !parent.storage_map.contains(p.input_id);
+    bool child_created = false;
+    if (sub_tree.storage_map.contains(p.input_id))
+    {
+      // Second subset of the same unit in this collection: only bump the child's refcount --
+      // add_storage on an existing id would DISCARD the very locations it re-references.
+      sub_tree.storage_map.add_ref(p.input_id);
+    }
+    else
+    {
+      sub_tree.storage_map.add_storage(p.input_id, attrib_locations_pair.first, std::move(attrib_locations_pair.second));
+      child_created = true;
+    }
+    // Registry-global chunk lifetime: +1 when a tree map gains the unit, -1 when one loses it
+    // (net zero for a plain hand-off). LOD/collapsed units are per-tree, never tracked.
+    if (input_data_id_is_leaf(p.input_id) && !input_data_id_is_collapsed_leaf(p.input_id))
+    {
+      auto refs = tree_cache.chunk_tree_refs.find(p.input_id);
+      if (refs != tree_cache.chunk_tree_refs.end())
+      {
+        if (child_created)
+          refs->second.tree_count++;
+        if (parent_erased)
+        {
+          assert(refs->second.tree_count > 0);
+          refs->second.tree_count--;
+        }
+        assert(refs->second.tree_count > 0 && "the sub tree references the unit, so the count cannot hit zero here");
+      }
+      // Missing entry: cache written before registry v3 -- chunk lifetime unknown, never freed.
+    }
   }
 }
 
@@ -215,7 +246,7 @@ static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_
         uint16_t sub_tree_name = morton::morton_get_name(0, 0, child_mask);
         auto sub_tree_id = tree->sub_trees[sub_skip];
         auto *sub_tree = tree_cache.get(sub_tree_id);
-        move_storage_locations_to_subtree(points, *tree, *sub_tree);
+        move_storage_locations_to_subtree(tree_cache, points, *tree, *sub_tree);
         sub_tree_insert_points(tree_cache, cache, sub_tree_id, new_min, 0, 0, sub_tree_name, std::move(points));
       }
       else
@@ -236,7 +267,7 @@ static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_
         sub_tree_increase_skips(*tree, current_level, skip);
         tree_initialize_sub(*tree, tree_cache, points.min, sub_tree);
         uint16_t sub_tree_name = morton::morton_get_name(0, 0, child_mask);
-        move_storage_locations_to_subtree(points, *tree, sub_tree);
+        move_storage_locations_to_subtree(tree_cache, points, *tree, sub_tree);
         sub_tree_insert_points(tree_cache, cache, sub_tree.id, new_min, 0, 0, sub_tree_name, std::move(points));
       }
       else
@@ -303,13 +334,13 @@ static void sub_tree_insert_points(tree_registry_t &tree_cache, storage_handler_
           tree->sub_trees.emplace(tree->sub_trees.begin() + sub_skip, sub_tree.id);
           sub_tree_increase_skips(*tree, current_level, skip);
           tree_initialize_sub(*tree, tree_cache, child_data.min, sub_tree);
-          move_storage_locations_to_subtree(child_data, *tree, sub_tree);
+          move_storage_locations_to_subtree(tree_cache, child_data, *tree, sub_tree);
           sub_tree_insert_points(tree_cache, cache, sub_tree.id, new_min, 0, 0, sub_tree_name, std::move(child_data));
         }
         else
         {
           tree_t *sub_tree = tree_cache.get(tree->sub_trees[sub_skip]);
-          move_storage_locations_to_subtree(child_data, *tree, *sub_tree);
+          move_storage_locations_to_subtree(tree_cache, child_data, *tree, *sub_tree);
           sub_tree_insert_points(tree_cache, cache, sub_tree->id, new_min, 0, 0, sub_tree_name, std::move(child_data));
         }
       }
@@ -433,6 +464,11 @@ tree_id_t tree_add_points(tree_registry_t &tree_registry, storage_handler_t &cac
   uint16_t name = morton::morton_get_name(0, 0, morton::morton_get_child_mask(morton::morton_magnitude_to_lod(tree->magnitude) + 1, points_data.min));
   assert(name == tree->node_ids[0][0]);
   tree->storage_map.add_storage(header.input_id, attributes_id, std::move(locations));
+  // Registry-global chunk lifetime: this tree's map now holds the chunk unit. Subtree moves
+  // adjust the count; collapse frees the chunk's blobs when it drops to zero.
+  if (input_data_id_is_leaf(header.input_id) && !input_data_id_is_collapsed_leaf(header.input_id))
+    tree_registry.chunk_tree_refs[header.input_id] = {1, uint32_t(header.point_count)};
+  tree->leaves_collapsed = false; // fresh subset-shaped leaf data
   sub_tree_insert_points(tree_registry, cache, tree->id, min, 0, 0, name, std::move(points_data));
   return ret;
 }
@@ -698,15 +734,64 @@ bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, po
     return false;
   }
 
+
+
   return true;
 }
 
-// Registry blob v2 ('TRG2'): adds current_lod_node_id (v1 dropped it -- a resumed conversion would
-// reuse LOD input_data_ids and corrupt storage maps), the done-morton watermark, per-tree
+// Recompute the transient collapse flag for a (de)serialized tree: every leaf must be a single
+// WHOLE-unit subset. A subset {id, 0, n} alone is ambiguous (the first octant child of a split
+// also starts at 0), so whole-unit means: a collapsed-leaf id (their units are exact by
+// construction), or a reader chunk whose registry-recorded point count equals the subset's. A
+// chunk with no refs entry (cache written before registry v3) counts as NOT collapsed -- the
+// collapse pass rewrites it, which is always safe.
+void tree_compute_leaves_collapsed(tree_t &tree, const tree_registry_t &tree_registry)
+{
+  tree.leaves_collapsed = true;
+  for (int level = 0; level < 5; level++)
+  {
+    for (uint32_t skip = 0; skip < uint32_t(tree.nodes[level].size()); skip++)
+    {
+      auto &collection = tree.data[level][skip];
+      if (tree.nodes[level][skip] != 0 || collection.point_count == 0)
+        continue;
+      if (collection.data.size() != 1 || collection.data[0].offset.data != 0 || uint64_t(collection.data[0].count.data) != collection.point_count)
+      {
+        tree.leaves_collapsed = false;
+        return;
+      }
+      auto id = collection.data[0].input_id;
+      if (input_data_id_is_collapsed_leaf(id))
+        continue;
+      auto refs = tree_registry.chunk_tree_refs.find(id);
+      if (refs == tree_registry.chunk_tree_refs.end() || refs->second.point_count != collection.data[0].count.data)
+      {
+        tree.leaves_collapsed = false;
+        return;
+      }
+    }
+  }
+}
+
+// Registry blob v3 ('TRG3'): v2 added current_lod_node_id (v1 dropped it -- a resumed conversion
+// would reuse LOD input_data_ids and corrupt storage maps), the done-morton watermark, per-tree
 // state/band (incremental finalization/upload), and the opaque input-registry snapshot (resume).
-// v1 blobs (no magic; first u32 is node_limit) still deserialize -- a realistic node_limit can
-// never equal the magic.
+// v3 adds current_collapsed_node_id, the registry-global chunk_tree_refs table, and grows the
+// serialized tree_config_t (read_chunk_byte_target). v2 and v1 blobs (v1: no magic; first u32 is
+// node_limit) still deserialize -- a realistic node_limit can never equal either magic.
 static constexpr uint32_t k_tree_registry_magic_v2 = 0x32475254u; // 'TRG2' little-endian
+static constexpr uint32_t k_tree_registry_magic_v3 = 0x33475254u; // 'TRG3' little-endian
+
+// The v2 on-disk layout of tree_config_t (before read_chunk_byte_target). Field order matches the
+// live struct so the memcpy'd bytes line up.
+struct tree_config_v2_t
+{
+  double scale;
+  double offset[3];
+  bool store_original_order;
+  uint32_t node_point_limit;
+};
+static_assert(sizeof(tree_config_v2_t) == 40, "v2 registry blobs serialized a 40-byte tree_config");
 
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry)
 {
@@ -715,14 +800,19 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   assert(tree_registry.tree_band.size() == tree_registry_count);
   auto input_snapshot_size = uint32_t(tree_registry.input_registry_snapshot.size());
 
+  auto chunk_refs_count = uint32_t(tree_registry.chunk_tree_refs.size());
+
   uint32_t tree_registry_size = 0;
-  tree_registry_size += sizeof(k_tree_registry_magic_v2);
+  tree_registry_size += sizeof(k_tree_registry_magic_v3);
   tree_registry_size += sizeof(tree_registry.node_limit);
   tree_registry_size += sizeof(tree_registry.current_id);
   tree_registry_size += sizeof(tree_registry.root);
   tree_registry_size += sizeof(tree_registry.tree_config);
   tree_registry_size += sizeof(tree_registry.current_lod_node_id);
+  tree_registry_size += sizeof(tree_registry.current_collapsed_node_id);
   tree_registry_size += sizeof(tree_registry.lod_watermark);
+  tree_registry_size += sizeof(chunk_refs_count);
+  tree_registry_size += (uint32_t(sizeof(input_data_id_t)) + 2 * uint32_t(sizeof(uint32_t))) * chunk_refs_count;
   tree_registry_size += sizeof(tree_registry_count);
   tree_registry_size += sizeof(storage_location_t) * tree_registry_count;
   tree_registry_size += uint32_t(sizeof(uint8_t)) * tree_registry_count;  // tree_state
@@ -734,7 +824,7 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   uint8_t *ptr = data.get();
   uint8_t *end_ptr = ptr + tree_registry_size;
 
-  if (!write_memory(ptr, end_ptr, k_tree_registry_magic_v2))
+  if (!write_memory(ptr, end_ptr, k_tree_registry_magic_v3))
     return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry.node_limit))
     return {nullptr, 0};
@@ -746,8 +836,21 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
     return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry.current_lod_node_id))
     return {nullptr, 0};
+  if (!write_memory(ptr, end_ptr, tree_registry.current_collapsed_node_id))
+    return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry.lod_watermark))
     return {nullptr, 0};
+  if (!write_memory(ptr, end_ptr, chunk_refs_count))
+    return {nullptr, 0};
+  for (auto &[chunk_id, chunk_ref] : tree_registry.chunk_tree_refs)
+  {
+    if (!write_memory(ptr, end_ptr, chunk_id))
+      return {nullptr, 0};
+    if (!write_memory(ptr, end_ptr, chunk_ref.tree_count))
+      return {nullptr, 0};
+    if (!write_memory(ptr, end_ptr, chunk_ref.point_count))
+      return {nullptr, 0};
+  }
   if (!write_memory(ptr, end_ptr, tree_registry_count))
     return {nullptr, 0};
   if (!write_vec_type(ptr, end_ptr, tree_registry.locations))
@@ -770,7 +873,8 @@ points_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data,
   uint32_t first_word = 0;
   if (!read_memory(ptr, end_ptr, first_word))
     return {1, "Invalid tree registry data"};
-  const bool v2 = first_word == k_tree_registry_magic_v2;
+  const bool v3 = first_word == k_tree_registry_magic_v3;
+  const bool v2 = v3 || first_word == k_tree_registry_magic_v2;
   if (v2)
   {
     if (!read_memory(ptr, end_ptr, tree_registry.node_limit))
@@ -784,14 +888,52 @@ points_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data,
     return {1, "Invalid tree registry data"};
   if (!read_memory(ptr, end_ptr, tree_registry.root))
     return {1, "Invalid tree registry data"};
-  if (!read_memory(ptr, end_ptr, tree_registry.tree_config))
-    return {1, "Invalid tree registry data"};
+  if (v3)
+  {
+    if (!read_memory(ptr, end_ptr, tree_registry.tree_config))
+      return {1, "Invalid tree registry data"};
+  }
+  else
+  {
+    // v1/v2 serialized the 40-byte config (no read_chunk_byte_target); the new field keeps its
+    // compiled-in default.
+    tree_config_v2_t old_config;
+    if (!read_memory(ptr, end_ptr, old_config))
+      return {1, "Invalid tree registry data"};
+    tree_registry.tree_config.scale = old_config.scale;
+    memcpy(tree_registry.tree_config.offset, old_config.offset, sizeof(old_config.offset));
+    tree_registry.tree_config.store_original_order = old_config.store_original_order;
+    tree_registry.tree_config.node_point_limit = old_config.node_point_limit;
+  }
   if (v2)
   {
     if (!read_memory(ptr, end_ptr, tree_registry.current_lod_node_id))
       return {1, "Invalid tree registry data"};
+    if (v3)
+    {
+      if (!read_memory(ptr, end_ptr, tree_registry.current_collapsed_node_id))
+        return {1, "Invalid tree registry data"};
+    }
     if (!read_memory(ptr, end_ptr, tree_registry.lod_watermark))
       return {1, "Invalid tree registry data"};
+    if (v3)
+    {
+      uint32_t chunk_refs_count = 0;
+      if (!read_memory(ptr, end_ptr, chunk_refs_count))
+        return {1, "Invalid tree registry data"};
+      for (uint32_t i = 0; i < chunk_refs_count; i++)
+      {
+        input_data_id_t chunk_id;
+        tree_registry_t::chunk_ref_t chunk_ref;
+        if (!read_memory(ptr, end_ptr, chunk_id))
+          return {1, "Invalid tree registry data"};
+        if (!read_memory(ptr, end_ptr, chunk_ref.tree_count))
+          return {1, "Invalid tree registry data"};
+        if (!read_memory(ptr, end_ptr, chunk_ref.point_count))
+          return {1, "Invalid tree registry data"};
+        tree_registry.chunk_tree_refs[chunk_id] = chunk_ref;
+      }
+    }
   }
   uint32_t tree_registry_count = 0;
   if (!read_memory(ptr, end_ptr, tree_registry_count))

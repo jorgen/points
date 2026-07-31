@@ -21,6 +21,7 @@
 #include <vio/event_pipe.h>
 #include <vio/thread_pool.h>
 
+#include "attributes_configs.hpp"
 #include "perf_stats.hpp"
 #include "tree.hpp"
 
@@ -36,19 +37,13 @@ struct lod_child_storage_info_t
   std::vector<storage_location_t> locations;
 };
 
-struct input_data_id_hash_t
-{
-  using is_avalanching = void;
-  auto operator()(input_data_id_t id) const noexcept -> uint64_t
-  {
-    uint64_t data;
-    static_assert(sizeof(data) == sizeof(id), "size mismatch");
-    memcpy(&data, &id, sizeof(data));
-    return ankerl::unordered_dense::detail::wyhash::hash(data);
-  }
-};
-
 using child_storage_map_t = ankerl::unordered_dense::map<input_data_id_t, lod_child_storage_info_t, input_data_id_hash_t>;
+
+// Shared with the leaf-collapse path: slice a subset window out of a whole (decoded) buffer, and
+// scatter source attributes into destination buffers by an (input id, source index) permutation.
+points_converter_buffer_t morton_buffer_for_subset(const points_converter_buffer_t &buffer, points_type_t format, offset_in_subset_t offset, point_count_t count);
+void quantize_attributres(storage_handler_t &cache, const child_storage_map_t &child_storage_map, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies,
+                          const attribute_lod_mapping_t &lod_attrib_mapping, attribute_buffers_t &buffers);
 struct lod_node_worker_data_t
 {
   morton::morton192_t node_min;

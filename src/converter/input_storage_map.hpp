@@ -18,10 +18,24 @@
 #pragma once
 #include <ankerl/unordered_dense.h>
 #include <conversion_types.hpp>
+#include <cstring>
 #include <vector>
 
 namespace points::converter
 {
+
+// Shared hasher for input_data_id_t keyed maps (storage maps, LOD child maps, registry chunk refs).
+struct input_data_id_hash_t
+{
+  using is_avalanching = void;
+  auto operator()(input_data_id_t id) const noexcept -> uint64_t
+  {
+    uint64_t data;
+    static_assert(sizeof(data) == sizeof(id), "size mismatch");
+    memcpy(&data, &id, sizeof(data));
+    return ankerl::unordered_dense::detail::wyhash::hash(data);
+  }
+};
 
 class input_storage_map_t
 {
@@ -32,6 +46,15 @@ public:
   // (see take_discarded) instead of handed to the caller. For call sites that abandon the blobs.
   void dereference_discard(input_data_id_t id);
   std::pair<attributes_id_t, std::vector<storage_location_t>> info(input_data_id_t id) const;
+  [[nodiscard]] bool contains(input_data_id_t id) const
+  {
+    return _map.contains(id);
+  }
+  [[nodiscard]] uint32_t ref_count(input_data_id_t id) const
+  {
+    auto it = _map.find(id);
+    return it == _map.end() ? 0 : it->second.ref_count;
+  }
   attributes_id_t attribute_id(input_data_id_t id) const;
   [[nodiscard]] storage_location_t location(input_data_id_t id, int attribute_index) const;
   void add_ref(input_data_id_t id);
@@ -73,25 +96,13 @@ public:
   std::pair<bool, const uint8_t *> deserialize(const uint8_t *buffer, const uint8_t *end);
 
 private:
-  struct hash
-  {
-    using is_avalanching = void;
-    auto operator()(input_data_id_t id) const noexcept -> uint64_t
-    {
-      uint64_t data;
-      static_assert(sizeof(data) == sizeof(id), "size mismatch");
-      memcpy(&data, &id, sizeof(data));
-      return ankerl::unordered_dense::detail::wyhash::hash(data);
-    }
-  };
-
   struct value_t
   {
     attributes_id_t attributes_id;
     std::vector<storage_location_t> storage;
     uint32_t ref_count;
   };
-  ankerl::unordered_dense::map<input_data_id_t, value_t, hash> _map;
+  ankerl::unordered_dense::map<input_data_id_t, value_t, input_data_id_hash_t> _map;
   std::vector<storage_location_t> _discarded;
 };
 

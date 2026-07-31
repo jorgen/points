@@ -27,6 +27,7 @@
 
 #include "perf_stats.hpp"
 #include "tree.hpp"
+#include "tree_collapse.hpp"
 #include "tree_lod_generator.hpp"
 #include "upload_handler.hpp" // band_job_t
 
@@ -53,6 +54,7 @@ public:
   void request_root();
   void set_tree_initialization_config(const tree_config_t &config);
   void set_tree_initialization_node_point_limit(uint32_t limit);
+  void set_tree_initialization_read_chunk_bytes(uint64_t bytes);
   void about_to_block() override;
   // Thread-safe: posts to the tree loop. The pass target/generator state belong to the tree loop,
   // which may be mid-checkpoint (serialize chain, band emission) when the processor advances the
@@ -196,6 +198,7 @@ private:
   std::function<std::vector<uint8_t>()> _input_registry_snapshot_provider;
 
   tree_lod_generator_t _tree_lod_generator;
+  tree_collapse_runner_t _tree_collapse;
 
   std::vector<std::function<void()>> _tree_deserialized_callbacks;
 

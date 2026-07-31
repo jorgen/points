@@ -169,6 +169,22 @@ write_done_event_t create_points(tree_test_infrastructure &test_util, uint64_t m
   return test_util.wait_for_write_done();
 }
 
+// Registry-global chunk-refs invariant: chunk_tree_refs[id] must equal the number of tree storage
+// maps that actually contain the id.
+static void require_chunk_refs_consistent(points::converter::tree_registry_t &registry)
+{
+  for (auto &[chunk_id, chunk_ref] : registry.chunk_tree_refs)
+  {
+    uint32_t actual = 0;
+    for (auto &tree : registry.data)
+      if (tree && tree->storage_map.contains(chunk_id))
+        actual++;
+    REQUIRE(actual == chunk_ref.tree_count);
+    REQUIRE(chunk_ref.tree_count > 0);
+    REQUIRE(chunk_ref.point_count > 0);
+  }
+}
+
 TEST_CASE("initialize empty tree")
 {
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
@@ -252,6 +268,7 @@ TEST_CASE("add_new_subtree")
   auto &added_tree = second_tree.sub_trees[second_tree.skips[4][0]];
   auto &sub_tree = *test_util.tree_registry.get(added_tree);
   REQUIRE(sub_tree.nodes[1].size() == 8);
+  require_chunk_refs_consistent(test_util.tree_registry);
 }
 
 TEST_CASE("add_new_subtree_offsets")
@@ -279,6 +296,7 @@ TEST_CASE("add_new_subtree_offsets")
     auto &added_tree = second_tree.sub_trees[second_tree.skips[4][0]];
     auto &sub_tree = *test_util.tree_registry.get(added_tree);
     REQUIRE(sub_tree.nodes[0].size() >= 1);
+    require_chunk_refs_consistent(test_util.tree_registry);
   }
 }
 TEST_CASE("reparent")
@@ -805,12 +823,17 @@ TEST_CASE("Two-pass incremental LOD matches single-pass" * doctest::test_suite("
   }
 }
 
-TEST_CASE("tree registry v2 round-trip preserves state, watermark and snapshot" * doctest::test_suite("[registry_v2]"))
+TEST_CASE("tree registry v3 round-trip preserves state, watermark, refs and snapshot" * doctest::test_suite("[registry_v2]"))
 {
-  points::converter::tree_registry_t registry(1000, create_tree_config(0.001, 0.0));
+  auto config = create_tree_config(0.001, 0.0);
+  config.read_chunk_byte_target = 96ull << 20; // non-default: must survive the round trip
+  points::converter::tree_registry_t registry(1000, config);
   registry.current_id = 3;
   registry.root = points::converter::tree_id_t(1);
-  registry.current_lod_node_id = (uint64_t(1) << 63) + 42; // must survive (v1 dropped it)
+  registry.current_lod_node_id = (uint64_t(1) << 63) + 42;       // must survive (v1 dropped it)
+  registry.current_collapsed_node_id = (uint64_t(1) << 62) + 7;  // v3
+  registry.chunk_tree_refs[points::converter::input_data_id_t{4, 2}] = {3, 200000};
+  registry.chunk_tree_refs[points::converter::input_data_id_t{5, 0}] = {1, 731};
   memset(&registry.lod_watermark, 0x3C, sizeof(registry.lod_watermark));
   registry.locations.resize(3);
   registry.locations[1] = {0, 128, 4096};
@@ -831,6 +854,13 @@ TEST_CASE("tree registry v2 round-trip preserves state, watermark and snapshot" 
   REQUIRE(restored.current_id == registry.current_id);
   REQUIRE(restored.root.data == registry.root.data);
   REQUIRE(restored.current_lod_node_id == registry.current_lod_node_id);
+  REQUIRE(restored.current_collapsed_node_id == registry.current_collapsed_node_id);
+  REQUIRE(restored.tree_config.read_chunk_byte_target == config.read_chunk_byte_target);
+  REQUIRE(restored.chunk_tree_refs.size() == 2);
+  REQUIRE(restored.chunk_tree_refs.at(points::converter::input_data_id_t{4, 2}).tree_count == 3);
+  REQUIRE(restored.chunk_tree_refs.at(points::converter::input_data_id_t{4, 2}).point_count == 200000);
+  REQUIRE(restored.chunk_tree_refs.at(points::converter::input_data_id_t{5, 0}).tree_count == 1);
+  REQUIRE(restored.chunk_tree_refs.at(points::converter::input_data_id_t{5, 0}).point_count == 731);
   REQUIRE(memcmp(&restored.lod_watermark, &registry.lod_watermark, sizeof(registry.lod_watermark)) == 0);
   REQUIRE(restored.locations.size() == 3);
   REQUIRE(restored.locations[1].offset == 4096);
@@ -839,13 +869,86 @@ TEST_CASE("tree registry v2 round-trip preserves state, watermark and snapshot" 
   REQUIRE(restored.input_registry_snapshot == registry.input_registry_snapshot);
 }
 
+namespace
+{
+// The 40-byte tree_config layout that v1/v2 registry blobs serialized (no read_chunk_byte_target).
+struct tree_config_v2_layout_t
+{
+  double scale;
+  double offset[3];
+  bool store_original_order;
+  uint32_t node_point_limit;
+};
+static_assert(sizeof(tree_config_v2_layout_t) == 40, "historic layout");
+
+tree_config_v2_layout_t v2_config_from(const points::converter::tree_config_t &config)
+{
+  tree_config_v2_layout_t out = {};
+  out.scale = config.scale;
+  memcpy(out.offset, config.offset, sizeof(out.offset));
+  out.store_original_order = config.store_original_order;
+  out.node_point_limit = config.node_point_limit;
+  return out;
+}
+} // namespace
+
+TEST_CASE("tree registry v2 blob deserializes with defaulted v3 state" * doctest::test_suite("[registry_v2]"))
+{
+  // Hand-build a v2 blob: magic, 40-byte config, v2 fields, no collapsed counter / chunk refs.
+  const uint32_t magic_v2 = 0x32475254u;
+  const uint32_t node_limit = 1000;
+  const uint32_t current_id = 1;
+  const points::converter::tree_id_t root(0);
+  const auto config = v2_config_from(create_tree_config(0.001, 0.0));
+  const uint64_t lod_node_id = (uint64_t(1) << 63) + 5;
+  points::converter::morton::morton192_t watermark = {};
+  watermark.data[0] = 77;
+  const uint32_t count = 1;
+  points::converter::storage_location_t location = {0, 64, 1024};
+  const uint8_t state = uint8_t(points::converter::tree_state_t::final);
+  const uint32_t band = 2;
+  const uint32_t snapshot_size = 0;
+
+  const uint32_t size = sizeof(magic_v2) + sizeof(node_limit) + sizeof(current_id) + sizeof(root) + sizeof(config) + sizeof(lod_node_id) + sizeof(watermark) + sizeof(count) + sizeof(location) + sizeof(state) + sizeof(band) + sizeof(snapshot_size);
+  auto buffer = std::make_unique<uint8_t[]>(size);
+  uint8_t *p = buffer.get();
+  auto put = [&p](const auto &v) { memcpy(p, &v, sizeof(v)); p += sizeof(v); };
+  put(magic_v2);
+  put(node_limit);
+  put(current_id);
+  put(root);
+  put(config);
+  put(lod_node_id);
+  put(watermark);
+  put(count);
+  put(location);
+  put(state);
+  put(band);
+  put(snapshot_size);
+  REQUIRE(p == buffer.get() + size);
+
+  points::converter::tree_registry_t restored;
+  auto error = points::converter::tree_registry_deserialize(buffer, size, restored);
+  REQUIRE(error.code == 0);
+  REQUIRE(restored.node_limit == node_limit);
+  REQUIRE(restored.current_lod_node_id == lod_node_id);
+  REQUIRE(restored.lod_watermark.data[0] == 77);
+  REQUIRE(restored.tree_state.size() == 1);
+  REQUIRE(restored.tree_state[0] == state);
+  REQUIRE(restored.tree_band[0] == band);
+  // v3 additions default:
+  REQUIRE(restored.current_collapsed_node_id == uint64_t(1) << 62);
+  REQUIRE(restored.chunk_tree_refs.empty());
+  REQUIRE(restored.tree_config.read_chunk_byte_target == points::converter::tree_config_t{}.read_chunk_byte_target);
+}
+
 TEST_CASE("tree registry v1 blob deserializes with defaulted v2 state" * doctest::test_suite("[registry_v2]"))
 {
   // Hand-build a v1 blob (no magic; first u32 is node_limit) and check the v2 fields default.
   const uint32_t node_limit = 200000;
   const uint32_t current_id = 2;
   const points::converter::tree_id_t root(0);
-  const auto tree_config = create_tree_config(0.001, 0.0);
+  const auto tree_config = v2_config_from(create_tree_config(0.001, 0.0)); // v1 wrote the 40-byte layout
   points::converter::storage_location_t locations[2] = {{0, 64, 1024}, {0, 32, 2048}};
   const uint32_t count = 2;
 
@@ -1145,17 +1248,16 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
   }
   REQUIRE(!all_blobs.empty());
 
-  // Every uploaded blob's bytes match the cache's raw bytes (ranged GET inside the pack).
+  // Every uploaded blob's bytes match the cache's raw bytes (whole-object GET, no range: the blob
+  // IS the object and the recorded offset is always 0).
   for (auto &blob : all_blobs)
   {
     auto request = test_util.cache_file_handler.read(points::converter::storage_location_t{0, blob.location.size, blob.cache_offset}, /*raw=*/true);
     request->wait_for_read();
     REQUIRE(request->error.code == 0);
+    REQUIRE(blob.location.offset == 0);
     std::vector<uint8_t> bucket_bytes(blob.location.size);
-    vio::objstore::io_range_t range;
-    range.offset = int64_t(blob.location.offset);
-    range.size = int64_t(blob.location.size);
-    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_pack_name(blob.location.file_id), bucket_bytes.data(), range); });
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object_all(points::converter::bucket_data_object_name(blob.location.file_id), bucket_bytes.data(), blob.location.size); });
     REQUIRE(read.has_value());
     REQUIRE(read.value() == blob.location.size);
     REQUIRE(memcmp(bucket_bytes.data(), request->buffer_info.data, blob.location.size) == 0);
@@ -1164,10 +1266,8 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
   // The bucket registry deserializes; every tree location points into a pack and the tree parses.
   {
     std::vector<uint8_t> reg_bytes(root.tree_registry.size);
-    vio::objstore::io_range_t range;
-    range.offset = int64_t(root.tree_registry.offset);
-    range.size = int64_t(root.tree_registry.size);
-    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_pack_name(root.tree_registry.file_id), reg_bytes.data(), range); });
+    REQUIRE(root.tree_registry.offset == 0);
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object_all(points::converter::bucket_data_object_name(root.tree_registry.file_id), reg_bytes.data(), root.tree_registry.size); });
     REQUIRE(read.has_value());
     auto buffer = std::make_unique<uint8_t[]>(reg_bytes.size());
     memcpy(buffer.get(), reg_bytes.data(), reg_bytes.size());
@@ -1180,10 +1280,8 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
       auto &tree_location = bucket_registry.locations[i];
       REQUIRE(tree_location.size > 0);
       std::vector<uint8_t> tree_bytes(tree_location.size);
-      vio::objstore::io_range_t tree_range;
-      tree_range.offset = int64_t(tree_location.offset);
-      tree_range.size = int64_t(tree_location.size);
-      auto tree_read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_pack_name(tree_location.file_id), tree_bytes.data(), tree_range); });
+      REQUIRE(tree_location.offset == 0);
+      auto tree_read = bucket_op(loop, [&]() { return bucket_raw->read_object_all(points::converter::bucket_data_object_name(tree_location.file_id), tree_bytes.data(), tree_location.size); });
       REQUIRE(tree_read.has_value());
       points::converter::serialized_tree_t serialized;
       serialized.size = int(tree_bytes.size());
@@ -1192,11 +1290,11 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
       points::converter::tree_t bucket_tree;
       points_error_t tree_error = {};
       REQUIRE(points::converter::tree_deserialize(serialized, bucket_tree, tree_error));
-      // Remapped storage locations must reference packs (file_id < next_pack_id), not the cache.
+      // Remapped storage locations must reference data objects (file_id < next_object_id), not the cache.
       bucket_tree.storage_map.for_each([&](points::converter::input_data_id_t, points::converter::attributes_id_t, const std::vector<points::converter::storage_location_t> &locations) {
         for (auto &location : locations)
           if (location.size)
-            REQUIRE(location.file_id < root.next_pack_id);
+            REQUIRE(location.file_id < root.next_object_id);
       });
     }
   }

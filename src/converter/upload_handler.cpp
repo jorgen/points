@@ -148,7 +148,7 @@ points_error_t upload_handler_t::bootstrap()
       }
       self->_band_count = root.band_count;
       self->_bootstrap_band_count = root.band_count;
-      self->_next_pack_id = root.next_pack_id;
+      self->_next_object_id = root.next_object_id;
       // Committed bands: rebuild the dedup map + uploaded tree table (names are deterministic; no
       // list op needed).
       for (uint32_t band = 0; band < root.band_count; band++)
@@ -251,21 +251,25 @@ vio::task_t<points_error_t> upload_handler_t::put_with_retry(std::string name, s
   co_return last;
 }
 
-vio::task_t<points_error_t> upload_handler_t::flush_pack(std::vector<uint8_t> &pack, uint32_t pack_id)
+vio::detached_task_t upload_handler_t::put_data_object_windowed(put_window_t *window, uint32_t object_id, std::shared_ptr<uint8_t[]> data, uint64_t size)
 {
-  if (pack.size() <= k_pack_header_size)
-    co_return points_error_t{};
-  const uint64_t size = pack.size();
-  auto data = std::make_shared<uint8_t[]>(size);
-  memcpy(data.get(), pack.data(), size);
-  pack.clear();
-  auto err = co_await put_with_retry(bucket_pack_name(pack_id), std::move(data), size);
+  auto err = co_await put_with_retry(bucket_data_object_name(object_id), std::move(data), size);
   if (err.code == 0)
   {
     std::unique_lock<std::mutex> lock(_stats_mutex);
-    _stats.packs_written++;
+    _stats.objects_written++;
   }
-  co_return err;
+  else if (window->first_error.code == 0)
+  {
+    window->first_error = err;
+  }
+  window->in_flight--;
+  if (window->waiter)
+  {
+    auto handle = window->waiter;
+    window->waiter = {};
+    handle.resume(); // the waiter re-checks room in its wait loop
+  }
 }
 
 vio::task_t<void> upload_handler_t::process_band(band_job_t job)
@@ -281,39 +285,29 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
       _on_error(error, true);
   };
 
+  // Data-object PUTs run through a bounded window (small ~0.2-2MB objects; sequential PUTs would
+  // pay a full round trip each). The window lives in this frame: EVERY exit below first drains it.
+  constexpr int k_max_in_flight_puts = 8;
+  put_window_t window;
+  auto launch_put = [&](uint32_t object_id, const uint8_t *bytes, uint32_t size) {
+    auto data = std::make_shared<uint8_t[]>(size);
+    memcpy(data.get(), bytes, size);
+    window.in_flight++;
+    put_data_object_windowed(&window, object_id, std::move(data), size);
+  };
+
   assert(job.band_id == _band_count && "bands must commit strictly in order");
   band_manifest_t manifest;
   manifest.band_id = job.band_id;
   memcpy(manifest.dataset_uuid, _uuid, sizeof(manifest.dataset_uuid));
   manifest.watermark = job.watermark;
-  manifest.first_pack_id = _next_pack_id;
+  manifest.first_object_id = _next_object_id;
   manifest.attributes_configs_snapshot = std::move(job.attributes_snapshot);
 
-  // Deterministic packing: trees ascending by id (the job is emitted that way, but enforce), and
-  // per tree the storage-map units sorted by input id -- so a crashed band retries into the SAME
-  // pack names/contents and overwrites its own orphans.
+  // Deterministic object-id assignment: trees ascending by id (the job is emitted that way, but
+  // enforce), per tree the storage-map units sorted by input id, blobs in location order -- so a
+  // crashed band retries into the SAME object names/contents and overwrites its own orphans.
   std::sort(job.trees.begin(), job.trees.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
-
-  std::vector<uint8_t> pack;
-  pack.reserve(_pack_target_bytes + (1u << 20));
-  uint32_t pack_id = _next_pack_id;
-  auto begin_pack_if_needed = [&]() {
-    if (!pack.empty())
-      return;
-    pack_header_t header;
-    header.band_id = job.band_id;
-    pack.resize(k_pack_header_size);
-    memcpy(pack.data(), &header, sizeof(header));
-  };
-  auto append_blob = [&](const std::vector<uint8_t> &bytes) -> storage_location_t {
-    begin_pack_if_needed();
-    storage_location_t location;
-    location.file_id = pack_id;
-    location.offset = pack.size();
-    location.size = uint32_t(bytes.size());
-    pack.insert(pack.end(), bytes.begin(), bytes.end());
-    return location;
-  };
 
   struct unit_t
   {
@@ -331,6 +325,8 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
     auto err = co_await read_cache_blob(tree_location, tree_bytes);
     if (err.code != 0)
     {
+      while (window.in_flight >= 1)
+        co_await window.wait_for_room(1);
       park(err);
       co_return;
     }
@@ -342,6 +338,8 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
     points_error_t tree_error = {};
     if (!tree_deserialize(serialized, *tree, tree_error))
     {
+      while (window.in_flight >= 1)
+        co_await window.wait_for_room(1);
       park(tree_error);
       co_return;
     }
@@ -362,26 +360,32 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
         auto read_error = co_await read_cache_blob(location, blob_bytes);
         if (read_error.code != 0)
         {
+          while (window.in_flight >= 1)
+            co_await window.wait_for_room(1);
           park(read_error);
           co_return;
         }
-        auto bucket_location = append_blob(blob_bytes);
+        while (window.in_flight >= k_max_in_flight_puts)
+          co_await window.wait_for_room(k_max_in_flight_puts);
+        if (window.first_error.code != 0)
+          break; // drain + park below
+        storage_location_t bucket_location;
+        bucket_location.file_id = _next_object_id++;
+        bucket_location.offset = 0;
+        bucket_location.size = uint32_t(blob_bytes.size());
+        launch_put(bucket_location.file_id, blob_bytes.data(), bucket_location.size);
+        // The dedup/manifest entries are recorded at LAUNCH: ids are deterministic, and nothing is
+        // committed unless every put succeeded (the drain below gates the band manifest).
         _dedup[location.offset] = bucket_location;
         manifest.blobs.push_back({location.offset, bucket_location});
-        if (pack.size() >= _pack_target_bytes)
-        {
-          auto flush_error = co_await flush_pack(pack, pack_id);
-          if (flush_error.code != 0)
-          {
-            park(flush_error);
-            co_return;
-          }
-          pack_id = ++_next_pack_id;
-        }
       }
+      if (window.first_error.code != 0)
+        break;
     }
+    if (window.first_error.code != 0)
+      break;
 
-    // 3. Remap the tree's storage map to bucket locations and pack the re-serialized tree.
+    // 3. Remap the tree's storage map to bucket object locations and re-serialize the tree.
     tree->storage_map.remap_storage([&](std::vector<storage_location_t> &locations) {
       for (auto &location : locations)
         if (location.size != 0)
@@ -398,27 +402,24 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
 
   for (auto &[tree_id, serialized] : remapped_trees)
   {
-    std::vector<uint8_t> bytes(serialized.data.get(), serialized.data.get() + serialized.size);
-    auto location = append_blob(bytes);
+    if (window.first_error.code != 0)
+      break;
+    while (window.in_flight >= k_max_in_flight_puts)
+      co_await window.wait_for_room(k_max_in_flight_puts);
+    storage_location_t location;
+    location.file_id = _next_object_id++;
+    location.offset = 0;
+    location.size = uint32_t(serialized.size);
+    launch_put(location.file_id, serialized.data.get(), location.size);
     _tree_locations[tree_id] = location;
     manifest.trees.push_back({tree_id, location});
-    if (pack.size() >= _pack_target_bytes)
-    {
-      auto flush_error = co_await flush_pack(pack, pack_id);
-      if (flush_error.code != 0)
-      {
-        park(flush_error);
-        co_return;
-      }
-      pack_id = ++_next_pack_id;
-    }
   }
 
-  // Terminal band: pack the registry (locations remapped to bucket packs, states marked uploaded)
+  // Terminal band: upload the registry (locations remapped to bucket objects, states marked uploaded)
   // + the attributes snapshot, and point the root manifest at them.
   storage_location_t registry_location = {};
   storage_location_t attributes_location = {};
-  if (job.terminal)
+  if (job.terminal && window.first_error.code == 0)
   {
     tree_registry_t registry;
     auto buffer = std::make_unique<uint8_t[]>(job.registry_snapshot.size);
@@ -426,6 +427,8 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
     auto err = tree_registry_deserialize(buffer, uint32_t(job.registry_snapshot.size), registry);
     if (err.code != 0)
     {
+      while (window.in_flight >= 1)
+        co_await window.wait_for_room(1);
       park(err);
       co_return;
     }
@@ -434,6 +437,8 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
       auto it = _tree_locations.find(i);
       if (it == _tree_locations.end())
       {
+        while (window.in_flight >= 1)
+          co_await window.wait_for_room(1);
         park(points_error_t{1, fmt::format("Terminal band missing bucket location for tree {}", i)});
         co_return;
       }
@@ -444,25 +449,33 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
     auto reserialized_registry = tree_registry_serialize(registry);
     if (!reserialized_registry.data)
     {
+      while (window.in_flight >= 1)
+        co_await window.wait_for_room(1);
       park(points_error_t{1, "Failed to serialize registry for upload"});
       co_return;
     }
-    std::vector<uint8_t> registry_bytes(reserialized_registry.data.get(), reserialized_registry.data.get() + reserialized_registry.size);
-    registry_location = append_blob(registry_bytes);
-    attributes_location = append_blob(manifest.attributes_configs_snapshot);
+    registry_location.file_id = _next_object_id++;
+    registry_location.offset = 0;
+    registry_location.size = uint32_t(reserialized_registry.size);
+    launch_put(registry_location.file_id, reserialized_registry.data.get(), registry_location.size);
+    attributes_location.file_id = _next_object_id++;
+    attributes_location.offset = 0;
+    attributes_location.size = uint32_t(manifest.attributes_configs_snapshot.size());
+    launch_put(attributes_location.file_id, manifest.attributes_configs_snapshot.data(), attributes_location.size);
   }
 
-  auto flush_error = co_await flush_pack(pack, pack_id);
-  if (flush_error.code != 0)
+  manifest.next_object_id = _next_object_id;
+
+  // Drain the window: every data object must be durable before the band manifest names them.
+  while (window.in_flight >= 1)
+    co_await window.wait_for_room(1);
+  if (window.first_error.code != 0)
   {
-    park(flush_error);
+    park(window.first_error);
     co_return;
   }
-  if (pack_id == _next_pack_id)
-    _next_pack_id++; // the last pack consumed this id
-  manifest.next_pack_id = _next_pack_id;
 
-  // Band manifest (immutable) AFTER all its packs...
+  // Band manifest (immutable) AFTER all its data objects...
   auto band_bytes = serialize_band_manifest(manifest);
   if (band_bytes.empty())
   {
@@ -482,7 +495,7 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
   root_manifest_t root;
   memcpy(root.dataset_uuid, _uuid, sizeof(root.dataset_uuid));
   root.band_count = job.band_id + 1;
-  root.next_pack_id = _next_pack_id;
+  root.next_object_id = _next_object_id;
   root.complete = job.terminal ? 1 : 0;
   root.tree_registry = registry_location;
   root.attribute_configs = attributes_location;
@@ -503,7 +516,7 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
   // facts -- its spill segments then stayed referenced (and undeletable) forever.
   //
   // The cache tier may now treat this band's blobs as uploaded (evictable once durable). The
-  // remote id is the bucket location, so evicted blobs remain readable through the pack objects.
+  // remote id is the bucket object, so evicted blobs remain readable through whole-object GETs.
   std::vector<std::pair<uint64_t, storage_location_t>> uploaded;
   uploaded.reserve(manifest.blobs.size());
   for (auto &blob : manifest.blobs)

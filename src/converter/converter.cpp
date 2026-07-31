@@ -183,7 +183,7 @@ bool points_converter_get_upload_state(points_converter_t *converter, points_con
   auto upload = converter->processor.upload_stats();
   state->bytes_uploaded = upload.bytes_uploaded;
   state->bands_committed = upload.bands_committed;
-  state->packs_written = upload.packs_written;
+  state->objects_written = upload.objects_written;
   state->upload_parked = upload.parked ? 1 : 0;
   state->destination_complete = upload.complete ? 1 : 0;
   points::converter::storage_handler_t::cache_tier_stats_t cache = {};
@@ -234,6 +234,11 @@ void points_converter_set_compression_level(points_converter_t *converter, int l
 void points_converter_set_node_point_limit(points_converter_t *converter, uint32_t points)
 {
   converter->processor.set_pre_init_node_point_limit(points);
+}
+
+void points_converter_set_read_chunk_bytes(points_converter_t *converter, uint64_t bytes)
+{
+  converter->processor.set_pre_init_read_chunk_bytes(bytes);
 }
 
 void points_converter_add_data_file(points_converter_t *converter, points_converter_str_buffer *buffers, uint32_t buffer_count)

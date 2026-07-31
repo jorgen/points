@@ -122,6 +122,7 @@ add_executable(points_render_wasm
     ${_conv}/processor.cpp
     ${_conv}/storage_handler.cpp
     ${_conv}/tree_handler.cpp
+    ${_conv}/tree_collapse.cpp
     ${_conv}/tree_lod_generator.cpp
     ${_conv}/tree.cpp
     ${_conv}/sorter.cpp

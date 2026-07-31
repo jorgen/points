@@ -27,9 +27,9 @@
 namespace points::converter
 {
 
-std::string bucket_pack_name(uint32_t pack_id)
+std::string bucket_data_object_name(uint32_t object_id)
 {
-  return fmt::format("data/{:08x}", pack_id);
+  return fmt::format("data/{:08x}", object_id);
 }
 
 std::string bucket_band_name(uint32_t band_id)
@@ -48,7 +48,7 @@ std::shared_ptr<uint8_t[]> serialize_root_manifest(const root_manifest_t &manife
   ok = ok && write_memory(ptr, end, manifest.dataset_uuid);
   ok = ok && write_memory(ptr, end, manifest.complete);
   ok = ok && write_memory(ptr, end, manifest.band_count);
-  ok = ok && write_memory(ptr, end, manifest.next_pack_id);
+  ok = ok && write_memory(ptr, end, manifest.next_object_id);
   ok = ok && write_memory(ptr, end, manifest.attribute_configs);
   ok = ok && write_memory(ptr, end, manifest.tree_registry);
   ok = ok && write_memory(ptr, end, manifest.compression_stats);
@@ -73,7 +73,7 @@ points_error_t deserialize_root_manifest(const uint8_t *data, uint32_t size, roo
   ok = ok && read_memory(ptr, end, out.dataset_uuid);
   ok = ok && read_memory(ptr, end, out.complete);
   ok = ok && read_memory(ptr, end, out.band_count);
-  ok = ok && read_memory(ptr, end, out.next_pack_id);
+  ok = ok && read_memory(ptr, end, out.next_object_id);
   ok = ok && read_memory(ptr, end, out.attribute_configs);
   ok = ok && read_memory(ptr, end, out.tree_registry);
   ok = ok && read_memory(ptr, end, out.compression_stats);
@@ -90,8 +90,8 @@ std::vector<uint8_t> serialize_band_manifest(const band_manifest_t &manifest)
   size += sizeof(manifest.band_id);
   size += sizeof(manifest.dataset_uuid);
   size += sizeof(manifest.watermark);
-  size += sizeof(manifest.first_pack_id);
-  size += sizeof(manifest.next_pack_id);
+  size += sizeof(manifest.first_object_id);
+  size += sizeof(manifest.next_object_id);
   size += sizeof(uint32_t) + uint32_t(manifest.trees.size()) * uint32_t(sizeof(band_tree_entry_t));
   size += sizeof(uint32_t) + uint32_t(manifest.blobs.size()) * uint32_t(sizeof(band_dedup_entry_t));
   size += sizeof(uint32_t) + uint32_t(manifest.attributes_configs_snapshot.size());
@@ -103,8 +103,8 @@ std::vector<uint8_t> serialize_band_manifest(const band_manifest_t &manifest)
   ok = ok && write_memory(ptr, end, manifest.band_id);
   ok = ok && write_memory(ptr, end, manifest.dataset_uuid);
   ok = ok && write_memory(ptr, end, manifest.watermark);
-  ok = ok && write_memory(ptr, end, manifest.first_pack_id);
-  ok = ok && write_memory(ptr, end, manifest.next_pack_id);
+  ok = ok && write_memory(ptr, end, manifest.first_object_id);
+  ok = ok && write_memory(ptr, end, manifest.next_object_id);
   ok = ok && write_memory(ptr, end, uint32_t(manifest.trees.size()));
   ok = ok && write_vec_type(ptr, end, manifest.trees);
   ok = ok && write_memory(ptr, end, uint32_t(manifest.blobs.size()));
@@ -129,8 +129,8 @@ points_error_t deserialize_band_manifest(const uint8_t *data, uint32_t size, ban
   bool ok = read_memory(ptr, end, out.band_id);
   ok = ok && read_memory(ptr, end, out.dataset_uuid);
   ok = ok && read_memory(ptr, end, out.watermark);
-  ok = ok && read_memory(ptr, end, out.first_pack_id);
-  ok = ok && read_memory(ptr, end, out.next_pack_id);
+  ok = ok && read_memory(ptr, end, out.first_object_id);
+  ok = ok && read_memory(ptr, end, out.next_object_id);
   uint32_t tree_count = 0;
   ok = ok && read_memory(ptr, end, tree_count);
   ok = ok && read_vec_type(ptr, end, out.trees, tree_count);

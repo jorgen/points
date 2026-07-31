@@ -394,7 +394,7 @@ static void quantize_morton_one(const morton::morton192_t &morton_min, const mor
   }
 }
 
-static points_converter_buffer_t morton_buffer_for_subset(const points_converter_buffer_t &buffer, points_type_t format, offset_in_subset_t offset, point_count_t count)
+points_converter_buffer_t morton_buffer_for_subset(const points_converter_buffer_t &buffer, points_type_t format, offset_in_subset_t offset, point_count_t count)
 {
   auto format_byte_size = size_for_format(format);
   points_converter_buffer_t ret;
@@ -604,8 +604,8 @@ static void copy_attribute_for_input(input_data_id_t input_id, const std::vector
   }
 }
 
-static void quantize_attributres(storage_handler_t &cache, const child_storage_map_t &child_storage_map, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies,
-                                 const attribute_lod_mapping_t &lod_attrib_mapping, attribute_buffers_t &buffers)
+void quantize_attributres(storage_handler_t &cache, const child_storage_map_t &child_storage_map, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies,
+                          const attribute_lod_mapping_t &lod_attrib_mapping, attribute_buffers_t &buffers)
 {
   fixed_capacity_vector_t<input_data_id_t> inputs(indecies, [](const std::pair<input_data_id_t, uint32_t> &a) { return a.first; });
   std::sort(inputs.begin(), inputs.end());

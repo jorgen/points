@@ -178,6 +178,13 @@ TEST_CASE("destination mode end-to-end via public API: convert, upload, resume, 
   uint32_t bands_seen = 0;
   points_converter_upload_callbacks_t upload_callbacks = {};
   upload_callbacks.band_committed = [](void *user_ptr, uint32_t, const uint64_t[3]) { (*static_cast<uint32_t *>(user_ptr))++; };
+  upload_callbacks.error = [](void *, const points_error_t *err, uint8_t parked) {
+    int code = 0;
+    const char *str = nullptr;
+    size_t len = 0;
+    points_error_get_info(err, &code, &str, &len);
+    fprintf(stderr, "[upload error] parked=%d %d: %.*s\n", int(parked), code, int(len), str ? str : "");
+  };
 
   // ---- Session 1: convert two files, everything uploads, destination completes. ----
   {
@@ -217,8 +224,37 @@ TEST_CASE("destination mode end-to-end via public API: convert, upload, resume, 
     REQUIRE(points::converter::deserialize_root_manifest(bytes.data(), uint32_t(bytes.size()), root).code == 0);
     REQUIRE(root.complete == 1);
     REQUIRE(root.tree_registry.size > 0);
+    REQUIRE(root.tree_registry.offset == 0); // per-blob layout: the blob IS the object
     bands_after_first = root.band_count;
     REQUIRE(bands_after_first >= 1);
+
+    // Per-blob layout on disk: data/ holds exactly next_object_id objects, ids 0..n-1, and every
+    // band dedup entry names an object whose file size equals the entry's blob size at offset 0.
+    uint32_t data_objects = 0;
+    std::error_code iterate_error;
+    for (auto &entry : std::filesystem::directory_iterator(std::filesystem::path(bucket_dir) / "data", iterate_error))
+      data_objects += entry.is_regular_file() ? 1 : 0;
+    REQUIRE(!iterate_error);
+    REQUIRE(data_objects == root.next_object_id);
+    for (uint32_t band = 0; band < root.band_count; band++)
+    {
+      auto band_path = std::filesystem::path(bucket_dir) / points::converter::bucket_band_name(band);
+      REQUIRE(std::filesystem::exists(band_path));
+      std::vector<uint8_t> band_bytes(std::filesystem::file_size(band_path));
+      FILE *bf = fopen(band_path.string().c_str(), "rb");
+      REQUIRE(bf);
+      REQUIRE(fread(band_bytes.data(), 1, band_bytes.size(), bf) == band_bytes.size());
+      fclose(bf);
+      points::converter::band_manifest_t band_manifest;
+      REQUIRE(points::converter::deserialize_band_manifest(band_bytes.data(), uint32_t(band_bytes.size()), band_manifest).code == 0);
+      for (auto &blob : band_manifest.blobs)
+      {
+        REQUIRE(blob.location.offset == 0);
+        auto object_path = std::filesystem::path(bucket_dir) / points::converter::bucket_data_object_name(blob.location.file_id);
+        REQUIRE(std::filesystem::exists(object_path));
+        REQUIRE(std::filesystem::file_size(object_path) == blob.location.size);
+      }
+    }
   }
 
   // ---- Session 2 (resume): same cache + destination, re-add the same inputs -> skipped, no new
@@ -337,6 +373,21 @@ TEST_CASE("JLP2 bucket reads back through the object backend (renderer/tool read
       deserialize_tree(cache_tree_bytes, cache_tree);
       deserialize_tree(bucket_tree_bytes, bucket_tree);
 
+      // Uploaded trees are final => collapsed: every leaf is one whole-unit subset (its own
+      // per-node unit -- a collapsed id, or a reader chunk that exactly covers the leaf).
+      for (int level = 0; level < 5; level++)
+      {
+        for (uint32_t skip = 0; skip < uint32_t(bucket_tree.nodes[level].size()); skip++)
+        {
+          auto &collection = bucket_tree.data[level][skip];
+          if (bucket_tree.nodes[level][skip] != 0 || collection.point_count == 0)
+            continue;
+          REQUIRE(collection.data.size() == 1);
+          REQUIRE(collection.data[0].offset.data == 0);
+          REQUIRE(uint64_t(collection.data[0].count.data) == collection.point_count);
+        }
+      }
+
       auto cache_units = unit_map(cache_tree);
       auto bucket_units = unit_map(bucket_tree);
       REQUIRE(bucket_units.size() == cache_units.size());
@@ -386,6 +437,144 @@ TEST_CASE("JLP2 bucket reads back through the object backend (renderer/tool read
     REQUIRE(reader == nullptr);
     REQUIRE(error != nullptr);
     points_error_destroy(error);
+  }
+
+  std::remove(cache_path);
+  std::filesystem::remove_all(bucket_dir);
+}
+
+TEST_CASE("exact-chunk leaves skip the collapse rewrite (no collapsed units in the bucket)")
+{
+  namespace pc = points::converter;
+  const char *cache_path = "test_skip_rewrite_cache.jlp";
+  const char *bucket_dir = "test_skip_rewrite_bucket";
+  std::remove(cache_path);
+  std::filesystem::remove_all(bucket_dir);
+  const std::string bucket_url = std::string("dir://") + bucket_dir;
+
+  // ONE file -> one reader chunk -> one whole-chunk leaf: collapse must skip the rewrite and the
+  // bucket's units must all carry the reader id (no collapsed-leaf ids, no extra blobs written).
+  {
+    points_error_t *error = nullptr;
+    auto *converter = points_converter_create_with_destination(cache_path, strlen(cache_path), bucket_url.c_str(), bucket_url.size(), nullptr, 0, points_open_file_semantics_truncate, &error);
+    REQUIRE(converter != nullptr);
+    points_converter_set_file_converter_callbacks(converter, synthetic_callbacks());
+    add_file(converter, "synth_0");
+    points_converter_wait_idle(converter);
+    points_converter_upload_state_t state = {};
+    REQUIRE(points_converter_get_upload_state(converter, &state));
+    REQUIRE(state.destination_complete == 1);
+    points_converter_destroy(converter);
+  }
+
+  {
+    vio::thread_with_event_loop_t loop_thread;
+    auto &loop = loop_thread.event_loop();
+    points_error_t err{};
+    auto bucket = pc::create_storage_backend(bucket_url, loop, err);
+    REQUIRE(bucket);
+    pc::index_load_t load{};
+    REQUIRE(bucket->read_index(load).code == 0);
+    pc::tree_registry_t registry;
+    REQUIRE(pc::tree_registry_deserialize(load.tree_registry, load.tree_registry_size, registry).code == 0);
+    uint32_t leaf_units = 0;
+    for (uint32_t i = 0; i < uint32_t(registry.locations.size()); i++)
+    {
+      if (registry.locations[i].size == 0)
+        continue;
+      std::vector<uint8_t> tree_bytes;
+      REQUIRE(backend_read(loop, bucket.get(), registry.locations[i], tree_bytes).code == 0);
+      std::shared_ptr<uint8_t[]> buffer(new uint8_t[tree_bytes.size()]);
+      memcpy(buffer.get(), tree_bytes.data(), tree_bytes.size());
+      pc::serialized_tree_t serialized{buffer, int(tree_bytes.size())};
+      pc::tree_t tree;
+      points_error_t de{};
+      REQUIRE(pc::tree_deserialize(serialized, tree, de));
+      tree.storage_map.for_each([&](pc::input_data_id_t id, pc::attributes_id_t, const std::vector<pc::storage_location_t> &) {
+        if (pc::input_data_id_is_leaf(id))
+        {
+          REQUIRE(!pc::input_data_id_is_collapsed_leaf(id)); // skip-rewrite kept the reader unit
+          leaf_units++;
+        }
+      });
+    }
+    REQUIRE(leaf_units >= 1);
+  }
+
+  std::remove(cache_path);
+  std::filesystem::remove_all(bucket_dir);
+}
+
+TEST_CASE("chunks larger than the node limit subdivide and collapse to per-node units")
+{
+  namespace pc = points::converter;
+  const char *cache_path = "test_bigchunk_cache.jlp";
+  const char *bucket_dir = "test_bigchunk_bucket";
+  std::remove(cache_path);
+  std::filesystem::remove_all(bucket_dir);
+  const std::string bucket_url = std::string("dir://") + bucket_dir;
+
+  // One 4096-point file read as a single chunk (byte target >> file size) with a 512-point node
+  // limit: the FIRST insert must take the subdivision path, and finality must rewrite every leaf
+  // into its own collapsed unit (a chunk slice can never be a whole-unit leaf).
+  {
+    points_error_t *error = nullptr;
+    auto *converter = points_converter_create_with_destination(cache_path, strlen(cache_path), bucket_url.c_str(), bucket_url.size(), nullptr, 0, points_open_file_semantics_truncate, &error);
+    REQUIRE(converter != nullptr);
+    points_converter_set_file_converter_callbacks(converter, synthetic_callbacks());
+    points_converter_set_node_point_limit(converter, 512);
+    points_converter_set_read_chunk_bytes(converter, 64ull << 20);
+    add_file(converter, "synth_0");
+    points_converter_wait_idle(converter);
+    points_converter_upload_state_t state = {};
+    REQUIRE(points_converter_get_upload_state(converter, &state));
+    REQUIRE(state.destination_complete == 1);
+    REQUIRE(state.upload_parked == 0);
+    points_converter_destroy(converter);
+  }
+
+  {
+    vio::thread_with_event_loop_t loop_thread;
+    auto &loop = loop_thread.event_loop();
+    points_error_t err{};
+    auto bucket = pc::create_storage_backend(bucket_url, loop, err);
+    REQUIRE(bucket);
+    pc::index_load_t load{};
+    REQUIRE(bucket->read_index(load).code == 0);
+    pc::tree_registry_t registry;
+    REQUIRE(pc::tree_registry_deserialize(load.tree_registry, load.tree_registry_size, registry).code == 0);
+    uint32_t collapsed_units = 0;
+    uint64_t leaf_points = 0;
+    for (uint32_t i = 0; i < uint32_t(registry.locations.size()); i++)
+    {
+      if (registry.locations[i].size == 0)
+        continue;
+      std::vector<uint8_t> tree_bytes;
+      REQUIRE(backend_read(loop, bucket.get(), registry.locations[i], tree_bytes).code == 0);
+      std::shared_ptr<uint8_t[]> buffer(new uint8_t[tree_bytes.size()]);
+      memcpy(buffer.get(), tree_bytes.data(), tree_bytes.size());
+      pc::serialized_tree_t serialized{buffer, int(tree_bytes.size())};
+      pc::tree_t tree;
+      points_error_t de{};
+      REQUIRE(pc::tree_deserialize(serialized, tree, de));
+      for (int level = 0; level < 5; level++)
+      {
+        for (uint32_t skip = 0; skip < uint32_t(tree.nodes[level].size()); skip++)
+        {
+          auto &collection = tree.data[level][skip];
+          if (tree.nodes[level][skip] != 0 || collection.point_count == 0)
+            continue;
+          REQUIRE(collection.point_count <= 512);
+          REQUIRE(collection.data.size() == 1);
+          REQUIRE(collection.data[0].offset.data == 0);
+          REQUIRE(pc::input_data_id_is_collapsed_leaf(collection.data[0].input_id));
+          collapsed_units++;
+          leaf_points += collection.point_count;
+        }
+      }
+    }
+    REQUIRE(collapsed_units > 1);   // the chunk was split across multiple leaves
+    REQUIRE(leaf_points == 4096);   // nothing lost or duplicated by the collapse
   }
 
   std::remove(cache_path);

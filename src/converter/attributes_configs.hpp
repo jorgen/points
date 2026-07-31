@@ -74,7 +74,9 @@ class attributes_configs_t
 {
 public:
   attributes_id_t get_attribute_config_index(points_converter_attributes_t &&attr);
-  attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end);
+  // keep_original_order: LOD buffers drop the synthetic original-order attribute (meaningless once
+  // sampled); collapse keeps it (values reorder with the merge; chunk attribution is lost).
+  attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end, bool keep_original_order = false);
   attribute_lod_mapping_t get_lod_attribute_mapping(points_type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const;
 
   const points_converter_attributes_t &get(attributes_id_t id);

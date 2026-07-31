@@ -176,14 +176,15 @@ vio::task_t<points_error_t> object_backend_t::read_location(storage_location_t l
     co_return points_error_t{};
   }
   buf = std::make_unique<uint8_t[]>(loc.size);
-  // JLP2: verbatim pack addressing, one ranged GET into "data/{file_id:08x}". Legacy: whole object.
-  auto r = _jlp2 ? co_await _io->read_object(bucket_pack_name(loc.file_id), buf.get(), io_range_t{int64_t(loc.offset), int64_t(loc.size)})
-                 : co_await _io->read_object(object_name(loc.file_id, loc.offset), buf.get(), io_range_t{0, int64_t(loc.size)});
+  // Whole-object GET in both layouts (read_object_all: no Range header, capacity-checked): JLP2
+  // objects are exactly one blob ("data/{file_id:08x}", size == loc.size), legacy objects likewise.
+  auto r = _jlp2 ? co_await _io->read_object_all(bucket_data_object_name(loc.file_id), buf.get(), loc.size)
+                 : co_await _io->read_object_all(object_name(loc.file_id, loc.offset), buf.get(), loc.size);
   size = loc.size;
   if (!r.has_value())
     co_return to_points_error(r.error());
   if (r.value() != loc.size)
-    co_return points_error_t{1, "Short read of metadata object"};
+    co_return points_error_t{1, "Metadata object size does not match its recorded location"};
   co_return points_error_t{};
 }
 
@@ -201,7 +202,7 @@ vio::task_t<points_error_t> object_backend_t::do_read_index(index_load_t &out)
   _manifest_size = info->size;
   auto manifest_bytes = uint32_t(std::min<uint64_t>(info->size, k_root_manifest_size));
   auto manifest = std::make_shared<uint8_t[]>(manifest_bytes);
-  auto mr = co_await _io->read_object(k_manifest_name, manifest.get(), io_range_t{0, int64_t(manifest_bytes)});
+  auto mr = co_await _io->read_object_all(k_manifest_name, manifest.get(), manifest_bytes);
   if (!mr.has_value())
     co_return to_points_error(mr.error());
   manifest_bytes = uint32_t(std::min<uint64_t>(mr.value(), manifest_bytes));
@@ -304,10 +305,13 @@ vio::task_t<points_error_t> object_backend_t::write_allocated(storage_location_t
 
 vio::task_t<points_error_t> object_backend_t::read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read)
 {
-  // JLP2: one ranged GET inside the pack object; legacy: the blob IS the object (offset is the high
-  // half of the blob-id counter there, never a byte offset -- the interpretations must never mix).
-  auto r = _jlp2 ? co_await _io->read_object(bucket_pack_name(location.file_id), dst, io_range_t{int64_t(location.offset), int64_t(location.size)})
-                 : co_await _io->read_object(object_name(location.file_id, location.offset), dst, io_range_t{0, int64_t(location.size)});
+  // Whole-object GET in both layouts (read_object_all: no Range header, capacity-checked so a
+  // mismatched object can never overrun the buffer). JLP2: the blob IS object "data/{file_id:08x}"
+  // (offset always 0). Legacy: the blob IS the object (there `offset` is the high half of the
+  // blob-id counter, never a byte offset -- the interpretations must never mix).
+  assert(!_jlp2 || location.offset == 0);
+  auto r = _jlp2 ? co_await _io->read_object_all(bucket_data_object_name(location.file_id), dst, location.size)
+                 : co_await _io->read_object_all(object_name(location.file_id, location.offset), dst, location.size);
   if (!r.has_value())
     co_return to_points_error(r.error());
   bytes_read = uint32_t(r.value());

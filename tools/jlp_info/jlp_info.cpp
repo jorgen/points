@@ -125,7 +125,7 @@ static void print_dir_bucket_state(const std::string &dir_path)
   fmt::print("  Dataset uuid:  {}\n", uuid_hex(root.dataset_uuid));
   fmt::print("  Complete:      {}\n", root.complete ? "yes" : "no (upload in progress or parked)");
   fmt::print("  Bands:         {}\n", root.band_count);
-  fmt::print("  Packs:         {}\n", root.next_pack_id);
+  fmt::print("  Objects:       {}\n", root.next_object_id);
   fmt::print("\n");
 }
 
