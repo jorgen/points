@@ -35,7 +35,9 @@ namespace points::converter
 
 // Alignment the platform requires for a punch to take effect. Linux fallocate handles arbitrary
 // ranges itself (partial blocks are zeroed); macOS F_PUNCHHOLE and Windows SET_ZERO_DATA only
-// reclaim whole filesystem blocks, so we conservatively punch the 4K-aligned interior.
+// reclaim whole filesystem blocks, so we conservatively punch the 4K-aligned interior. (Compiled
+// only where used: the Linux branch never calls it and -Werror=unused-function would trip.)
+#if defined(__APPLE__) || defined(_WIN32)
 static constexpr uint64_t k_punch_align = 4096;
 
 static bool aligned_interior(uint64_t offset, uint64_t length, uint64_t &aligned_offset, uint64_t &aligned_length)
@@ -48,6 +50,7 @@ static bool aligned_interior(uint64_t offset, uint64_t length, uint64_t &aligned
   aligned_length = end - begin;
   return true;
 }
+#endif
 
 #if defined(__linux__)
 
