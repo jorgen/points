@@ -237,6 +237,35 @@ public:
     mark_dirty();
   }
 
+  // Total CPU-memory budget (MB) for the streaming renderer -- derives the read-cache size, the decoded-
+  // backlog byte cap, the virtual-resident budget and an in-flight-IO clamp. GPU memory is budgeted
+  // separately (setGpuMemoryBudgetMb): GL buffers live outside the wasm heap.
+  void setMemoryBudgetMb(double mb)
+  {
+    if (mb < 64.0)
+      mb = 64.0;
+    points_converter_data_source_set_memory_budget(_cds, static_cast<uint64_t>(mb) * 1024u * 1024u);
+    mark_dirty();
+  }
+  // {heapBytes, heapMax, budgetBytes, backlogBytes, readCacheBytes, residentBytes, brakeLevel}. heapBytes/
+  // heapMax are the wasm heap and its link-time ceiling as of the last rendered frame; brakeLevel is
+  // 0 none / 1 high / 2 critical (the heap-pressure brake tightening IO + cache caps).
+  val getMemoryStats()
+  {
+    uint64_t heap_bytes = 0, heap_max = 0, budget = 0, backlog = 0, read_cache = 0, resident = 0;
+    uint32_t brake = 0;
+    points_converter_data_source_get_memory_stats(_cds, &heap_bytes, &heap_max, &budget, &backlog, &read_cache, &resident, &brake);
+    val stats = val::object();
+    stats.set("heapBytes", double(heap_bytes));
+    stats.set("heapMax", double(heap_max));
+    stats.set("budgetBytes", double(budget));
+    stats.set("backlogBytes", double(backlog));
+    stats.set("readCacheBytes", double(read_cache));
+    stats.set("residentBytes", double(resident));
+    stats.set("brakeLevel", double(brake));
+    return stats;
+  }
+
   // --- virtual subnodes (A/B toggle + telemetry) ---
   void setEnableVirtualSubtrees(bool on)
   {
@@ -496,6 +525,8 @@ EMSCRIPTEN_BINDINGS(points_render)
     .function("setGpuMemoryBudgetMb", &renderer_wasm_t::setGpuMemoryBudgetMb)
     .function("setUploadBudgetPerFrameMb", &renderer_wasm_t::setUploadBudgetPerFrameMb)
     .function("setMaxInFlightIo", &renderer_wasm_t::setMaxInFlightIo)
+    .function("setMemoryBudgetMb", &renderer_wasm_t::setMemoryBudgetMb)
+    .function("getMemoryStats", &renderer_wasm_t::getMemoryStats)
     .function("setEnableVirtualSubtrees", &renderer_wasm_t::setEnableVirtualSubtrees)
     .function("getEnableVirtualSubtrees", &renderer_wasm_t::getEnableVirtualSubtrees)
     .function("getVirtualPromoted", &renderer_wasm_t::getVirtualPromoted)

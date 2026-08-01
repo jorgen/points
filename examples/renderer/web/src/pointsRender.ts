@@ -20,6 +20,24 @@ export interface Aabb {
 }
 
 /** One WebGL2 renderer bound to a canvas + dataset. Mirrors the embind `Renderer` class. */
+/** Wasm heap + memory-budget telemetry (see Renderer.getMemoryStats). */
+export interface MemoryStats {
+  /** Current wasm heap size in bytes (never shrinks within a page load). */
+  heapBytes: number;
+  /** Link-time heap ceiling in bytes. */
+  heapMax: number;
+  /** The configured total CPU-memory budget in bytes. */
+  budgetBytes: number;
+  /** Estimated CPU bytes held by in-flight + decoded-awaiting-upload nodes last frame. */
+  backlogBytes: number;
+  /** Compressed read-cache occupancy in bytes. */
+  readCacheBytes: number;
+  /** CPU bytes pinned by virtual-subtree residents + salvage handlers. */
+  residentBytes: number;
+  /** Heap-pressure brake: 0 none, 1 high (>=80% of ceiling), 2 critical (>=90%). */
+  brakeLevel: number;
+}
+
 export interface Renderer {
   /** Pump the streaming loops and draw once, at the given drawing-buffer pixel size. */
   frame(width: number, height: number): void;
@@ -51,6 +69,14 @@ export interface Renderer {
   setUploadBudgetPerFrameMb(mb: number): void;
   /** Max concurrent in-flight IO requests (streaming convergence speed). */
   setMaxInFlightIo(n: number): void;
+  /**
+   * Total CPU-memory budget (MB) for the streaming renderer: derives the read-cache size, the decoded-
+   * backlog cap, the virtual-resident budget and an in-flight-IO clamp. GPU memory is budgeted separately
+   * (setGpuMemoryBudgetMb) — GL buffers live outside the wasm heap. Values below 64 clamp to 64.
+   */
+  setMemoryBudgetMb(mb: number): void;
+  /** Wasm heap + memory-budget telemetry (heap values are from the last rendered frame). */
+  getMemoryStats(): MemoryStats;
   /** Virtual subnodes: render-time balanced LOD for spanning leaves. Off = leaves fall back to monoliths. */
   setEnableVirtualSubtrees(on: boolean): void;
   getEnableVirtualSubtrees(): boolean;

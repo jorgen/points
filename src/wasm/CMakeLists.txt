@@ -60,6 +60,7 @@ target_link_options(points_data_wasm PRIVATE
     "-sFETCH=1"
     "-sASYNCIFY"
     "-sALLOW_MEMORY_GROWTH=1"
+    "-sMAXIMUM_MEMORY=1GB"
     "-sEXIT_RUNTIME=0"
     "-sMODULARIZE=1"
     "-sEXPORT_ES6=1"
@@ -177,6 +178,13 @@ target_link_options(points_render_wasm PRIVATE
     "-sFETCH=1"
     "-sASYNCIFY"
     "-sALLOW_MEMORY_GROWTH=1"
+    # Hard heap ceiling (default would be 2GB -- past what mobile browsers survive). ABORTING_MALLOC
+    # defaults on, so growth past the ceiling is a clean wasm trap, never corrupted state (we build
+    # -fno-exceptions; bad_alloc recovery is impossible anyway). The data source's heap-pressure brake
+    # (memory_budget.hpp) tightens IO/cache caps at 80%/90% of this ceiling so the trap is unreachable in
+    # practice; INITIAL_MEMORY skips the first ~dozen growth events on the common path.
+    "-sMAXIMUM_MEMORY=1GB"
+    "-sINITIAL_MEMORY=128MB"
     "-sEXIT_RUNTIME=0"
     "-sMODULARIZE=1"
     "-sEXPORT_ES6=1"
@@ -223,6 +231,11 @@ target_link_options(points_decode_worker PRIVATE
     "-sDISABLE_EXCEPTION_THROWING=0"
     --bind
     "-sALLOW_MEMORY_GROWTH=1"          # note: NO -sFETCH / NO -sASYNCIFY -- pure CPU
+    # Each worker owns an independent heap; per-job peak is bounded by the largest node (compressed +
+    # decompressed + decode outputs + salvage clones), well under 256MB. See the render module's ceiling
+    # comment for the ABORTING_MALLOC semantics.
+    "-sMAXIMUM_MEMORY=256MB"
+    "-sINITIAL_MEMORY=64MB"
     "-sEXIT_RUNTIME=0"
     "-sMODULARIZE=1"
     "-sEXPORT_ES6=1"

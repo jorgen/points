@@ -18,6 +18,7 @@
 #include "render_pipeline.hpp"
 
 #include "data_source.hpp"
+#include "memory_budget.hpp" // estimate_node_cpu_bytes / estimate_node_gpu_bytes (byte-gated IO)
 #include "native_node_data_loader.hpp" // loaded_node_impl_data_t (salvage data_handler on promotion)
 #include "renderer.hpp"
 #include "virtual_tree.hpp" // destroy_virtual_subtree
@@ -242,10 +243,7 @@ io_upload_stats_t process_io_and_upload(
     render::node_data_loader_t *node_loader,
     vio::thread_pool_t &convert_pool,
     const render::frame_camera_cpp_t &camera_frame,
-    int max_concurrent_io,
-    int max_new_io_per_frame,
-    size_t max_upload_bytes,
-    size_t gpu_memory_budget,
+    const io_limits_t &limits,
     double attr_min, double attr_max,
     bool promote_leaves,
     size_t virtual_gpu_used,
@@ -255,6 +253,8 @@ io_upload_stats_t process_io_and_upload(
   auto to_ms = [](auto d) { return std::chrono::duration<double, std::milli>(d).count(); };
 
   io_upload_stats_t stats;
+  // Departed-but-busy nodes parked outside the render list still pin decoded CPU buffers in the same heap.
+  stats.backlog_bytes = limits.deferred_backlog_bytes;
   std::vector<priority_entry_t> load_list;
   std::vector<priority_entry_t> upload_list;
 
@@ -287,6 +287,8 @@ io_upload_stats_t process_io_and_upload(
       {
         stats.io_in_flight++;
       }
+      stats.backlog_bytes += estimate_node_cpu_bytes(node.walker_data);
+      stats.projected_gpu_bytes += estimate_node_gpu_bytes(node.walker_data);
       break;
     case render_node_io_state::converting:
       if (node.convert_done.load(std::memory_order_acquire))
@@ -301,10 +303,21 @@ io_upload_stats_t process_io_and_upload(
           node.io_state = render_node_io_state::none;
         }
       }
+      stats.backlog_bytes += estimate_node_cpu_bytes(node.walker_data);
+      stats.projected_gpu_bytes += estimate_node_gpu_bytes(node.walker_data);
       break;
     case render_node_io_state::loaded:
+      // Charge ONLY while awaiting upload: a steady-state node keeps io_state==loaded after upload, but its
+      // decoded buffers were reaped then (loaded_data.release() nulls pointers, not the sizes) and its GPU
+      // bytes are already in gpu_memory_used above -- charging here too would permanently starve new IO.
       if (node.gpu_state == render_node_gpu_state::none)
+      {
         upload_list.push_back({i, node.cached_distance});
+        // Decoded outputs are exact now; the decode inputs are still alive via _impl_data's data_handler
+        // until the post-upload reap, so keep charging the estimate for them.
+        stats.backlog_bytes += node.loaded_data.vertex_data_size + node.loaded_data.attribute_data_size + node.loaded_data.rep_level_data_size + estimate_node_input_bytes(node.walker_data);
+        stats.projected_gpu_bytes += node.gpu_memory_size;
+      }
       break;
     case render_node_io_state::none:
       // monolith_freed: a live virtual cut represents this leaf; don't reload its monolith (R3). On un-promotion
@@ -323,11 +336,31 @@ io_upload_stats_t process_io_and_upload(
 
   for (auto &entry : load_list)
   {
-    if (stats.io_in_flight >= max_concurrent_io)
+    if (stats.io_in_flight >= limits.max_concurrent_io)
       break;
-    if (stats.io_scheduled >= max_new_io_per_frame)
+    if (stats.io_scheduled >= limits.max_new_io_per_frame)
       break;
     auto &node = *render_list[entry.index];
+    // Byte gates (closest-first, so `break` like the upload loop -- a far node must not leapfrog a near one).
+    // The backlog gate is what bounds CPU-heap growth: without it, every decoded node frees an IO slot while
+    // its buffers wait (possibly forever, if the GPU budget is full) in the same heap. The GPU-fit gate skips
+    // loads the upload loop could not accept anyway, so nothing is decoded just to stall.
+    const uint64_t est_cpu = estimate_node_cpu_bytes(node.walker_data);
+    const uint64_t est_gpu = estimate_node_gpu_bytes(node.walker_data);
+    // Escape hatch: always admit the closest node when nothing is in flight or awaiting upload. A single
+    // node whose estimate exceeds the cap must still make progress, else it blocks itself (and everything
+    // behind it) forever.
+    const bool pipeline_empty = stats.io_in_flight == 0 && stats.backlog_bytes == limits.deferred_backlog_bytes;
+    if (!pipeline_empty && stats.backlog_bytes + est_cpu > limits.decoded_backlog_cap)
+    {
+      stats.io_denied_backlog++;
+      break;
+    }
+    if (stats.gpu_memory_used + virtual_gpu_used + stats.projected_gpu_bytes + est_gpu > limits.gpu_memory_budget)
+    {
+      stats.io_denied_gpu++;
+      break;
+    }
     native_load_request_t req;
     std::memcpy(req.format, node.walker_data.format, sizeof(req.format));
     std::memcpy(req.locations, node.walker_data.locations, sizeof(req.locations));
@@ -339,6 +372,8 @@ io_upload_stats_t process_io_and_upload(
     node.io_state = render_node_io_state::loading;
     stats.io_in_flight++;
     stats.io_scheduled++;
+    stats.backlog_bytes += est_cpu;
+    stats.projected_gpu_bytes += est_gpu;
   }
   auto t2 = clock::now();
   stats.schedule_io_ms = to_ms(t2 - t1);
@@ -351,12 +386,12 @@ io_upload_stats_t process_io_and_upload(
 
   for (auto &entry : upload_list)
   {
-    if (bytes_uploaded >= max_upload_bytes)
+    if (bytes_uploaded >= limits.max_upload_bytes)
       break;
     auto &node = *render_list[entry.index];
     // Unified GPU budget (R7): leave room for the virtual nodes' total (last frame) so real + virtual together
     // are bounded by gpu_memory_budget, not just the real monoliths.
-    if (stats.gpu_memory_used + virtual_gpu_used + node.gpu_memory_size > gpu_memory_budget)
+    if (stats.gpu_memory_used + virtual_gpu_used + node.gpu_memory_size > limits.gpu_memory_budget)
       break;
 
     auto &loaded = node.loaded_data;

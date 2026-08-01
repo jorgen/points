@@ -169,6 +169,8 @@ public:
   void set_compressor(compression_method_t method);
   void set_compression_level(int level);
   void set_read_cache_size(uint64_t max_bytes);
+  void set_decompressed_cache_size(uint64_t max_bytes);
+  uint64_t read_cache_current_bytes();
   void set_on_write_progress(std::function<void()> cb) { _on_write_progress = std::move(cb); }
   // Cache-tier pressure: invoked (from the storage loop) at most once per arm when the backend
   // reports that only a checkpoint can relieve pressure. rearm after the checkpoint completes.

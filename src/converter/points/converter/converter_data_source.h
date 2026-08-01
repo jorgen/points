@@ -59,6 +59,23 @@ POINTS_CONVERTER_EXPORT void points_converter_data_source_set_gpu_memory_budget(
 POINTS_CONVERTER_EXPORT void points_converter_data_source_set_upload_budget_per_frame(struct points_converter_data_source_t *converter_data_source, size_t budget_bytes);
 POINTS_CONVERTER_EXPORT void points_converter_data_source_set_max_in_flight_io(struct points_converter_data_source_t *converter_data_source, int max_requests);
 
+/* One total CPU-memory budget for the streaming renderer. Internally derived into the read-cache size, the
+ * decoded-backlog byte cap (new IO is refused while estimated in-flight + decoded-awaiting-upload bytes
+ * exceed it), the virtual-subtree CPU-resident budget, and a clamp on max_in_flight_io (see
+ * memory_budget.hpp for the formula). GPU memory has its own budget
+ * (points_converter_data_source_set_gpu_memory_budget) -- GL buffers live outside this heap. The default
+ * (1GB) reproduces the historical sub-budget defaults. Values below 64MB are clamped up to 64MB. */
+POINTS_CONVERTER_EXPORT void points_converter_data_source_set_memory_budget(struct points_converter_data_source_t *cds, uint64_t total_bytes);
+POINTS_CONVERTER_EXPORT uint64_t points_converter_data_source_get_memory_budget(struct points_converter_data_source_t *cds);
+
+/* Observability for the memory budget and the wasm heap-pressure brake. heap_bytes/heap_max are the wasm
+ * heap size and its link-time ceiling as probed on the last rendered frame (0/0 on native); backlog_bytes
+ * is the estimated CPU held by in-flight + decoded-awaiting-upload nodes last frame; brake_level is
+ * 0 none / 1 high (>=80% of ceiling) / 2 critical (>=90%). Any out-pointer may be null. */
+POINTS_CONVERTER_EXPORT void points_converter_data_source_get_memory_stats(struct points_converter_data_source_t *cds,
+  uint64_t *heap_bytes, uint64_t *heap_max, uint64_t *budget_bytes, uint64_t *backlog_bytes,
+  uint64_t *read_cache_bytes, uint64_t *resident_cpu_bytes, uint32_t *brake_level);
+
 POINTS_CONVERTER_EXPORT uint64_t points_converter_data_source_get_points_rendered(struct points_converter_data_source_t *converter_data_source);
 
 POINTS_CONVERTER_EXPORT uint8_t points_converter_data_source_is_animating(struct points_converter_data_source_t *converter_data_source);

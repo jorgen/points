@@ -93,6 +93,7 @@ export function App() {
             controls={renderer.controls}
             setControl={renderer.setControl}
             getVirtualStats={renderer.getVirtualStats}
+            getMemoryStats={renderer.getMemoryStats}
             resetView={renderer.resetView}
             pointsRendered={renderer.pointsRendered}
             aabb={renderer.aabb}

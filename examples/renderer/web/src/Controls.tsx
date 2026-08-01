@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Aabb } from './pointsRender';
+import type { Aabb, MemoryStats } from './pointsRender';
 import type { ViewControls, VirtualStats } from './usePointCloudRenderer';
 
 interface ControlsProps {
@@ -9,6 +9,7 @@ interface ControlsProps {
   controls: ViewControls;
   setControl: <K extends keyof ViewControls>(key: K, value: ViewControls[K]) => void;
   getVirtualStats: () => VirtualStats | null;
+  getMemoryStats: () => MemoryStats | null;
   resetView: () => void;
   pointsRendered: number;
   aabb: Aabb | null;
@@ -62,16 +63,21 @@ export function Controls({
   controls,
   setControl,
   getVirtualStats,
+  getMemoryStats,
   resetView,
   pointsRendered,
   aabb,
 }: ControlsProps) {
-  // Poll virtual-subnode telemetry a couple of times a second for the diagnostics panel.
+  // Poll virtual-subnode + memory telemetry a couple of times a second for the diagnostics panel.
   const [vstats, setVstats] = useState<VirtualStats | null>(null);
+  const [mstats, setMstats] = useState<MemoryStats | null>(null);
   useEffect(() => {
-    const id = window.setInterval(() => setVstats(getVirtualStats()), 500);
+    const id = window.setInterval(() => {
+      setVstats(getVirtualStats());
+      setMstats(getMemoryStats());
+    }, 500);
     return () => window.clearInterval(id);
-  }, [getVirtualStats]);
+  }, [getVirtualStats, getMemoryStats]);
 
   return (
     <div className="controls">
@@ -154,6 +160,16 @@ export function Controls({
           format={(v) => `${v} MB`}
         />
         <Slider
+          label="Memory budget"
+          title="Total CPU (wasm-heap) budget for streaming: read cache + decode backlog + virtual residents. Note: once the heap-pressure brake has latched (see Stats), raising this needs a page reload — the wasm heap never shrinks."
+          value={controls.memoryBudgetMb}
+          min={128}
+          max={1024}
+          step={64}
+          onChange={(v) => setControl('memoryBudgetMb', v)}
+          format={(v) => `${v} MB`}
+        />
+        <Slider
           label="Upload / frame"
           title="Per-frame GPU upload budget. Higher = refinement converges faster after a camera move (matters most on slow networks)."
           value={controls.uploadBudgetMb}
@@ -230,6 +246,32 @@ export function Controls({
               <span>Resident CPU</span>
               <b>{fmtMb(vstats.residentCpuBytes)}</b>
             </div>
+          </>
+        )}
+        {mstats && (
+          <>
+            {mstats.heapMax > 0 && (
+              <div className="ctl__stat" title="Current wasm heap vs its link-time ceiling. The heap never shrinks within a page load.">
+                <span>Heap</span>
+                <b>
+                  {fmtMb(mstats.heapBytes)} / {fmtMb(mstats.heapMax)}
+                </b>
+              </div>
+            )}
+            <div className="ctl__stat" title="Estimated CPU bytes held by in-flight + decoded-awaiting-upload nodes last frame.">
+              <span>Backlog</span>
+              <b>{fmtMb(mstats.backlogBytes)}</b>
+            </div>
+            <div className="ctl__stat" title="Compressed read-cache occupancy.">
+              <span>Read cache</span>
+              <b>{fmtMb(mstats.readCacheBytes)}</b>
+            </div>
+            {mstats.brakeLevel > 0 && (
+              <div className="ctl__stat" title="Heap-pressure brake: IO and cache caps are tightened to keep the heap under its ceiling. Latches until reload.">
+                <span>Brake</span>
+                <b>{mstats.brakeLevel >= 2 ? 'critical' : 'high'}</b>
+              </div>
+            )}
           </>
         )}
       </section>

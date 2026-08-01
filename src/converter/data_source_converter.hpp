@@ -21,6 +21,7 @@
 #include "converter.hpp"
 #include "data_source_node_bbox.hpp"
 #include "frustum_tree_walker.hpp"
+#include "memory_budget.hpp"
 #include "render_node.hpp"
 #include "render_pipeline.hpp"
 #include "renderer_callbacks.hpp"
@@ -28,7 +29,9 @@
 
 #include <vio/thread_pool.h>
 
+#include <atomic>
 #include <chrono>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
@@ -69,6 +72,24 @@ struct points_converter_data_source_t
   size_t upload_budget_per_frame = 6 * 1024 * 1024;
   int max_in_flight_io = 64;
   int max_new_io_per_frame = 16;
+
+  // Total CPU-memory budget for the streaming renderer (the one consumer knob; GPU has its own budget above).
+  // derive_budgets() splits it into the read-cache size, the decoded-backlog byte cap, the virtual-resident
+  // budget, and an in-flight-IO clamp; the ctor and set_memory_budget() keep derived state + the storage
+  // caches in sync. Default 1GB reproduces the historical sub-budget defaults exactly.
+  uint64_t total_memory_budget = uint64_t(1024) * 1024 * 1024;
+  points::converter::derived_budgets_t derived_budgets = points::converter::derive_budgets(total_memory_budget);
+  // Heap-pressure brake (wasm): watches the real heap vs its link-time ceiling each frame and tightens the
+  // per-frame caps at 80%/90% so the hard OOM trap is never reached. Inert on native (probe reports 0/0).
+  // Tests inject a fake probe; when unset the emscripten probe (or 0/0) is used.
+  points::converter::brake_level_t brake_level = points::converter::brake_level_t::none;
+  std::function<void(uint64_t &heap_bytes, uint64_t &heap_max)> heap_probe_override;
+  uint64_t heap_bytes_last = 0;
+  uint64_t heap_max_last = 0;
+  // Stats published for any-thread readers (get_memory_stats / get_virtual_stats): the render thread writes
+  // them outside the mutex, so they are relaxed atomics rather than mutex-guarded fields.
+  std::atomic<uint64_t> decoded_backlog_bytes_last{0};
+  std::atomic<uint64_t> resident_cpu_published{0};
 
   points_buffer_t index_buffer;
 

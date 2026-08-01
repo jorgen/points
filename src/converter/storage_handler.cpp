@@ -576,8 +576,19 @@ void storage_handler_t::set_compression_level(int level)
 
 void storage_handler_t::set_read_cache_size(uint64_t max_bytes)
 {
-  _read_cache.clear();
+  // No clear(): set_max_bytes evicts LRU-first down to the new cap, so a runtime cap change (budget knob,
+  // heap-pressure brake) shrinks the cache without discarding the hot entries that still fit.
   _read_cache.set_max_bytes(max_bytes);
+}
+
+void storage_handler_t::set_decompressed_cache_size(uint64_t max_bytes)
+{
+  _decompressed_cache.set_max_bytes(max_bytes);
+}
+
+uint64_t storage_handler_t::read_cache_current_bytes()
+{
+  return _read_cache.current_bytes();
 }
 
 #ifdef __EMSCRIPTEN__

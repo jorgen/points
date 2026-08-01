@@ -23,6 +23,7 @@
 #include "virtual_tree.hpp" // build_resident_source, make_virtual_root, process_virtual_trees, emit_virtual_draws
 #ifdef __EMSCRIPTEN__
 #include "worker_node_data_loader.hpp" // decode-worker loader (used when the web app installs a worker pool)
+#include <emscripten/heap.h>           // emscripten_get_heap_size/_max (heap-pressure brake probe)
 #endif
 #include <points/common/format.h>
 #include <points/converter/converter_data_source.h>
@@ -48,6 +49,42 @@ static size_t estimate_resident_cpu(const dyn_points_data_handler_t &h)
   if (h.data_info[1].data)
     bytes += h.data_info[1].size;
   return bytes;
+}
+
+// CPU bytes a bare salvage handler pins (morton codes + attribute blob) on an unpromoted promotion-candidate
+// leaf. Unlike estimate_resident_cpu this excludes the future r32x3 decode -- it hasn't happened yet. A
+// PROMOTED node's handler is the same shared_ptr as resident->data_handler and already inside
+// resident->cpu_bytes, so it must never be charged through this.
+static size_t salvage_handler_bytes(const dyn_points_data_handler_t &h)
+{
+  size_t bytes = h.data_info[0].size;
+  if (h.data_info[1].data)
+    bytes += h.data_info[1].size;
+  return bytes;
+}
+
+// Heap-pressure probe: current wasm heap size and its link-time ceiling. Native has no comparable cheap,
+// portable probe -- report 0/0, which compute_brake_level maps to `none` (the budget knob still applies).
+static void probe_heap(uint64_t &heap_bytes, uint64_t &heap_max)
+{
+#ifdef __EMSCRIPTEN__
+  heap_bytes = emscripten_get_heap_size();
+  heap_max = emscripten_get_heap_max();
+#else
+  heap_bytes = 0;
+  heap_max = 0;
+#endif
+}
+
+// The one place the read-cache cap is computed from (budget, brake level), so a budget change under a
+// latched brake and a brake transition can never disagree about the cap.
+static uint64_t braked_read_cache_bytes(const derived_budgets_t &d, brake_level_t level)
+{
+  if (level == brake_level_t::critical)
+    return 0;
+  if (level == brake_level_t::high)
+    return d.read_cache_bytes / 4;
+  return d.read_cache_bytes;
 }
 
 points_converter_data_source_t::points_converter_data_source_t(const std::string &a_url, render::callback_manager_t &a_callbacks)
@@ -78,6 +115,12 @@ points_converter_data_source_t::points_converter_data_source_t(const std::string
 #else
   node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler());
 #endif
+
+  // Apply the default memory budget's derived cache sizes (the storage_handler ctor defaults predate the
+  // budget knob; the render data source's decompressed cache in particular is derived smaller because the
+  // render path never populates it).
+  processor.storage_handler().set_read_cache_size(derived_budgets.read_cache_bytes);
+  processor.storage_handler().set_decompressed_cache_size(derived_budgets.decompressed_cache_bytes);
 
   // Read compression stats for attribute normalization
   attribute_stats = processor.storage_handler().get_compression_stats();
@@ -124,19 +167,60 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   const render::frame_camera_cpp_t camera = render::cast_to_frame_camera_cpp(*c_camera);
   bool new_attribute = false;
   double frac_threshold;
-  size_t frame_upload_budget;
-  int max_io_in_flight;
   int frame_viewport_height;
   double frame_render_density_px;
+  io_limits_t io_limits;
+  brake_level_t frame_brake;
+  size_t frame_cpu_resident_budget; // snapshot: set_memory_budget writes the member under the mutex
   {
     std::unique_lock<std::mutex> lock(mutex);
     new_attribute = current_attribute_name != next_attribute_name;
     current_attribute_name = next_attribute_name;
     frac_threshold = screen_fraction_threshold;
-    frame_upload_budget = upload_budget_per_frame;
-    max_io_in_flight = max_in_flight_io;
     frame_viewport_height = viewport_height;
     frame_render_density_px = render_density_px;
+
+    // Heap-pressure brake. The level only ever rises within a run (on wasm the heap never shrinks, so
+    // pressure that latched once is real until reload); the one-shot cache shrinks fire on each upward
+    // transition, the per-frame cap tightening below re-applies every frame at the current level.
+    uint64_t heap_bytes = 0, heap_max = 0;
+    if (heap_probe_override)
+      heap_probe_override(heap_bytes, heap_max);
+    else
+      probe_heap(heap_bytes, heap_max);
+    heap_bytes_last = heap_bytes;
+    heap_max_last = heap_max;
+    const auto probe_level = compute_brake_level(heap_bytes, heap_max);
+    if (probe_level > brake_level)
+    {
+      brake_level = probe_level;
+      fmt::print(stderr, "[membrake] heap {} MB of {} MB ceiling -> {} (tightening io/cache caps)\n",
+                 heap_bytes / (1024 * 1024), heap_max / (1024 * 1024), brake_level == brake_level_t::critical ? "critical" : "high");
+      processor.storage_handler().set_read_cache_size(braked_read_cache_bytes(derived_budgets, brake_level));
+    }
+    frame_brake = brake_level;
+    frame_cpu_resident_budget = cpu_resident_budget;
+
+    io_limits.max_concurrent_io = std::min(max_in_flight_io, derived_budgets.io_clamp);
+    io_limits.max_new_io_per_frame = max_new_io_per_frame;
+    io_limits.max_upload_bytes = upload_budget_per_frame;
+    io_limits.gpu_memory_budget = gpu_memory_budget;
+    io_limits.decoded_backlog_cap = derived_budgets.decoded_backlog_cap;
+    // The brake never relaxes (the wasm heap cannot shrink), so every level must stay livable as a
+    // PERMANENT state: high halves the caps, critical quarters them and trickles new IO at 1/frame --
+    // never zero, which would brick streaming for the rest of the session. malloc reuses freed space
+    // inside the grown heap, so a small backlog window cannot push the heap past its ceiling.
+    if (frame_brake >= brake_level_t::high)
+    {
+      io_limits.decoded_backlog_cap /= 2;
+      io_limits.max_concurrent_io = std::max(1, io_limits.max_concurrent_io / 2);
+    }
+    if (frame_brake == brake_level_t::critical)
+    {
+      io_limits.decoded_backlog_cap /= 2;
+      io_limits.max_concurrent_io = std::max(1, io_limits.max_concurrent_io / 2);
+      io_limits.max_new_io_per_frame = 1;
+    }
   }
 
   // Handle attribute change
@@ -214,9 +298,17 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
 
   // Phase 3: IO + upload (single pass for distances, completions, scheduling, upload)
   auto tree_config = processor.tree_config();
+  // Departed-but-busy nodes parked in pending_destroy (including ones build_render_list just parked) still
+  // hold decoded/decoding CPU buffers in the same heap; pre-charge them against the backlog cap. An
+  // uploaded node's decoded buffers were already reaped -- only pre-upload states pin CPU.
+  for (auto &np : pending_destroy)
+    if (np && (np->io_state == render_node_io_state::converting ||
+               (np->io_state == render_node_io_state::loaded && np->gpu_state == render_node_gpu_state::none)))
+      io_limits.deferred_backlog_bytes += estimate_node_cpu_bytes(np->walker_data);
   auto io_stats = process_io_and_upload(render_list, camera_position, tree_config,
-      callbacks, node_loader.get(), convert_pool, camera, max_io_in_flight, max_new_io_per_frame,
-      frame_upload_budget, gpu_memory_budget, current_attr_min, current_attr_max, enable_virtual_subtrees, virtual_gpu_used, &cpu_reap_queue);
+      callbacks, node_loader.get(), convert_pool, camera, io_limits,
+      current_attr_min, current_attr_max, enable_virtual_subtrees, virtual_gpu_used, &cpu_reap_queue);
+  decoded_backlog_bytes_last.store(io_stats.backlog_bytes, std::memory_order_relaxed);
   // Free this frame's dead decoded CPU buffers on a worker (their dtor cascade is ~140 render-thread samples).
   if (!cpu_reap_queue.empty())
   {
@@ -246,7 +338,9 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
     // that a far/small spanning leaf is drawn full-res (the dense-patch inversion) and needs a coarse LOD.
     // A leaf is worth promoting only if it has a coarser representation to offer (maskWidth = lod_span-9 > 0);
     // compact leaves keep the cheap monolith. Cap promotions/frame so the one-time decodes don't hitch.
-    int builds_left = int(virtual_max_promotions_per_frame);
+    // Under heap pressure stop starting new promotions: each one pins a resident source (codes + full
+    // re-decode + attrs) in the already-tight CPU heap. Existing cuts keep rendering.
+    int builds_left = frame_brake >= brake_level_t::high ? 0 : int(virtual_max_promotions_per_frame);
     bool recovery_fired = false; // a recovery reload was kicked this frame -> keep the dirty-driven host ticking
     for (auto &np : render_list)
     {
@@ -285,7 +379,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
       if (node.salvage_lost && !node.resident_handler && !node.resident_building && node.walker_data.frustum_visible &&
           node.fade_state != render_node_fade_state::fade_out &&
           node.gpu_state == render_node_gpu_state::uploaded && node.io_state == render_node_io_state::loaded &&
-          builds_left > 0 && resident_cpu_used + resident_estimate <= cpu_resident_budget * 3 / 4)
+          builds_left > 0 && resident_cpu_used + resident_estimate <= frame_cpu_resident_budget * 3 / 4)
       {
         --builds_left;             // a reload leads to a resident build soon; count it against the ramp
         node.salvage_lost = false; // one-shot; re-armed only by another R5 eviction
@@ -313,13 +407,21 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         node.resident_handler.reset(); // compact leaf: maskWidth(lod_span)==0, no coarser LOD to offer
         continue;
       }
+      // Latched heap-pressure brake: no promotion is coming this session, so do NOT suppress the monolith --
+      // suppressing without a cut would pin the region at ancestor-level detail forever. (A leaf suppressed
+      // just before the latch is un-suppressed here the next frame.)
+      if (frame_brake >= brake_level_t::high)
+      {
+        node.draw_suppressed = false;
+        continue;
+      }
       // This IS a promotable spanning leaf -> never draw its full-res monolith. Suppress it NOW (phase 4.5, before
       // emit_draws): the octree is additive so the coarser ancestor nodes already cover the leaf's footprint while
       // its virtual cut materializes, then the cut refines it coarse->fine. Set before the per-frame build cap so a
       // leaf still waiting its turn to promote isn't flashed at full res either. (Un-promotion / A-B-off / departure
       // reset draw_suppressed elsewhere; a leaf that stops being promotable falls back to its monolith there.)
       node.draw_suppressed = true;
-      if (builds_left <= 0 || resident_cpu_used >= cpu_resident_budget)
+      if (builds_left <= 0 || resident_cpu_used >= frame_cpu_resident_budget)
         continue; // ramp over frames; and don't promote while over the CPU-resident budget (R5)
       --builds_left;
       // Kick the resident decode onto convert_pool (R11) -- keeps the ~1-2ms/leaf morton decode off the render
@@ -389,9 +491,30 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         resident_cpu_used += np->resident->cpu_bytes;
       else if (np->resident_building && np->resident_handler)
         resident_cpu_used += estimate_resident_cpu(*np->resident_handler);
+      else if (np->resident_handler)
+        // Bare salvage copy on an unpromoted candidate leaf: real heap bytes that previously went uncounted.
+        // (A promoted node's handler is the same shared_ptr inside resident->cpu_bytes -- branch 1 covers it.)
+        resident_cpu_used += salvage_handler_bytes(*np->resident_handler);
     }
-    while (resident_cpu_used > cpu_resident_budget)
+    // Under critical heap pressure enforce down to a quarter of the budget: un-promotions genuinely free
+    // resident + handler bytes, the most effective relief the renderer has.
+    const size_t resident_target = frame_brake == brake_level_t::critical ? frame_cpu_resident_budget / 4 : frame_cpu_resident_budget;
+    while (resident_cpu_used > resident_target)
     {
+      // Tier 1: drop bare salvage handlers from unpromoted candidates farthest-first. Cheap (no virtual
+      // teardown), and salvage_lost re-arms the R5-recovery reload once headroom returns.
+      render_node_t *bare = nullptr;
+      for (auto &np : render_list)
+        if (np->resident_handler && !np->is_virtual_source && !np->resident_building && (!bare || np->cached_distance > bare->cached_distance))
+          bare = np.get();
+      if (bare)
+      {
+        resident_cpu_used -= std::min(resident_cpu_used, salvage_handler_bytes(*bare->resident_handler));
+        bare->resident_handler.reset();
+        bare->draw_suppressed = false; // no cut is coming; the monolith must draw again
+        bare->salvage_lost = true;
+        continue;
+      }
       render_node_t *farthest = nullptr;
       for (auto &np : render_list)
         // Skip a subtree still materializing on the convert pool: destroy_virtual_subtree would spin-wait the
@@ -416,6 +539,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
         farthest->io_state = render_node_io_state::none;
       }
     }
+    resident_cpu_published.store(resident_cpu_used, std::memory_order_relaxed);
   }
 
   // Collect bounding boxes and tight AABB, count stats
@@ -611,6 +735,51 @@ void points_converter_data_source_set_max_in_flight_io(struct points_converter_d
   converter_data_source->max_in_flight_io = max_requests;
 }
 
+void points_converter_data_source_set_memory_budget(struct points_converter_data_source_t *cds, uint64_t total_bytes)
+{
+  constexpr uint64_t min_budget = 64 * 1024 * 1024;
+  if (total_bytes < min_budget)
+    total_bytes = min_budget;
+  std::unique_lock<std::mutex> lock(cds->mutex);
+  cds->total_memory_budget = total_bytes;
+  cds->derived_budgets = derive_budgets(total_bytes);
+  cds->cpu_resident_budget = cds->derived_budgets.cpu_resident_budget;
+  // Cache caps applied while still holding the mutex so this can never interleave with a brake transition
+  // (which recomputes the same cap under the same mutex). Safe: the storage caches' own locks are only ever
+  // taken AFTER the data-source mutex, never before it. braked_read_cache_bytes keeps a latched brake's
+  // divisor in effect, so lowering the budget under pressure tightens the cache as the user expects.
+  cds->processor.storage_handler().set_read_cache_size(braked_read_cache_bytes(cds->derived_budgets, cds->brake_level));
+  cds->processor.storage_handler().set_decompressed_cache_size(cds->derived_budgets.decompressed_cache_bytes);
+}
+
+uint64_t points_converter_data_source_get_memory_budget(struct points_converter_data_source_t *cds)
+{
+  std::unique_lock<std::mutex> lock(cds->mutex);
+  return cds->total_memory_budget;
+}
+
+void points_converter_data_source_get_memory_stats(struct points_converter_data_source_t *cds,
+  uint64_t *heap_bytes, uint64_t *heap_max, uint64_t *budget_bytes, uint64_t *backlog_bytes,
+  uint64_t *read_cache_bytes, uint64_t *resident_cpu_bytes, uint32_t *brake_level)
+{
+  std::unique_lock<std::mutex> lock(cds->mutex);
+  if (heap_bytes)
+    *heap_bytes = cds->heap_bytes_last;
+  if (heap_max)
+    *heap_max = cds->heap_max_last;
+  if (budget_bytes)
+    *budget_bytes = cds->total_memory_budget;
+  if (brake_level)
+    *brake_level = uint32_t(cds->brake_level);
+  lock.unlock(); // the remaining fields are atomics / have their own lock
+  if (backlog_bytes)
+    *backlog_bytes = cds->decoded_backlog_bytes_last.load(std::memory_order_relaxed);
+  if (resident_cpu_bytes)
+    *resident_cpu_bytes = cds->resident_cpu_published.load(std::memory_order_relaxed);
+  if (read_cache_bytes)
+    *read_cache_bytes = cds->processor.storage_handler().read_cache_current_bytes();
+}
+
 uint64_t points_converter_data_source_get_points_rendered(struct points_converter_data_source_t *converter_data_source)
 {
   return converter_data_source->points_rendered_last_frame;
@@ -698,6 +867,7 @@ void points_converter_data_source_set_enable_virtual_subtrees(struct points_conv
       }
     }
     cds->resident_cpu_used = 0;
+    cds->resident_cpu_published.store(0, std::memory_order_relaxed);
     cds->virtual_promoted_last = 0;
     cds->virtual_nodes_drawn_last = 0;
     cds->last_virtual_promoted = -1;
@@ -731,7 +901,7 @@ void points_converter_data_source_get_virtual_stats(struct points_converter_data
   if (gpu_bytes)
     *gpu_bytes = uint64_t(cds->virtual_gpu_used);
   if (resident_cpu_bytes)
-    *resident_cpu_bytes = uint64_t(cds->resident_cpu_used);
+    *resident_cpu_bytes = cds->resident_cpu_published.load(std::memory_order_relaxed);
   if (nodes_drawn)
     *nodes_drawn = uint32_t(cds->virtual_nodes_drawn_last);
 }

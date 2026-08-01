@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { loadPointsRender, type Aabb, type Connection, type Renderer } from './pointsRender';
+import { loadPointsRender, type Aabb, type Connection, type MemoryStats, type Renderer } from './pointsRender';
 import { installDecodeWorkerPool } from './decodeWorkerPool';
+import { detectDeviceProfile } from './deviceProfile';
+
+// Device-class defaults (mobile gets small memory/GPU/IO budgets; desktop keeps the historical values).
+// Evaluated once — the profile also sizes the decode-worker pool below.
+const DEVICE_PROFILE = detectDeviceProfile();
 
 // Install the off-main-thread decode pool iff its wasm module was built and copied to public/. Probing the
 // artifact keeps it a safe opt-in: a render-only build (no points_decode_worker.mjs) transparently falls back
@@ -13,8 +18,9 @@ function ensureDecodeWorkerPool(): Promise<void> {
         const url = new URL('points_decode_worker.mjs', document.baseURI).href;
         const res = await fetch(url, { method: 'HEAD' });
         if (res.ok) {
-          installDecodeWorkerPool();
-          console.info('[points] off-main-thread decode enabled');
+          // Each worker owns an independent wasm heap, so mobile runs fewer of them (device profile).
+          installDecodeWorkerPool(DEVICE_PROFILE.decodeWorkers);
+          console.info(`[points] off-main-thread decode enabled (${DEVICE_PROFILE.decodeWorkers} workers)`);
         } else {
           console.info('[points] decode worker module absent — using inline decode');
         }
@@ -43,6 +49,8 @@ export interface ViewControls {
   renderDensityPx: number;
   /** GPU memory budget in MB. */
   gpuMemoryBudgetMb: number;
+  /** Total CPU-memory budget in MB (read cache + decode backlog + virtual residents; the wasm-heap bound). */
+  memoryBudgetMb: number;
   /** Per-frame GPU upload budget in MB (how fast refinement converges after a move). */
   uploadBudgetMb: number;
   /** Max concurrent in-flight IO requests. */
@@ -54,15 +62,16 @@ export interface ViewControls {
 }
 
 // Defaults match the C++ gl_renderer fields (point_world_size 0.05, lod_scale_base 1.1); the streaming
-// values are browser-appropriate starting points pushed to the data source on connect.
+// and memory values come from the device profile (mobile gets small budgets, desktop the historical ones).
 export const DEFAULT_CONTROLS: ViewControls = {
   pointSize: 0.05,
   lodScaleBase: 1.1,
   pixelErrorThreshold: 0.65,
   renderDensityPx: 0.8,
-  gpuMemoryBudgetMb: 512,
+  gpuMemoryBudgetMb: DEVICE_PROFILE.gpuBudgetMb,
+  memoryBudgetMb: DEVICE_PROFILE.memoryBudgetMb,
   uploadBudgetMb: 6,
-  maxInFlightIo: 64,
+  maxInFlightIo: DEVICE_PROFILE.maxInFlightIo,
   enableVirtualSubtrees: true,
   showBoundingBoxes: false,
 };
@@ -73,6 +82,7 @@ function applyControls(r: Renderer, c: ViewControls) {
   r.setPixelErrorThreshold(c.pixelErrorThreshold);
   r.setRenderDensityPx(c.renderDensityPx);
   r.setGpuMemoryBudgetMb(c.gpuMemoryBudgetMb);
+  r.setMemoryBudgetMb(c.memoryBudgetMb);
   r.setUploadBudgetPerFrameMb(c.uploadBudgetMb);
   r.setMaxInFlightIo(c.maxInFlightIo);
   r.setEnableVirtualSubtrees(c.enableVirtualSubtrees);
@@ -98,6 +108,7 @@ export interface RendererState {
   controls: ViewControls;
   setControl: <K extends keyof ViewControls>(key: K, value: ViewControls[K]) => void;
   getVirtualStats: () => VirtualStats | null;
+  getMemoryStats: () => MemoryStats | null;
   resetView: () => void;
 }
 
@@ -445,6 +456,9 @@ export function usePointCloudRenderer(
       case 'gpuMemoryBudgetMb':
         r.setGpuMemoryBudgetMb(value as number);
         break;
+      case 'memoryBudgetMb':
+        r.setMemoryBudgetMb(value as number);
+        break;
       case 'uploadBudgetMb':
         r.setUploadBudgetPerFrameMb(value as number);
         break;
@@ -472,6 +486,13 @@ export function usePointCloudRenderer(
     };
   }, []);
 
+  // Poll wasm-heap / memory-budget telemetry for the diagnostics panel.
+  const getMemoryStats = useCallback((): MemoryStats | null => {
+    const r = rendererRef.current;
+    if (!r) return null;
+    return r.getMemoryStats();
+  }, []);
+
   const resetView = useCallback(() => rendererRef.current?.resetView(), []);
 
   return {
@@ -485,6 +506,7 @@ export function usePointCloudRenderer(
     controls,
     setControl,
     getVirtualStats,
+    getMemoryStats,
     resetView,
   };
 }
