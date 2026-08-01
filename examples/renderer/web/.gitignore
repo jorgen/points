@@ -6,3 +6,5 @@ dist-ssr
 # Built Emscripten artifacts, copied in by scripts/copy-wasm.mjs (not source).
 public/dew_render.mjs
 public/dew_render.wasm
+public/dew_decode_worker.mjs
+public/dew_decode_worker.wasm
