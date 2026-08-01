@@ -245,8 +245,8 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const po
 
 std::vector<point_format_t> attributes_configs_t::get_format_components(attributes_id_t id)
 {
-  assert(id.data < _attributes_configs.size());
   std::unique_lock<std::mutex> lock(_mutex);
+  assert(id.data < _attributes_configs.size()); // under the lock: size() races a concurrent emplace_back otherwise
   auto &attrib_config = _attributes_configs[id.data];
   std::vector<point_format_t> ret;
   ret.reserve(attrib_config.attributes.attributes.size());
@@ -259,8 +259,8 @@ std::vector<point_format_t> attributes_configs_t::get_format_components(attribut
 
 point_format_t attributes_configs_t::get_point_format(attributes_id_t id)
 {
-  assert(id.data < _attributes_configs.size());
   std::unique_lock<std::mutex> lock(_mutex);
+  assert(id.data < _attributes_configs.size()); // under the lock: size() races a concurrent emplace_back otherwise
   auto &attrib = _attributes_configs[id.data].attributes.attributes[0];
   return {attrib.type, attrib.components};
 }
