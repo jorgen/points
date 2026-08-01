@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -22,7 +22,7 @@
 #include <cassert>
 #include <cstring>
 
-namespace points::converter
+namespace dew::converter
 {
 
 static constexpr uint32_t k_residency_magic = 0x31534252u; // 'RBS1' little-endian
@@ -261,9 +261,9 @@ std::vector<uint8_t> blob_residency_t::serialize(bool clean_shutdown) const
   return out;
 }
 
-points_error_t blob_residency_t::deserialize(const uint8_t *data, uint32_t size)
+dew_error_t blob_residency_t::deserialize(const uint8_t *data, uint32_t size)
 {
-  const points_error_t invalid = {1, "Invalid blob residency data"};
+  const dew_error_t invalid = {1, "Invalid blob residency data"};
   const uint8_t *ptr = data;
   const uint8_t *end = data + size;
   uint32_t magic = 0;
@@ -325,4 +325,4 @@ points_error_t blob_residency_t::deserialize(const uint8_t *data, uint32_t size)
   return {};
 }
 
-} // namespace points::converter
+} // namespace dew::converter

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -23,13 +23,13 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-struct points_camera_t
+struct dew_camera_t
 {
   glm::dmat4 view;
   glm::dmat4 projection;
 };
 
-namespace points::render
+namespace dew::render
 {
 template <typename R>
 inline R to_radians(R degrees)
@@ -42,17 +42,17 @@ inline R to_degrees(R radians)
 {
   return radians * (R(180.0) / R(M_PI));
 }
-} // namespace points::render
+} // namespace dew::render
 
-struct points_arcball_t
+struct dew_arcball_t
 {
-  points_camera_t *camera;
+  dew_camera_t *camera;
   glm::dvec3 center;
   glm::dvec3 up;
   double distance;
   double yaw;
   double pitch;
-  // "Home" view captured after initial setup (create + set_up_axis); points_arcball_reset restores it.
+  // "Home" view captured after initial setup (create + set_up_axis); dew_arcball_reset restores it.
   // Without a stored snapshot, reset just re-derived the current view and did nothing.
   glm::dvec3 home_center;
   glm::dvec3 home_up;
@@ -61,9 +61,9 @@ struct points_arcball_t
   double home_pitch;
 };
 
-struct points_fps_t
+struct dew_fps_t
 {
-  points_camera_t *camera;
+  dew_camera_t *camera;
   glm::dmat4 inverse_view;
   double yaw;
   double pitch;

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include <cstring>
 #include <mutex>
 
-namespace points::converter
+namespace dew::converter
 {
 static auto &get_item(input_data_id_t id, ankerl::unordered_dense::map<uint32_t, input_data_source_impl_t> &registry)
 {
@@ -104,7 +104,7 @@ void input_data_source_registry_t::register_pre_init_result(const tree_config_t 
   _unsorted_input_sources_dirty = true;
 }
 
-void input_data_source_registry_t::handle_input_init(input_data_id_t id, attributes_id_t attributes_id, points_converter_header_t public_header)
+void input_data_source_registry_t::handle_input_init(input_data_id_t id, attributes_id_t attributes_id, dew_converter_header_t public_header)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   auto &item = get_item(id, _registry);
@@ -351,12 +351,12 @@ std::vector<uint8_t> input_data_source_registry_t::serialize() const
   return out;
 }
 
-points_error_t input_data_source_registry_t::deserialize(const uint8_t *data, uint32_t size)
+dew_error_t input_data_source_registry_t::deserialize(const uint8_t *data, uint32_t size)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   const uint8_t *ptr = data;
   const uint8_t *end_ptr = data + size;
-  const points_error_t invalid = {1, "Invalid input registry data"};
+  const dew_error_t invalid = {1, "Invalid input registry data"};
 
   uint32_t magic = 0;
   if (!read_memory(ptr, end_ptr, magic) || magic != k_input_registry_magic)
@@ -452,4 +452,4 @@ points_error_t input_data_source_registry_t::deserialize(const uint8_t *data, ui
   return {};
 }
 
-} // namespace points::converter
+} // namespace dew::converter

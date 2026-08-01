@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2020  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -16,15 +16,15 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "data_source_aabb.hpp"
-#include <points/render/aabb_data_source.h>
-#include <points/render/buffer.h>
+#include <dew/render/aabb_data_source.h>
+#include <dew/render/buffer.h>
 #include "frustum.hpp"
 
 #include "renderer.hpp"
 
 #include <fmt/printf.h>
 
-using namespace points::render;
+using namespace dew::render;
 
 template<typename T, int SIZE>
 int array_size(const T (&)[SIZE])
@@ -32,7 +32,7 @@ int array_size(const T (&)[SIZE])
   return SIZE;
 }
 
-static std::vector<glm::vec3> coordinates_for_aabb(const points_aabb_t &aabb, const glm::dvec3 &eye)
+static std::vector<glm::vec3> coordinates_for_aabb(const dew_aabb_t &aabb, const glm::dvec3 &eye)
 {
   std::vector<glm::vec3> coordinates;
   coordinates.resize(8);
@@ -76,7 +76,7 @@ static std::vector<uint16_t> indecies_for_aabb()
 }
 
 template<typename buffer_data_t>
-inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, points_buffer_type_t buffer_type, points_type_t type, points_components_t components, points_buffer_t &buffer)
+inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_data_t> &data_vector, dew_buffer_type_t buffer_type, dew_type_t type, dew_components_t components, dew_buffer_t &buffer)
 {
   assert(data_vector.size());
   buffer.releaseBuffer = [&data_vector]() { data_vector = std::vector<buffer_data_t>(); };
@@ -84,20 +84,20 @@ inline void initialize_buffer(callback_manager_t &callbacks, std::vector<buffer_
   callbacks.do_initialize_buffer(buffer, type, components, int(data_vector.size() * sizeof(data_vector[0])), data_vector.data());
 }
 
-points_aabb_data_source_t::points_aabb_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &)
+dew_aabb_data_source_t::dew_aabb_data_source_t(callback_manager_t &a_callbacks, const glm::dvec3 &)
   : callbacks(a_callbacks)
   , project_view(1)
 {
-  callbacks.do_create_buffer(project_view_buffer, points_buffer_type_uniform);
-  callbacks.do_initialize_buffer(project_view_buffer, points_type_r32, points_components_4x4, sizeof(project_view), &project_view);
+  callbacks.do_create_buffer(project_view_buffer, dew_buffer_type_uniform);
+  callbacks.do_initialize_buffer(project_view_buffer, dew_type_r32, dew_components_4x4, sizeof(project_view), &project_view);
 
   indecies = indecies_for_aabb();
-  initialize_buffer(callbacks, indecies, points_buffer_type_index, points_type_u16, points_components_1, index_buffer);
+  initialize_buffer(callbacks, indecies, dew_buffer_type_index, dew_type_u16, dew_components_1, index_buffer);
   colors = colors_for_aabb();
-  initialize_buffer(callbacks, colors, points_buffer_type_vertex, points_type_u8, points_components_3, color_buffer);
+  initialize_buffer(callbacks, colors, dew_buffer_type_vertex, dew_type_u8, dew_components_3, color_buffer);
 }
 
-void points_aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, points_to_render_t *to_render)
+void dew_aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, dew_to_render_t *to_render)
 {
   glm::dvec3 eye = glm::dvec3(camera.inverse_view[3]);
 
@@ -113,32 +113,32 @@ void points_aabb_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, p
                                int(aabb_buffer->vertices.size() * sizeof(aabb_buffer->vertices[0])),
                                aabb_buffer->vertices.data());
 
-    aabb_buffer->render_list[0].buffer_mapping = points_aabb_bm_position;
+    aabb_buffer->render_list[0].buffer_mapping = dew_aabb_bm_position;
     aabb_buffer->render_list[0].user_ptr = aabb_buffer->vertices_buffer.user_ptr;
-    aabb_buffer->render_list[1].buffer_mapping = points_aabb_bm_index;
+    aabb_buffer->render_list[1].buffer_mapping = dew_aabb_bm_index;
     aabb_buffer->render_list[1].user_ptr = index_buffer.user_ptr;
-    aabb_buffer->render_list[2].buffer_mapping = points_aabb_bm_color;
+    aabb_buffer->render_list[2].buffer_mapping = dew_aabb_bm_color;
     aabb_buffer->render_list[2].user_ptr = color_buffer.user_ptr;
-    aabb_buffer->render_list[3].buffer_mapping = points_aabb_bm_camera;
+    aabb_buffer->render_list[3].buffer_mapping = dew_aabb_bm_camera;
     aabb_buffer->render_list[3].user_ptr= project_view_buffer.user_ptr;
-    points_draw_group_t draw_group = {};
+    dew_draw_group_t draw_group = {};
     draw_group.buffers = aabb_buffer->render_list;
     draw_group.buffers_size = array_size(aabb_buffer->render_list);
-    draw_group.draw_type = points_draw_type_t::points_aabb_triangle_mesh;
+    draw_group.draw_type = dew_draw_type_t::dew_aabb_triangle_mesh;
     draw_group.draw_size = 36;
-    points_to_render_add_render_group(to_render, draw_group);
+    dew_to_render_add_render_group(to_render, draw_group);
   }
 }
 
-struct points_aabb_data_source_t *points_aabb_data_source_create(struct points_renderer_t *renderer, const double offset[3])
+struct dew_aabb_data_source_t *dew_aabb_data_source_create(struct dew_renderer_t *renderer, const double offset[3])
 {
-  return new points_aabb_data_source_t(renderer->callbacks, glm::dvec3(offset[0], offset[1], offset[2]));
+  return new dew_aabb_data_source_t(renderer->callbacks, glm::dvec3(offset[0], offset[1], offset[2]));
 }
-void points_aabb_data_source_destroy(struct points_aabb_data_source_t *aabb_data_source)
+void dew_aabb_data_source_destroy(struct dew_aabb_data_source_t *aabb_data_source)
 {
   delete aabb_data_source;
 }
-struct points_data_source_t points_aabb_data_source_get(struct points_aabb_data_source_t *aabb_data_source)
+struct dew_data_source_t dew_aabb_data_source_get(struct dew_aabb_data_source_t *aabb_data_source)
 {
   return aabb_data_source->data_source;
 }
@@ -149,12 +149,12 @@ void create_aabb_buffer(callback_manager_t &callbacks, const glm::dvec3 &min, co
   memcpy(buffer->aabb.max, &max, sizeof(max));
   glm::dvec3 zero(0);
   buffer->vertices = coordinates_for_aabb(buffer->aabb, zero);
-  callbacks.do_create_buffer(buffer->vertices_buffer, points_buffer_type_vertex);
-  callbacks.do_initialize_buffer(buffer->vertices_buffer, points_type_r32, points_components_3,
+  callbacks.do_create_buffer(buffer->vertices_buffer, dew_buffer_type_vertex);
+  callbacks.do_initialize_buffer(buffer->vertices_buffer, dew_type_r32, dew_components_3,
                                  int(buffer->vertices.size() * sizeof(buffer->vertices[0])), buffer->vertices.data());
 }
 
-int points_aabb_data_source_add_aabb(struct points_aabb_data_source_t *aabb_data_source, const double min[3], const double max[3])
+int dew_aabb_data_source_add_aabb(struct dew_aabb_data_source_t *aabb_data_source, const double min[3], const double max[3])
 {
   static uint16_t ids = 0;
   aabb_data_source->aabbs.emplace_back(new aabb_buffer_t());
@@ -166,7 +166,7 @@ int points_aabb_data_source_add_aabb(struct points_aabb_data_source_t *aabb_data
   return id;
 }
 
-void points_aabb_data_source_modify_aabb(struct points_aabb_data_source_t *aabb_data_source, int id, const double min[3], const double max[3])
+void dew_aabb_data_source_modify_aabb(struct dew_aabb_data_source_t *aabb_data_source, int id, const double min[3], const double max[3])
 {
   auto it = std::find(aabb_data_source->aabbs_ids.begin(), aabb_data_source->aabbs_ids.end(), uint16_t(id));
   if (it == aabb_data_source->aabbs_ids.end())
@@ -180,7 +180,7 @@ void points_aabb_data_source_modify_aabb(struct points_aabb_data_source_t *aabb_
   memcpy(aabb_buffer->aabb.max, &world_max, sizeof(world_max));
 }
 
-void points_aabb_data_source_remove_aabb(struct points_aabb_data_source_t *aabb_data_source, int id)
+void dew_aabb_data_source_remove_aabb(struct dew_aabb_data_source_t *aabb_data_source, int id)
 {
   auto it = std::find(aabb_data_source->aabbs_ids.begin(), aabb_data_source->aabbs_ids.end(), uint16_t(id));
   if (it == aabb_data_source->aabbs_ids.end())
@@ -192,7 +192,7 @@ void points_aabb_data_source_remove_aabb(struct points_aabb_data_source_t *aabb_
   aabb_data_source->aabbs.erase(aabb_it);
 }
 
-void points_aabb_data_source_get_center(struct points_aabb_data_source_t *aabb_data_source, int id, double center[3])
+void dew_aabb_data_source_get_center(struct dew_aabb_data_source_t *aabb_data_source, int id, double center[3])
 {
   auto it = std::find(aabb_data_source->aabbs_ids.begin(), aabb_data_source->aabbs_ids.end(), uint16_t(id));
   if (it == aabb_data_source->aabbs_ids.end())

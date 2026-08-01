@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 #include "render_node.hpp"
 #include "render_pipeline.hpp"
 #include "renderer_callbacks.hpp"
-#include <points/render/data_source.h>
+#include <dew/render/data_source.h>
 
 #include <vio/thread_pool.h>
 
@@ -37,20 +37,20 @@
 #include <string>
 #include <vector>
 
-struct points_converter_data_source_t
+struct dew_converter_data_source_t
 {
-  points_converter_data_source_t(const std::string &url, points::render::callback_manager_t &callback_manager);
+  dew_converter_data_source_t(const std::string &url, dew::render::callback_manager_t &callback_manager);
   // R14: drain in-flight convert/materialize jobs and free every GPU buffer BEFORE members tear down (the
   // convert_pool is destroyed after render_list, so without this its drain would run jobs against freed nodes).
-  ~points_converter_data_source_t();
+  ~dew_converter_data_source_t();
 
-  void add_to_frame(points_frame_camera_t *camera, points_to_render_t *to_render);
+  void add_to_frame(dew_frame_camera_t *camera, dew_to_render_t *to_render);
 
   const std::string url;
-  points_error_t error;
-  points::converter::processor_t processor;
-  points::render::callback_manager_t &callbacks;
-  points_data_source_t data_source;
+  dew_error_t error;
+  dew::converter::processor_t processor;
+  dew::render::callback_manager_t &callbacks;
+  dew_data_source_t data_source;
 
   std::mutex mutex;
   std::string current_attribute_name;
@@ -78,11 +78,11 @@ struct points_converter_data_source_t
   // budget, and an in-flight-IO clamp; the ctor and set_memory_budget() keep derived state + the storage
   // caches in sync. Default 1GB reproduces the historical sub-budget defaults exactly.
   uint64_t total_memory_budget = uint64_t(1024) * 1024 * 1024;
-  points::converter::derived_budgets_t derived_budgets = points::converter::derive_budgets(total_memory_budget);
+  dew::converter::derived_budgets_t derived_budgets = dew::converter::derive_budgets(total_memory_budget);
   // Heap-pressure brake (wasm): watches the real heap vs its link-time ceiling each frame and tightens the
   // per-frame caps at 80%/90% so the hard OOM trap is never reached. Inert on native (probe reports 0/0).
   // Tests inject a fake probe; when unset the emscripten probe (or 0/0) is used.
-  points::converter::brake_level_t brake_level = points::converter::brake_level_t::none;
+  dew::converter::brake_level_t brake_level = dew::converter::brake_level_t::none;
   std::function<void(uint64_t &heap_bytes, uint64_t &heap_max)> heap_probe_override;
   uint64_t heap_bytes_last = 0;
   uint64_t heap_max_last = 0;
@@ -91,39 +91,39 @@ struct points_converter_data_source_t
   std::atomic<uint64_t> decoded_backlog_bytes_last{0};
   std::atomic<uint64_t> resident_cpu_published{0};
 
-  points_buffer_t index_buffer;
+  dew_buffer_t index_buffer;
 
-  std::unique_ptr<points::render::node_data_loader_t> node_loader;
+  std::unique_ptr<dew::render::node_data_loader_t> node_loader;
   vio::thread_pool_t convert_pool{std::max(2u, std::thread::hardware_concurrency() / 2)};
-  points::converter::render_list_t render_list;
+  dew::converter::render_list_t render_list;
   // Departed nodes whose worker job (convert / resident-build / virtual materialize) is still in flight.
   // build_render_list parks them here instead of spin-waiting; add_to_frame retries them each frame. This
   // is what makes camera-move eviction non-blocking on the main thread.
-  points::converter::render_list_t pending_destroy;
+  dew::converter::render_list_t pending_destroy;
   // Decoded CPU buffers from nodes uploaded this frame, handed off to be freed on a convert_pool worker
   // instead of on the render thread (freeing MB-sized shared_ptr[] cascades was the top main-thread cost).
   // Render-thread-only (only add_to_frame touches it), so no lock.
-  std::vector<points::render::loaded_node_data_t> cpu_reap_queue;
+  std::vector<dew::render::loaded_node_data_t> cpu_reap_queue;
 
   uint64_t points_rendered_last_frame = 0;
-  points::converter::frame_timings_t frame_timings;
+  dew::converter::frame_timings_t frame_timings;
 
-  points::converter::compression_stats_t attribute_stats;
+  dew::converter::compression_stats_t attribute_stats;
   double current_attr_min = 0.0;
   double current_attr_max = 1.0;
 
   std::vector<std::string> cached_walker_attribute_names;
   std::string cached_walker_attribute_source;
 
-  float fade_duration_ms = points::converter::default_fade_duration_ms;
+  float fade_duration_ms = dew::converter::default_fade_duration_ms;
   std::chrono::high_resolution_clock::time_point last_frame_time;
 
-  std::unique_ptr<points::converter::node_bbox_data_source_t> bbox_data_source;
-  points::converter::node_aabb_t tight_aabb_accumulator = {{std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()},
+  std::unique_ptr<dew::converter::node_bbox_data_source_t> bbox_data_source;
+  dew::converter::node_aabb_t tight_aabb_accumulator = {{std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()},
                                         {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()}};
   bool show_bounding_boxes = false;
   bool debug_transitions = false;
-  points::converter::node_set_t previously_subdivided;
+  dew::converter::node_set_t previously_subdivided;
 
   // Virtual subnodes: promote spanning leaves to a render-time balanced LOD tree. A/B toggle on one camera path.
   bool enable_virtual_subtrees = true;

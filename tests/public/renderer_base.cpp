@@ -1,13 +1,13 @@
 #include <doctest/doctest.h>
 #include <fmt/printf.h>
-#include <points/render/renderer.h>
-#include <points/render/camera.h>
+#include <dew/render/renderer.h>
+#include <dew/render/camera.h>
 
 TEST_CASE("CreateRenderer")
 {
-  auto* renderer = points_renderer_create();
-  auto* camera = points_camera_create();
-  auto frame = points_renderer_frame(renderer, camera);
-  points_camera_destroy(camera);
-  points_renderer_destroy(renderer);
+  auto* renderer = dew_renderer_create();
+  auto* camera = dew_camera_create();
+  auto frame = dew_renderer_frame(renderer, camera);
+  dew_camera_destroy(camera);
+  dew_renderer_destroy(renderer);
 }

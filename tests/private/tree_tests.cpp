@@ -19,17 +19,17 @@
 #include <input_header.hpp>
 #include <morton.hpp>
 #include <morton_tree_coordinate_transform.hpp>
-#include <points/common/format.h>
-#include <points/converter/converter.h>
-#include <points/converter/default_attribute_names.h>
+#include <dew/common/format.h>
+#include <dew/converter/converter.h>
+#include <dew/converter/default_attribute_names.h>
 #include <tree.hpp>
 
 namespace
 {
 
-points::converter::tree_config_t create_tree_config(double scale, double offset = -double(uint64_t(1) << 17))
+dew::converter::tree_config_t create_tree_config(double scale, double offset = -double(uint64_t(1) << 17))
 {
-  points::converter::tree_config_t tree_config;
+  dew::converter::tree_config_t tree_config;
   tree_config.scale = scale;
 
   tree_config.offset[0] = offset;
@@ -41,9 +41,9 @@ points::converter::tree_config_t create_tree_config(double scale, double offset 
 
 struct write_done_event_t
 {
-  points::converter::storage_header_t header;
-  points::converter::attributes_id_t attribute_id;
-  std::vector<points::converter::storage_location_t> locations;
+  dew::converter::storage_header_t header;
+  dew::converter::attributes_id_t attribute_id;
+  std::vector<dew::converter::storage_location_t> locations;
 };
 
 struct tree_test_infrastructure : vio::about_to_block_t
@@ -64,14 +64,14 @@ struct tree_test_infrastructure : vio::about_to_block_t
     (void)cache_file_handler.upgrade_to_write(true);
   }
 
-  void write(const points::converter::storage_header_t &header, points::converter::attributes_id_t attribute_id, points::converter::attribute_buffers_t &&buffers)
+  void write(const dew::converter::storage_header_t &header, dew::converter::attributes_id_t attribute_id, dew::converter::attribute_buffers_t &&buffers)
   {
     std::unique_lock<std::mutex> lock(wait_for_write_done_mutex);
     write_done_state = false;
 
     cache_file_handler.write(header, attribute_id, std::move(buffers),
-                             [this](const points::converter::storage_header_t &header, points::converter::attributes_id_t attributes_id, std::vector<points::converter::storage_location_t> &&location,
-                                    const points_error_t &error) { handle_write_done(header, attributes_id, std::move(location)); });
+                             [this](const dew::converter::storage_header_t &header, dew::converter::attributes_id_t attributes_id, std::vector<dew::converter::storage_location_t> &&location,
+                                    const dew_error_t &error) { handle_write_done(header, attributes_id, std::move(location)); });
   }
 
   void handle_index_written()
@@ -80,11 +80,11 @@ struct tree_test_infrastructure : vio::about_to_block_t
     if (on_index_written)
       on_index_written();
   }
-  void handle_file_error(const points_error_t &&error)
+  void handle_file_error(const dew_error_t &&error)
   {
     fmt::print("error: {}\n", error.msg);
   }
-  void handle_write_done(const points::converter::storage_header_t &header, points::converter::attributes_id_t attributes_id, std::vector<points::converter::storage_location_t> &&location)
+  void handle_write_done(const dew::converter::storage_header_t &header, dew::converter::attributes_id_t attributes_id, std::vector<dew::converter::storage_location_t> &&location)
   {
     std::unique_lock<std::mutex> lock(wait_for_write_done_mutex);
     write_done_state = true;
@@ -104,18 +104,18 @@ struct tree_test_infrastructure : vio::about_to_block_t
   {
   }
 
-  points_error_t error;
+  dew_error_t error;
   vio::thread_pool_t worker_thread_pool;
   vio::thread_with_event_loop_t event_loop_thread;
   vio::event_loop_t &event_loop;
   uint32_t node_limit;
-  points::converter::tree_config_t tree_config;
-  points::converter::tree_registry_t tree_registry;
-  points::converter::attributes_configs_t attributes_config;
+  dew::converter::tree_config_t tree_config;
+  dew::converter::tree_registry_t tree_registry;
+  dew::converter::attributes_configs_t attributes_config;
   vio::event_pipe_t<void> index_written;
-  vio::event_pipe_t<points_error_t> cache_file_error;
-  points::converter::perf_stats_t perf_stats;
-  points::converter::storage_handler_t cache_file_handler;
+  vio::event_pipe_t<dew_error_t> cache_file_error;
+  dew::converter::perf_stats_t perf_stats;
+  dew::converter::storage_handler_t cache_file_handler;
 
   std::function<void()> on_index_written; // optional test hook, fired per checkpoint commit
 
@@ -126,20 +126,20 @@ struct tree_test_infrastructure : vio::about_to_block_t
   write_done_event_t write_done_event;
 };
 
-void attributes_add_attributecpp(points_converter_attributes_t &attr, const std::string &name, points_type_t format, points_components_t components)
+void attributes_add_attributecpp(dew_converter_attributes_t &attr, const std::string &name, dew_type_t format, dew_components_t components)
 {
-  points_converter_attributes_add_attribute(&attr, name.c_str(), uint32_t(name.size()), format, components);
+  dew_converter_attributes_add_attribute(&attr, name.c_str(), uint32_t(name.size()), format, components);
 }
 
 write_done_event_t create_points(tree_test_infrastructure &test_util, uint64_t min, uint64_t max, uint64_t point_count = 256)
 {
-  points_converter_attributes_t attrs;
-  attributes_add_attributecpp(attrs, POINTS_ATTRIBUTE_XYZ, points_type_m64, points_components_1);
-  attributes_add_attributecpp(attrs, POINTS_ATTRIBUTE_INTENSITY, points_type_u8, points_components_1);
+  dew_converter_attributes_t attrs;
+  attributes_add_attributecpp(attrs, DEW_ATTRIBUTE_XYZ, dew_type_m64, dew_components_1);
+  attributes_add_attributecpp(attrs, DEW_ATTRIBUTE_INTENSITY, dew_type_u8, dew_components_1);
   auto attr_id = test_util.attributes_config.get_attribute_config_index(std::move(attrs));
   auto attr_def = test_util.attributes_config.get_format_components(attr_id);
 
-  points::converter::points_t points;
+  dew::converter::points_t points;
   points.header.input_id = {test_util.next_input_id++, 0};
   points.header.morton_min.data[0] = min;
   points.header.morton_min.data[1] = 0;
@@ -148,11 +148,11 @@ write_done_event_t create_points(tree_test_infrastructure &test_util, uint64_t m
   points.header.morton_max.data[1] = 0;
   points.header.morton_max.data[2] = 0;
   points.header.point_count = point_count;
-  points.header.lod_span = points::converter::morton::morton_lod(points.header.morton_min, points.header.morton_max);
+  points.header.lod_span = dew::converter::morton::morton_lod(points.header.morton_min, points.header.morton_max);
   points.header.point_format = attr_def[0];
   attribute_buffers_initialize(attr_def, points.buffers, point_count);
 
-  auto *morton_buffer = reinterpret_cast<points::converter::morton::morton64_t *>(points.buffers.data[0].get());
+  auto *morton_buffer = reinterpret_cast<dew::converter::morton::morton64_t *>(points.buffers.data[0].get());
   auto *intensity_buffer = reinterpret_cast<uint8_t *>(points.buffers.data[1].get());
   assert(points.buffers.buffers[0].size == point_count * 8);
   assert(points.buffers.buffers[1].size == point_count);
@@ -171,7 +171,7 @@ write_done_event_t create_points(tree_test_infrastructure &test_util, uint64_t m
 
 // Registry-global chunk-refs invariant: chunk_tree_refs[id] must equal the number of tree storage
 // maps that actually contain the id.
-static void require_chunk_refs_consistent(points::converter::tree_registry_t &registry)
+static void require_chunk_refs_consistent(dew::converter::tree_registry_t &registry)
 {
   for (auto &[chunk_id, chunk_ref] : registry.chunk_tree_refs)
   {
@@ -192,7 +192,7 @@ TEST_CASE("initialize empty tree")
   auto write_done_event = create_points(test_util, 0, morton_max, 256);
   auto &[header, attribute_id, locations] = write_done_event;
 
-  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, header, attribute_id, std::move(locations));
+  auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, header, attribute_id, std::move(locations));
   auto tree = *test_util.tree_registry.get(root_id);
   REQUIRE(tree.morton_max.data[0] == morton_max);
   REQUIRE(tree.morton_max.data[1] == 0);
@@ -208,12 +208,12 @@ TEST_CASE("add inclusion")
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   tree_test_infrastructure test_util;
   auto write_done_event = create_points(test_util, 0, morton_max, 256);
-  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, write_done_event.header, write_done_event.attribute_id, std::move(write_done_event.locations));
+  auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, write_done_event.header, write_done_event.attribute_id, std::move(write_done_event.locations));
 
   uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
   auto second_points = create_points(test_util, morton_min, morton_max, 256);
 
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
   auto tree = *test_util.tree_registry.get(root_id);
   REQUIRE(tree.morton_max.data[0] == morton_max);
   REQUIRE(tree.morton_max.data[1] == 0);
@@ -234,12 +234,12 @@ TEST_CASE("add_new_node")
   tree_test_infrastructure test_util(256);
   auto points = create_points(test_util, 0, morton_max, 256);
 
-  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+  auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
 
   uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
   auto second_points = create_points(test_util, morton_min, morton_max, 256);
 
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
   auto &tree = *test_util.tree_registry.get(root_id);
   REQUIRE(tree.nodes[0][0] > 0);
   REQUIRE(tree.data[0][0].data.empty());
@@ -250,7 +250,7 @@ TEST_CASE("add_new_subtree")
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
   tree_test_infrastructure test_util(256);
   auto points = create_points(test_util, 0, morton_max, 256);
-  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+  auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
   auto &tree = *test_util.tree_registry.get(root_id);
 
   REQUIRE(tree.nodes[0][0] == 0);
@@ -258,7 +258,7 @@ TEST_CASE("add_new_subtree")
 
   morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   auto second_points = create_points(test_util, 0, morton_max, 256);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
   auto &second_tree = *test_util.tree_registry.get(root_id);
 
   REQUIRE(second_tree.nodes[0].size() == 1);
@@ -278,7 +278,7 @@ TEST_CASE("add_new_subtree_offsets")
     tree_test_infrastructure test_util(256);
     uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2 + i)) - 1);
     auto points = create_points(test_util, 0, morton_max, 256);
-    auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+    auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
     auto &tree = *test_util.tree_registry.get(root_id);
 
     REQUIRE(tree.nodes[0][0] == 0);
@@ -286,7 +286,7 @@ TEST_CASE("add_new_subtree_offsets")
 
     morton_max = ((uint64_t(1) << (1 * 3 * 5 + i)) - 1);
     auto second_points = create_points(test_util, 0, morton_max, 256);
-    root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+    root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
     auto &second_tree = *test_util.tree_registry.get(root_id);
 
     REQUIRE(second_tree.nodes[0].size() == 1);
@@ -306,11 +306,11 @@ TEST_CASE("reparent")
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
 
   auto first_points = create_points(test_util, 0, morton_max);
-  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, first_points.header, first_points.attribute_id, std::move(first_points.locations));
+  auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, first_points.header, first_points.attribute_id, std::move(first_points.locations));
 
   morton_max = ((uint64_t(1) << (1 * 3 * 5 * 2)) - 1);
   auto second_points = create_points(test_util, 0, morton_max);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
 
   {
     auto &tree = *test_util.tree_registry.get(root_id);
@@ -320,7 +320,7 @@ TEST_CASE("reparent")
   }
 
   auto third_points = create_points(test_util, 1, morton_max);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, third_points.header, third_points.attribute_id, std::move(third_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, third_points.header, third_points.attribute_id, std::move(third_points.locations));
   {
     auto &tree = *test_util.tree_registry.get(root_id);
     REQUIRE(tree.sub_trees.size() == 1);
@@ -329,7 +329,7 @@ TEST_CASE("reparent")
   uint64_t splitting_max = morton_max + morton_max / 2;
   uint64_t splitting_min = morton_max / 2;
   auto fourth_points = create_points(test_util, splitting_min, splitting_max);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, fourth_points.header, fourth_points.attribute_id, std::move(fourth_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, fourth_points.header, fourth_points.attribute_id, std::move(fourth_points.locations));
   {
     auto &tree = *test_util.tree_registry.get(root_id);
     REQUIRE(tree.sub_trees.size() == 2);
@@ -338,7 +338,7 @@ TEST_CASE("reparent")
 
   uint64_t very_large_max = morton_max / 2;
   auto fifth_points = create_points(test_util, 0, very_large_max);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, fifth_points.header, fifth_points.attribute_id, std::move(fifth_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, fifth_points.header, fifth_points.attribute_id, std::move(fifth_points.locations));
   {
     auto &tree = *test_util.tree_registry.get(root_id);
     REQUIRE(tree.sub_trees.size() == 2);
@@ -356,7 +356,7 @@ TEST_CASE("reparent non-zero child position")
   uint64_t high_min = uint64_t(1) << 27;
   uint64_t high_max = high_min + ((uint64_t(1) << 15) - 1);
   auto first_points = create_points(test_util, high_min, high_max);
-  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, first_points.header, first_points.attribute_id, std::move(first_points.locations));
+  auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, first_points.header, first_points.attribute_id, std::move(first_points.locations));
 
   {
     auto &tree = *test_util.tree_registry.get(root_id);
@@ -367,7 +367,7 @@ TEST_CASE("reparent non-zero child position")
   // must place the old tree at child position 1, not 0.
   uint64_t wide_max = (uint64_t(1) << 30) - 1;
   auto second_points = create_points(test_util, 0, wide_max);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
 
   {
     auto &tree = *test_util.tree_registry.get(root_id);
@@ -378,7 +378,7 @@ TEST_CASE("reparent non-zero child position")
   // Add a third set of points in the low range to exercise the subtree
   // that was created at child position 0 during the split.
   auto third_points = create_points(test_util, 0, high_min - 1);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, third_points.header, third_points.attribute_id, std::move(third_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, third_points.header, third_points.attribute_id, std::move(third_points.locations));
 
   {
     auto &tree = *test_util.tree_registry.get(root_id);
@@ -391,11 +391,11 @@ TEST_CASE("lod generation updates subset count and offset")
 
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   auto points = create_points(test_util, 0, morton_max, 256);
-  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+  auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
 
   uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
   auto second_points = create_points(test_util, morton_min, morton_max, 256);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
 
   {
     auto &tree = *test_util.tree_registry.get(root_id);
@@ -413,10 +413,10 @@ TEST_CASE("lod generation updates subset count and offset")
     lod_cv.notify_all();
   }));
 
-  points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+  dew::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
                                                    test_util.perf_stats, lod_done);
 
-  points::converter::morton::morton192_t max_morton;
+  dew::converter::morton::morton192_t max_morton;
   memset(&max_morton, 0xFF, sizeof(max_morton));
   lod_gen.generate_lods(root_id, max_morton);
 
@@ -443,11 +443,11 @@ TEST_CASE("lod generation on magnitude 0 tree does not trigger negative shift")
   // by adding overlapping points that exceed the node limit.
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   auto points = create_points(test_util, 0, morton_max, 256);
-  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+  auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
 
   uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
   auto second_points = create_points(test_util, morton_min, morton_max, 256);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
 
   {
     auto &tree = *test_util.tree_registry.get(root_id);
@@ -469,10 +469,10 @@ TEST_CASE("lod generation on magnitude 0 tree does not trigger negative shift")
     lod_cv.notify_all();
   }));
 
-  points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+  dew::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
                                                    test_util.perf_stats, lod_done);
 
-  points::converter::morton::morton192_t max_morton;
+  dew::converter::morton::morton192_t max_morton;
   memset(&max_morton, 0xFF, sizeof(max_morton));
   lod_gen.generate_lods(root_id, max_morton);
 
@@ -493,7 +493,7 @@ TEST_CASE("lod generation on magnitude 0 tree does not trigger negative shift")
 }
 
 // Helper to register a file with a given name in the registry
-static points::converter::input_data_reference_t register_test_file(points::converter::input_data_source_registry_t &registry, const std::string &name)
+static dew::converter::input_data_reference_t register_test_file(dew::converter::input_data_source_registry_t &registry, const std::string &name)
 {
   auto name_buf = std::make_unique<char[]>(name.size());
   memcpy(name_buf.get(), name.c_str(), name.size());
@@ -502,22 +502,22 @@ static points::converter::input_data_reference_t register_test_file(points::conv
 
 // Helper to pre-init a file with a given min position (controls morton ordering)
 // Also sets morton_min via handle_sorted_points so get_done_morton can return it.
-static void pre_init_test_file(points::converter::input_data_source_registry_t &registry, const points::converter::tree_config_t &tree_config, points::converter::input_data_id_t id, double min_x)
+static void pre_init_test_file(dew::converter::input_data_source_registry_t &registry, const dew::converter::tree_config_t &tree_config, dew::converter::input_data_id_t id, double min_x)
 {
   double min[3] = {min_x, 0.0, 0.0};
   registry.register_pre_init_result(tree_config, id, true, min, 100, 16, 0);
 
   // Set morton_min/max on the source so get_done_morton returns meaningful boundaries
-  points::converter::morton::morton192_t morton_min = {};
-  points::converter::morton::morton192_t morton_max = {};
-  points::converter::convert_pos_to_morton(tree_config.scale, tree_config.offset, min, morton_min);
+  dew::converter::morton::morton192_t morton_min = {};
+  dew::converter::morton::morton192_t morton_max = {};
+  dew::converter::convert_pos_to_morton(tree_config.scale, tree_config.offset, min, morton_min);
   double max_pos[3] = {min_x + 1.0, 1.0, 1.0};
-  points::converter::convert_pos_to_morton(tree_config.scale, tree_config.offset, max_pos, morton_max);
+  dew::converter::convert_pos_to_morton(tree_config.scale, tree_config.offset, max_pos, morton_max);
   registry.handle_sorted_points(id, morton_min, morton_max);
 }
 
 // Helper to mark a file as fully done (sub_added + reading_done + tree_done)
-static void mark_file_done(points::converter::input_data_source_registry_t &registry, points::converter::input_data_id_t id)
+static void mark_file_done(dew::converter::input_data_source_registry_t &registry, dew::converter::input_data_id_t id)
 {
   registry.handle_sub_added(id);
   registry.handle_reading_done(id);
@@ -526,7 +526,7 @@ static void mark_file_done(points::converter::input_data_source_registry_t &regi
 
 TEST_CASE("get_done_morton returns empty when no files sorted" * doctest::test_suite("[incremental_lod]"))
 {
-  points::converter::input_data_source_registry_t registry;
+  dew::converter::input_data_source_registry_t registry;
   auto tree_config = create_tree_config(0.001, 0.0);
 
   auto ref1 = register_test_file(registry, "file1.las");
@@ -542,7 +542,7 @@ TEST_CASE("get_done_morton returns empty when no files sorted" * doctest::test_s
 
 TEST_CASE("get_done_morton returns empty when first file not done" * doctest::test_suite("[incremental_lod]"))
 {
-  points::converter::input_data_source_registry_t registry;
+  dew::converter::input_data_source_registry_t registry;
   auto tree_config = create_tree_config(0.001, 0.0);
 
   auto ref1 = register_test_file(registry, "file1.las");
@@ -566,7 +566,7 @@ TEST_CASE("get_done_morton returns empty when first file not done" * doctest::te
 
 TEST_CASE("get_done_morton returns boundary when prefix is done" * doctest::test_suite("[incremental_lod]"))
 {
-  points::converter::input_data_source_registry_t registry;
+  dew::converter::input_data_source_registry_t registry;
   auto tree_config = create_tree_config(0.001, 0.0);
 
   auto ref1 = register_test_file(registry, "file1.las");
@@ -604,7 +604,7 @@ TEST_CASE("get_done_morton returns boundary when prefix is done" * doctest::test
 
 TEST_CASE("get_done_morton returns all-max when all files done" * doctest::test_suite("[incremental_lod]"))
 {
-  points::converter::input_data_source_registry_t registry;
+  dew::converter::input_data_source_registry_t registry;
   auto tree_config = create_tree_config(0.001, 0.0);
 
   auto ref1 = register_test_file(registry, "file1.las");
@@ -628,7 +628,7 @@ TEST_CASE("get_done_morton returns all-max when all files done" * doctest::test_
   REQUIRE(result.has_value());
 
   // Should be the all-0xFF sentinel
-  points::converter::morton::morton192_t expected;
+  dew::converter::morton::morton192_t expected;
   memset(&expected, 0xFF, sizeof(expected));
   REQUIRE(result->data[0] == expected.data[0]);
   REQUIRE(result->data[1] == expected.data[1]);
@@ -641,7 +641,7 @@ TEST_CASE("get_done_morton clamps by undispatched files" * doctest::test_suite("
   // input_order (morton of the aabb-min corner) is a true lower bound on every point it can ever
   // contribute, so the boundary clamps to it instead. A registered file with UNKNOWN bounds
   // (no pre-init yet -> input_order 0) still blocks everything.
-  points::converter::input_data_source_registry_t registry;
+  dew::converter::input_data_source_registry_t registry;
   auto tree_config = create_tree_config(0.001, 0.0);
 
   auto ref1 = register_test_file(registry, "file1.las");
@@ -659,9 +659,9 @@ TEST_CASE("get_done_morton clamps by undispatched files" * doctest::test_suite("
   // Prefix [ref1] is done; undispatched ref2 clamps the boundary to its aabb-min morton.
   auto result = registry.get_done_morton();
   REQUIRE(result.has_value());
-  points::converter::morton::morton192_t expected_clamp;
+  dew::converter::morton::morton192_t expected_clamp;
   double pos2[3] = {20.0, 0.0, 0.0}; // matches pre_init_test_file's {min_x, 0, 0}
-  points::converter::convert_pos_to_morton(tree_config.scale, tree_config.offset, pos2, expected_clamp);
+  dew::converter::convert_pos_to_morton(tree_config.scale, tree_config.offset, pos2, expected_clamp);
   REQUIRE(result->data[0] == expected_clamp.data[0]);
   REQUIRE(result->data[1] == expected_clamp.data[1]);
   REQUIRE(result->data[2] == expected_clamp.data[2]);
@@ -682,12 +682,12 @@ TEST_CASE("LOD with restricted morton boundary skips nodes outside range" * doct
 
   // First batch: points spanning full range
   auto points = create_points(test_util, 0, morton_max, 256);
-  auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+  auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
 
   // Second batch: overlapping to force children
   uint64_t morton_min = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
   auto second_points = create_points(test_util, morton_min, morton_max, 256);
-  root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+  root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
 
   {
     auto &tree = *test_util.tree_registry.get(root_id);
@@ -705,11 +705,11 @@ TEST_CASE("LOD with restricted morton boundary skips nodes outside range" * doct
     lod_cv.notify_all();
   }));
 
-  points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+  dew::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
                                                    test_util.perf_stats, lod_done);
 
   // Use midpoint as boundary
-  points::converter::morton::morton192_t mid_morton = {};
+  dew::converter::morton::morton192_t mid_morton = {};
   mid_morton.data[0] = morton_max / 2;
 
   lod_gen.generate_lods(root_id, mid_morton);
@@ -733,16 +733,16 @@ TEST_CASE("Two-pass incremental LOD matches single-pass" * doctest::test_suite("
   uint64_t morton_max = ((uint64_t(1) << (1 * 3 * 5)) - 1);
   uint64_t morton_mid = ((uint64_t(1) << (1 * 3 * 5 - 1)) - 1);
 
-  points::converter::tree_id_t single_root_id;
+  dew::converter::tree_id_t single_root_id;
   uint64_t single_root_point_count = 0;
   {
     tree_test_infrastructure test_util(256);
 
     auto points = create_points(test_util, 0, morton_max, 256);
-    single_root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+    single_root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
 
     auto second_points = create_points(test_util, morton_mid, morton_max, 256);
-    single_root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, single_root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+    single_root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, single_root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
 
     std::mutex lod_mutex;
     std::condition_variable lod_cv;
@@ -754,10 +754,10 @@ TEST_CASE("Two-pass incremental LOD matches single-pass" * doctest::test_suite("
       lod_cv.notify_all();
     }));
 
-    points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+    dew::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
                                                      test_util.perf_stats, lod_done);
 
-    points::converter::morton::morton192_t max_morton;
+    dew::converter::morton::morton192_t max_morton;
     memset(&max_morton, 0xFF, sizeof(max_morton));
     lod_gen.generate_lods(single_root_id, max_morton);
 
@@ -776,10 +776,10 @@ TEST_CASE("Two-pass incremental LOD matches single-pass" * doctest::test_suite("
     tree_test_infrastructure test_util(256);
 
     auto points = create_points(test_util, 0, morton_max, 256);
-    auto root_id = points::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
+    auto root_id = dew::converter::tree_initialize(test_util.tree_registry, test_util.cache_file_handler, points.header, points.attribute_id, std::move(points.locations));
 
     auto second_points = create_points(test_util, morton_mid, morton_max, 256);
-    root_id = points::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
+    root_id = dew::converter::tree_add_points(test_util.tree_registry, test_util.cache_file_handler, root_id, second_points.header, second_points.attribute_id, std::move(second_points.locations));
 
     // Pass 1: LOD up to midpoint
     std::mutex lod_mutex;
@@ -792,10 +792,10 @@ TEST_CASE("Two-pass incremental LOD matches single-pass" * doctest::test_suite("
       lod_cv.notify_all();
     }));
 
-    points::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
+    dew::converter::tree_lod_generator_t lod_gen(test_util.event_loop, test_util.worker_thread_pool, test_util.tree_registry, test_util.cache_file_handler, test_util.attributes_config,
                                                      test_util.perf_stats, lod_done);
 
-    points::converter::morton::morton192_t mid_morton = {};
+    dew::converter::morton::morton192_t mid_morton = {};
     mid_morton.data[0] = morton_max / 2;
     lod_gen.generate_lods(root_id, mid_morton);
 
@@ -806,7 +806,7 @@ TEST_CASE("Two-pass incremental LOD matches single-pass" * doctest::test_suite("
 
     // Pass 2: LOD the rest (all-max)
     lod_complete = false;
-    points::converter::morton::morton192_t max_morton;
+    dew::converter::morton::morton192_t max_morton;
     memset(&max_morton, 0xFF, sizeof(max_morton));
     lod_gen.generate_lods(root_id, max_morton);
 
@@ -827,27 +827,27 @@ TEST_CASE("tree registry v3 round-trip preserves state, watermark, refs and snap
 {
   auto config = create_tree_config(0.001, 0.0);
   config.read_chunk_byte_target = 96ull << 20; // non-default: must survive the round trip
-  points::converter::tree_registry_t registry(1000, config);
+  dew::converter::tree_registry_t registry(1000, config);
   registry.current_id = 3;
-  registry.root = points::converter::tree_id_t(1);
+  registry.root = dew::converter::tree_id_t(1);
   registry.current_lod_node_id = (uint64_t(1) << 63) + 42;       // must survive (v1 dropped it)
   registry.current_collapsed_node_id = (uint64_t(1) << 62) + 7;  // v3
-  registry.chunk_tree_refs[points::converter::input_data_id_t{4, 2}] = {3, 200000};
-  registry.chunk_tree_refs[points::converter::input_data_id_t{5, 0}] = {1, 731};
+  registry.chunk_tree_refs[dew::converter::input_data_id_t{4, 2}] = {3, 200000};
+  registry.chunk_tree_refs[dew::converter::input_data_id_t{5, 0}] = {1, 731};
   memset(&registry.lod_watermark, 0x3C, sizeof(registry.lod_watermark));
   registry.locations.resize(3);
   registry.locations[1] = {0, 128, 4096};
-  registry.tree_state = {uint8_t(points::converter::tree_state_t::final), uint8_t(points::converter::tree_state_t::building), uint8_t(points::converter::tree_state_t::uploaded)};
-  registry.tree_band = {7, points::converter::tree_band_none, 9};
+  registry.tree_state = {uint8_t(dew::converter::tree_state_t::final), uint8_t(dew::converter::tree_state_t::building), uint8_t(dew::converter::tree_state_t::uploaded)};
+  registry.tree_band = {7, dew::converter::tree_band_none, 9};
   registry.input_registry_snapshot = {1, 2, 3, 4, 5};
 
-  auto serialized = points::converter::tree_registry_serialize(registry);
+  auto serialized = dew::converter::tree_registry_serialize(registry);
   REQUIRE(serialized.data != nullptr);
 
   auto buffer = std::make_unique<uint8_t[]>(serialized.size);
   memcpy(buffer.get(), serialized.data.get(), serialized.size);
-  points::converter::tree_registry_t restored;
-  auto error = points::converter::tree_registry_deserialize(buffer, uint32_t(serialized.size), restored);
+  dew::converter::tree_registry_t restored;
+  auto error = dew::converter::tree_registry_deserialize(buffer, uint32_t(serialized.size), restored);
   REQUIRE(error.code == 0);
 
   REQUIRE(restored.node_limit == registry.node_limit);
@@ -857,10 +857,10 @@ TEST_CASE("tree registry v3 round-trip preserves state, watermark, refs and snap
   REQUIRE(restored.current_collapsed_node_id == registry.current_collapsed_node_id);
   REQUIRE(restored.tree_config.read_chunk_byte_target == config.read_chunk_byte_target);
   REQUIRE(restored.chunk_tree_refs.size() == 2);
-  REQUIRE(restored.chunk_tree_refs.at(points::converter::input_data_id_t{4, 2}).tree_count == 3);
-  REQUIRE(restored.chunk_tree_refs.at(points::converter::input_data_id_t{4, 2}).point_count == 200000);
-  REQUIRE(restored.chunk_tree_refs.at(points::converter::input_data_id_t{5, 0}).tree_count == 1);
-  REQUIRE(restored.chunk_tree_refs.at(points::converter::input_data_id_t{5, 0}).point_count == 731);
+  REQUIRE(restored.chunk_tree_refs.at(dew::converter::input_data_id_t{4, 2}).tree_count == 3);
+  REQUIRE(restored.chunk_tree_refs.at(dew::converter::input_data_id_t{4, 2}).point_count == 200000);
+  REQUIRE(restored.chunk_tree_refs.at(dew::converter::input_data_id_t{5, 0}).tree_count == 1);
+  REQUIRE(restored.chunk_tree_refs.at(dew::converter::input_data_id_t{5, 0}).point_count == 731);
   REQUIRE(memcmp(&restored.lod_watermark, &registry.lod_watermark, sizeof(registry.lod_watermark)) == 0);
   REQUIRE(restored.locations.size() == 3);
   REQUIRE(restored.locations[1].offset == 4096);
@@ -881,7 +881,7 @@ struct tree_config_v2_layout_t
 };
 static_assert(sizeof(tree_config_v2_layout_t) == 40, "historic layout");
 
-tree_config_v2_layout_t v2_config_from(const points::converter::tree_config_t &config)
+tree_config_v2_layout_t v2_config_from(const dew::converter::tree_config_t &config)
 {
   tree_config_v2_layout_t out = {};
   out.scale = config.scale;
@@ -898,14 +898,14 @@ TEST_CASE("tree registry v2 blob deserializes with defaulted v3 state" * doctest
   const uint32_t magic_v2 = 0x32475254u;
   const uint32_t node_limit = 1000;
   const uint32_t current_id = 1;
-  const points::converter::tree_id_t root(0);
+  const dew::converter::tree_id_t root(0);
   const auto config = v2_config_from(create_tree_config(0.001, 0.0));
   const uint64_t lod_node_id = (uint64_t(1) << 63) + 5;
-  points::converter::morton::morton192_t watermark = {};
+  dew::converter::morton::morton192_t watermark = {};
   watermark.data[0] = 77;
   const uint32_t count = 1;
-  points::converter::storage_location_t location = {0, 64, 1024};
-  const uint8_t state = uint8_t(points::converter::tree_state_t::final);
+  dew::converter::storage_location_t location = {0, 64, 1024};
+  const uint8_t state = uint8_t(dew::converter::tree_state_t::final);
   const uint32_t band = 2;
   const uint32_t snapshot_size = 0;
 
@@ -927,8 +927,8 @@ TEST_CASE("tree registry v2 blob deserializes with defaulted v3 state" * doctest
   put(snapshot_size);
   REQUIRE(p == buffer.get() + size);
 
-  points::converter::tree_registry_t restored;
-  auto error = points::converter::tree_registry_deserialize(buffer, size, restored);
+  dew::converter::tree_registry_t restored;
+  auto error = dew::converter::tree_registry_deserialize(buffer, size, restored);
   REQUIRE(error.code == 0);
   REQUIRE(restored.node_limit == node_limit);
   REQUIRE(restored.current_lod_node_id == lod_node_id);
@@ -939,7 +939,7 @@ TEST_CASE("tree registry v2 blob deserializes with defaulted v3 state" * doctest
   // v3 additions default:
   REQUIRE(restored.current_collapsed_node_id == uint64_t(1) << 62);
   REQUIRE(restored.chunk_tree_refs.empty());
-  REQUIRE(restored.tree_config.read_chunk_byte_target == points::converter::tree_config_t{}.read_chunk_byte_target);
+  REQUIRE(restored.tree_config.read_chunk_byte_target == dew::converter::tree_config_t{}.read_chunk_byte_target);
 }
 
 TEST_CASE("tree registry v1 blob deserializes with defaulted v2 state" * doctest::test_suite("[registry_v2]"))
@@ -947,9 +947,9 @@ TEST_CASE("tree registry v1 blob deserializes with defaulted v2 state" * doctest
   // Hand-build a v1 blob (no magic; first u32 is node_limit) and check the v2 fields default.
   const uint32_t node_limit = 200000;
   const uint32_t current_id = 2;
-  const points::converter::tree_id_t root(0);
+  const dew::converter::tree_id_t root(0);
   const auto tree_config = v2_config_from(create_tree_config(0.001, 0.0)); // v1 wrote the 40-byte layout
-  points::converter::storage_location_t locations[2] = {{0, 64, 1024}, {0, 32, 2048}};
+  dew::converter::storage_location_t locations[2] = {{0, 64, 1024}, {0, 32, 2048}};
   const uint32_t count = 2;
 
   const uint32_t size = sizeof(node_limit) + sizeof(current_id) + sizeof(root) + sizeof(tree_config) + sizeof(count) + sizeof(locations);
@@ -963,22 +963,22 @@ TEST_CASE("tree registry v1 blob deserializes with defaulted v2 state" * doctest
   memcpy(p, locations, sizeof(locations)); p += sizeof(locations);
   REQUIRE(p == buffer.get() + size);
 
-  points::converter::tree_registry_t restored;
-  auto error = points::converter::tree_registry_deserialize(buffer, size, restored);
+  dew::converter::tree_registry_t restored;
+  auto error = dew::converter::tree_registry_deserialize(buffer, size, restored);
   REQUIRE(error.code == 0);
   REQUIRE(restored.node_limit == node_limit);
   REQUIRE(restored.locations.size() == 2);
   REQUIRE(restored.tree_state.size() == 2);
-  REQUIRE(restored.tree_state[0] == uint8_t(points::converter::tree_state_t::building));
+  REQUIRE(restored.tree_state[0] == uint8_t(dew::converter::tree_state_t::building));
   REQUIRE(restored.tree_band.size() == 2);
-  REQUIRE(restored.tree_band[0] == points::converter::tree_band_none);
+  REQUIRE(restored.tree_band[0] == dew::converter::tree_band_none);
   REQUIRE(restored.input_registry_snapshot.empty());
   REQUIRE(restored.current_lod_node_id == uint64_t(1) << 63);
 }
 
 TEST_CASE("input registry snapshot round-trips and restores dispatch state" * doctest::test_suite("[registry_v2]"))
 {
-  points::converter::input_data_source_registry_t registry;
+  dew::converter::input_data_source_registry_t registry;
   auto tree_config = create_tree_config(0.001, 0.0);
 
   auto ref1 = register_test_file(registry, "done.las");
@@ -1002,7 +1002,7 @@ TEST_CASE("input registry snapshot round-trips and restores dispatch state" * do
   auto snapshot = registry.serialize();
   REQUIRE(!snapshot.empty());
 
-  points::converter::input_data_source_registry_t restored;
+  dew::converter::input_data_source_registry_t restored;
   auto error = restored.deserialize(snapshot.data(), uint32_t(snapshot.size()));
   REQUIRE(error.code == 0);
 
@@ -1025,7 +1025,7 @@ TEST_CASE("input registry snapshot round-trips and restores dispatch state" * do
   REQUIRE(!restored.next_input_to_process().has_value());
 
   // A fresh id after restore must not collide with any persisted id.
-  auto fresh = points::converter::get_next_input_id();
+  auto fresh = dew::converter::get_next_input_id();
   REQUIRE(fresh.data > ref3.input_id.data);
 }
 
@@ -1045,13 +1045,13 @@ TEST_CASE("finality marking across multi-batch morton-ordered input" * doctest::
     checkpoints_seen++;
     sync_cv.notify_all();
   };
-  vio::event_pipe_t<points::converter::input_data_id_t> done_input(test_util.event_loop, std::function<void(points::converter::input_data_id_t &&)>([&](points::converter::input_data_id_t &&) {
+  vio::event_pipe_t<dew::converter::input_data_id_t> done_input(test_util.event_loop, std::function<void(dew::converter::input_data_id_t &&)>([&](dew::converter::input_data_id_t &&) {
     std::lock_guard<std::mutex> lock(sync_mutex);
     inputs_done++;
     sync_cv.notify_all();
   }));
 
-  points::converter::tree_handler_t tree_handler(test_util.worker_thread_pool, test_util.cache_file_handler, test_util.attributes_config, test_util.perf_stats, done_input);
+  dew::converter::tree_handler_t tree_handler(test_util.worker_thread_pool, test_util.cache_file_handler, test_util.attributes_config, test_util.perf_stats, done_input);
   tree_handler.set_tree_initialization_config(test_util.tree_config);
   tree_handler.set_tree_initialization_node_point_limit(256);
 
@@ -1073,7 +1073,7 @@ TEST_CASE("finality marking across multi-batch morton-ordered input" * doctest::
   }
 
   // Pass 1: watermark at batch2's min -- everything strictly below is final.
-  points::converter::morton::morton192_t watermark = {};
+  dew::converter::morton::morton192_t watermark = {};
   watermark.data[0] = mid;
   tree_handler.generate_lod(watermark);
   {
@@ -1089,18 +1089,18 @@ TEST_CASE("finality marking across multi-batch morton-ordered input" * doctest::
       if (!tree)
         continue;
       const bool below = tree->morton_max < watermark;
-      const bool is_final = registry.tree_state[i] == uint8_t(points::converter::tree_state_t::final);
+      const bool is_final = registry.tree_state[i] == uint8_t(dew::converter::tree_state_t::final);
       REQUIRE(is_final == below);
       if (is_final)
         final_count++;
     }
     // The root tree spans both batches, so it must still be building.
-    REQUIRE(registry.tree_state[registry.root.data] == uint8_t(points::converter::tree_state_t::building));
+    REQUIRE(registry.tree_state[registry.root.data] == uint8_t(dew::converter::tree_state_t::building));
     (void)final_count;
   }
 
   // Terminal pass: everything becomes final, and the watermark persists into the registry.
-  points::converter::morton::morton192_t terminal;
+  dew::converter::morton::morton192_t terminal;
   memset(&terminal, 0xFF, sizeof(terminal));
   tree_handler.generate_lod(terminal);
   {
@@ -1113,7 +1113,7 @@ TEST_CASE("finality marking across multi-batch morton-ordered input" * doctest::
     {
       if (!registry.data[i])
         continue;
-      REQUIRE(registry.tree_state[i] == uint8_t(points::converter::tree_state_t::final));
+      REQUIRE(registry.tree_state[i] == uint8_t(dew::converter::tree_state_t::final));
     }
     REQUIRE(memcmp(&registry.lod_watermark, &terminal, sizeof(terminal)) == 0);
   }
@@ -1156,13 +1156,13 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
     checkpoints_seen++;
     sync_cv.notify_all();
   };
-  vio::event_pipe_t<points::converter::input_data_id_t> done_input(test_util.event_loop, std::function<void(points::converter::input_data_id_t &&)>([&](points::converter::input_data_id_t &&) {
+  vio::event_pipe_t<dew::converter::input_data_id_t> done_input(test_util.event_loop, std::function<void(dew::converter::input_data_id_t &&)>([&](dew::converter::input_data_id_t &&) {
     std::lock_guard<std::mutex> lock(sync_mutex);
     inputs_done++;
     sync_cv.notify_all();
   }));
 
-  points::converter::tree_handler_t tree_handler(test_util.worker_thread_pool, test_util.cache_file_handler, test_util.attributes_config, test_util.perf_stats, done_input);
+  dew::converter::tree_handler_t tree_handler(test_util.worker_thread_pool, test_util.cache_file_handler, test_util.attributes_config, test_util.perf_stats, done_input);
   tree_handler.set_tree_initialization_config(test_util.tree_config);
   tree_handler.set_tree_initialization_node_point_limit(256);
 
@@ -1171,10 +1171,10 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
     uuid[i] = uint8_t(0x40 + i);
   auto bucket = std::make_unique<vio::objstore::memory_io_manager_t>();
   auto *bucket_raw = bucket.get();
-  points::converter::upload_handler_t uploader(std::move(bucket), test_util.cache_file_handler, test_util.worker_thread_pool, uuid);
+  dew::converter::upload_handler_t uploader(std::move(bucket), test_util.cache_file_handler, test_util.worker_thread_pool, uuid);
   REQUIRE(uploader.bootstrap().code == 0);
-  uploader.set_on_band_committed([&](uint32_t band_id, std::vector<uint32_t> tree_ids, const points::converter::morton::morton192_t &) { tree_handler.mark_band_uploaded(band_id, std::move(tree_ids)); });
-  tree_handler.set_band_sink([&](points::converter::band_job_t &&job) { uploader.enqueue_band(std::move(job)); }, uploader.committed_band_count(), uploader.stats().complete);
+  uploader.set_on_band_committed([&](uint32_t band_id, std::vector<uint32_t> tree_ids, const dew::converter::morton::morton192_t &) { tree_handler.mark_band_uploaded(band_id, std::move(tree_ids)); });
+  tree_handler.set_band_sink([&](dew::converter::band_job_t &&job) { uploader.enqueue_band(std::move(job)); }, uploader.committed_band_count(), uploader.stats().complete);
 
   const uint64_t full_max = (uint64_t(1) << (2 * 3 * 5)) - 1;
   const uint64_t mid = full_max / 2;
@@ -1192,14 +1192,14 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
   }
 
   // Pass 1 (partial watermark) then the terminal pass; each commit emits a band.
-  points::converter::morton::morton192_t watermark = {};
+  dew::converter::morton::morton192_t watermark = {};
   watermark.data[0] = mid;
   tree_handler.generate_lod(watermark);
   {
     std::unique_lock<std::mutex> lock(sync_mutex);
     sync_cv.wait(lock, [&] { return checkpoints_seen == 1; });
   }
-  points::converter::morton::morton192_t terminal;
+  dew::converter::morton::morton192_t terminal;
   memset(&terminal, 0xFF, sizeof(terminal));
   tree_handler.generate_lod(terminal);
   {
@@ -1218,30 +1218,30 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
   // ---- Verify the bucket ----
   auto &loop = test_util.event_loop;
   // Root manifest: complete, uuid, registry location set.
-  std::vector<uint8_t> root_bytes(points::converter::k_root_manifest_size);
+  std::vector<uint8_t> root_bytes(dew::converter::k_root_manifest_size);
   {
-    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_root_manifest_name(), root_bytes.data(), {}); });
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(dew::converter::bucket_root_manifest_name(), root_bytes.data(), {}); });
     REQUIRE(read.has_value());
   }
-  points::converter::root_manifest_t root;
-  REQUIRE(points::converter::deserialize_root_manifest(root_bytes.data(), uint32_t(root_bytes.size()), root).code == 0);
+  dew::converter::root_manifest_t root;
+  REQUIRE(dew::converter::deserialize_root_manifest(root_bytes.data(), uint32_t(root_bytes.size()), root).code == 0);
   REQUIRE(root.complete == 1);
   REQUIRE(memcmp(root.dataset_uuid, uuid, 16) == 0);
   REQUIRE(root.band_count == stats.bands_committed);
   REQUIRE(root.tree_registry.size > 0);
 
   // Every band manifest parses; collect the dedup table for blob verification.
-  std::vector<points::converter::band_dedup_entry_t> all_blobs;
+  std::vector<dew::converter::band_dedup_entry_t> all_blobs;
   for (uint32_t band = 0; band < root.band_count; band++)
   {
-    auto info = bucket_op(loop, [&]() { return bucket_raw->object_info(points::converter::bucket_band_name(band)); });
+    auto info = bucket_op(loop, [&]() { return bucket_raw->object_info(dew::converter::bucket_band_name(band)); });
     REQUIRE(info.has_value());
     REQUIRE(info.value().exists);
     std::vector<uint8_t> band_bytes(info.value().size);
-    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(points::converter::bucket_band_name(band), band_bytes.data(), {}); });
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object(dew::converter::bucket_band_name(band), band_bytes.data(), {}); });
     REQUIRE(read.has_value());
-    points::converter::band_manifest_t manifest;
-    REQUIRE(points::converter::deserialize_band_manifest(band_bytes.data(), uint32_t(band_bytes.size()), manifest).code == 0);
+    dew::converter::band_manifest_t manifest;
+    REQUIRE(dew::converter::deserialize_band_manifest(band_bytes.data(), uint32_t(band_bytes.size()), manifest).code == 0);
     REQUIRE(manifest.band_id == band);
     for (auto &blob : manifest.blobs)
       all_blobs.push_back(blob);
@@ -1252,12 +1252,12 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
   // IS the object and the recorded offset is always 0).
   for (auto &blob : all_blobs)
   {
-    auto request = test_util.cache_file_handler.read(points::converter::storage_location_t{0, blob.location.size, blob.cache_offset}, /*raw=*/true);
+    auto request = test_util.cache_file_handler.read(dew::converter::storage_location_t{0, blob.location.size, blob.cache_offset}, /*raw=*/true);
     request->wait_for_read();
     REQUIRE(request->error.code == 0);
     REQUIRE(blob.location.offset == 0);
     std::vector<uint8_t> bucket_bytes(blob.location.size);
-    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object_all(points::converter::bucket_data_object_name(blob.location.file_id), bucket_bytes.data(), blob.location.size); });
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object_all(dew::converter::bucket_data_object_name(blob.location.file_id), bucket_bytes.data(), blob.location.size); });
     REQUIRE(read.has_value());
     REQUIRE(read.value() == blob.location.size);
     REQUIRE(memcmp(bucket_bytes.data(), request->buffer_info.data, blob.location.size) == 0);
@@ -1267,31 +1267,31 @@ TEST_CASE("bucket upload end-to-end: bands, packs, manifests, completion" * doct
   {
     std::vector<uint8_t> reg_bytes(root.tree_registry.size);
     REQUIRE(root.tree_registry.offset == 0);
-    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object_all(points::converter::bucket_data_object_name(root.tree_registry.file_id), reg_bytes.data(), root.tree_registry.size); });
+    auto read = bucket_op(loop, [&]() { return bucket_raw->read_object_all(dew::converter::bucket_data_object_name(root.tree_registry.file_id), reg_bytes.data(), root.tree_registry.size); });
     REQUIRE(read.has_value());
     auto buffer = std::make_unique<uint8_t[]>(reg_bytes.size());
     memcpy(buffer.get(), reg_bytes.data(), reg_bytes.size());
-    points::converter::tree_registry_t bucket_registry;
-    REQUIRE(points::converter::tree_registry_deserialize(buffer, uint32_t(reg_bytes.size()), bucket_registry).code == 0);
+    dew::converter::tree_registry_t bucket_registry;
+    REQUIRE(dew::converter::tree_registry_deserialize(buffer, uint32_t(reg_bytes.size()), bucket_registry).code == 0);
     REQUIRE(bucket_registry.locations.size() == tree_handler.tree_registry().locations.size());
     for (uint32_t i = 0; i < uint32_t(bucket_registry.locations.size()); i++)
     {
-      REQUIRE(bucket_registry.tree_state[i] == uint8_t(points::converter::tree_state_t::uploaded));
+      REQUIRE(bucket_registry.tree_state[i] == uint8_t(dew::converter::tree_state_t::uploaded));
       auto &tree_location = bucket_registry.locations[i];
       REQUIRE(tree_location.size > 0);
       std::vector<uint8_t> tree_bytes(tree_location.size);
       REQUIRE(tree_location.offset == 0);
-      auto tree_read = bucket_op(loop, [&]() { return bucket_raw->read_object_all(points::converter::bucket_data_object_name(tree_location.file_id), tree_bytes.data(), tree_location.size); });
+      auto tree_read = bucket_op(loop, [&]() { return bucket_raw->read_object_all(dew::converter::bucket_data_object_name(tree_location.file_id), tree_bytes.data(), tree_location.size); });
       REQUIRE(tree_read.has_value());
-      points::converter::serialized_tree_t serialized;
+      dew::converter::serialized_tree_t serialized;
       serialized.size = int(tree_bytes.size());
       serialized.data = std::make_shared<uint8_t[]>(tree_bytes.size());
       memcpy(serialized.data.get(), tree_bytes.data(), tree_bytes.size());
-      points::converter::tree_t bucket_tree;
-      points_error_t tree_error = {};
-      REQUIRE(points::converter::tree_deserialize(serialized, bucket_tree, tree_error));
+      dew::converter::tree_t bucket_tree;
+      dew_error_t tree_error = {};
+      REQUIRE(dew::converter::tree_deserialize(serialized, bucket_tree, tree_error));
       // Remapped storage locations must reference data objects (file_id < next_object_id), not the cache.
-      bucket_tree.storage_map.for_each([&](points::converter::input_data_id_t, points::converter::attributes_id_t, const std::vector<points::converter::storage_location_t> &locations) {
+      bucket_tree.storage_map.for_each([&](dew::converter::input_data_id_t, dew::converter::attributes_id_t, const std::vector<dew::converter::storage_location_t> &locations) {
         for (auto &location : locations)
           if (location.size)
             REQUIRE(location.file_id < root.next_object_id);

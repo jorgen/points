@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -46,7 +46,7 @@
 
 #include <cstdint>
 
-namespace points::converter
+namespace dew::converter
 {
 
 class storage_handler_t;
@@ -103,8 +103,8 @@ struct read_request_t
   bool is_cancelled() const { return _cancelled.load(std::memory_order_relaxed); }
 
   std::shared_ptr<uint8_t[]> buffer;
-  points_converter_buffer_t buffer_info;
-  points_error_t error;
+  dew_converter_buffer_t buffer_info;
+  dew_error_t error;
 
   bool raw = false; // when set, read() returns the COMPRESSED bytes as-is (no decompress) -- used by the
                     // wasm decode-worker path, which decompresses off the main thread.
@@ -139,7 +139,7 @@ struct read_request_t
 class storage_handler_t
 {
 public:
-  storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written, vio::event_pipe_t<points_error_t> &storage_error_pipe, points_error_t &error);
+  storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written, vio::event_pipe_t<dew_error_t> &storage_error_pipe, dew_error_t &error);
   ~storage_handler_t();
   // Join the storage loop thread. Idempotent. Called by the processor's ordered teardown (and the destructor)
   // before _backend / _read_cache / the event pipes an in-flight read touches are destroyed.
@@ -148,16 +148,16 @@ public:
   {
     return _backend && _backend->exists();
   }
-  [[nodiscard]] points_error_t read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
+  [[nodiscard]] dew_error_t read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
                                    std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size);
-  [[nodiscard]] points_error_t deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
-  [[nodiscard]] points_error_t upgrade_to_write(bool truncate);
+  [[nodiscard]] dew_error_t deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
+  [[nodiscard]] dew_error_t upgrade_to_write(bool truncate);
 
   void write(const storage_header_t &header, attributes_id_t attributes_id, attribute_buffers_t &&buffers,
-             std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const points_error_t &error)> done);
-  void write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&error)> done);
-  void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, points_error_t &&error)> done);
-  void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> done);
+             std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const dew_error_t &error)> done);
+  void write_trees(std::vector<tree_id_t> &&tree_ids, std::vector<serialized_tree_t> &&serialized_trees, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, dew_error_t &&error)> done);
+  void write_tree_registry(serialized_tree_registry_t &&serialized_tree_registry, std::function<void(storage_location_t, dew_error_t &&error)> done);
+  void write_blob_locations_and_update_header(storage_location_t location, std::vector<storage_location_t> &&old_locations, std::function<void(dew_error_t &&error)> done);
 
   // decompress_inline: on a RAM-cache hit of a compressed blob the decompress normally hops to the
   // shared thread pool (a render-thread latency fix). Callers that ALREADY run on a pool worker and
@@ -186,14 +186,14 @@ public:
   // ---- cache-tier configuration (destination mode; requires a LOCAL packed cache file) ----
   // Enable residency tracking (cap 0 = track only) and, when destination_url is non-empty, the
   // spill area + destination reads on that bucket. Call at bootstrap, before read_index/open.
-  [[nodiscard]] points_error_t configure_cache_tier(uint64_t cap_bytes, const std::string &destination_url, const std::string &connection);
+  [[nodiscard]] dew_error_t configure_cache_tier(uint64_t cap_bytes, const std::string &destination_url, const std::string &connection);
   // Runtime cap adjustment (thread-safe; lowering triggers a reclaim pass on the storage loop).
   void set_cache_max_bytes(uint64_t cap_bytes);
   // Returns the dataset uuid, generating + installing a fresh one if the cache has none yet.
   // Only valid in destination mode (packed backend).
   void ensure_dataset_uuid(uint8_t (&out)[16]);
   // After read_index/restore_allocator at bootstrap: replay spill liveness + GC orphan segments.
-  [[nodiscard]] points_error_t run_spill_bootstrap();
+  [[nodiscard]] dew_error_t run_spill_bootstrap();
   // Mark the next checkpoint as the orderly-teardown one (keeps local_* residency on reopen).
   void set_clean_shutdown_next_checkpoint();
   struct cache_tier_stats_t
@@ -211,19 +211,19 @@ public:
 
 private:
   void handle_write_events(
-    std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const points_error_t &error)>> &&event);
-  void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)>> &&event);
-  void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, points_error_t &&error)> &&done);
-  void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(points_error_t &&error)> &&done);
+    std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const dew_error_t &error)>> &&event);
+  void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, dew_error_t &&)>> &&event);
+  void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, dew_error_t &&error)> &&done);
+  void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(dew_error_t &&error)> &&done);
   void handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location);
 
   vio::task_t<void> do_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location);
   vio::task_t<void> do_write_events(storage_header_t header, attributes_id_t attributes_id, attribute_buffers_t attribute_buffers,
-                                    std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const points_error_t &error)> done);
+                                    std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t> &&, const dew_error_t &error)> done);
   vio::task_t<void> do_write_trees(std::vector<tree_id_t> tree_ids, std::vector<serialized_tree_t> serialized_trees,
-                                   std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&)> done);
-  vio::task_t<void> do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, points_error_t &&error)> done);
-  vio::task_t<void> do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(points_error_t &&error)> done);
+                                   std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, dew_error_t &&)> done);
+  vio::task_t<void> do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, dew_error_t &&error)> done);
+  vio::task_t<void> do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(dew_error_t &&error)> done);
   vio::task_t<void> do_read_request(std::shared_ptr<read_request_t> read_request, storage_location_t location);
 
   vio::thread_pool_t &_thread_pool;
@@ -245,11 +245,11 @@ private:
   ankerl::unordered_dense::map<uint32_t, uint64_t> _input_file_sizes;
 
   vio::event_pipe_t<void> &_index_written;
-  vio::event_pipe_t<points_error_t> &_storage_error;
-  vio::event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const points_error_t &error)>>> _write_event_pipe;
-  vio::event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, points_error_t &&error)>>> _write_trees_pipe;
-  vio::event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, points_error_t &&error)>> _write_tree_registry_pipe;
-  vio::event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(points_error_t &&error)>> _write_blob_locations_and_update_header_pipe;
+  vio::event_pipe_t<dew_error_t> &_storage_error;
+  vio::event_pipe_t<std::tuple<storage_header_t, attributes_id_t, attribute_buffers_t, std::function<void(const storage_header_t &, attributes_id_t, std::vector<storage_location_t>, const dew_error_t &error)>>> _write_event_pipe;
+  vio::event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, dew_error_t &&error)>>> _write_trees_pipe;
+  vio::event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, dew_error_t &&error)>> _write_tree_registry_pipe;
+  vio::event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(dew_error_t &&error)>> _write_blob_locations_and_update_header_pipe;
   vio::event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;
 
   lru_cache_t<cache_key_t, cache_value_t, cache_key_hash_t> _read_cache;
@@ -284,8 +284,8 @@ struct read_only_points_t
   storage_location_t location;
   std::shared_ptr<read_request_t> read_request;
   storage_header_t header;
-  points_converter_buffer_t data;
-  points_error_t error;
+  dew_converter_buffer_t data;
+  dew_error_t error;
 };
 
 struct read_attribute_t
@@ -306,8 +306,8 @@ struct read_attribute_t
   storage_handler_t &storage_handler;
   storage_location_t location;
   std::shared_ptr<read_request_t> read_request;
-  points_converter_buffer_t data;
-  points_error_t error;
+  dew_converter_buffer_t data;
+  dew_error_t error;
 };
 
-} // namespace points::converter
+} // namespace dew::converter

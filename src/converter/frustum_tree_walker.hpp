@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 #include <unordered_set>
 
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct node_id_t
@@ -184,5 +184,5 @@ node_aabb_t make_aabb_from_child_index(const node_aabb_t &parent, int child_inde
 
 void walk_tree_direct(const tree_registry_t &tree_registry, attribute_index_map_t &attribute_index_map, frustum_tree_walker_t &walker);
 
-} // namespace points::converter
+} // namespace dew::converter
 

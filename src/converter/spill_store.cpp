@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -27,14 +27,14 @@
 #include <cassert>
 #include <cstring>
 
-namespace points::converter
+namespace dew::converter
 {
 
 static constexpr uint32_t k_journal_magic = 0x314c4a53u; // 'SJL1'
 
-static points_error_t from_vio(const vio::error_t &e)
+static dew_error_t from_vio(const vio::error_t &e)
 {
-  points_error_t r;
+  dew_error_t r;
   r.code = e.code;
   r.msg = e.msg;
   return r;
@@ -57,7 +57,7 @@ std::string spill_store_t::journal_name() const
   return _prefix + "journal";
 }
 
-vio::task_t<points_error_t> spill_store_t::write_journal()
+vio::task_t<dew_error_t> spill_store_t::write_journal()
 {
   // The journal lists every segment that exists (or is about to exist) remotely but is NOT yet
   // referenced by a committed residency table: the open segment + the undurable ones. On-open GC
@@ -74,14 +74,14 @@ vio::task_t<points_error_t> spill_store_t::write_journal()
   ok = ok && write_memory(ptr, end, _open_seq);
   assert(ok && ptr == end);
   if (!ok)
-    co_return points_error_t{1, "Failed to serialize spill journal"};
+    co_return dew_error_t{1, "Failed to serialize spill journal"};
   auto r = co_await _io.write_object(journal_name(), std::move(data), size);
   if (!r.has_value())
     co_return from_vio(r.error());
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-vio::task_t<points_error_t> spill_store_t::spill_blob(const uint8_t *data, uint32_t size, uint64_t &remote_id_out)
+vio::task_t<dew_error_t> spill_store_t::spill_blob(const uint8_t *data, uint32_t size, uint64_t &remote_id_out)
 {
   // Whole-operation gate: another spill_blob interleaving at the journal/flush suspension points
   // would append into a buffer a suspended flush is about to clear (bytes lost -> short reads).
@@ -109,19 +109,19 @@ vio::task_t<points_error_t> spill_store_t::spill_blob(const uint8_t *data, uint3
 
   if (_open_buffer.size() >= _segment_target_bytes)
     co_return co_await flush_locked();
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-vio::task_t<points_error_t> spill_store_t::flush()
+vio::task_t<dew_error_t> spill_store_t::flush()
 {
   auto gate_lock = co_await _gate.lock();
   co_return co_await flush_locked();
 }
 
-vio::task_t<points_error_t> spill_store_t::flush_locked()
+vio::task_t<dew_error_t> spill_store_t::flush_locked()
 {
   if (_open_buffer.empty())
-    co_return points_error_t{};
+    co_return dew_error_t{};
   const uint32_t size = uint32_t(_open_buffer.size());
   auto data = std::make_shared<uint8_t[]>(size);
   memcpy(data.get(), _open_buffer.data(), size);
@@ -132,10 +132,10 @@ vio::task_t<points_error_t> spill_store_t::flush_locked()
   _open_buffer.clear();
   _open_buffer.shrink_to_fit();
   _open_journaled = false;
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-vio::task_t<points_error_t> spill_store_t::read(uint64_t remote_id, uint8_t *dst, uint32_t size)
+vio::task_t<dew_error_t> spill_store_t::read(uint64_t remote_id, uint8_t *dst, uint32_t size)
 {
   const uint32_t seq = spill_segment_of(remote_id);
   const uint32_t offset = spill_offset_of(remote_id);
@@ -143,9 +143,9 @@ vio::task_t<points_error_t> spill_store_t::read(uint64_t remote_id, uint8_t *dst
   if (!_open_buffer.empty() && seq == _open_seq)
   {
     if (uint64_t(offset) + size > _open_buffer.size())
-      co_return points_error_t{1, "Spill read out of open-segment bounds"};
+      co_return dew_error_t{1, "Spill read out of open-segment bounds"};
     memcpy(dst, _open_buffer.data() + offset, size);
-    co_return points_error_t{};
+    co_return dew_error_t{};
   }
   vio::objstore::io_range_t range;
   range.offset = int64_t(offset);
@@ -154,8 +154,8 @@ vio::task_t<points_error_t> spill_store_t::read(uint64_t remote_id, uint8_t *dst
   if (!r.has_value())
     co_return from_vio(r.error());
   if (r.value() != size)
-    co_return points_error_t{1, "Short spill segment read"};
-  co_return points_error_t{};
+    co_return dew_error_t{1, "Short spill segment read"};
+  co_return dew_error_t{};
 }
 
 void spill_store_t::add_live(uint64_t remote_id)
@@ -181,17 +181,17 @@ void spill_store_t::deref(uint64_t remote_id)
   }
 }
 
-vio::task_t<points_error_t> spill_store_t::sweep_after_checkpoint()
+vio::task_t<dew_error_t> spill_store_t::sweep_after_checkpoint()
 {
   // Under the gate: this rewrites/removes the journal, which must not interleave with a
   // spill_blob's own journal write.
   auto gate_lock = co_await _gate.lock();
-  if (std::getenv("POINTS_DEBUG_SPILL"))
+  if (std::getenv("DEW_DEBUG_SPILL"))
     fprintf(stderr, "[spill] sweep: dead=%zu undurable=%zu live_segs=%zu open=%zu\n", _dead_segments.size(), _undurable_segments.size(), _live_counts.size(), _open_buffer.size());
   // The checkpoint that just committed references (via the residency table) every segment in
   // _undurable_segments that still has live blobs -- those are durable now and leave the journal.
   _undurable_segments.clear();
-  points_error_t first_error = {};
+  dew_error_t first_error = {};
   for (auto seq : _dead_segments)
   {
     auto r = co_await _io.remove_object(segment_name(seq));
@@ -215,7 +215,7 @@ vio::task_t<points_error_t> spill_store_t::sweep_after_checkpoint()
   co_return first_error;
 }
 
-vio::task_t<points_error_t> spill_store_t::gc_orphans()
+vio::task_t<dew_error_t> spill_store_t::gc_orphans()
 {
   // On open: journaled segments not referenced by the restored residency table (i.e. absent from
   // _live_counts, which the backend replayed via add_live) are crash orphans -- delete them.
@@ -223,7 +223,7 @@ vio::task_t<points_error_t> spill_store_t::gc_orphans()
   if (!info.has_value())
     co_return from_vio(info.error());
   if (!info.value().exists || info.value().size < 8)
-    co_return points_error_t{};
+    co_return dew_error_t{};
   std::vector<uint8_t> buffer(info.value().size);
   auto r = co_await _io.read_object(journal_name(), buffer.data(), {});
   if (!r.has_value())
@@ -233,13 +233,13 @@ vio::task_t<points_error_t> spill_store_t::gc_orphans()
   uint32_t magic = 0;
   uint32_t count = 0;
   if (!read_memory(ptr, end, magic) || magic != k_journal_magic || !read_memory(ptr, end, count))
-    co_return points_error_t{1, "Invalid spill journal"};
-  points_error_t first_error = {};
+    co_return dew_error_t{1, "Invalid spill journal"};
+  dew_error_t first_error = {};
   for (uint32_t i = 0; i < count; i++)
   {
     uint32_t seq = 0;
     if (!read_memory(ptr, end, seq))
-      co_return points_error_t{1, "Invalid spill journal"};
+      co_return dew_error_t{1, "Invalid spill journal"};
     restore_next_segment_seq(seq + 1);
     if (_live_counts.contains(seq))
       continue; // referenced by the committed table -> keep
@@ -253,4 +253,4 @@ vio::task_t<points_error_t> spill_store_t::gc_orphans()
   co_return first_error;
 }
 
-} // namespace points::converter
+} // namespace dew::converter

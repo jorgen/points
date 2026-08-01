@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include <cstring>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_config_t &tree_config, std::shared_ptr<dyn_points_data_handler_t> salvage_handler)
@@ -48,10 +48,10 @@ render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_conf
     const uint32_t n0 = in.header.point_count;
     switch (in.header.point_format.type)
     {
-    case points_type_m32: build_lod_order_from_mortons<morton::morton32_t>(static_cast<const morton::morton32_t *>(m), n0, prefix_count, perm, rep_level); has_lod_order = true; break;
-    case points_type_m64: build_lod_order_from_mortons<morton::morton64_t>(static_cast<const morton::morton64_t *>(m), n0, prefix_count, perm, rep_level); has_lod_order = true; break;
-    case points_type_m128: build_lod_order_from_mortons<morton::morton128_t>(static_cast<const morton::morton128_t *>(m), n0, prefix_count, perm, rep_level); has_lod_order = true; break;
-    case points_type_m192: build_lod_order_from_mortons<morton::morton192_t>(static_cast<const morton::morton192_t *>(m), n0, prefix_count, perm, rep_level); has_lod_order = true; break;
+    case dew_type_m32: build_lod_order_from_mortons<morton::morton32_t>(static_cast<const morton::morton32_t *>(m), n0, prefix_count, perm, rep_level); has_lod_order = true; break;
+    case dew_type_m64: build_lod_order_from_mortons<morton::morton64_t>(static_cast<const morton::morton64_t *>(m), n0, prefix_count, perm, rep_level); has_lod_order = true; break;
+    case dew_type_m128: build_lod_order_from_mortons<morton::morton128_t>(static_cast<const morton::morton128_t *>(m), n0, prefix_count, perm, rep_level); has_lod_order = true; break;
+    case dew_type_m192: build_lod_order_from_mortons<morton::morton192_t>(static_cast<const morton::morton192_t *>(m), n0, prefix_count, perm, rep_level); has_lod_order = true; break;
     default: break;
     }
     if (has_lod_order && tmp.point_count > 0)
@@ -61,13 +61,13 @@ render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_conf
       const uint32_t vstride = 3u * uint32_t(sizeof(float));
       auto reordered_vertex = reorder_points_by_perm(static_cast<const uint8_t *>(tmp.data_info[0].data), n, vstride, perm);
       tmp.data[0] = reordered_vertex;
-      tmp.data_info[0] = points_converter_buffer_t(reordered_vertex.get(), n * vstride);
+      tmp.data_info[0] = dew_converter_buffer_t(reordered_vertex.get(), n * vstride);
       if (tmp.data_info[1].data && tmp.data_info[1].size)
       {
         const uint32_t astride = tmp.data_info[1].size / n;
         auto reordered_attribute = reorder_points_by_perm(static_cast<const uint8_t *>(tmp.data_info[1].data), n, astride, perm);
         tmp.data[1] = reordered_attribute;
-        tmp.data_info[1] = points_converter_buffer_t(reordered_attribute.get(), n * astride);
+        tmp.data_info[1] = dew_converter_buffer_t(reordered_attribute.get(), n * astride);
       }
       // rep_level is already in perm (coarse->fine) order; copy into an owned buffer.
       rep_level_buffer = std::make_shared<uint8_t[]>(n);
@@ -118,4 +118,4 @@ render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_conf
   return result;
 }
 
-} // namespace points::converter
+} // namespace dew::converter

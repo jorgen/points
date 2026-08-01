@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #include <cstring>
 #include <numeric>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // Multi-word comparison: returns true if a < b (MSW-first, matching morton.hpp operator<).
@@ -617,4 +617,4 @@ void delta_decode_single(uint8_t *data, uint32_t size, int element_size)
   }
 }
 
-} // namespace points::converter
+} // namespace dew::converter

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -49,8 +49,8 @@
 #include <memory>
 #include <vector>
 
-using namespace points::converter;
-using namespace points::render;
+using namespace dew::converter;
+using namespace dew::render;
 
 namespace
 {
@@ -74,7 +74,7 @@ std::shared_ptr<uint8_t[]> copy_in(const emscripten::val &u8, uint32_t &size_out
 }
 
 // Decompress one blob slot if it carries the PCM magic; otherwise keep the raw bytes. Returns owned bytes.
-std::shared_ptr<uint8_t[]> decompress_slot(const std::shared_ptr<uint8_t[]> &raw, uint32_t raw_size, uint32_t &out_size, points_error_t &error)
+std::shared_ptr<uint8_t[]> decompress_slot(const std::shared_ptr<uint8_t[]> &raw, uint32_t raw_size, uint32_t &out_size, dew_error_t &error)
 {
   if (!raw || raw_size == 0)
   {
@@ -117,17 +117,17 @@ emscripten::val decode_node_js(emscripten::val msg)
   decode_input_t in;
   emscripten::val formats = msg["formats"];
   emscripten::val buffers = msg["buffers"];
-  points_error_t error{};
+  dew_error_t error{};
 
   for (int i = 0; i < 4; ++i)
   {
-    in.point_format[i] = point_format_t(static_cast<points_type_t>(formats[i]["type"].as<int>()),
-                                        static_cast<points_components_t>(formats[i]["components"].as<int>()));
+    in.point_format[i] = point_format_t(static_cast<dew_type_t>(formats[i]["type"].as<int>()),
+                                        static_cast<dew_components_t>(formats[i]["components"].as<int>()));
     uint32_t raw_size = 0;
     auto raw = copy_in(buffers[i], raw_size);
     uint32_t dsize = 0;
     in.buffers[i] = decompress_slot(raw, raw_size, dsize, error);
-    in.data_info[i] = points_converter_buffer_t(in.buffers[i] ? in.buffers[i].get() : nullptr, dsize);
+    in.data_info[i] = dew_converter_buffer_t(in.buffers[i] ? in.buffers[i].get() : nullptr, dsize);
   }
 
   // A leaf that may be promoted to virtual subnodes needs its raw (decompressed, pre-reorder) points + attr
@@ -141,14 +141,14 @@ emscripten::val decode_node_js(emscripten::val msg)
   // Buffer 0 is the serialized points blob: pull the storage_header out and point data_info[0] at the points.
   if (in.buffers[0])
   {
-    points_error_t deser_error{};
+    dew_error_t deser_error{};
     deserialize_points(in.data_info[0], in.header, in.data_info[0], deser_error);
     if (deser_error.code != 0)
       error = deser_error;
   }
 
   // The actual CPU decode -- identical to the native convert_pool path.
-  points::render::loaded_node_data_t out = decode_node(in, tree_config, /*salvage_handler=*/nullptr);
+  dew::render::loaded_node_data_t out = decode_node(in, tree_config, /*salvage_handler=*/nullptr);
 
   // Marshal the result back to JS. Each buffer is copied into an OWNED Uint8Array (new Uint8Array(view) clones
   // per spec — its ArrayBuffer does not alias the wasm heap), so `out` can be freed immediately here and there
@@ -193,7 +193,7 @@ emscripten::val decode_node_js(emscripten::val msg)
   return result;
 }
 
-EMSCRIPTEN_BINDINGS(points_decode_worker)
+EMSCRIPTEN_BINDINGS(dew_decode_worker)
 {
   emscripten::function("decodeNode", &decode_node_js);
 }
@@ -206,7 +206,7 @@ EMSCRIPTEN_BINDINGS(points_decode_worker)
 // 2. Loader: src/converter/worker_node_data_loader.{hpp,cpp} (wasm-only) issues the 4 raw reads, posts the
 //    compressed buffers (+ formats + tree_config) to the JS pool, and reconstructs loaded_node_data_t from
 //    the reply's transferred ArrayBuffers (_impl_data owns the copies). data_source_converter picks it over
-//    the inline native loader when globalThis.__pointsDecodePool exists. [DONE]
+//    the inline native loader when globalThis.__dewDecodePool exists. [DONE]
 // 3. A pool of these workers (decodeWorkerPool.ts, ~hardwareConcurrency) parallelises decode. [DONE]
 // 4. deserialize_points now lives in conversion_types.hpp (storage-free), so this worker links a lean source
 //    set (node_decode + compressor + tree + morton) instead of the whole converter. [DONE]

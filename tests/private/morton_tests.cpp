@@ -13,31 +13,31 @@ TEST_CASE("SimpleMorton")
   double scale[] = {0.001, 0.001, 0.001};
   double offset[] = {0.0, 0.0, 0.0}; 
 
-//  points::converter::morton::morton_t<uint64_t, 3> half_morton;
-//  points::converter::convert_pos_to_morton(scale, offset, half, half_morton);
-//  points::converter::morton::morton_t<uint64_t, 3> quarter_morton;
-//  points::converter::convert_pos_to_morton(scale, offset, quarter, quarter_morton);
-  //  points::converter::morton::morton64_t a;
-//  a = points::converter::morton::morton_mask_create(0);
+//  dew::converter::morton::morton_t<uint64_t, 3> half_morton;
+//  dew::converter::convert_pos_to_morton(scale, offset, half, half_morton);
+//  dew::converter::morton::morton_t<uint64_t, 3> quarter_morton;
+//  dew::converter::convert_pos_to_morton(scale, offset, quarter, quarter_morton);
+  //  dew::converter::morton::morton64_t a;
+//  a = dew::converter::morton::morton_mask_create(0);
 //  REQUIRE(a.data[0] == 0b111);
-//  a = points::converter::morton::morton_mask_create(1);
+//  a = dew::converter::morton::morton_mask_create(1);
 //  REQUIRE(a.data[0] == 0b111);
-//  a = points::converter::morton::morton_mask_create(2);
+//  a = dew::converter::morton::morton_mask_create(2);
 //  REQUIRE(a.data[0] == 0b111);
-//  a = points::converter::morton::morton_mask_create(3);
+//  a = dew::converter::morton::morton_mask_create(3);
 //  REQUIRE(a.data[0] == 0b111111);
-//  a = points::converter::morton::morton_mask_create(4);
+//  a = dew::converter::morton::morton_mask_create(4);
 //  REQUIRE(a.data[0] == 0b111111);
-//  a = points::converter::morton::morton_mask_create(5);
+//  a = dew::converter::morton::morton_mask_create(5);
 //  REQUIRE(a.data[0] == 0b111111);
-//  a = points::converter::morton::morton_mask_create(6);
+//  a = dew::converter::morton::morton_mask_create(6);
 //  REQUIRE(a.data[0] == 0b111111111);
-//  a = points::converter::morton::morton_mask_create(63);
+//  a = dew::converter::morton::morton_mask_create(63);
 //  REQUIRE(a.data[2] == 0);
 //  REQUIRE(a.data[1] == 0b11);
 //  REQUIRE(a.data[0] == ~uint64_t(0));
 //
-//  a = points::converter::morton::morton_mask_create(127);
+//  a = dew::converter::morton::morton_mask_create(127);
 //  REQUIRE(a.data[2] == 1);
 //  REQUIRE(a.data[1] == ~uint64_t(0));
 //  REQUIRE(a.data[0] == ~uint64_t(0));
@@ -45,7 +45,7 @@ TEST_CASE("SimpleMorton")
 
 TEST_CASE("Morton order")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   morton::morton_t<uint32_t, 3> first = {};
   first.data[0] = 64425663;
   first.data[1] = 4959871;
@@ -75,7 +75,7 @@ TEST_CASE("Morton order")
 
 TEST_CASE("Morton random downcast/upcast")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   std::mt19937 gen(44);
   std::uniform_int_distribution<uint64_t> distrib(0, ~uint64_t(0));
 
@@ -101,7 +101,7 @@ TEST_CASE("Morton random downcast/upcast")
 
 TEST_CASE("Morton 192 encode/decode x")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = ~uint64_t(0);
   pos[1] = uint64_t(0);
@@ -129,7 +129,7 @@ TEST_CASE("Morton 192 encode/decode x")
 
 TEST_CASE("Morton 192 encode/decode x top off")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = ~uint64_t(0) & (~(uint64_t(1) << 21));
   pos[1] = uint64_t(0);
@@ -157,7 +157,7 @@ TEST_CASE("Morton 192 encode/decode x top off")
 
 TEST_CASE("Morton 192 encode/decode y top off")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = uint64_t(0);
   pos[1] = ~uint64_t(0) & (~(uint64_t(1) << (21 + 21)));
@@ -185,7 +185,7 @@ TEST_CASE("Morton 192 encode/decode y top off")
 
 TEST_CASE("Morton 192 encode/decode y")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = uint64_t(0);
   pos[1] = ~uint64_t(0);
@@ -213,7 +213,7 @@ TEST_CASE("Morton 192 encode/decode y")
 
 TEST_CASE("Morton 192 encode_z")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = uint64_t(0);
   pos[1] = uint64_t(0);
@@ -241,7 +241,7 @@ TEST_CASE("Morton 192 encode_z")
 
 TEST_CASE("Morton 128 encode/decode x")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = ~uint64_t(0);
   pos[1] = uint64_t(0);
@@ -271,7 +271,7 @@ TEST_CASE("Morton 128 encode/decode x")
 
 TEST_CASE("Morton 128 encode/decode y")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = uint64_t(0);
   pos[1] = ~uint64_t(0);
@@ -301,7 +301,7 @@ TEST_CASE("Morton 128 encode/decode y")
 
 TEST_CASE("Morton 128 encode/decode z")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = uint64_t(0);
   pos[1] = uint64_t(0);
@@ -331,7 +331,7 @@ TEST_CASE("Morton 128 encode/decode z")
 
 TEST_CASE("Morton 64 encode/decode x")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = ~uint64_t(0);
   pos[1] = uint64_t(0);
@@ -363,7 +363,7 @@ TEST_CASE("Morton 64 encode/decode x")
 
 TEST_CASE("Morton 64 encode/decode y")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = uint64_t(0);
   pos[1] = ~uint64_t(0);
@@ -395,7 +395,7 @@ TEST_CASE("Morton 64 encode/decode y")
 
 TEST_CASE("Morton 64 encode/decode z")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = uint64_t(0);
   pos[1] = uint64_t(0);
@@ -427,7 +427,7 @@ TEST_CASE("Morton 64 encode/decode z")
 
 TEST_CASE("Morton 32 encode/decode x")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = ~uint64_t(0);
   pos[1] = uint64_t(0);
@@ -459,7 +459,7 @@ TEST_CASE("Morton 32 encode/decode x")
 
 TEST_CASE("Morton 32 encode/decode y")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = uint64_t(0);
   pos[1] = ~uint64_t(0);
@@ -491,7 +491,7 @@ TEST_CASE("Morton 32 encode/decode y")
 
 TEST_CASE("Morton 32 encode/decode z")
 {
-  using namespace  points::converter;
+  using namespace  dew::converter;
   uint64_t pos[3];
   pos[0] = uint64_t(0);
   pos[1] = uint64_t(0);
@@ -523,7 +523,7 @@ TEST_CASE("Morton 32 encode/decode z")
 
 TEST_CASE("Morton downcast")
 {
-  using namespace points::converter;
+  using namespace dew::converter;
   morton::morton192_t m192;
   m192.data[0] = ~uint64_t(0);
   m192.data[1] = ~uint64_t(0);
@@ -551,7 +551,7 @@ TEST_CASE("Morton downcast")
 
 TEST_CASE("Morton upcast")
 {
-  using namespace points::converter;
+  using namespace dew::converter;
   morton::morton192_t m192;
   m192.data[0] = ~uint64_t(0);
   m192.data[1] = ~uint64_t(0);
@@ -584,7 +584,7 @@ TEST_CASE("Morton upcast")
 
 TEST_CASE("Morton name")
 {
-  using namespace points::converter;
+  using namespace dew::converter;
   morton::morton192_t to_test;
   memset(to_test.data, 0, sizeof(to_test.data));
 
@@ -609,7 +609,7 @@ TEST_CASE("Morton name")
 
 TEST_CASE("morton_is_null and morton_is_set")
 {
-  using namespace points::converter;
+  using namespace dew::converter;
 
   morton::morton64_t zero64 = {};
   REQUIRE(morton::morton_is_null(zero64) == true);
@@ -644,7 +644,7 @@ TEST_CASE("morton_is_null and morton_is_set")
 
 TEST_CASE("morton_mask_create 128-bit matches 192-bit (no UB shift for C==2)")
 {
-  using namespace points::converter;
+  using namespace dew::converter;
   // For the 128-bit (C==2) morton, lod 21..41 yields bit index 66..126 (>= 64),
   // which previously produced an undefined shift-by->=64. Cross-check against the
   // trusted 192-bit mask (low two words) for every valid lod.
@@ -663,7 +663,7 @@ TEST_CASE("morton_mask_create 128-bit matches 192-bit (no UB shift for C==2)")
 
 TEST_CASE("set_name_in_morton does not write out of bounds at high magnitude")
 {
-  using namespace points::converter;
+  using namespace dew::converter;
   morton::morton192_t base = {};
   // magnitude 12 -> lower_bit 180 -> lower_section 2; the spill word would be
   // data[3] (out of bounds). The guarded implementation must not touch it.

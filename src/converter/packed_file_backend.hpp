@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -32,7 +32,7 @@
 #include <optional>
 #include <string>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // The single-file (packed) storage backend: all blobs packed into one file's linear byte space by
@@ -49,7 +49,7 @@ namespace points::converter
 class packed_file_backend_t : public storage_backend_t
 {
 public:
-  packed_file_backend_t(std::string file_name, vio::event_loop_t &event_loop, points_error_t &error);
+  packed_file_backend_t(std::string file_name, vio::event_loop_t &event_loop, dew_error_t &error);
   ~packed_file_backend_t() override;
 
   bool is_packed_file() const override
@@ -91,7 +91,7 @@ public:
   }
   // After read_index restored the residency table: replay spilled-blob liveness into the spill
   // store and GC crash-orphaned segments. Async (object IO); run on the storage loop.
-  vio::task_t<points_error_t> spill_bootstrap();
+  vio::task_t<dew_error_t> spill_bootstrap();
   void note_blob_uploaded(uint64_t offset, uint32_t size, uint64_t remote_id) override
   {
     if (!_residency)
@@ -104,7 +104,7 @@ public:
   // Copy existing LOCAL data blobs (descending offset ≈ highest morton ≈ consumed latest) into
   // spill segments until under the low watermark. Local bytes stay readable until their spill
   // fact turns durable at the next checkpoint, after which they are punched.
-  vio::task_t<points_error_t> run_spill_pass();
+  vio::task_t<dew_error_t> run_spill_pass();
   // The next checkpoint is the orderly-teardown one: its residency table is marked clean, so a
   // reopen keeps local_* states instead of demoting them (see blob_residency_t::deserialize).
   void set_clean_shutdown_next_checkpoint() { _clean_shutdown_next_checkpoint = true; }
@@ -113,13 +113,13 @@ public:
   const uint8_t (&dataset_uuid() const)[16] { return _dataset_uuid; }
 
   [[nodiscard]] bool exists() const override;
-  [[nodiscard]] points_error_t open_for_write(bool truncate) override;
-  [[nodiscard]] points_error_t read_index(index_load_t &out) override;
-  [[nodiscard]] points_error_t restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size) override;
+  [[nodiscard]] dew_error_t open_for_write(bool truncate) override;
+  [[nodiscard]] dew_error_t read_index(index_load_t &out) override;
+  [[nodiscard]] dew_error_t restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size) override;
   void allocate_blob(uint32_t size, blob_kind_t kind, storage_location_t &out) override;
-  vio::task_t<points_error_t> write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data) override;
-  vio::task_t<points_error_t> read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read) override;
-  vio::task_t<points_error_t> write_index(checkpoint_t checkpoint) override;
+  vio::task_t<dew_error_t> write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data) override;
+  vio::task_t<dew_error_t> read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read) override;
+  vio::task_t<dew_error_t> write_index(checkpoint_t checkpoint) override;
 
 private:
   std::string _file_name;
@@ -162,4 +162,4 @@ private:
   std::mutex _mutex; // guards _blob_manager during allocate_blob (and _divert_on_write)
 };
 
-} // namespace points::converter
+} // namespace dew::converter

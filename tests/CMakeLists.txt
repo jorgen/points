@@ -3,7 +3,7 @@ target_link_libraries(doctest_main PUBLIC doctest)
 target_compile_definitions(doctest_main PUBLIC DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)
 
 add_executable(public_interface_unit_tests "public/renderer_base.cpp")
-target_link_libraries(public_interface_unit_tests PRIVATE doctest_main doctest fmt points_render)
+target_link_libraries(public_interface_unit_tests PRIVATE doctest_main doctest fmt dew_render)
 
 add_executable(private_interface_unit_tests
         private/basic_camera.cpp
@@ -18,9 +18,9 @@ add_executable(private_interface_unit_tests
         private/cached_upload_tests.cpp
         private/storage_backend_test.cpp
         private/cloud_io_live_test.cpp
-        $<TARGET_OBJECTS:points_common_objects>
-        $<TARGET_OBJECTS:points_converter_objects>
-        $<TARGET_OBJECTS:points_render_objects>
+        $<TARGET_OBJECTS:dew_common_objects>
+        $<TARGET_OBJECTS:dew_converter_objects>
+        $<TARGET_OBJECTS:dew_render_objects>
         private/frustum.cpp
         private/byte_shuffle_tests.cpp
         private/compression_preprocess_tests.cpp
@@ -32,5 +32,5 @@ add_executable(private_interface_unit_tests
 target_link_libraries(private_interface_unit_tests PRIVATE vio_objstore libzstd_static)
 target_link_libraries(private_interface_unit_tests PRIVATE doctest_main doctest fmt glm unordered_dense laszip)
 target_include_directories(private_interface_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
-copy_dll_for_target(public_interface_unit_tests points_render points_converter)
-copy_dll_for_target(private_interface_unit_tests points_render points_converter)
+copy_dll_for_target(public_interface_unit_tests dew_render dew_converter)
+copy_dll_for_target(private_interface_unit_tests dew_render dew_converter)

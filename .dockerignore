@@ -15,8 +15,8 @@ build-*/
 # Frontend node artifacts + built bundle + copied-in WASM (rebuilt in the web stage)
 **/node_modules/
 **/dist/
-examples/renderer/web/public/points_render.mjs
-examples/renderer/web/public/points_render.wasm
+examples/renderer/web/public/dew_render.mjs
+examples/renderer/web/public/dew_render.wasm
 
 # Object files / misc
 **/*.o

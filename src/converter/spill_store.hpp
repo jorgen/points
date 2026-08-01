@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -45,7 +45,7 @@
 #include <string>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // FIFO gate serializing whole spill operations on the (single-threaded) storage loop. Coroutines
@@ -135,13 +135,13 @@ public:
 
   // Append `size` bytes to the open segment buffer; flushes (journal PUT + segment PUT) when the
   // buffer reaches the target. Returns the blob's spill locator. The bytes are already compressed.
-  vio::task_t<points_error_t> spill_blob(const uint8_t *data, uint32_t size, uint64_t &remote_id_out);
+  vio::task_t<dew_error_t> spill_blob(const uint8_t *data, uint32_t size, uint64_t &remote_id_out);
   // PUT the open segment (if non-empty). Call before a checkpoint serializes the residency table,
   // so every persisted locator is backed by a durable object.
-  vio::task_t<points_error_t> flush();
+  vio::task_t<dew_error_t> flush();
 
   // Ranged GET of one spilled blob.
-  vio::task_t<points_error_t> read(uint64_t remote_id, uint8_t *dst, uint32_t size);
+  vio::task_t<dew_error_t> read(uint64_t remote_id, uint8_t *dst, uint32_t size);
 
   // Live tracking: +1 per residency entry referencing the segment. Recomputed on open by the
   // backend walking the restored residency table (add_live per spilled entry).
@@ -150,11 +150,11 @@ public:
   void deref(uint64_t remote_id);
   // Delete queued dead segments + rewrite the journal without now-durable ones. Call AFTER a
   // checkpoint commit (the destructive barrier).
-  vio::task_t<points_error_t> sweep_after_checkpoint();
+  vio::task_t<dew_error_t> sweep_after_checkpoint();
 
   // Orphan GC on open: delete journaled segments the committed residency table doesn't reference.
   // Call after the backend restored the residency table and replayed add_live.
-  vio::task_t<points_error_t> gc_orphans();
+  vio::task_t<dew_error_t> gc_orphans();
 
   uint32_t next_segment_seq() const { return _next_seq; }
   void restore_next_segment_seq(uint32_t seq) { _next_seq = seq > _next_seq ? seq : _next_seq; }
@@ -163,8 +163,8 @@ public:
 private:
   std::string segment_name(uint32_t seq) const;
   std::string journal_name() const;
-  vio::task_t<points_error_t> write_journal();
-  vio::task_t<points_error_t> flush_locked(); // body of flush(); caller holds _gate
+  vio::task_t<dew_error_t> write_journal();
+  vio::task_t<dew_error_t> flush_locked(); // body of flush(); caller holds _gate
 
   coro_gate_t _gate; // serializes spill_blob / flush / sweep (see coro_gate_t)
   vio::objstore::io_manager_t &_io;
@@ -188,4 +188,4 @@ private:
   uint64_t _bytes_spilled = 0;
 };
 
-} // namespace points::converter
+} // namespace dew::converter

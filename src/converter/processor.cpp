@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -26,9 +26,9 @@
 #include <algorithm>
 #include <functional>
 
-namespace points::converter
+namespace dew::converter
 {
-processor_t::processor_t(std::string url, file_existence_requirement_t existence_requirement, points_error_t &error, const destination_config_t &destination)
+processor_t::processor_t(std::string url, file_existence_requirement_t existence_requirement, dew_error_t &error, const destination_config_t &destination)
   : _url(std::move(url))
   , _thread_pool(int(std::thread::hardware_concurrency()))
   , _runtime_callbacks({})
@@ -171,7 +171,7 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
         _upload_callbacks.done(_upload_callback_user_ptr);
       _event_loop.run_in_loop([] {}); // wake the processor loop so idle/wait states re-evaluate
     });
-    _upload_handler->set_on_error([this](const points_error_t &upload_error, bool parked) {
+    _upload_handler->set_on_error([this](const dew_error_t &upload_error, bool parked) {
       if (_upload_callbacks.error)
         _upload_callbacks.error(_upload_callback_user_ptr, &upload_error, parked ? 1 : 0);
       _event_loop.run_in_loop([] {});
@@ -262,7 +262,7 @@ void processor_t::wait_local_complete()
 
 void processor_t::wait_idle()
 {
-  // Full quiesce: conversion done (cache is a complete valid JLP), then every committed
+  // Full quiesce: conversion done (cache is a complete valid DEW), then every committed
   // checkpoint's band emission has been evaluated on the tree loop (the processor can observe the
   // commit before the tree loop hands the band to the uploader -- the handshake closes that gap),
   // then the upload backlog drained (or parked on persistent errors -- the cache keeps everything
@@ -334,7 +334,7 @@ void processor_t::about_to_block()
   }
 }
 
-const points_converter_attributes_t &processor_t::get_attributes(attributes_id_t id)
+const dew_converter_attributes_t &processor_t::get_attributes(attributes_id_t id)
 {
   return _attributes_configs.get(id);
 }
@@ -385,11 +385,11 @@ vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_d
       pre_init_work_result_t result;
       result.input_id = input_id;
 
-      points_error_t *local_error = nullptr;
+      dew_error_t *local_error = nullptr;
       auto pre_init_info = callbacks->pre_init(file_name.name, file_name.name_length, &local_error);
       if (local_error)
       {
-        std::unique_ptr<points_error_t> error(local_error);
+        std::unique_ptr<dew_error_t> error(local_error);
         result.has_error = true;
         result.file_error.input_id = input_id;
         result.file_error.error = std::move(*error);
@@ -431,24 +431,24 @@ vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_d
   }
 }
 
-void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t> &&event)
+void processor_t::handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, dew_converter_header_t> &&event)
 {
   _input_data_source_registry.handle_input_init(std::get<0>(event), std::get<1>(event), std::get<2>(event));
 }
 
 void processor_t::handle_sub_added(input_data_id_t &&event)
 {
-  if (std::getenv("POINTS_DEBUG_CHAIN"))
+  if (std::getenv("DEW_DEBUG_CHAIN"))
     fmt::print(stderr, "[sched] sub_added file={}\n", event.data);
   _input_data_source_registry.handle_sub_added(event);
 }
 
-void processor_t::handle_sorted_points(std::pair<points_t, points_error_t> &&event)
+void processor_t::handle_sorted_points(std::pair<points_t, dew_error_t> &&event)
 {
   _input_data_source_registry.handle_sorted_points(event.first.header.input_id, event.first.header.morton_min, event.first.header.morton_max);
   _storage_handler.write(
     event.first.header, event.first.attributes_id, std::move(event.first.buffers),
-    [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> locations, const points_error_t &) { this->handle_points_written(header, attributes, std::move(locations)); });
+    [this](const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> locations, const dew_error_t &) { this->handle_points_written(header, attributes, std::move(locations)); });
 }
 
 void processor_t::handle_file_errors(file_error_t &&error)
@@ -460,7 +460,7 @@ void processor_t::handle_file_errors(file_error_t &&error)
 
 void processor_t::handle_file_reading_done(input_data_id_t &&file)
 {
-  if (std::getenv("POINTS_DEBUG_CHAIN"))
+  if (std::getenv("DEW_DEBUG_CHAIN"))
     fmt::print(stderr, "[sched] reading_done file={}\n", file.data);
   _read_sort_active_approximate_size -= _input_data_source_registry.get_approximate_size(file);
   _input_data_source_registry.handle_reading_done(file);
@@ -468,7 +468,7 @@ void processor_t::handle_file_reading_done(input_data_id_t &&file)
 
 void processor_t::handle_index_write_done()
 {
-  if (std::getenv("POINTS_DEBUG_CHAIN"))
+  if (std::getenv("DEW_DEBUG_CHAIN"))
     fmt::print(stderr, "[sched] index_write_done generating={} committed={} target={}\n", _generating_lod, _tree_handler.last_committed_watermark().data[0], _current_lod_target_morton.data[0]);
   // Every committed checkpoint (pass-concluding or cache-pressure) re-arms the pressure request.
   _storage_handler.rearm_checkpoint_request();
@@ -489,7 +489,7 @@ void processor_t::handle_index_write_done()
   }
 }
 
-void processor_t::handle_storage_error(points_error_t &&error)
+void processor_t::handle_storage_error(dew_error_t &&error)
 {
   _has_errors = true;
   if (_runtime_callbacks.error)
@@ -509,7 +509,7 @@ void processor_t::handle_points_written(const storage_header_t &header, attribut
 
 void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
 {
-  if (std::getenv("POINTS_DEBUG_CHAIN"))
+  if (std::getenv("DEW_DEBUG_CHAIN"))
     fmt::print(stderr, "[sched] tree_done file={}\n", event.data);
   _input_data_source_registry.handle_tree_done_with_input(event);
   maybe_start_lod();
@@ -517,7 +517,7 @@ void processor_t::handle_tree_done_with_input(input_data_id_t &&event)
 
 void processor_t::maybe_start_lod()
 {
-  if (std::getenv("POINTS_DEBUG_CHAIN"))
+  if (std::getenv("DEW_DEBUG_CHAIN"))
   {
     auto dm = _input_data_source_registry.get_done_morton();
     fmt::print(stderr, "[sched] maybe_start_lod generating={} done_morton={} lod_done={}\n", _generating_lod, dm ? dm->data[0] : 0, _lod_done_morton.data[0]);
@@ -533,7 +533,7 @@ void processor_t::maybe_start_lod()
   }
 }
 
-points_error_t processor_t::upgrade_to_write(bool truncate)
+dew_error_t processor_t::upgrade_to_write(bool truncate)
 {
   auto ret = _storage_handler.upgrade_to_write(truncate);
   if (truncate)
@@ -565,7 +565,7 @@ void processor_t::set_pre_init_read_chunk_bytes(uint64_t bytes)
   _tree_handler.set_tree_initialization_read_chunk_bytes(bytes);
 }
 
-void processor_t::set_runtime_callbacks(const points_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr)
+void processor_t::set_runtime_callbacks(const dew_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr)
 {
   _runtime_callbacks = runtime_callbacks;
   _runtime_callback_user_ptr = user_ptr;
@@ -575,7 +575,7 @@ void processor_t::set_runtime_callbacks(const points_converter_runtime_callbacks
   });
 }
 
-void processor_t::set_converter_callbacks(const points_converter_file_convert_callbacks_t &convert_callbacks)
+void processor_t::set_converter_callbacks(const dew_converter_file_convert_callbacks_t &convert_callbacks)
 {
   _convert_callbacks = convert_callbacks;
 }
@@ -589,4 +589,4 @@ uint32_t processor_t::attrib_name_registry_get(uint32_t index, char *name, uint3
 {
   return _attributes_configs.attrib_name_registry_get(index, name, buffer_size);
 }
-} // namespace points::converter
+} // namespace dew::converter

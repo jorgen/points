@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -26,7 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace points::converter
+namespace dew::converter
 {
 
 tree_collapse_runner_t::tree_collapse_runner_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, tree_registry_t &tree_registry, storage_handler_t &storage, attributes_configs_t &attributes_configs)
@@ -115,7 +115,7 @@ void tree_collapse_runner_t::collapse_for_pass(const morton::morton192_t &target
     }
   }
 
-  if (std::getenv("POINTS_DEBUG_CHAIN"))
+  if (std::getenv("DEW_DEBUG_CHAIN"))
     fprintf(stderr, "[collapse] pass target=%llx jobs=%zu\n", (unsigned long long)target.data[0], _jobs.size());
   if (_jobs.empty())
   {
@@ -191,7 +191,7 @@ void tree_collapse_runner_t::merge_worker(collapse_job_t &job)
     auto points = std::make_unique<read_only_points_t>(_storage, job.sources.at(subset.input_id).locations[0]);
     if (points->error.code != 0)
     {
-      if (std::getenv("POINTS_DEBUG_CHAIN"))
+      if (std::getenv("DEW_DEBUG_CHAIN"))
         fprintf(stderr, "[collapse] read failed id=%u.%u: %s\n", subset.input_id.data, subset.input_id.sub, points->error.msg.c_str());
       // The storage error pipe already flagged the conversion; the leaf keeps its subsets and the
       // tree stays building (retried by a later pass).
@@ -201,16 +201,16 @@ void tree_collapse_runner_t::merge_worker(collapse_job_t &job)
     }
     switch (points->header.point_format.type)
     {
-    case points_type_m32:
+    case dew_type_m32:
       append_absolute<morton::morton32_t>(*points, subset_index, subset, entries);
       break;
-    case points_type_m64:
+    case dew_type_m64:
       append_absolute<morton::morton64_t>(*points, subset_index, subset, entries);
       break;
-    case points_type_m128:
+    case dew_type_m128:
       append_absolute<morton::morton128_t>(*points, subset_index, subset, entries);
       break;
-    case points_type_m192:
+    case dew_type_m192:
       append_absolute<morton::morton192_t>(*points, subset_index, subset, entries);
       break;
     default:
@@ -232,18 +232,18 @@ void tree_collapse_runner_t::merge_worker(collapse_job_t &job)
   job.generated_min = entries.front().absolute;
   job.generated_max = entries.back().absolute;
   const int lod_span = morton::morton_lod(job.generated_min, job.generated_max);
-  const points_type_t destination_type = morton_type_from_lod(lod_span);
+  const dew_type_t destination_type = morton_type_from_lod(lod_span);
   uint32_t morton_buffer_size = 0;
   std::unique_ptr<uint8_t[]> morton_buffer;
   switch (destination_type)
   {
-  case points_type_m32:
+  case dew_type_m32:
     morton_buffer = make_destination_morton<morton::morton32_t>(entries, morton_buffer_size);
     break;
-  case points_type_m64:
+  case dew_type_m64:
     morton_buffer = make_destination_morton<morton::morton64_t>(entries, morton_buffer_size);
     break;
-  case points_type_m128:
+  case dew_type_m128:
     morton_buffer = make_destination_morton<morton::morton128_t>(entries, morton_buffer_size);
     break;
   default:
@@ -280,12 +280,12 @@ void tree_collapse_runner_t::merge_worker(collapse_job_t &job)
   header.morton_min = job.generated_min;
   header.morton_max = job.generated_max;
   header.lod_span = lod_span;
-  header.point_format = {destination_type, points_components_1};
+  header.point_format = {destination_type, dew_components_1};
   job.generated_attributes_id = mapping.destination_id;
-  _storage.write(header, mapping.destination_id, std::move(buffers), [&job, finish](const storage_header_t &, attributes_id_t, std::vector<storage_location_t> locations, const points_error_t &error) {
+  _storage.write(header, mapping.destination_id, std::move(buffers), [&job, finish](const storage_header_t &, attributes_id_t, std::vector<storage_location_t> locations, const dew_error_t &error) {
     if (error.code != 0)
     {
-      if (std::getenv("POINTS_DEBUG_CHAIN"))
+      if (std::getenv("DEW_DEBUG_CHAIN"))
         fprintf(stderr, "[collapse] write failed: %s\n", error.msg.c_str());
       job.failed = true;
     }
@@ -312,7 +312,7 @@ void tree_collapse_runner_t::apply_results()
   {
     auto *tree = _tree_registry.get(job.tree_id);
     assert(tree && "collapsed trees stay loaded for the duration of the pass");
-    if (std::getenv("POINTS_DEBUG_CHAIN"))
+    if (std::getenv("DEW_DEBUG_CHAIN"))
       fprintf(stderr, "[collapse] apply tree=%u level=%d idx=%u failed=%d locations=%zu\n", job.tree_id.data, job.level, job.node_index, int(job.failed), job.generated_locations.size());
     if (job.failed || job.generated_locations.empty())
       continue; // leaf keeps its subsets; the tree stays building and is retried next pass
@@ -360,7 +360,7 @@ void tree_collapse_runner_t::apply_results()
     touched[job.tree_id.data] = touched[job.tree_id.data] || !job.applied;
   for (auto &[tree_id, any_failed] : touched)
   {
-    if (std::getenv("POINTS_DEBUG_CHAIN"))
+    if (std::getenv("DEW_DEBUG_CHAIN"))
       fprintf(stderr, "[collapse] tree=%u failed=%d\n", tree_id, int(any_failed));
     if (!any_failed)
       _tree_registry.get(tree_id_t(tree_id))->leaves_collapsed = true;
@@ -372,4 +372,4 @@ void tree_collapse_runner_t::apply_results()
   on_done();
 }
 
-} // namespace points::converter
+} // namespace dew::converter

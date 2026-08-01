@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -30,15 +30,15 @@
 #include <emscripten/emscripten.h> // emscripten_sleep (Asyncify)
 #endif
 
-namespace points::converter
+namespace dew::converter
 {
 
 using vio::objstore::io_range_t;
 
-// Translate a vio object-store error into the storage layer's points_error_t (code 0 == success).
-static points_error_t to_points_error(const vio::error_t &e)
+// Translate a vio object-store error into the storage layer's dew_error_t (code 0 == success).
+static dew_error_t to_points_error(const vio::error_t &e)
 {
-  points_error_t p;
+  dew_error_t p;
   p.code = e.code != 0 ? e.code : -1;
   p.msg = e.msg;
   return p;
@@ -51,7 +51,7 @@ struct sync_wait_state_t
   std::mutex m;
   std::condition_variable cv;
   bool done = false;
-  points_error_t result;
+  dew_error_t result;
 };
 
 // The coroutine that actually drives the io. state and factory are BY-VALUE parameters so they are
@@ -70,12 +70,12 @@ vio::task_t<void> sync_wait_coro(std::shared_ptr<sync_wait_state_t> state, Facto
   co_return;
 }
 
-// Run a coroutine (returning points_error_t) on `loop` and block the calling thread until it
+// Run a coroutine (returning dew_error_t) on `loop` and block the calling thread until it
 // completes. Used only for the one-time bootstrap calls (exists/read_index) which are invoked from
 // the processor's constructor thread, not the loop thread. The shared state keeps the sync objects
 // alive until both the caller and the loop coroutine are done, so teardown is race-free.
 template <typename Factory>
-points_error_t run_on_loop_blocking(vio::event_loop_t &loop, Factory factory)
+dew_error_t run_on_loop_blocking(vio::event_loop_t &loop, Factory factory)
 {
   auto state = std::make_shared<sync_wait_state_t>();
   // The lambda handed to run_in_loop is NOT a coroutine: it just forwards into sync_wait_coro, whose
@@ -117,12 +117,12 @@ storage_location_t object_backend_t::next_location(uint32_t size)
   return loc;
 }
 
-vio::task_t<points_error_t> object_backend_t::probe_exists(bool &out)
+vio::task_t<dew_error_t> object_backend_t::probe_exists(bool &out)
 {
   auto r = co_await _io->object_info(k_manifest_name);
   out = r.has_value() && r->exists;
-  _manifest_size = out ? r->size : 0; // 128 = legacy superblock, 256 = JLP2 root manifest
-  co_return points_error_t{};
+  _manifest_size = out ? r->size : 0; // 128 = legacy superblock, 256 = DEW2 root manifest
+  co_return dew_error_t{};
 }
 
 object_backend_t::object_backend_t(std::unique_ptr<vio::objstore::io_manager_t> io, vio::event_loop_t &event_loop)
@@ -143,18 +143,18 @@ bool object_backend_t::exists() const
   return _exists;
 }
 
-points_error_t object_backend_t::open_for_write(bool truncate)
+dew_error_t object_backend_t::open_for_write(bool truncate)
 {
-  // A JLP2 bucket is read-only through this backend: its writers (upload_handler_t, jlp_copy) drive
+  // A DEW2 bucket is read-only through this backend: its writers (upload_handler_t, dew_copy) drive
   // the io_manager directly with pack/band/manifest ordering that checkpoint_t cannot express.
-  // Truncate is allowed -- the fresh legacy manifest atomically supersedes the JLP2 one (stale packs
+  // Truncate is allowed -- the fresh legacy manifest atomically supersedes the DEW2 one (stale packs
   // become orphans, same contract as legacy truncate).
-  if (_jlp2 && !truncate)
-    return {1, "This destination holds a JLP2 dataset; it cannot be appended to through this backend. Convert with points_converter_create_with_destination or copy with jlp_copy instead."};
+  if (_dew2 && !truncate)
+    return {1, "This destination holds a DEW2 dataset; it cannot be appended to through this backend. Convert with dew_converter_create_with_destination or copy with dew_copy instead."};
   if (truncate)
   {
     std::unique_lock<std::mutex> lock(_mutex);
-    _jlp2 = false;
+    _dew2 = false;
     _next_id = 0;
     _attributes_location = {};
     _stats_location = {};
@@ -167,38 +167,38 @@ points_error_t object_backend_t::open_for_write(bool truncate)
   return {};
 }
 
-vio::task_t<points_error_t> object_backend_t::read_location(storage_location_t loc, std::unique_ptr<uint8_t[]> &buf, uint32_t &size)
+vio::task_t<dew_error_t> object_backend_t::read_location(storage_location_t loc, std::unique_ptr<uint8_t[]> &buf, uint32_t &size)
 {
   if (loc.size == 0)
   {
     buf.reset();
     size = 0;
-    co_return points_error_t{};
+    co_return dew_error_t{};
   }
   buf = std::make_unique<uint8_t[]>(loc.size);
-  // Whole-object GET in both layouts (read_object_all: no Range header, capacity-checked): JLP2
+  // Whole-object GET in both layouts (read_object_all: no Range header, capacity-checked): DEW2
   // objects are exactly one blob ("data/{file_id:08x}", size == loc.size), legacy objects likewise.
-  auto r = _jlp2 ? co_await _io->read_object_all(bucket_data_object_name(loc.file_id), buf.get(), loc.size)
+  auto r = _dew2 ? co_await _io->read_object_all(bucket_data_object_name(loc.file_id), buf.get(), loc.size)
                  : co_await _io->read_object_all(object_name(loc.file_id, loc.offset), buf.get(), loc.size);
   size = loc.size;
   if (!r.has_value())
     co_return to_points_error(r.error());
   if (r.value() != loc.size)
-    co_return points_error_t{1, "Metadata object size does not match its recorded location"};
-  co_return points_error_t{};
+    co_return dew_error_t{1, "Metadata object size does not match its recorded location"};
+  co_return dew_error_t{};
 }
 
-vio::task_t<points_error_t> object_backend_t::do_read_index(index_load_t &out)
+vio::task_t<dew_error_t> object_backend_t::do_read_index(index_load_t &out)
 {
   // The "manifest" object name is shared by both layouts; sniff by content. Sizes differ (128-byte
-  // legacy superblock vs 256-byte JLP2 root manifest), so size the read from a HEAD instead of
+  // legacy superblock vs 256-byte DEW2 root manifest), so size the read from a HEAD instead of
   // relying on stores clamping an over-long range.
   static_assert(k_root_manifest_size > k_serialized_index_size);
   auto info = co_await _io->object_info(k_manifest_name);
   if (!info.has_value())
     co_return to_points_error(info.error());
   if (!info->exists)
-    co_return points_error_t{1, "No manifest object at the dataset url"};
+    co_return dew_error_t{1, "No manifest object at the dataset url"};
   _manifest_size = info->size;
   auto manifest_bytes = uint32_t(std::min<uint64_t>(info->size, k_root_manifest_size));
   auto manifest = std::make_shared<uint8_t[]>(manifest_bytes);
@@ -209,19 +209,19 @@ vio::task_t<points_error_t> object_backend_t::do_read_index(index_load_t &out)
 
   uint32_t magic;
   if (manifest_bytes < sizeof(magic))
-    co_return points_error_t{1, "Manifest object is too small"};
+    co_return dew_error_t{1, "Manifest object is too small"};
   memcpy(&magic, manifest.get(), sizeof(magic));
-  if (magic == k_root_manifest_magic)
+  if (is_root_manifest_magic(magic))
   {
-    // JLP2 bucket. Read-only here: the root manifest's metadata slots are only populated once the
+    // DEW2 bucket. Read-only here: the root manifest's metadata slots are only populated once the
     // terminal band committed; before that there is no registry to read, so refuse cleanly.
     root_manifest_t root;
     auto err = deserialize_root_manifest(manifest.get(), manifest_bytes, root);
     if (err.code != 0)
       co_return err;
     if (!root.complete)
-      co_return points_error_t{1, "JLP2 dataset is incomplete: the conversion that writes it has not finished uploading. Retry when it completes (or resume the parked upload)."};
-    _jlp2 = true;
+      co_return dew_error_t{1, "DEW2 dataset is incomplete: the conversion that writes it has not finished uploading. Retry when it completes (or resume the parked upload)."};
+    _dew2 = true;
     out.free_blobs.reset();
     out.free_blobs_size = 0;
     err = co_await read_location(root.attribute_configs, out.attribute_configs, out.attribute_configs_size);
@@ -236,7 +236,7 @@ vio::task_t<points_error_t> object_backend_t::do_read_index(index_load_t &out)
     err = co_await read_location(root.perf_stats, out.perf, out.perf_size);
     if (err.code != 0)
       co_return err;
-    co_return points_error_t{};
+    co_return dew_error_t{};
   }
 
   storage_location_t free_blobs;
@@ -245,7 +245,7 @@ vio::task_t<points_error_t> object_backend_t::do_read_index(index_load_t &out)
   storage_location_t compression_stats;
   storage_location_t perf_stats;
   if (manifest_bytes < k_serialized_index_size)
-    co_return points_error_t{1, "Manifest object is too small"};
+    co_return dew_error_t{1, "Manifest object is too small"};
   auto err = deserialize_index(manifest.get(), k_serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats);
   if (err.code != 0)
     co_return err;
@@ -273,15 +273,15 @@ vio::task_t<points_error_t> object_backend_t::do_read_index(index_load_t &out)
   if (err.code != 0)
     co_return err;
 
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-points_error_t object_backend_t::read_index(index_load_t &out)
+dew_error_t object_backend_t::read_index(index_load_t &out)
 {
   return run_on_loop_blocking(_event_loop, [this, &out]() { return do_read_index(out); });
 }
 
-points_error_t object_backend_t::restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+dew_error_t object_backend_t::restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
   (void)data;
   (void)size;
@@ -291,34 +291,34 @@ points_error_t object_backend_t::restore_allocator(const std::unique_ptr<uint8_t
 void object_backend_t::allocate_blob(uint32_t size, blob_kind_t kind, storage_location_t &out)
 {
   (void)kind; // object mode is remote already; kind only matters for the local cached backend
-  assert(!_jlp2 && "JLP2 buckets are read-only through object_backend_t (open_for_write refuses)");
+  assert(!_dew2 && "DEW2 buckets are read-only through object_backend_t (open_for_write refuses)");
   out = next_location(size);
 }
 
-vio::task_t<points_error_t> object_backend_t::write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data)
+vio::task_t<dew_error_t> object_backend_t::write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data)
 {
   auto r = co_await _io->write_object(object_name(location.file_id, location.offset), std::move(data), location.size);
   if (!r.has_value())
     co_return to_points_error(r.error());
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-vio::task_t<points_error_t> object_backend_t::read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read)
+vio::task_t<dew_error_t> object_backend_t::read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read)
 {
   // Whole-object GET in both layouts (read_object_all: no Range header, capacity-checked so a
-  // mismatched object can never overrun the buffer). JLP2: the blob IS object "data/{file_id:08x}"
+  // mismatched object can never overrun the buffer). DEW2: the blob IS object "data/{file_id:08x}"
   // (offset always 0). Legacy: the blob IS the object (there `offset` is the high half of the
   // blob-id counter, never a byte offset -- the interpretations must never mix).
-  assert(!_jlp2 || location.offset == 0);
-  auto r = _jlp2 ? co_await _io->read_object_all(bucket_data_object_name(location.file_id), dst, location.size)
+  assert(!_dew2 || location.offset == 0);
+  auto r = _dew2 ? co_await _io->read_object_all(bucket_data_object_name(location.file_id), dst, location.size)
                  : co_await _io->read_object_all(object_name(location.file_id, location.offset), dst, location.size);
   if (!r.has_value())
     co_return to_points_error(r.error());
   bytes_read = uint32_t(r.value());
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-vio::task_t<points_error_t> object_backend_t::write_index(checkpoint_t checkpoint)
+vio::task_t<dew_error_t> object_backend_t::write_index(checkpoint_t checkpoint)
 {
   storage_location_t attributes_location = next_location(checkpoint.attribute_configs_size);
   {
@@ -380,7 +380,7 @@ vio::task_t<points_error_t> object_backend_t::write_index(checkpoint_t checkpoin
   if (old_tree_registry.size > 0)
     (void)co_await _io->remove_object(object_name(old_tree_registry.file_id, old_tree_registry.offset));
 
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-} // namespace points::converter
+} // namespace dew::converter

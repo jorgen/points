@@ -13,7 +13,7 @@ macro(Build3rdParty)
     string(REPLACE "/GR-" "/GR" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     string(REPLACE "-D_HAS_EXCEPTIONS=0" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
-    if (POINTS_BUILD_EXAMPLES)
+    if (DEW_BUILD_EXAMPLES)
         set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
         add_subdirectory(${sdl_SOURCE_DIR} SYSTEM)
         unset(SDL_TEST_LIBRARY CACHE)

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -25,12 +25,12 @@
 
 #include "morton.hpp"
 #include "conversion_types.hpp"
-#include <points/converter/converter.h>
+#include <dew/converter/converter.h>
 
 #include <random>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // maskWidth = max(0, lod - lod_quantize_full_detail_level). At/below this octree level a node's morton cell is
@@ -72,7 +72,7 @@ inline std::vector<float> make_lod_random_offsets()
 // representative is picked at range_start + random_offsets[...]*range_size (the final cell uses the median).
 // The emitted morton is cast into node_min's local frame; index is the global index into the source.
 template <typename S_M, typename T, size_t N>
-inline void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, const points_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+inline void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, const dew_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
                                      const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
@@ -111,24 +111,24 @@ inline void find_indices_to_quantize(input_data_id_t input_id, const morton::mor
 }
 
 template <typename T, size_t N>
-inline void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, points_type_t source_type, const points_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+inline void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, dew_type_t source_type, const dew_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
                                      const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
-  assert(source_type == points_type_m32 || source_type == points_type_m64 || source_type == points_type_m128 || source_type == points_type_m192);
+  assert(source_type == dew_type_m32 || source_type == dew_type_m64 || source_type == dew_type_m128 || source_type == dew_type_m192);
 
   switch (source_type)
   {
-  case points_type_m32:
+  case dew_type_m32:
     return find_indices_to_quantize<morton::morton32_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
-  case points_type_m64:
+  case dew_type_m64:
     return find_indices_to_quantize<morton::morton64_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
-  case points_type_m128:
+  case dew_type_m128:
     return find_indices_to_quantize<morton::morton128_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
-  case points_type_m192:
+  case dew_type_m192:
     return find_indices_to_quantize<morton::morton192_t>(input_id, node_min, source, offset, point_count, maskWidth, random_offsets, morton_to_lod);
   default:
     return;
   }
 }
 
-} // namespace points::converter
+} // namespace dew::converter

@@ -4,7 +4,7 @@ if (CCACHE_PROGRAM)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif ()
 
-project(Points VERSION 0.0.1)
+project(dewfall VERSION 0.0.1)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 
@@ -54,16 +54,16 @@ if (WIN32)
     endif ()
 endif ()
 
-option(POINTS_BUILD_TESTS "Build tests" ON)
-option(POINTS_BUILD_EXAMPLES "Build examples" ON)
+option(DEW_BUILD_TESTS "Build tests" ON)
+option(DEW_BUILD_EXAMPLES "Build examples" ON)
 option(BUILD_SHARED_LIBS "Build shared libs" ON)
 
 if(EMSCRIPTEN)
     # The WebAssembly build produces a single read-only data library (src/wasm); no shared libraries,
     # tests, or examples, and no laszip/SDL. Everything below is guarded by EMSCRIPTEN so the native
     # build is unaffected.
-    set(POINTS_BUILD_TESTS OFF)
-    set(POINTS_BUILD_EXAMPLES OFF)
+    set(DEW_BUILD_TESTS OFF)
+    set(DEW_BUILD_EXAMPLES OFF)
     set(BUILD_SHARED_LIBS OFF)
 endif()
 
@@ -82,16 +82,16 @@ include(CMake/CopyDllForTarget.cmake)
 
 add_subdirectory(src)
 
-if (POINTS_BUILD_TESTS)
+if (DEW_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif ()
 
-if (POINTS_BUILD_EXAMPLES)
+if (DEW_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif ()
 
-# CLI tools (jlp_info / jlp_extract) depend on the native converter/render libraries.
+# CLI tools (dew_info / dew_extract) depend on the native converter/render libraries.
 if (NOT EMSCRIPTEN)
     add_subdirectory(tools)
 endif ()

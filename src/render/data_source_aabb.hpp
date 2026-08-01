@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2020  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -21,42 +21,42 @@
 #include "data_source.hpp"
 #include "glm_include.hpp"
 #include "renderer_callbacks.hpp"
-#include <points/render/aabb.h>
-#include <points/render/renderer.h>
+#include <dew/render/aabb.h>
+#include <dew/render/renderer.h>
 
 #include <memory>
 #include <vector>
 
-namespace points::render
+namespace dew::render
 {
 struct aabb_buffer_t
 {
-  points_aabb_t aabb;
+  dew_aabb_t aabb;
   std::vector<glm::vec3> vertices;
-  points_buffer_t vertices_buffer;
+  dew_buffer_t vertices_buffer;
 
-  points_draw_buffer_t render_list[4];
+  dew_draw_buffer_t render_list[4];
 };
-} // namespace points::render
+} // namespace dew::render
 
-struct points_aabb_data_source_t : public points::render::data_source_cpp_t
+struct dew_aabb_data_source_t : public dew::render::data_source_cpp_t
 {
-  points_aabb_data_source_t(points::render::callback_manager_t &a_callbacks, const glm::dvec3 &a_offset);
+  dew_aabb_data_source_t(dew::render::callback_manager_t &a_callbacks, const glm::dvec3 &a_offset);
 
-  void add_to_frame(const points::render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
+  void add_to_frame(const dew::render::frame_camera_cpp_t &camera, dew_to_render_t *to_render) override;
 
-  points::render::callback_manager_t &callbacks;
+  dew::render::callback_manager_t &callbacks;
 
-  std::vector<std::unique_ptr<points::render::aabb_buffer_t>> aabbs;
+  std::vector<std::unique_ptr<dew::render::aabb_buffer_t>> aabbs;
 
   std::vector<uint32_t> aabbs_ids;
 
-  points_buffer_t project_view_buffer;
+  dew_buffer_t project_view_buffer;
   glm::mat4 project_view;
 
-  points_buffer_t index_buffer;
+  dew_buffer_t index_buffer;
   std::vector<uint16_t> indecies;
 
-  points_buffer_t color_buffer;
+  dew_buffer_t color_buffer;
   std::vector<glm::u8vec3> colors;
 };

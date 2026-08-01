@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -20,11 +20,11 @@
 #include "data_source.hpp"
 #include "renderer_callbacks.hpp"
 #include <glm_include.hpp>
-#include <points/render/renderer.h>
+#include <dew/render/renderer.h>
 
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct node_bbox_t
@@ -40,19 +40,19 @@ struct node_bbox_data_source_t : public render::data_source_cpp_t
 
   void update_boxes(const std::vector<node_bbox_t> &loose_boxes,
                     const std::vector<node_bbox_t> &tight_boxes);
-  void add_to_frame(const render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
+  void add_to_frame(const render::frame_camera_cpp_t &camera, dew_to_render_t *to_render) override;
 
   render::callback_manager_t &callbacks;
   bool enabled = false;
 
-  points_buffer_t camera_buffer = {};
+  dew_buffer_t camera_buffer = {};
   glm::mat4 camera_matrix = glm::mat4(1);
 
   std::vector<node_bbox_t> stored_loose_boxes;
   std::vector<node_bbox_t> stored_tight_boxes;
 
-  points_buffer_t vertex_buffer = {};
-  points_buffer_t color_buffer = {};
+  dew_buffer_t vertex_buffer = {};
+  dew_buffer_t color_buffer = {};
   bool buffers_created = false;
   int vertex_buffer_capacity = 0;
   int color_buffer_capacity = 0;
@@ -61,7 +61,7 @@ struct node_bbox_data_source_t : public render::data_source_cpp_t
   std::vector<glm::u8vec3> colors;
   int line_count = 0;
 
-  points_draw_buffer_t render_list[3] = {};
+  dew_draw_buffer_t render_list[3] = {};
 };
 
-} // namespace points::converter
+} // namespace dew::converter

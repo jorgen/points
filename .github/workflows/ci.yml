@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: jorgen/points-ci
+  IMAGE_NAME: jorgen/dewfall-ci
 
 jobs:
   docker:
@@ -54,7 +54,7 @@ jobs:
   sanitizers:
     needs: docker
     runs-on: ubuntu-24.04
-    container: ghcr.io/jorgen/points-ci:${{ needs.docker.outputs.image-tag }}
+    container: ghcr.io/jorgen/dewfall-ci:${{ needs.docker.outputs.image-tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -110,7 +110,7 @@ jobs:
             -DCMAKE_CXX_FLAGS="${{ matrix.cxx_flags }}" \
             -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.linker_flags }}" \
             -DBUILD_SHARED_LIBS=OFF \
-            -DPOINTS_BUILD_EXAMPLES=OFF
+            -DDEW_BUILD_EXAMPLES=OFF
 
       - name: Build
         env:

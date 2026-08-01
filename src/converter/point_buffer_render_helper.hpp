@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2023  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -22,9 +22,9 @@
 #include "conversion_types.hpp"
 #include "storage_handler.hpp"
 #include <glm_include.hpp>
-#include <points/common/format.h>
-#include <points/converter/converter_data_source.h>
-#include <points/render/buffer.h>
+#include <dew/common/format.h>
+#include <dew/converter/converter_data_source.h>
+#include <dew/render/buffer.h>
 
 #include <algorithm>
 #include <array>
@@ -33,13 +33,13 @@
 #include <memory>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // Rescale an attribute buffer to normalized r32 in [0,1] over [global_min, global_max]. Shared by the stored
 // upload path and the virtual-node upload so intensity/scalar attributes get the same contrast stretch (else a
 // promoted region drawn in native u16 renders near-black -- a brightness seam vs its neighbours).
-inline std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data, uint32_t data_size, points_type_t type, points_components_t components,
+inline std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data, uint32_t data_size, dew_type_t type, dew_components_t components,
                                                                uint32_t point_count, double global_min, double global_max, uint32_t &out_size)
 {
   double range = global_max - global_min;
@@ -55,10 +55,10 @@ inline std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data,
   int type_size = 1;
   switch (type)
   {
-  case points_type_u8: case points_type_i8: type_size = 1; break;
-  case points_type_u16: case points_type_i16: type_size = 2; break;
-  case points_type_u32: case points_type_i32: case points_type_r32: type_size = 4; break;
-  case points_type_u64: case points_type_i64: case points_type_r64: type_size = 8; break;
+  case dew_type_u8: case dew_type_i8: type_size = 1; break;
+  case dew_type_u16: case dew_type_i16: type_size = 2; break;
+  case dew_type_u32: case dew_type_i32: case dew_type_r32: type_size = 4; break;
+  case dew_type_u64: case dew_type_i64: case dew_type_r64: type_size = 8; break;
   default: type_size = 1; break;
   }
   const uint32_t elem_size = uint32_t(type_size) * comp_count;
@@ -71,16 +71,16 @@ inline std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data,
       double val = 0.0;
       switch (type)
       {
-      case points_type_u8:  { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-      case points_type_i8:  { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
-      case points_type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-      case points_type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
-      case points_type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-      case points_type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
-      case points_type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
-      case points_type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-      case points_type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
-      case points_type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
+      case dew_type_u8:  { uint8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+      case dew_type_i8:  { int8_t v; memcpy(&v, elem, 1); val = double(v); break; }
+      case dew_type_u16: { uint16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+      case dew_type_i16: { int16_t v; memcpy(&v, elem, 2); val = double(v); break; }
+      case dew_type_u32: { uint32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+      case dew_type_i32: { int32_t v; memcpy(&v, elem, 4); val = double(v); break; }
+      case dew_type_r32: { float v; memcpy(&v, elem, 4); val = double(v); break; }
+      case dew_type_u64: { uint64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+      case dew_type_i64: { int64_t v; memcpy(&v, elem, 8); val = double(v); break; }
+      case dew_type_r64: { double v; memcpy(&v, elem, 8); val = v; break; }
       default: break;
       }
       float normalized = static_cast<float>((val - global_min) * inv_range);
@@ -92,9 +92,9 @@ inline std::shared_ptr<uint8_t[]> normalize_attribute_to_float(const void *data,
 }
 
 // Whether an attribute needs the [min,max] contrast stretch. u16x3 (packed RGB) is drawn GL-normalized as-is.
-inline bool attribute_should_normalize(points_type_t type, points_components_t components, double attr_min, double attr_max)
+inline bool attribute_should_normalize(dew_type_t type, dew_components_t components, double attr_min, double attr_max)
 {
-  return (attr_min < attr_max) && !(type == points_type_u16 && components == points_components_3);
+  return (attr_min < attr_max) && !(type == dew_type_u16 && components == dew_components_3);
 }
 
 // Draw count for a coarse->fine LOD-ordered node: the prefix down to the finest level its nearest point needs,
@@ -127,7 +127,7 @@ struct decode_input_t
   storage_header_t header{};
   point_format_t point_format[4]{};
   std::shared_ptr<uint8_t[]> buffers[4];
-  points_converter_buffer_t data_info[4]{};
+  dew_converter_buffer_t data_info[4]{};
 };
 
 struct dyn_points_data_handler_t
@@ -207,7 +207,7 @@ struct dyn_points_data_handler_t
       }
       if (i == 0)
       {
-        points_error_t deser_error;
+        dew_error_t deser_error;
         deserialize_points(req->buffer_info, header, data_info[0], deser_error);
         if (deser_error.code != 0 && error.code == 0)
           error = deser_error;
@@ -227,22 +227,22 @@ struct dyn_points_data_handler_t
   int target_count = 0;
   int done = 0;
 
-  points_error_t error;
+  dew_error_t error;
 
   storage_header_t header{};
   point_format_t point_format[4];
-  points_converter_buffer_t data_info[4];
+  dew_converter_buffer_t data_info[4];
 };
 
 struct dyn_points_draw_buffer_t
 {
   tree_walker_data_t node_info;
-  points_draw_type_t draw_type;
-  points_draw_buffer_t render_list[4];
-  points_buffer_t render_buffers[3];
+  dew_draw_type_t draw_type;
+  dew_draw_buffer_t render_list[4];
+  dew_buffer_t render_buffers[3];
   point_format_t format[3];
   std::shared_ptr<uint8_t[]> data[2];
-  points_converter_buffer_t data_info[2];
+  dew_converter_buffer_t data_info[2];
   uint32_t point_count;
   std::array<double, 3> offset;
   std::array<double, 3> scale;
@@ -253,7 +253,7 @@ struct dyn_points_draw_buffer_t
 };
 
 template <typename MORTON_TYPE, typename DECODED_T>
-void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const decode_input_t &in, points_converter_buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
+void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const decode_input_t &in, dew_converter_buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
                                           std::shared_ptr<uint8_t[]> &vertex_data)
 {
   assert(in.data_info[0].data);
@@ -267,7 +267,7 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   (void)sizeof(DECODED_T);
   auto buffer_size = uint32_t(point_count * sizeof(std::array<float, 3>));
   vertex_data = std::make_shared<uint8_t[]>(buffer_size);
-  vertex_data_info = points_converter_buffer_t(vertex_data.get(), buffer_size);
+  vertex_data_info = dew_converter_buffer_t(vertex_data.get(), buffer_size);
   auto vertex_data_ptr = vertex_data.get();
   auto *decoded_array = reinterpret_cast<std::array<float, 3> *>(vertex_data_ptr);
 
@@ -306,43 +306,43 @@ inline void convert_points_to_vertex_data(const tree_config_t &tree_config, cons
   auto pformat = in.header.point_format;
   switch (pformat.type)
   {
-  case points_type_u8:
-  case points_type_i8:
-  case points_type_u16:
-  case points_type_i16:
-  case points_type_u32:
-  case points_type_i32:
-  case points_type_r32:
-  case points_type_u64:
-  case points_type_i64:
-  case points_type_r64: {
+  case dew_type_u8:
+  case dew_type_i8:
+  case dew_type_u16:
+  case dew_type_i16:
+  case dew_type_u32:
+  case dew_type_i32:
+  case dew_type_r32:
+  case dew_type_u64:
+  case dew_type_i64:
+  case dew_type_r64: {
     draw_buffer.data[0].reset(new uint8_t[in.data_info[0].size]);
-    draw_buffer.data_info[0] = points_converter_buffer_t(draw_buffer.data[0].get(), in.data_info[0].size);
+    draw_buffer.data_info[0] = dew_converter_buffer_t(draw_buffer.data[0].get(), in.data_info[0].size);
     draw_buffer.format[0] = pformat;
     memcpy(draw_buffer.data[0].get(), in.data_info[0].data, in.data_info[0].size);
     break;
   }
-  case points_type_m32:
+  case dew_type_m32:
     convert_points_to_vertex_data_morton<morton::morton32_t, std::array<uint16_t, 3>>(tree_config, in, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
-    draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
+    draw_buffer.format[0] = point_format_t(dew_type_r32, dew_components_3);
     break;
-  case points_type_m64:
+  case dew_type_m64:
     convert_points_to_vertex_data_morton<morton::morton64_t, std::array<uint32_t, 3>>(tree_config, in, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
-    draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
+    draw_buffer.format[0] = point_format_t(dew_type_r32, dew_components_3);
     break;
-  case points_type_m128:
+  case dew_type_m128:
     convert_points_to_vertex_data_morton<morton::morton128_t, std::array<uint64_t, 3>>(tree_config, in, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
-    draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
+    draw_buffer.format[0] = point_format_t(dew_type_r32, dew_components_3);
     break;
-  case points_type_m192:
+  case dew_type_m192:
     convert_points_to_vertex_data_morton<morton::morton192_t, std::array<uint64_t, 3>>(tree_config, in, draw_buffer.data_info[0], draw_buffer.offset, draw_buffer.data[0]);
-    draw_buffer.format[0] = point_format_t(points_type_r32, points_components_3);
+    draw_buffer.format[0] = point_format_t(dew_type_r32, dew_components_3);
     break;
   }
 }
 inline void convert_attribute_to_draw_buffer_data(const decode_input_t &in, dyn_points_draw_buffer_t &draw_buffer, int data_slot)
 {
-  draw_buffer.draw_type = in.point_format[1].components == points_components_3 ? points_dyn_points_3 : points_dyn_points_1;
+  draw_buffer.draw_type = in.point_format[1].components == dew_components_3 ? dew_dyn_points_3 : dew_dyn_points_1;
   draw_buffer.data[data_slot] = in.buffers[data_slot];
   draw_buffer.data_info[data_slot] = in.data_info[data_slot];
   draw_buffer.format[data_slot] = in.point_format[data_slot];
@@ -422,6 +422,6 @@ inline std::shared_ptr<uint8_t[]> reorder_points_by_perm(const uint8_t *src, uin
     std::memcpy(out_ptr + size_t(j) * stride, src + size_t(perm[j]) * stride, stride);
   return out;
 }
-} // namespace points::converter
+} // namespace dew::converter
 
 #endif // POINT_BUFFER_RENDER_HELPER_H

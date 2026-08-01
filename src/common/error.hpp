@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #include <string>
 
-struct points_error_t
+struct dew_error_t
 {
   int code = 0;
   std::string msg;

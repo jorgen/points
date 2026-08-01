@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -29,7 +29,7 @@
 #include <string_view>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // The five metadata regions read from the dataset index on open. free_blobs/attribute_configs/
@@ -83,10 +83,10 @@ struct storage_backend_t
 
   // ---- bootstrap (constructed on / called from the processor thread) ----
   [[nodiscard]] virtual bool exists() const = 0;
-  [[nodiscard]] virtual points_error_t open_for_write(bool truncate) = 0;
-  [[nodiscard]] virtual points_error_t read_index(index_load_t &out) = 0;
+  [[nodiscard]] virtual dew_error_t open_for_write(bool truncate) = 0;
+  [[nodiscard]] virtual dew_error_t read_index(index_load_t &out) = 0;
   // Rebuild the packed allocator from its serialized blob; a no-op for object backends.
-  [[nodiscard]] virtual points_error_t restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size) = 0;
+  [[nodiscard]] virtual dew_error_t restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size) = 0;
 
   // ---- data blobs (event-loop thread) ----
   // What a blob holds, from the storage tier's perspective. `data` blobs (point/attribute payloads)
@@ -101,13 +101,13 @@ struct storage_backend_t
   // Reserve a location for `size` bytes. Synchronous, no IO. For packed this is register_blob and
   // may return a recycled offset (so the handler must invalidate its read cache before writing).
   virtual void allocate_blob(uint32_t size, blob_kind_t kind, storage_location_t &out) = 0;
-  virtual vio::task_t<points_error_t> write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data) = 0;
-  virtual vio::task_t<points_error_t> read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read) = 0;
+  virtual vio::task_t<dew_error_t> write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data) = 0;
+  virtual vio::task_t<dew_error_t> read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read) = 0;
 
   // ---- checkpoint / durability barrier (event-loop thread) ----
   // Writes the metadata blobs, then the index/manifest LAST, fsyncs, commits internal state, and
   // only then reclaims `freed`. On success the handler posts its index-written event.
-  virtual vio::task_t<points_error_t> write_index(checkpoint_t checkpoint) = 0;
+  virtual vio::task_t<dew_error_t> write_index(checkpoint_t checkpoint) = 0;
 
   // ---- cache-tier pressure hooks (event-loop thread; no-ops outside the cached local backend) ----
   // Reclaim local bytes if the tier is over pressure and durable victims exist.
@@ -133,7 +133,7 @@ struct storage_backend_t
 // -> object). event_loop is the storage handler's own loop, used for all IO. `connection` is a vendor
 // connection string (see vio connection_string.h) supplying credentials/endpoint/region for cloud stores;
 // empty means "AWS_*/AZURE_* environment + defaults". Ignored for local packed files.
-std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, std::string_view connection, vio::event_loop_t &event_loop, points_error_t &error);
-std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, points_error_t &error);
+std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, std::string_view connection, vio::event_loop_t &event_loop, dew_error_t &error);
+std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, dew_error_t &error);
 
-} // namespace points::converter
+} // namespace dew::converter

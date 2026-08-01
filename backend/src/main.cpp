@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2025  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -52,12 +52,12 @@ std::uint16_t parse_port(const std::string &text, std::uint16_t fallback)
 // points.limilind.com is entirely client-side: the WebGL2 renderer runs in the browser as WebAssembly and
 // streams the point cloud straight from S3 via the WASM's own fetch client. So this server only hands out
 // the built SPA (with an SPA fallback) plus a health endpoint for the deploy check. TLS / host routing are
-// terminated by the limilind-edge gateway; this process speaks plain HTTP on POINTS_PORT.
+// terminated by the limilind-edge gateway; this process speaks plain HTTP on DEW_PORT.
 VIO_MAIN(loop, argc, argv)
 {
-  std::string dist = env_or("POINTS_DIST", "dist");
-  std::string host = env_or("POINTS_HOST", "");
-  std::uint16_t port = parse_port(env_or("POINTS_PORT", "8080"), 8080);
+  std::string dist = env_or("DEW_DIST", "dist");
+  std::string host = env_or("DEW_HOST", "");
+  std::uint16_t port = parse_port(env_or("DEW_PORT", "8080"), 8080);
 
   if (argc > 1)
   {

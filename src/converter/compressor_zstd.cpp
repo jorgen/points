@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 #include <cstring>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 compression_method_t compressor_zstd_t::method() const
@@ -164,7 +164,7 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
 {
   compression_result_t result;
 
-  bool is_r64 = (format.type == points_type_r64 && format.components == points_components_1);
+  bool is_r64 = (format.type == dew_type_r64 && format.components == dew_components_1);
 
   if (is_r64 && size >= 8)
   {
@@ -272,7 +272,7 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
     return result;
   }
 
-  bool is_u16x3 = (format.type == points_type_u16 && format.components == points_components_3);
+  bool is_u16x3 = (format.type == dew_type_u16 && format.components == dew_components_3);
   if (is_u16x3 && size >= 6)
   {
     // Path A: raw (no preprocessing)
@@ -311,9 +311,9 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
   }
 
   // Single-component integer path: try element delta
-  bool is_morton = (format.type == points_type_m32 || format.type == points_type_m64 || format.type == points_type_m128 || format.type == points_type_m192);
+  bool is_morton = (format.type == dew_type_m32 || format.type == dew_type_m64 || format.type == dew_type_m128 || format.type == dew_type_m192);
   int elem_size = size_for_format(format.type);
-  if (format.components == points_components_1 && !is_morton && !is_r64 && (elem_size == 1 || elem_size == 2 || elem_size == 4 || elem_size == 8))
+  if (format.components == dew_components_1 && !is_morton && !is_r64 && (elem_size == 1 || elem_size == 2 || elem_size == 4 || elem_size == 8))
   {
     // Path A: standard (no delta)
     std::vector<uint8_t> working_a;
@@ -509,4 +509,4 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
   return result;
 }
 
-} // namespace points::converter
+} // namespace dew::converter

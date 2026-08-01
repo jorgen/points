@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -28,7 +28,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct resident_source_t;         // full type in resident_source.hpp (shared_ptr member only needs a forward decl)
@@ -44,10 +44,10 @@ struct render_node_t
   std::atomic<bool> convert_done{false};
 
   render_node_gpu_state gpu_state = render_node_gpu_state::none;
-  points_draw_type_t draw_type = points_dyn_points_1;
+  dew_draw_type_t draw_type = dew_dyn_points_1;
   // [0]=vertex, [1]=color, [2]=camera uniform, [3]=rep_level (per-point LOD, u8x1)
-  points_buffer_t gpu_buffers[4] = {};
-  points_draw_buffer_t draw_list[6] = {};
+  dew_buffer_t gpu_buffers[4] = {};
+  dew_draw_buffer_t draw_list[6] = {};
   uint32_t point_count = 0;
   std::array<double, 3> offset = {};
   glm::mat4 camera_view = {};
@@ -56,7 +56,7 @@ struct render_node_t
   render_node_fade_state fade_state = render_node_fade_state::fade_in;
   float fade_ms = 0.0f;
 
-  points_buffer_t params_buffer = {};
+  dew_buffer_t params_buffer = {};
   glm::vec4 params_data = {1.0f, 1.0f, 0.0f, 0.0f};
 
   double cached_distance = 0.0;
@@ -119,4 +119,4 @@ struct frame_timings_t
   int uploads_this_frame = 0;
 };
 
-} // namespace points::converter
+} // namespace dew::converter

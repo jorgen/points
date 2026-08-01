@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -24,7 +24,7 @@
 #include <limits>
 #include <memory>
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct io_counter_t
@@ -257,4 +257,4 @@ struct perf_stats_t
   }
 };
 
-} // namespace points::converter
+} // namespace dew::converter

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include "morton_tree_coordinate_transform.hpp" // convert_morton_to_pos
 #include "point_buffer_render_helper.hpp"       // convert_points_to_vertex_data, dyn_points_draw_buffer_t
 #include "point_buffer_splitter.hpp"            // for_each_octant_range
-#include "renderer.hpp"                         // points_to_render_add_render_group
+#include "renderer.hpp"                         // dew_to_render_add_render_group
 
 #include <data_source.hpp> // render::frame_camera_cpp_t
 
@@ -32,20 +32,20 @@
 #include <algorithm>
 #include <cstring>
 
-namespace points::converter
+namespace dew::converter
 {
 
-static uint32_t morton_type_size(points_type_t t)
+static uint32_t morton_type_size(dew_type_t t)
 {
   switch (t)
   {
-  case points_type_m32:
+  case dew_type_m32:
     return uint32_t(sizeof(morton::morton32_t));
-  case points_type_m64:
+  case dew_type_m64:
     return uint32_t(sizeof(morton::morton64_t));
-  case points_type_m128:
+  case dew_type_m128:
     return uint32_t(sizeof(morton::morton128_t));
-  case points_type_m192:
+  case dew_type_m192:
     return uint32_t(sizeof(morton::morton192_t));
   default:
     return 0;
@@ -112,8 +112,8 @@ std::unique_ptr<virtual_node_t> make_virtual_root(const resident_source_t &src, 
   root->octant_min = src.node_min;
   root->tight_aabb = tight_aabb;
   root->loose_aabb = loose_aabb;
-  const bool rgb = src.data_handler->point_format[1].components == points_components_3;
-  root->draw_type = rgb ? points_dyn_points_3 : points_dyn_points_1;
+  const bool rgb = src.data_handler->point_format[1].components == dew_components_3;
+  root->draw_type = rgb ? dew_dyn_points_3 : dew_dyn_points_1;
   return root;
 }
 
@@ -125,16 +125,16 @@ void split_octants(virtual_node_t &node, const resident_source_t &src, const tre
     return; // defensive: children would be at a negative morton level (out-of-bounds child-mask writes)
   switch (src.morton_type)
   {
-  case points_type_m32:
+  case dew_type_m32:
     split_octants_typed<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(node, src, tree_config);
     break;
-  case points_type_m64:
+  case dew_type_m64:
     split_octants_typed<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(node, src, tree_config);
     break;
-  case points_type_m128:
+  case dew_type_m128:
     split_octants_typed<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(node, src, tree_config);
     break;
-  case points_type_m192:
+  case dew_type_m192:
     split_octants_typed<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(node, src, tree_config);
     break;
   default:
@@ -170,7 +170,7 @@ static void materialize_typed(virtual_node_t &node, const resident_source_t &src
   else
   {
     const uint32_t code_size = morton_type_size(src.morton_type);
-    points_converter_buffer_t source_buf(static_cast<uint8_t *>(src.data_handler->data_info[0].data) + size_t(node.first_index) * code_size, node.src_count * code_size);
+    dew_converter_buffer_t source_buf(static_cast<uint8_t *>(src.data_handler->data_info[0].data) + size_t(node.first_index) * code_size, node.src_count * code_size);
     using M192 = morton::morton192_t;
     std::vector<morton_to_lod_t<M192::component_type, M192::component_count::value>> reps;
     input_data_id_t dummy_id{0, 0};
@@ -222,10 +222,10 @@ void materialize_virtual_node(virtual_node_t &node, const resident_source_t &src
 {
   switch (src.morton_type)
   {
-  case points_type_m32: materialize_typed<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(node, src, lod_random_offsets); break;
-  case points_type_m64: materialize_typed<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(node, src, lod_random_offsets); break;
-  case points_type_m128: materialize_typed<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(node, src, lod_random_offsets); break;
-  case points_type_m192: materialize_typed<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(node, src, lod_random_offsets); break;
+  case dew_type_m32: materialize_typed<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(node, src, lod_random_offsets); break;
+  case dew_type_m64: materialize_typed<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(node, src, lod_random_offsets); break;
+  case dew_type_m128: materialize_typed<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(node, src, lod_random_offsets); break;
+  case dew_type_m192: materialize_typed<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(node, src, lod_random_offsets); break;
   default: break;
   }
 }
@@ -256,13 +256,13 @@ static void upload_virtual_node(virtual_node_t &v, const resident_source_t &src,
 {
   const uint32_t n = v.draw_count;
   const uint32_t vbytes = n * 3u * uint32_t(sizeof(float));
-  f.callbacks->do_create_buffer(v.gpu_buffers[0], points_buffer_type_vertex);
-  f.callbacks->do_initialize_buffer(v.gpu_buffers[0], points_type_r32, points_components_3, int(vbytes), v.vertex_data.get());
+  f.callbacks->do_create_buffer(v.gpu_buffers[0], dew_buffer_type_vertex);
+  f.callbacks->do_initialize_buffer(v.gpu_buffers[0], dew_type_r32, dew_components_3, int(vbytes), v.vertex_data.get());
 
   // Color: same contrast stretch as the real path (R6) -- else intensity/scalar attrs render near-black on
   // promoted regions. RGB (u16x3) is drawn GL-normalized as-is.
   uint32_t abytes = 0;
-  f.callbacks->do_create_buffer(v.gpu_buffers[1], points_buffer_type_vertex);
+  f.callbacks->do_create_buffer(v.gpu_buffers[1], dew_buffer_type_vertex);
   if (v.attribute_data && src.point_count && src.data_handler->data_info[1].size)
   {
     const auto attr_fmt = src.data_handler->point_format[1];
@@ -272,7 +272,7 @@ static void upload_virtual_node(virtual_node_t &v, const resident_source_t &src,
     {
       uint32_t norm_size = 0;
       auto norm = normalize_attribute_to_float(v.attribute_data.get(), abytes, attr_fmt.type, attr_fmt.components, n, f.attr_min, f.attr_max, norm_size);
-      f.callbacks->do_initialize_buffer(v.gpu_buffers[1], points_type_r32, attr_fmt.components, int(norm_size), norm.get());
+      f.callbacks->do_initialize_buffer(v.gpu_buffers[1], dew_type_r32, attr_fmt.components, int(norm_size), norm.get());
       abytes = norm_size;
     }
     else
@@ -283,15 +283,15 @@ static void upload_virtual_node(virtual_node_t &v, const resident_source_t &src,
 
   const auto offset = glm::dvec3(f.tree_config->offset[0], f.tree_config->offset[1], f.tree_config->offset[2]) + glm::dvec3(src.decode_offset[0], src.decode_offset[1], src.decode_offset[2]);
   v.camera_view = glm::mat4(f.camera->projection * glm::translate(f.camera->view, offset));
-  f.callbacks->do_create_buffer(v.gpu_buffers[2], points_buffer_type_uniform);
-  f.callbacks->do_initialize_buffer(v.gpu_buffers[2], points_type_r32, points_components_4x4, sizeof(v.camera_view), &v.camera_view);
+  f.callbacks->do_create_buffer(v.gpu_buffers[2], dew_buffer_type_uniform);
+  f.callbacks->do_initialize_buffer(v.gpu_buffers[2], dew_type_r32, dew_components_4x4, sizeof(v.camera_view), &v.camera_view);
 
   // rep_level (u8, one per point) -> per-point density cull in the shader (R19: the Density slider now thins
   // promoted regions the same as everything else).
-  f.callbacks->do_create_buffer(v.gpu_buffers[3], points_buffer_type_vertex);
-  f.callbacks->do_initialize_buffer(v.gpu_buffers[3], points_type_u8, points_components_1, int(n), v.rep_level_data.get());
+  f.callbacks->do_create_buffer(v.gpu_buffers[3], dew_buffer_type_vertex);
+  f.callbacks->do_initialize_buffer(v.gpu_buffers[3], dew_type_u8, dew_components_1, int(n), v.rep_level_data.get());
 
-  v.draw_type = (src.data_handler->point_format[1].components == points_components_3) ? points_dyn_points_3 : points_dyn_points_1;
+  v.draw_type = (src.data_handler->point_format[1].components == dew_components_3) ? dew_dyn_points_3 : dew_dyn_points_1;
   v.gpu_memory_size = vbytes + abytes + n + uint32_t(sizeof(v.camera_view));
   v.gpu_state = render_node_gpu_state::uploaded;
   v.fade_state = render_node_fade_state::fade_in; // crossfade in (R17)
@@ -498,7 +498,7 @@ struct virtual_emit_ctx_t
   render::callback_manager_t *callbacks;
   const render::frame_camera_cpp_t *camera;
   const tree_config_t *tree_config;
-  points_to_render_t *to_render;
+  dew_to_render_t *to_render;
   uint32_t frame_index;
   int viewport_height;
   double render_density_px;
@@ -519,34 +519,34 @@ static void emit_virtual_node(virtual_node_t &v, const resident_source_t &src, c
     // thins promoted regions too, instead of the old lod_density_scale=0 keep-all).
     const uint32_t draw_size = lod_draw_size_from_prefix(v.prefix_count, v.draw_count, v.cached_distance, e.camera->projection[1][1], e.viewport_height, e.tree_config->scale, e.render_density_px);
 
-    v.draw_list[0] = {points_dyn_points_bm_vertex, v.gpu_buffers[0].user_ptr};
-    v.draw_list[1] = {points_dyn_points_bm_color, v.gpu_buffers[1].user_ptr};
-    v.draw_list[2] = {points_dyn_points_bm_camera, v.gpu_buffers[2].user_ptr};
+    v.draw_list[0] = {dew_dyn_points_bm_vertex, v.gpu_buffers[0].user_ptr};
+    v.draw_list[1] = {dew_dyn_points_bm_color, v.gpu_buffers[1].user_ptr};
+    v.draw_list[2] = {dew_dyn_points_bm_camera, v.gpu_buffers[2].user_ptr};
     if (v.fade_state == render_node_fade_state::fade_in)
     {
       // Whole-node crossfade in (R17) via the same crossfade draw + params alpha the real nodes use.
       float alpha = v.fade_ms / e.fade_duration_ms;
       alpha = alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha);
-      const bool is_mono = (v.draw_type == points_dyn_points_1);
+      const bool is_mono = (v.draw_type == dew_dyn_points_1);
       v.params_data = glm::vec4(alpha, 1.0f, is_mono ? 1.0f : 0.0f, is_mono ? 1.0f : 0.0f);
       if (!v.params_buffer.user_ptr)
       {
-        e.callbacks->do_create_buffer(v.params_buffer, points_buffer_type_uniform);
-        e.callbacks->do_initialize_buffer(v.params_buffer, points_type_r32, points_components_4, sizeof(v.params_data), &v.params_data);
+        e.callbacks->do_create_buffer(v.params_buffer, dew_buffer_type_uniform);
+        e.callbacks->do_initialize_buffer(v.params_buffer, dew_type_r32, dew_components_4, sizeof(v.params_data), &v.params_data);
       }
       else
         e.callbacks->do_modify_buffer(v.params_buffer, 0, sizeof(v.params_data), &v.params_data);
-      v.draw_list[3] = {points_dyn_points_bm_old_color, v.gpu_buffers[1].user_ptr};
-      v.draw_list[4] = {points_dyn_points_bm_params, v.params_buffer.user_ptr};
-      v.draw_list[5] = {points_dyn_points_bm_replevel, v.gpu_buffers[3].user_ptr};
-      points_draw_group_t draw_group = {points_dyn_points_crossfade, v.draw_list, 6, int(draw_size), v.level, e.lod_px_scale, e.lod_density_scale};
-      points_to_render_add_render_group(e.to_render, draw_group);
+      v.draw_list[3] = {dew_dyn_points_bm_old_color, v.gpu_buffers[1].user_ptr};
+      v.draw_list[4] = {dew_dyn_points_bm_params, v.params_buffer.user_ptr};
+      v.draw_list[5] = {dew_dyn_points_bm_replevel, v.gpu_buffers[3].user_ptr};
+      dew_draw_group_t draw_group = {dew_dyn_points_crossfade, v.draw_list, 6, int(draw_size), v.level, e.lod_px_scale, e.lod_density_scale};
+      dew_to_render_add_render_group(e.to_render, draw_group);
     }
     else
     {
-      v.draw_list[3] = {points_dyn_points_bm_replevel, v.gpu_buffers[3].user_ptr};
-      points_draw_group_t draw_group = {v.draw_type, v.draw_list, 4, int(draw_size), v.level, e.lod_px_scale, e.lod_density_scale};
-      points_to_render_add_render_group(e.to_render, draw_group);
+      v.draw_list[3] = {dew_dyn_points_bm_replevel, v.gpu_buffers[3].user_ptr};
+      dew_draw_group_t draw_group = {v.draw_type, v.draw_list, 4, int(draw_size), v.level, e.lod_px_scale, e.lod_density_scale};
+      dew_to_render_add_render_group(e.to_render, draw_group);
     }
     points_rendered += draw_size;
     drawn++;
@@ -556,7 +556,7 @@ static void emit_virtual_node(virtual_node_t &v, const resident_source_t &src, c
       emit_virtual_node(*c, src, e, points_rendered, drawn);
 }
 
-int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, int viewport_height, double render_density_px, float fade_duration_ms, uint64_t &points_rendered)
+int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, dew_to_render_t *to_render, uint32_t frame_index, int viewport_height, double render_density_px, float fade_duration_ms, uint64_t &points_rendered)
 {
   int drawn = 0;
   virtual_emit_ctx_t e;
@@ -609,4 +609,4 @@ bool virtual_subtree_has_inflight(const virtual_node_t &node)
   return false;
 }
 
-} // namespace points::converter
+} // namespace dew::converter

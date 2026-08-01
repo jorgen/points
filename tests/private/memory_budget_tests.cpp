@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -26,8 +26,8 @@
 
 namespace
 {
-using namespace points;
-using namespace points::converter;
+using namespace dew;
+using namespace dew::converter;
 
 constexpr uint64_t operator""_mb(unsigned long long v)
 {
@@ -102,11 +102,11 @@ static tree_walker_data_t make_walker_data(uint32_t point_count, bool with_attri
   w.aabb = {};
   w.tight_aabb = {};
   w.point_count.data = point_count;
-  w.format[0] = point_format_t(points_type_m64, points_components_1);
+  w.format[0] = point_format_t(dew_type_m64, dew_components_1);
   w.locations[0].size = point_count * 8;
   if (with_attribute)
   {
-    w.format[1] = point_format_t(points_type_u16, points_components_3);
+    w.format[1] = point_format_t(dew_type_u16, dew_components_3);
     w.locations[1].size = point_count * 6;
   }
   return w;
@@ -125,7 +125,7 @@ TEST_CASE("node byte estimators match the decode/upload layout")
   REQUIRE(estimate_node_gpu_bytes(w) == uint64_t(pc) * (12 + 6 + 1) + 64 + 16);
   // A normalizing attribute (u32x1) uploads as float-per-component: max(raw 4, normalized 4) = 4.
   auto wn = make_walker_data(pc, false);
-  wn.format[1] = point_format_t(points_type_u8, points_components_1);
+  wn.format[1] = point_format_t(dew_type_u8, dew_components_1);
   wn.locations[1].size = pc;
   REQUIRE(estimate_node_gpu_bytes(wn) == uint64_t(pc) * (12 + 4 + 1) + 64 + 16);
 

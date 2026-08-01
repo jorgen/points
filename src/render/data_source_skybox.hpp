@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -17,9 +17,9 @@
 ************************************************************************/
 #pragma once
 
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
-#include <points/render/skybox_data_source.h>
+#include <dew/render/camera.h>
+#include <dew/render/renderer.h>
+#include <dew/render/skybox_data_source.h>
 #include "data_source.hpp"
 #include "buffer.hpp"
 #include "renderer_callbacks.hpp"
@@ -28,7 +28,7 @@
 #include <vector>
 #include <memory>
 
-namespace points::render
+namespace dew::render
 {
 struct skybox_texture_t
 {
@@ -37,28 +37,28 @@ struct skybox_texture_t
   int height = 0;
   int components = 0;
 };
-} // namespace points::render
+} // namespace dew::render
 
-struct points_skybox_data_source_t : public points::render::data_source_cpp_t
+struct dew_skybox_data_source_t : public dew::render::data_source_cpp_t
 {
-  points_skybox_data_source_t(points::render::callback_manager_t &callbacks, points_skybox_data_t skybox_data);
+  dew_skybox_data_source_t(dew::render::callback_manager_t &callbacks, dew_skybox_data_t skybox_data);
 
-  void add_to_frame(const points::render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
+  void add_to_frame(const dew::render::frame_camera_cpp_t &camera, dew_to_render_t *to_render) override;
 
-  points::render::callback_manager_t &callbacks;
+  dew::render::callback_manager_t &callbacks;
 
-  points_buffer_t inverse_vp_buffer;
+  dew_buffer_t inverse_vp_buffer;
   glm::mat4 inverse_vp;
 
-  points_buffer_t camera_pos_buffer;
+  dew_buffer_t camera_pos_buffer;
   glm::vec3 camera_pos;
 
-  points_buffer_t vertex_buffer;
+  dew_buffer_t vertex_buffer;
   std::vector<glm::vec2> vertices;
 
-  points_buffer_t cube_texture;
+  dew_buffer_t cube_texture;
 
-  points::render::skybox_texture_t textures[6];
+  dew::render::skybox_texture_t textures[6];
 
-  points_draw_buffer_t draw_buffers[4];
+  dew_draw_buffer_t draw_buffers[4];
 };

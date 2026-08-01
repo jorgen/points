@@ -1,13 +1,13 @@
 # Read-only point-cloud data library for WebAssembly. Exposes (via embind) an API to open an S3 dataset
 # with caller-supplied credentials, load blobs over emscripten_fetch, and return DECOMPRESSED buffers.
-# Emits points_data.mjs + points_data.wasm (an ES6 module). Only built under Emscripten.
+# Emits dew_data.mjs + dew_data.wasm (an ES6 module). Only built under Emscripten.
 
 set(_conv ${CMAKE_CURRENT_SOURCE_DIR}/../converter)
 set(_common ${CMAKE_CURRENT_SOURCE_DIR}/../common)
 set(_render ${CMAKE_CURRENT_SOURCE_DIR}/../render)
 
-add_executable(points_data_wasm
-    points_wasm_api.cpp
+add_executable(dew_data_wasm
+    dew_wasm_api.cpp
     ${_common}/error.cpp
     # The portable read + decompress subset (no libuv / laszip):
     ${_conv}/object_backend.cpp
@@ -24,7 +24,7 @@ add_executable(points_data_wasm
     ${_conv}/attributes_configs.cpp
 )
 
-target_include_directories(points_data_wasm PRIVATE
+target_include_directories(dew_data_wasm PRIVATE
     ${_conv}
     ${_common}
     ${_render}
@@ -36,7 +36,7 @@ target_include_directories(points_data_wasm PRIVATE
 )
 
 # FMT_HEADER_ONLY avoids building the fmt library under emcc; ZSTD_DISABLE_ASM skips zstd's .S paths.
-target_compile_definitions(points_data_wasm PRIVATE FMT_HEADER_ONLY=1 ZSTD_DISABLE_ASM=1)
+target_compile_definitions(dew_data_wasm PRIVATE FMT_HEADER_ONLY=1 ZSTD_DISABLE_ASM=1)
 
 # embind requires RTTI (the top-level build sets -fno-rtti globally); fmt 11 references malloc/free
 # without pulling <cstdlib> under emscripten's clang, so force-include it. Our own code stays
@@ -46,11 +46,11 @@ target_compile_definitions(points_data_wasm PRIVATE FMT_HEADER_ONLY=1 ZSTD_DISAB
 # --bind is needed at COMPILE time too (not only link) for embind. -fvisibility=default overrides the
 # project-wide CXX_VISIBILITY_PRESET=hidden: hidden visibility keeps the per-TU RTTI type_info symbols
 # from merging with embind's runtime, which makes every bound function report "unbound types" at call time.
-target_compile_options(points_data_wasm PRIVATE -frtti -include cstdlib --bind -fvisibility=default)
+target_compile_options(dew_data_wasm PRIVATE -frtti -include cstdlib --bind -fvisibility=default)
 
-target_link_libraries(points_data_wasm PRIVATE vio libzstd_static)
+target_link_libraries(dew_data_wasm PRIVATE vio libzstd_static)
 
-target_link_options(points_data_wasm PRIVATE
+target_link_options(dew_data_wasm PRIVATE
     # RTTI must also be on at LINK: emscripten (re)builds its system libs -- including libembind -- with
     # the link-command flags, and the global -fno-rtti would build libembind without RTTI, so its
     # type_info for int/val/etc. would not match our -frtti TUs -> "unbound types" for every function.
@@ -64,23 +64,23 @@ target_link_options(points_data_wasm PRIVATE
     "-sEXIT_RUNTIME=0"
     "-sMODULARIZE=1"
     "-sEXPORT_ES6=1"
-    "-sEXPORT_NAME=PointsData"
+    "-sEXPORT_NAME=DewData"
     "-sENVIRONMENT=web,worker,node"
     "-sSTACK_SIZE=5MB"
 )
 
-set_target_properties(points_data_wasm PROPERTIES OUTPUT_NAME "points_data" SUFFIX ".mjs")
+set_target_properties(dew_data_wasm PROPERTIES OUTPUT_NAME "dew_data" SUFFIX ".mjs")
 
 # ---------------------------------------------------------------------------------------------------
 # WebGL2 renderer library. Streams + decodes the octree and draws it with the desktop gl_renderer
 # (ported to GLES3), driven by a React canvas + a semantic arcball camera API. Emits
-# points_render.mjs + .wasm (an ES6 module). Rendering is dirty-driven: WASM calls a JS requestUpdate
+# dew_render.mjs + .wasm (an ES6 module). Rendering is dirty-driven: WASM calls a JS requestUpdate
 # callback (input / async-IO completion) instead of a continuous main loop.
 set(_examples ${CMAKE_SOURCE_DIR}/examples/renderer)
 
 # The GLSL sources, embedded via cmrc under the "shaders" namespace (matches gl_renderer's CMRC_DECLARE).
 # WHENCE keeps the resource names as "shaders/xxx" even though the target lives in src/wasm.
-cmrc_add_resource_library(points_render_wasm_shaders ALIAS points_render_wasm::shaders NAMESPACE shaders
+cmrc_add_resource_library(dew_render_wasm_shaders ALIAS dew_render_wasm::shaders NAMESPACE shaders
     WHENCE ${_examples}
     ${_examples}/shaders/aabb.frag
     ${_examples}/shaders/aabb.vert
@@ -103,12 +103,12 @@ cmrc_add_resource_library(points_render_wasm_shaders ALIAS points_render_wasm::s
 )
 # cmrc.hpp calls abort() without <cstdlib>; emscripten's strict headers need it force-included (the
 # generated cmrc TU does not inherit the main target's -include cstdlib).
-target_compile_options(points_render_wasm_shaders PRIVATE -include cstdlib)
+target_compile_options(dew_render_wasm_shaders PRIVATE -include cstdlib)
 
-add_executable(points_render_wasm
+add_executable(dew_render_wasm
     ${_examples}/renderer_wasm.cpp
     ${_examples}/gl_renderer.cpp
-    # points_render (pure C++/glm; no GL, no uv)
+    # dew_render (pure C++/glm; no GL, no uv)
     ${_render}/renderer.cpp
     ${_render}/camera.cpp
     ${_render}/data_source.cpp
@@ -153,7 +153,7 @@ add_executable(points_render_wasm
     ${_common}/error.cpp
 )
 
-target_include_directories(points_render_wasm PRIVATE
+target_include_directories(dew_render_wasm PRIVATE
     ${_examples}
     ${_conv}
     ${_common}
@@ -166,12 +166,12 @@ target_include_directories(points_render_wasm PRIVATE
     ${stbimage_SOURCE_DIR}
 )
 
-target_compile_definitions(points_render_wasm PRIVATE FMT_HEADER_ONLY=1 ZSTD_DISABLE_ASM=1)
-target_compile_options(points_render_wasm PRIVATE -frtti -include cstdlib --bind -fvisibility=default)
+target_compile_definitions(dew_render_wasm PRIVATE FMT_HEADER_ONLY=1 ZSTD_DISABLE_ASM=1)
+target_compile_options(dew_render_wasm PRIVATE -frtti -include cstdlib --bind -fvisibility=default)
 
-target_link_libraries(points_render_wasm PRIVATE vio libzstd_static points_render_wasm::shaders)
+target_link_libraries(dew_render_wasm PRIVATE vio libzstd_static dew_render_wasm::shaders)
 
-target_link_options(points_render_wasm PRIVATE
+target_link_options(dew_render_wasm PRIVATE
     -frtti
     "-sDISABLE_EXCEPTION_THROWING=0"
     --bind
@@ -188,7 +188,7 @@ target_link_options(points_render_wasm PRIVATE
     "-sEXIT_RUNTIME=0"
     "-sMODULARIZE=1"
     "-sEXPORT_ES6=1"
-    "-sEXPORT_NAME=PointsRender"
+    "-sEXPORT_NAME=DewRender"
     "-sENVIRONMENT=web,worker,node"
     "-sSTACK_SIZE=8MB"
     # WebGL2 / GLES3 (FULL_ES3 also enables glMapBufferRange + client-array emulation).
@@ -197,14 +197,14 @@ target_link_options(points_render_wasm PRIVATE
     "-sFULL_ES3=1"
 )
 
-set_target_properties(points_render_wasm PROPERTIES OUTPUT_NAME "points_render" SUFFIX ".mjs")
+set_target_properties(dew_render_wasm PROPERTIES OUTPUT_NAME "dew_render" SUFFIX ".mjs")
 
 # ---------------------------------------------------------------------------------------------------------
 # Pure-CPU decode Web Worker module (decompress -> deserialize -> decode_node). No WebGL, no FETCH, no
 # ASYNCIFY -- it only crunches bytes handed to it over postMessage (see examples/renderer/web/src/decodeWorker
 # .ts + decodeWorkerPool.ts, and the as-built notes in decode_worker.cpp). Built + node-smoke-tested under
 # EMSDK; the worker_node_data_loader (src/converter) drives it.
-add_executable(points_decode_worker
+add_executable(dew_decode_worker
     decode_worker.cpp
     ${_common}/error.cpp
     ${_conv}/node_decode.cpp            # the extracted decode seam
@@ -218,15 +218,15 @@ add_executable(points_decode_worker
     ${_conv}/input_storage_map.cpp
     ${_conv}/attributes_configs.cpp
 )
-target_include_directories(points_decode_worker PRIVATE
+target_include_directories(dew_decode_worker PRIVATE
     ${_conv} ${_common} ${_render}
     ${fmt_SOURCE_DIR}/include ${glm_SOURCE_DIR} ${libmorton_SOURCE_DIR}/include
     ${unordered_dense_SOURCE_DIR}/include ${zstd_SOURCE_DIR}/lib
 )
-target_compile_definitions(points_decode_worker PRIVATE FMT_HEADER_ONLY=1 ZSTD_DISABLE_ASM=1)
-target_compile_options(points_decode_worker PRIVATE -frtti -include cstdlib --bind -fvisibility=default)
-target_link_libraries(points_decode_worker PRIVATE vio libzstd_static)
-target_link_options(points_decode_worker PRIVATE
+target_compile_definitions(dew_decode_worker PRIVATE FMT_HEADER_ONLY=1 ZSTD_DISABLE_ASM=1)
+target_compile_options(dew_decode_worker PRIVATE -frtti -include cstdlib --bind -fvisibility=default)
+target_link_libraries(dew_decode_worker PRIVATE vio libzstd_static)
+target_link_options(dew_decode_worker PRIVATE
     -frtti
     "-sDISABLE_EXCEPTION_THROWING=0"
     --bind
@@ -239,8 +239,8 @@ target_link_options(points_decode_worker PRIVATE
     "-sEXIT_RUNTIME=0"
     "-sMODULARIZE=1"
     "-sEXPORT_ES6=1"
-    "-sEXPORT_NAME=PointsDecodeWorker"
+    "-sEXPORT_NAME=DewDecodeWorker"
     "-sENVIRONMENT=web,worker,node"
     "-sSTACK_SIZE=5MB"
 )
-set_target_properties(points_decode_worker PROPERTIES OUTPUT_NAME "points_decode_worker" SUFFIX ".mjs")
+set_target_properties(dew_decode_worker PROPERTIES OUTPUT_NAME "dew_decode_worker" SUFFIX ".mjs")

@@ -5,7 +5,7 @@ if (CCACHE_PROGRAM)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif ()
 
-project(points_server VERSION 0.1.0 DESCRIPTION "Static-file server for points.limilind.com" LANGUAGES CXX)
+project(dew_server VERSION 0.1.0 DESCRIPTION "Static-file server for points.limilind.com" LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -22,13 +22,12 @@ else ()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")
 endif ()
 
-# This is only the backend (a prism static-file server) for points.limilind.com. The renderer itself is the
-# points library cross-compiled to WebAssembly separately (src/wasm, via Emscripten). We own
+# This is only the backend (a prism static-file server) for points.limilind.com. # points library cross-compiled to WebAssembly separately (src/wasm, via Emscripten). We own
 # vio / structify / prism; consume local checkouts by default so changes in a dependency are picked up
-# without a re-pin (overridden with -DPOINTS_WEB_*_DIR in CI / Docker).
-set(POINTS_WEB_VIO_DIR       "/home/jlind/dev/vio"       CACHE PATH "Local vio checkout")
-set(POINTS_WEB_STRUCTIFY_DIR "/home/jlind/dev/structify" CACHE PATH "Local structify checkout")
-set(POINTS_WEB_PRISM_DIR     "/home/jlind/dev/prism"     CACHE PATH "Local prism checkout")
+# without a re-pin (overridden with -DDEW_WEB_*_DIR in CI / Docker).
+set(DEW_WEB_VIO_DIR       "/home/jlind/dev/vio"       CACHE PATH "Local vio checkout")
+set(DEW_WEB_STRUCTIFY_DIR "/home/jlind/dev/structify" CACHE PATH "Local structify checkout")
+set(DEW_WEB_PRISM_DIR     "/home/jlind/dev/prism"     CACHE PATH "Local prism checkout")
 
 set(VIO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(VIO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -41,9 +40,9 @@ set(STRUCTIFY_OPT_INSTALL OFF CACHE BOOL "" FORCE)
 set(PRISM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(PRISM_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-add_subdirectory(${POINTS_WEB_VIO_DIR}       ${CMAKE_BINARY_DIR}/_ext/vio)
-add_subdirectory(${POINTS_WEB_STRUCTIFY_DIR} ${CMAKE_BINARY_DIR}/_ext/structify)
-add_subdirectory(${POINTS_WEB_PRISM_DIR}     ${CMAKE_BINARY_DIR}/_ext/prism)
+add_subdirectory(${DEW_WEB_VIO_DIR}       ${CMAKE_BINARY_DIR}/_ext/vio)
+add_subdirectory(${DEW_WEB_STRUCTIFY_DIR} ${CMAKE_BINARY_DIR}/_ext/structify)
+add_subdirectory(${DEW_WEB_PRISM_DIR}     ${CMAKE_BINARY_DIR}/_ext/prism)
 
 foreach (dep_target vio structify prism)
     set_property(TARGET ${dep_target} PROPERTY
@@ -51,5 +50,5 @@ foreach (dep_target vio structify prism)
             $<TARGET_PROPERTY:${dep_target},INTERFACE_INCLUDE_DIRECTORIES>)
 endforeach ()
 
-add_executable(points_server src/main.cpp)
-target_link_libraries(points_server PRIVATE prism::prism)
+add_executable(dew_server src/main.cpp)
+target_link_libraries(dew_server PRIVATE prism::prism)

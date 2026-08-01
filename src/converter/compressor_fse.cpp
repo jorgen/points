@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -27,7 +27,7 @@ extern "C" {
 #include <cstring>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 static constexpr uint32_t huf_max_block_size = HUF_BLOCKSIZE_MAX; // 128 KB
@@ -36,7 +36,7 @@ struct huf_compress_result_t
 {
   std::vector<uint8_t> data;
   uint32_t size;
-  points_error_t error;
+  dew_error_t error;
 };
 
 static huf_compress_result_t huf_compress_chunked(const uint8_t *src, uint32_t src_size)
@@ -237,7 +237,7 @@ compression_result_t compressor_huff0_t::compress(const void *data, uint32_t siz
 {
   compression_result_t result;
 
-  bool is_r64 = (format.type == points_type_r64 && format.components == points_components_1);
+  bool is_r64 = (format.type == dew_type_r64 && format.components == dew_components_1);
 
   if (is_r64 && size >= 8)
   {
@@ -278,7 +278,7 @@ compression_result_t compressor_huff0_t::compress(const void *data, uint32_t siz
     return result;
   }
 
-  bool is_u16x3 = (format.type == points_type_u16 && format.components == points_components_3);
+  bool is_u16x3 = (format.type == dew_type_u16 && format.components == dew_components_3);
   if (is_u16x3 && size >= 6)
   {
     // Path A: raw (no preprocessing)
@@ -317,9 +317,9 @@ compression_result_t compressor_huff0_t::compress(const void *data, uint32_t siz
   }
 
   // Single-component integer path: try element delta
-  bool is_morton = (format.type == points_type_m32 || format.type == points_type_m64 || format.type == points_type_m128 || format.type == points_type_m192);
+  bool is_morton = (format.type == dew_type_m32 || format.type == dew_type_m64 || format.type == dew_type_m128 || format.type == dew_type_m192);
   int elem_size = size_for_format(format.type);
-  if (format.components == points_components_1 && !is_morton && !is_r64 && (elem_size == 1 || elem_size == 2 || elem_size == 4 || elem_size == 8))
+  if (format.components == dew_components_1 && !is_morton && !is_r64 && (elem_size == 1 || elem_size == 2 || elem_size == 4 || elem_size == 8))
   {
     // Path A: standard (no delta)
     std::vector<uint8_t> working_a;
@@ -505,4 +505,4 @@ compression_result_t compressor_huff0_t::decompress(const void *data, uint32_t s
   return result;
 }
 
-} // namespace points::converter
+} // namespace dew::converter

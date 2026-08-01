@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -17,14 +17,14 @@
 ************************************************************************/
 #pragma once
 
-#include <points/common/format.h>
-#include <points/render/draw_group.h>
+#include <dew/common/format.h>
+#include <dew/render/draw_group.h>
 
 #include <array>
 #include <cstdint>
 #include <memory>
 
-namespace points::render
+namespace dew::render
 {
 
 using load_handle_t = uint64_t;
@@ -34,13 +34,13 @@ struct loaded_node_data_t
 {
   void *vertex_data = nullptr;
   uint32_t vertex_data_size = 0;
-  points_type_t vertex_type = points_type_r32;
-  points_components_t vertex_components = points_components_3;
+  dew_type_t vertex_type = dew_type_r32;
+  dew_components_t vertex_components = dew_components_3;
 
   void *attribute_data = nullptr;
   uint32_t attribute_data_size = 0;
-  points_type_t attribute_type = points_type_u8;
-  points_components_t attribute_components = points_components_3;
+  dew_type_t attribute_type = dew_type_u8;
+  dew_components_t attribute_components = dew_components_3;
 
   // Per-point representative level (u8, one per point, reordered to match vertex/attribute). Uploaded as a
   // vertex attribute for the per-point LOD test in the shader. Null for non-morton nodes.
@@ -49,7 +49,7 @@ struct loaded_node_data_t
 
   uint32_t point_count = 0;
   std::array<double, 3> offset = {};
-  points_draw_type_t draw_type = points_dyn_points_1;
+  dew_draw_type_t draw_type = dew_dyn_points_1;
 
   // Runtime per-node LOD: the vertex + attribute buffers are reordered coarse->fine (one morton-cell
   // representative first), so drawing the first N points is a screen-uniform subsample. prefix_count[k] =
@@ -79,4 +79,4 @@ public:
   virtual void cancel(load_handle_t handle) = 0;
 };
 
-} // namespace points::render
+} // namespace dew::render

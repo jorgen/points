@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-// The renderer's total-CPU-memory budget: one consumer knob (points_converter_data_source_set_memory_budget)
+// The renderer's total-CPU-memory budget: one consumer knob (dew_converter_data_source_set_memory_budget)
 // derived into the sub-budgets that actually bound heap growth. Kept free of storage/GL dependencies so the
 // derivation, the heap-pressure brake, and the pre-load byte estimators are unit-testable natively.
 //
@@ -32,7 +32,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct derived_budgets_t
@@ -119,10 +119,10 @@ inline uint64_t estimate_node_gpu_bytes(const tree_walker_data_t &w)
   {
     const uint64_t raw = uint64_t(size_for_format(w.format[1].type, w.format[1].components));
     const uint64_t normalized = uint64_t(w.format[1].components) * sizeof(float);
-    const bool never_normalized = w.format[1].type == points_type_u16 && w.format[1].components == points_components_3;
+    const bool never_normalized = w.format[1].type == dew_type_u16 && w.format[1].components == dew_components_3;
     attr_stride = never_normalized ? raw : std::max(raw, normalized);
   }
   return pc * (3 * sizeof(float) + attr_stride + 1) + 16 * sizeof(float) + 4 * sizeof(float);
 }
 
-} // namespace points::converter
+} // namespace dew::converter

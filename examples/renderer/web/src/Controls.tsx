@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Aabb, MemoryStats } from './pointsRender';
+import type { Aabb, MemoryStats } from './dewRender';
 import type { ViewControls, VirtualStats } from './usePointCloudRenderer';
 
 interface ControlsProps {

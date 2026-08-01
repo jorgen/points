@@ -1,8 +1,8 @@
 #ifndef FRUSTUM_GL_RENDERER_H
 #define FRUSTUM_GL_RENDERER_H
 
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
+#include <dew/render/camera.h>
+#include <dew/render/renderer.h>
 
 #ifdef __EMSCRIPTEN__
 // Emscripten links the WebGL2 (GLES3) entry points directly; glad's runtime loader is meaningless here.
@@ -16,10 +16,10 @@
 struct gl_buffer_t
 {
   GLuint id = 0;
-  points_buffer_t *buffer;
-  points_buffer_type_t buffer_type;
-  points_type_t type;
-  points_components_t components;
+  dew_buffer_t *buffer;
+  dew_buffer_type_t buffer_type;
+  dew_type_t type;
+  dew_components_t components;
   void *data = nullptr;
   int data_size = 0;
   bool data_needs_upload = false;
@@ -29,10 +29,10 @@ struct gl_buffer_t
 struct gl_texture_t
 {
   GLuint id = 0;
-  points_buffer_t *buffer;
-  points_texture_type_t texture_type;
-  points_type_t type;
-  points_components_t components;
+  dew_buffer_t *buffer;
+  dew_texture_type_t texture_type;
+  dew_type_t type;
+  dew_components_t components;
   int size[3];
 };
 
@@ -50,7 +50,7 @@ public:
   gl_aabb_handler();
   ~gl_aabb_handler();
   void initialize() override;
-  void draw(points_draw_group_t &group);
+  void draw(dew_draw_group_t &group);
 
   GLuint vao;
   GLuint program;
@@ -66,7 +66,7 @@ public:
   gl_flat_points_handler();
   ~gl_flat_points_handler();
   void initialize() override;
-  void draw(points_draw_group_t &group);
+  void draw(dew_draw_group_t &group);
 
   GLuint vao;
   GLuint program;
@@ -88,8 +88,8 @@ public:
   gl_dyn_points_handler();
   ~gl_dyn_points_handler();
   void initialize() override;
-  void draw(points_draw_group_t &group, color_components_t color_components, float point_scale);
-  void draw_crossfade(points_draw_group_t &group, float point_scale);
+  void draw(dew_draw_group_t &group, color_components_t color_components, float point_scale);
+  void draw_crossfade(dew_draw_group_t &group, float point_scale);
 
   bool is_initialized;
 
@@ -128,7 +128,7 @@ public:
   gl_skybox_handler();
   ~gl_skybox_handler();
   void initialize() override;
-  void draw(points_draw_group_t &group);
+  void draw(dew_draw_group_t &group);
 
   GLuint vao;
   GLuint program;
@@ -145,7 +145,7 @@ public:
   gl_axis_gizmo_handler();
   ~gl_axis_gizmo_handler();
   void initialize() override;
-  void draw(points_draw_group_t &group, int viewport_width, int viewport_height);
+  void draw(dew_draw_group_t &group, int viewport_width, int viewport_height);
 
   GLuint vao;
   GLuint program;
@@ -161,7 +161,7 @@ public:
   gl_environment_handler();
   ~gl_environment_handler();
   void initialize() override;
-  void draw(points_draw_group_t &group);
+  void draw(dew_draw_group_t &group);
 
   GLuint vao;
   GLuint program;
@@ -178,7 +178,7 @@ public:
   gl_node_bbox_handler();
   ~gl_node_bbox_handler();
   void initialize() override;
-  void draw(points_draw_group_t &group);
+  void draw(dew_draw_group_t &group);
 
   GLuint vao = 0;
   GLuint program = 0;
@@ -194,7 +194,7 @@ public:
   gl_origin_anchor_handler();
   ~gl_origin_anchor_handler();
   void initialize() override;
-  void draw(points_draw_group_t &group);
+  void draw(dew_draw_group_t &group);
 
   GLuint vao;
   GLuint program;
@@ -215,7 +215,7 @@ class gl_renderer
 {
 
 public:
-  gl_renderer(points_renderer_t *renderer, points_camera_t *camera);
+  gl_renderer(dew_renderer_t *renderer, dew_camera_t *camera);
 
   void draw(clear clear, int viewport_width, int viewport_height);
 
@@ -223,31 +223,31 @@ public:
   float lod_scale_base = 1.1f;
 
 private:
-  static void static_dirty_callback(struct points_renderer_t *renderer, void *renderer_user_ptr);
-  static void static_create_buffer(struct points_renderer_t *renderer, void *renderer_user_ptr, enum points_buffer_type_t buffer_type, void **buffer_user_ptr);
-  static void static_initialize_buffer(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *buffer_user_ptr, enum points_type_t type,
-                                       enum points_components_t components, int buffer_size, void *data);
-  static void static_modify_buffer(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
-  static void static_destroy_buffer(struct points_renderer_t *renderer, void *renderer_user_ptr, void *buffer_user_ptr);
-  static void static_create_texture(struct points_renderer_t *renderer, void *renderer_user_ptr, enum points_texture_type_t buffer_texture_type, void **buffer_user_ptr);
-  static void static_initialize_texture(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *texture_user_ptr,
-                                        enum points_texture_type_t buffer_texture_type, enum points_type_t type, enum points_components_t components, int size[3], void *data);
-  static void static_modify_texture(struct points_renderer_t *renderer, void *renderer_user_ptr, struct points_buffer_t *buffer, void *texture_user_ptr,
-                                    enum points_texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
-  static void static_destroy_texture(struct points_renderer_t *renderer, void *renderer_user_ptr, void *texture_user_ptr);
+  static void static_dirty_callback(struct dew_renderer_t *renderer, void *renderer_user_ptr);
+  static void static_create_buffer(struct dew_renderer_t *renderer, void *renderer_user_ptr, enum dew_buffer_type_t buffer_type, void **buffer_user_ptr);
+  static void static_initialize_buffer(struct dew_renderer_t *renderer, void *renderer_user_ptr, struct dew_buffer_t *buffer, void *buffer_user_ptr, enum dew_type_t type,
+                                       enum dew_components_t components, int buffer_size, void *data);
+  static void static_modify_buffer(struct dew_renderer_t *renderer, void *renderer_user_ptr, struct dew_buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
+  static void static_destroy_buffer(struct dew_renderer_t *renderer, void *renderer_user_ptr, void *buffer_user_ptr);
+  static void static_create_texture(struct dew_renderer_t *renderer, void *renderer_user_ptr, enum dew_texture_type_t buffer_texture_type, void **buffer_user_ptr);
+  static void static_initialize_texture(struct dew_renderer_t *renderer, void *renderer_user_ptr, struct dew_buffer_t *buffer, void *texture_user_ptr,
+                                        enum dew_texture_type_t buffer_texture_type, enum dew_type_t type, enum dew_components_t components, int size[3], void *data);
+  static void static_modify_texture(struct dew_renderer_t *renderer, void *renderer_user_ptr, struct dew_buffer_t *buffer, void *texture_user_ptr,
+                                    enum dew_texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
+  static void static_destroy_texture(struct dew_renderer_t *renderer, void *renderer_user_ptr, void *texture_user_ptr);
   void dirty_callback();
-  void create_buffer(enum points_buffer_type_t buffer_type, void **buffer_user_ptr);
-  void initialize_buffer(struct points_buffer_t *buffer, void *buffer_user_ptr, enum points_type_t type, enum points_components_t components, int buffer_size, void *data);
-  void modify_buffer(struct points_buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
+  void create_buffer(enum dew_buffer_type_t buffer_type, void **buffer_user_ptr);
+  void initialize_buffer(struct dew_buffer_t *buffer, void *buffer_user_ptr, enum dew_type_t type, enum dew_components_t components, int buffer_size, void *data);
+  void modify_buffer(struct dew_buffer_t *buffer, void *buffer_user_ptr, int offset, int buffer_size, void *data);
   void destroy_buffer(void *buffer_user_ptr);
-  void create_texture(enum points_texture_type_t buffer_texture_type, void **buffer_user_ptr);
-  void initialize_texture(struct points_buffer_t *buffer, void *texture_user_ptr, enum points_texture_type_t buffer_texture_type, enum points_type_t type, enum points_components_t components,
+  void create_texture(enum dew_texture_type_t buffer_texture_type, void **buffer_user_ptr);
+  void initialize_texture(struct dew_buffer_t *buffer, void *texture_user_ptr, enum dew_texture_type_t buffer_texture_type, enum dew_type_t type, enum dew_components_t components,
                           int size[3], void *data);
-  void modify_texture(struct points_buffer_t *buffer, void *texture_user_ptr, enum points_texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
+  void modify_texture(struct dew_buffer_t *buffer, void *texture_user_ptr, enum dew_texture_type_t buffer_texture_type, int offset[3], int size[3], void *data);
   void destroy_texture(void *texture_user_ptr);
 
-  points_renderer_t *renderer;
-  points_camera_t *camera;
+  dew_renderer_t *renderer;
+  dew_camera_t *camera;
   std::vector<gl_frame_handler *> frame_handlers;
   std::vector<gl_buffer_t *> index_buffers;
   std::vector<gl_buffer_t *> vertex_buffers;

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -15,7 +15,7 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <points/render/flat_points_data_source.h>
+#include <dew/render/flat_points_data_source.h>
 
 #include "data_source_flat_points.hpp"
 
@@ -25,9 +25,9 @@
 
 #include <laszip_api.h>
 
-using namespace points::render;
+using namespace dew::render;
 
-static glm::vec3 get_point(laszip_point *point, double (&offset)[3], double (&scale)[3], points_aabb_t &aabb)
+static glm::vec3 get_point(laszip_point *point, double (&offset)[3], double (&scale)[3], dew_aabb_t &aabb)
 {
   glm::dvec3 ret(point->X * scale[0], point->Y * scale[1], point->Z * scale[2]);
   glm::dvec3 o(offset[0], offset[1], offset[2]);
@@ -47,7 +47,7 @@ static glm::vec3 get_point(laszip_point *point, double (&offset)[3], double (&sc
   return ret;
 }
 
-points_flat_points_data_source_t::points_flat_points_data_source_t(callback_manager_t &a_callbacks, std::string url)
+dew_flat_points_data_source_t::dew_flat_points_data_source_t(callback_manager_t &a_callbacks, std::string url)
   : data_source_cpp_t()
   , callbacks(a_callbacks)
 {
@@ -129,50 +129,50 @@ points_flat_points_data_source_t::points_flat_points_data_source_t(callback_mana
     fprintf(stderr, "DLL ERROR: destroying laszip reader\n");
   }
 
-  callbacks.do_create_buffer(vertex_buffer, points_buffer_type_vertex);
-  callbacks.do_initialize_buffer(vertex_buffer, points_type_r32, points_components_3, int(sizeof(*vertices.data()) * vertices.size()), vertices.data());
+  callbacks.do_create_buffer(vertex_buffer, dew_buffer_type_vertex);
+  callbacks.do_initialize_buffer(vertex_buffer, dew_type_r32, dew_components_3, int(sizeof(*vertices.data()) * vertices.size()), vertices.data());
 
-  callbacks.do_create_buffer(color_buffer, points_buffer_type_vertex);
-  callbacks.do_initialize_buffer(color_buffer, points_type_u8, points_components_3, int(sizeof(*colors.data()) * colors.size()), colors.data());
+  callbacks.do_create_buffer(color_buffer, dew_buffer_type_vertex);
+  callbacks.do_initialize_buffer(color_buffer, dew_type_u8, dew_components_3, int(sizeof(*colors.data()) * colors.size()), colors.data());
 
-  callbacks.do_create_buffer(project_view_buffer, points_buffer_type_uniform);
-  callbacks.do_initialize_buffer(project_view_buffer, points_type_r32, points_components_4x4, sizeof(project_view), &project_view);
+  callbacks.do_create_buffer(project_view_buffer, dew_buffer_type_uniform);
+  callbacks.do_initialize_buffer(project_view_buffer, dew_type_r32, dew_components_4x4, sizeof(project_view), &project_view);
 
-  render_list[0].buffer_mapping = points_bm_camera;
+  render_list[0].buffer_mapping = dew_bm_camera;
   render_list[0].user_ptr = project_view_buffer.user_ptr;
 
-  render_list[1].buffer_mapping = points_bm_vertex;
+  render_list[1].buffer_mapping = dew_bm_vertex;
   render_list[1].user_ptr = vertex_buffer.user_ptr;
 
-  render_list[2].buffer_mapping = points_bm_color;
+  render_list[2].buffer_mapping = dew_bm_color;
   render_list[2].user_ptr = color_buffer.user_ptr;
 }
-void points_flat_points_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, points_to_render_t *to_render)
+void dew_flat_points_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, dew_to_render_t *to_render)
 {
   project_view = camera.projection * glm::translate(camera.view, glm::dvec3(offset[0], offset[1], offset[2]));
   callbacks.do_modify_buffer(project_view_buffer, 0, sizeof(project_view), &project_view);
-  points_draw_group_t draw_group = {};
+  dew_draw_group_t draw_group = {};
   draw_group.buffers = render_list;
   draw_group.buffers_size = sizeof(render_list) / sizeof(*render_list);
-  draw_group.draw_type = points_flat_points;
+  draw_group.draw_type = dew_flat_points;
   draw_group.draw_size = int(vertices.size());
-  points_to_render_add_render_group(to_render, draw_group);
+  dew_to_render_add_render_group(to_render, draw_group);
 }
 
-struct points_flat_points_data_source_t *points_flat_points_data_source_create(struct points_renderer_t *renderer, const char *url, int url_size)
+struct dew_flat_points_data_source_t *dew_flat_points_data_source_create(struct dew_renderer_t *renderer, const char *url, int url_size)
 {
-  return new points_flat_points_data_source_t(renderer->callbacks, std::string(url, url_size));
+  return new dew_flat_points_data_source_t(renderer->callbacks, std::string(url, url_size));
 }
-void points_flat_points_data_source_destroy(struct points_flat_points_data_source_t *flat_points_data_source)
+void dew_flat_points_data_source_destroy(struct dew_flat_points_data_source_t *flat_points_data_source)
 {
   delete flat_points_data_source;
 }
-struct points_data_source_t points_flat_points_data_source_get(struct points_flat_points_data_source_t *flat_points_data_source)
+struct dew_data_source_t dew_flat_points_data_source_get(struct dew_flat_points_data_source_t *flat_points_data_source)
 {
   return flat_points_data_source->data_source;
 }
 
-void points_flat_points_get_aabb(struct points_flat_points_data_source_t *points, double aabb_min[3], double aabb_max[3])
+void dew_flat_points_get_aabb(struct dew_flat_points_data_source_t *points, double aabb_min[3], double aabb_max[3])
 {
   memcpy(aabb_min, points->aabb.min, sizeof(points->aabb.min));
   memcpy(aabb_max, points->aabb.max, sizeof(points->aabb.max));

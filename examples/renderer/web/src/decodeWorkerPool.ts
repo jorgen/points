@@ -1,8 +1,8 @@
-// The main-thread half of the off-main-thread decode. Installs `globalThis.__pointsDecodePool`, which the
+// The main-thread half of the off-main-thread decode. Installs `globalThis.__dewDecodePool`, which the
 // wasm render module (worker_node_data_loader.cpp) calls via embind:
 //
-//   __pointsDecodePool.post(id, msg)   -- hand a node's COMPRESSED blobs to a worker
-//   __pointsDecodePool.drain()         -- pull every finished reply since the last call (once per frame)
+//   __dewDecodePool.post(id, msg)   -- hand a node's COMPRESSED blobs to a worker
+//   __dewDecodePool.drain()         -- pull every finished reply since the last call (once per frame)
 //
 // `post`'s msg.buffers are Uint8Array views straight into the render module's wasm heap; we slice() them into
 // standalone ArrayBuffers (never transfer a heap view — that would detach the render heap) and hand those to
@@ -81,23 +81,23 @@ class DecodeWorkerPoolImpl implements DecodeWorkerPool {
     for (const w of this.workers) w.terminate();
     this.workers.length = 0;
     this.completed = [];
-    if ((globalThis as unknown as { __pointsDecodePool?: unknown }).__pointsDecodePool === this) {
-      delete (globalThis as unknown as { __pointsDecodePool?: unknown }).__pointsDecodePool;
+    if ((globalThis as unknown as { __dewDecodePool?: unknown }).__dewDecodePool === this) {
+      delete (globalThis as unknown as { __dewDecodePool?: unknown }).__dewDecodePool;
     }
   }
 }
 
 /**
- * Install a decode-worker pool as globalThis.__pointsDecodePool (idempotent — returns the existing one if
+ * Install a decode-worker pool as globalThis.__dewDecodePool (idempotent — returns the existing one if
  * already installed). The wasm render module picks it up when a data source is created; without it, decode
  * falls back to the main thread. Returns null if Web Workers are unavailable.
  */
 export function installDecodeWorkerPool(size?: number): DecodeWorkerPool | null {
-  const g = globalThis as unknown as { __pointsDecodePool?: DecodeWorkerPool };
-  if (g.__pointsDecodePool) return g.__pointsDecodePool;
+  const g = globalThis as unknown as { __dewDecodePool?: DecodeWorkerPool };
+  if (g.__dewDecodePool) return g.__dewDecodePool;
   if (typeof Worker === 'undefined') return null;
   const n = size ?? Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
   const pool = new DecodeWorkerPoolImpl(n);
-  g.__pointsDecodePool = pool;
+  g.__dewDecodePool = pool;
   return pool;
 }

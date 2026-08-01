@@ -3,13 +3,13 @@
 #include "fixed_size_vector.hpp"
 
 TEST_CASE("fixed_capacity_vector_t construction and basic properties") {
-  points::fixed_capacity_vector_t<int> vec(5);
+  dew::fixed_capacity_vector_t<int> vec(5);
 
   REQUIRE(vec.capacity() == 5);
 }
 
 TEST_CASE("fixed_capacity_vector_t element initialization and access") {
-  points::fixed_capacity_vector_t<int> vec(3);
+  dew::fixed_capacity_vector_t<int> vec(3);
 
   vec.initialize_at(0, 1);
   vec.initialize_at(1, 2);
@@ -21,7 +21,7 @@ TEST_CASE("fixed_capacity_vector_t element initialization and access") {
 }
 
 TEST_CASE("fixed_capacity_vector_t iterator usage") {
-  points::fixed_capacity_vector_t<int> vec(3);
+  dew::fixed_capacity_vector_t<int> vec(3);
 
   vec.initialize_at(0, 1);
   vec.initialize_at(1, 2);
@@ -38,7 +38,7 @@ TEST_CASE("fixed_capacity_vector_t iterator usage") {
 }
 
 TEST_CASE("fixed_capacity_vector_t const iterator usage") {
-  points::fixed_capacity_vector_t<int> vec(3);
+  dew::fixed_capacity_vector_t<int> vec(3);
 
   vec.initialize_at(0,1);
   vec.initialize_at(1, 2);
@@ -54,12 +54,12 @@ TEST_CASE("fixed_capacity_vector_t const iterator usage") {
 }
 
 TEST_CASE("fixed_capacity_vector_t move constructor") {
-  points::fixed_capacity_vector_t<int> vec(3);
+  dew::fixed_capacity_vector_t<int> vec(3);
   vec.initialize_at(0, 1);
   vec.initialize_at(1, 2);
   vec.initialize_at(2, 3);
 
-  points::fixed_capacity_vector_t<int> moved_vec(std::move(vec));
+  dew::fixed_capacity_vector_t<int> moved_vec(std::move(vec));
 
   REQUIRE(moved_vec.capacity() == 3);
   REQUIRE(moved_vec[0] == 1);
@@ -69,12 +69,12 @@ TEST_CASE("fixed_capacity_vector_t move constructor") {
 }
 
 TEST_CASE("fixed_capacity_vector_t move assignment") {
-  points::fixed_capacity_vector_t<int> vec(3);
+  dew::fixed_capacity_vector_t<int> vec(3);
   vec.initialize_at(0, 1);
   vec.initialize_at(1, 2);
   vec.initialize_at(2, 3);
 
-  points::fixed_capacity_vector_t<int> moved_vec(1);
+  dew::fixed_capacity_vector_t<int> moved_vec(1);
   moved_vec = std::move(vec);
 
   REQUIRE(moved_vec.capacity() == 3);
@@ -86,7 +86,7 @@ TEST_CASE("fixed_capacity_vector_t move assignment") {
 
 TEST_CASE("fixed_capacity_vector_t clear")
 {
-  points::fixed_capacity_vector_t<int> vec(3);
+  dew::fixed_capacity_vector_t<int> vec(3);
   vec.initialize_at(0, 1);
   vec.initialize_at(1, 2);
   vec.initialize_at(2, 3);
@@ -96,12 +96,12 @@ TEST_CASE("fixed_capacity_vector_t clear")
 }
 
 TEST_CASE("fixed_capacity_vector_t noexcept move assignment") {
-  points::fixed_capacity_vector_t<int> vec(3);
+  dew::fixed_capacity_vector_t<int> vec(3);
   vec.initialize_at(0, 1);
   vec.initialize_at(1, 2);
   vec.initialize_at(2, 3);
 
-  points::fixed_capacity_vector_t<int> moved_vec(1);
+  dew::fixed_capacity_vector_t<int> moved_vec(1);
   REQUIRE(std::is_nothrow_move_assignable_v<decltype(moved_vec)>);
 
   moved_vec = std::move(vec);
@@ -113,6 +113,6 @@ TEST_CASE("fixed_capacity_vector_t noexcept move assignment") {
 }
 
 TEST_CASE("fixed_capacity_vector_t deleted copy constructor and assignment") {
-  REQUIRE_FALSE(std::is_copy_constructible_v<points::fixed_capacity_vector_t<int>>);
-  REQUIRE_FALSE(std::is_copy_assignable_v<points::fixed_capacity_vector_t<int>>);
+  REQUIRE_FALSE(std::is_copy_constructible_v<dew::fixed_capacity_vector_t<int>>);
+  REQUIRE_FALSE(std::is_copy_assignable_v<dew::fixed_capacity_vector_t<int>>);
 }

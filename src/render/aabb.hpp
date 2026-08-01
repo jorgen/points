@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2020  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -18,11 +18,11 @@
 #pragma once
 
 #include "glm_include.hpp"
-#include <points/render/aabb.h>
+#include <dew/render/aabb.h>
 
-namespace points::render
+namespace dew::render
 {
-inline glm::dvec3 aabb_center(const points_aabb_t &aabb)
+inline glm::dvec3 aabb_center(const dew_aabb_t &aabb)
 {
   double half_x = (aabb.max[0] - aabb.min[0]) * 0.5;
   double half_y = (aabb.max[1] - aabb.min[1]) * 0.5;
@@ -30,4 +30,4 @@ inline glm::dvec3 aabb_center(const points_aabb_t &aabb)
   return {aabb.min[0] + half_x, aabb.min[1] + half_y, aabb.min[2] + half_z};
 }
 
-} // namespace points::render
+} // namespace dew::render

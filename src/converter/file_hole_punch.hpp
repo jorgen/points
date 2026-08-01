@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -34,7 +34,7 @@
 
 #include <cstdint>
 
-namespace points::converter
+namespace dew::converter
 {
 
 enum class hole_punch_status_t
@@ -47,7 +47,7 @@ enum class hole_punch_status_t
 struct hole_punch_result_t
 {
   hole_punch_status_t status;
-  points_error_t error;
+  dew_error_t error;
 };
 
 // Punch `[offset, offset + length)` (its block-aligned interior where the platform requires it) in
@@ -63,4 +63,4 @@ inline hole_punch_result_t file_hole_punch_probe(int fd, uint64_t offset, uint64
   return file_hole_punch(fd, offset, length);
 }
 
-} // namespace points::converter
+} // namespace dew::converter

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -28,7 +28,7 @@
 #include <emscripten/emscripten.h>
 #endif
 
-namespace points::converter
+namespace dew::converter
 {
 
 // Awaitable wrapper for callback-based storage_handler operations.
@@ -68,18 +68,18 @@ struct write_trees_result_t
 {
   std::vector<tree_id_t> tree_ids;
   std::vector<storage_location_t> locations;
-  points_error_t error;
+  dew_error_t error;
 };
 
 struct write_tree_registry_result_t
 {
   storage_location_t location;
-  points_error_t error;
+  dew_error_t error;
 };
 
 struct write_blob_result_t
 {
-  points_error_t error;
+  dew_error_t error;
 };
 
 tree_handler_t::tree_handler_t(vio::thread_pool_t &thread_pool, storage_handler_t &file_cache, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<input_data_id_t> &done_with_input)
@@ -134,7 +134,7 @@ void tree_handler_t::stop_loop()
   _event_loop_thread.stop_and_join();
 }
 
-points_error_t tree_handler_t::deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size)
+dew_error_t tree_handler_t::deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size)
 {
   auto ret = tree_registry_deserialize(tree_registry_buffer, tree_registry_blobs_size, _tree_registry);
   if (ret.code == 0)
@@ -235,7 +235,7 @@ void tree_handler_t::generate_lod(const morton::morton192_t &max)
 
 void tree_handler_t::handle_generate_lod(morton::morton192_t &&max)
 {
-  if (std::getenv("POINTS_DEBUG_CHAIN"))
+  if (std::getenv("DEW_DEBUG_CHAIN"))
     fmt::print(stderr, "[sched] handle_generate_lod target={}\n", max.data[0]);
   _perf_stats.lod_start = perf_stats_t::clock_t::now();
   _perf_stats.lod_phase.store(true, std::memory_order_release);
@@ -468,7 +468,7 @@ void tree_handler_t::checkpoint_and_wait()
 
 vio::task_t<void> tree_handler_t::do_serialize_trees()
 {
-  const bool chain_debug = std::getenv("POINTS_DEBUG_CHAIN") != nullptr;
+  const bool chain_debug = std::getenv("DEW_DEBUG_CHAIN") != nullptr;
   if (chain_debug)
     fmt::print(stderr, "[chain] enter\n");
   // Step 0: Mark finality BEFORE serializing, so the state lands in this checkpoint's registry
@@ -551,7 +551,7 @@ vio::task_t<void> tree_handler_t::do_serialize_trees()
   {
     auto state = write_trees_awaitable._state;
     _file_cache.write_trees(std::move(tree_ids), std::move(serialized_trees),
-      [state](std::vector<tree_id_t> &&ids, std::vector<storage_location_t> &&locs, points_error_t &&err)
+      [state](std::vector<tree_id_t> &&ids, std::vector<storage_location_t> &&locs, dew_error_t &&err)
       {
         state->result.tree_ids = std::move(ids);
         state->result.locations = std::move(locs);
@@ -599,7 +599,7 @@ vio::task_t<void> tree_handler_t::do_serialize_trees()
   {
     auto state = write_registry_awaitable._state;
     _file_cache.write_tree_registry(std::move(serialized_registry),
-      [state](storage_location_t loc, points_error_t &&err)
+      [state](storage_location_t loc, dew_error_t &&err)
       {
         state->result.location = loc;
         state->result.error = std::move(err);
@@ -622,7 +622,7 @@ vio::task_t<void> tree_handler_t::do_serialize_trees()
     auto state = write_blob_awaitable._state;
     auto committed_watermark = _tree_registry.lod_watermark;
     _file_cache.write_blob_locations_and_update_header(registry_result.location, std::move(old_locations),
-      [state, this, committed_watermark](points_error_t &&err)
+      [state, this, committed_watermark](dew_error_t &&err)
       {
         if (err.code == 0)
         {
@@ -665,7 +665,7 @@ void tree_handler_t::handle_deserialize_tree(tree_id_t &&tree_id, serialized_tre
   _tree_registry.data[tree_id.data] = std::make_unique<tree_t>();
   auto tree = _tree_registry.get(tree_id);
   assert(tree);
-  points_error_t error;
+  dew_error_t error;
   auto ret = tree_deserialize(data, *tree, error);
   if (ret)
     tree_compute_leaves_collapsed(*tree, _tree_registry);
@@ -737,4 +737,4 @@ void tree_handler_t::handle_request_root()
 {
   handle_request_trees_batch(std::vector<tree_id_t>{_tree_registry.root});
 }
-} // namespace points::converter
+} // namespace dew::converter

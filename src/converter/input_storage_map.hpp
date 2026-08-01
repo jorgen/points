@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #include <cstring>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // Shared hasher for input_data_id_t keyed maps (storage maps, LOD child maps, registry chunk refs).
@@ -138,5 +138,5 @@ private:
   std::vector<input_data_id_t> _ids;
 };
 
-} // namespace points::converter
+} // namespace dew::converter
 

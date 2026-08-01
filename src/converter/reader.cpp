@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -25,15 +25,15 @@
 
 #include <fmt/printf.h>
 
-#include <points/converter/default_attribute_names.h>
+#include <dew/converter/default_attribute_names.h>
 
 #include <assert.h>
 #include <chrono>
 
-namespace points::converter
+namespace dew::converter
 {
 get_data_worker_t::get_data_worker_t(point_reader_file_t &a_point_reader_file, attributes_configs_t &a_attribute_configs, perf_stats_t &a_perf_stats, const get_points_file_t &a_file,
-                                     vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t>> &a_input_init_pipe, vio::event_pipe_t<input_data_id_t> &a_sub_added,
+                                     vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, dew_converter_header_t>> &a_input_init_pipe, vio::event_pipe_t<input_data_id_t> &a_sub_added,
                                      vio::event_pipe_t<unsorted_points_event_t> &a_unsorted_points_queue)
   : point_reader_file(a_point_reader_file)
   , attribute_configs(a_attribute_configs)
@@ -49,7 +49,7 @@ get_data_worker_t::get_data_worker_t(point_reader_file_t &a_point_reader_file, a
 
 struct callback_closer
 {
-  callback_closer(points_converter_file_convert_callbacks_t &a_callbacks, void *a_user_ptr)
+  callback_closer(dew_converter_file_convert_callbacks_t &a_callbacks, void *a_user_ptr)
     : callbacks(a_callbacks)
     , user_ptr(a_user_ptr)
   {
@@ -62,17 +62,17 @@ struct callback_closer
     }
   }
 
-  points_converter_file_convert_callbacks_t &callbacks;
+  dew_converter_file_convert_callbacks_t &callbacks;
   void *user_ptr;
 };
 
 void get_data_worker_t::work()
 {
   storage_header_initialize(storage_header);
-  points_converter_attributes_t tmp_attributes;
-  points_error_t *local_error = nullptr;
+  dew_converter_attributes_t tmp_attributes;
+  dew_error_t *local_error = nullptr;
   void *user_ptr;
-  points_converter_header_t public_header;
+  dew_converter_header_t public_header;
   file.callbacks.init(file.filename.name, file.filename.name_length, &public_header, &tmp_attributes, &user_ptr, &local_error);
   callback_closer closer(file.callbacks, user_ptr);
   if (local_error)
@@ -81,11 +81,11 @@ void get_data_worker_t::work()
     return;
   }
 
-  if (tmp_attributes.attributes[0].name_size != strlen(POINTS_ATTRIBUTE_XYZ) || memcmp(tmp_attributes.attributes[0].name, POINTS_ATTRIBUTE_XYZ, tmp_attributes.attributes[0].name_size) != 0)
+  if (tmp_attributes.attributes[0].name_size != strlen(DEW_ATTRIBUTE_XYZ) || memcmp(tmp_attributes.attributes[0].name, DEW_ATTRIBUTE_XYZ, tmp_attributes.attributes[0].name_size) != 0)
   {
-    error.reset(new points_error_t());
+    error.reset(new dew_error_t());
     error->code = -1;
-    error->msg = "First attribute has to be " POINTS_ATTRIBUTE_XYZ;
+    error->msg = "First attribute has to be " DEW_ATTRIBUTE_XYZ;
     return;
   }
 
@@ -161,7 +161,7 @@ void get_data_worker_t::enqueue(vio::event_loop_t &event_loop, vio::thread_pool_
   });
 }
 
-sort_worker_t::sort_worker_t(const tree_config_t &a_tree_config, point_reader_file_t &a_reader_file, attributes_configs_t &a_attributes_configs, perf_stats_t &a_perf_stats, points_converter_header_t a_public_header, points_t &&a_points)
+sort_worker_t::sort_worker_t(const tree_config_t &a_tree_config, point_reader_file_t &a_reader_file, attributes_configs_t &a_attributes_configs, perf_stats_t &a_perf_stats, dew_converter_header_t a_public_header, points_t &&a_points)
   : _tree_config(a_tree_config)
   , reader_file(a_reader_file)
   , attributes_configs(a_attributes_configs)
@@ -203,8 +203,8 @@ void sort_worker_t::enqueue(vio::event_loop_t &event_loop, vio::thread_pool_t &t
 }
 
 point_reader_t::point_reader_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats,
-                               vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t>> &input_init_pipe,
-                               vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<std::pair<points_t, points_error_t>> &sorted_points_pipe, vio::event_pipe_t<input_data_id_t> &done_with_file,
+                               vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, dew_converter_header_t>> &input_init_pipe,
+                               vio::event_pipe_t<input_data_id_t> &sub_added, vio::event_pipe_t<std::pair<points_t, dew_error_t>> &sorted_points_pipe, vio::event_pipe_t<input_data_id_t> &done_with_file,
                                vio::event_pipe_t<file_error_t> &file_errors)
   : _event_loop(event_loop)
   , _thread_pool(thread_pool)
@@ -260,4 +260,4 @@ void point_reader_t::handle_unsorted_points(unsorted_points_event_t &&unsorted_p
   unsorted_points.reader_file.sort_workers.back()->enqueue(unsorted_points.reader_file.event_loop, unsorted_points.reader_file.thread_pool);
 }
 
-} // namespace points::converter
+} // namespace dew::converter

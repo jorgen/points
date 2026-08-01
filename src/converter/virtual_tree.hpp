@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -29,9 +29,9 @@
 #include <memory>
 #include <vector>
 
-struct points_to_render_t;
+struct dew_to_render_t;
 
-namespace points::converter
+namespace dew::converter
 {
 
 // Everything the per-frame virtual passes need, bundled to keep signatures small.
@@ -94,7 +94,7 @@ void process_virtual_trees(render_list_t &render_list, virtual_frame_t &frame);
 
 // Emit flat draw groups (lod_density_scale=0 -> the shader keeps all points) for selected+uploaded virtual
 // nodes, refreshing each node's camera uniform. Returns the number of virtual nodes drawn.
-int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, points_to_render_t *to_render, uint32_t frame_index, int viewport_height, double render_density_px, float fade_duration_ms, uint64_t &points_rendered);
+int emit_virtual_draws(render_list_t &render_list, render::callback_manager_t &callbacks, const render::frame_camera_cpp_t &camera, const tree_config_t &tree_config, dew_to_render_t *to_render, uint32_t frame_index, int viewport_height, double render_density_px, float fade_duration_ms, uint64_t &points_rendered);
 
 // Destroy a virtual subtree children-first, spin-waiting each in-flight materialize before freeing.
 void destroy_virtual_subtree(std::unique_ptr<virtual_node_t> &root, render::callback_manager_t &callbacks, size_t *gpu_memory_used);
@@ -104,4 +104,4 @@ void destroy_virtual_subtree(std::unique_ptr<virtual_node_t> &root, render::call
 // decoding -- destroy_virtual_subtree would otherwise spin-wait on the main thread.
 bool virtual_subtree_has_inflight(const virtual_node_t &root);
 
-} // namespace points::converter
+} // namespace dew::converter

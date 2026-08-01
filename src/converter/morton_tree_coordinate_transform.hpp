@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 #include "conversion_types.hpp"
 #include "morton.hpp"
 
-namespace points
+namespace dew
 {
 namespace converter
 {
@@ -57,17 +57,17 @@ inline void convert_local_morton_to_world(const morton::morton_t<T, C> &local, c
   morton::morton_upcast(local, min, world);
 }
 
-inline points_type_t morton_type_from_lod(int lod)
+inline dew_type_t morton_type_from_lod(int lod)
 {
   int top_index = lod * 3 + 3;
   if (top_index < 32)
-    return points_type_m32;
+    return dew_type_m32;
   if (top_index < 64)
-    return points_type_m64;
+    return dew_type_m64;
   if (top_index < 128)
-    return points_type_m128;
-  return points_type_m192;
+    return dew_type_m128;
+  return dew_type_m192;
 }
 
 } // namespace converter
-} // namespace points
+} // namespace dew

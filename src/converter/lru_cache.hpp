@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -24,7 +24,7 @@
 #include <mutex>
 #include <optional>
 
-namespace points::converter
+namespace dew::converter
 {
 
 template <typename Key, typename Value, typename Hash, typename KeyEqual = std::equal_to<Key>>
@@ -144,4 +144,4 @@ private:
   mutable std::mutex _mutex;
 };
 
-} // namespace points::converter
+} // namespace dew::converter

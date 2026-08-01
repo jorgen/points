@@ -1,10 +1,10 @@
 
 set(public_headers
-        points/converter/export.h
-        points/converter/converter.h
-        points/converter/connection_cli.h
-        points/converter/default_attribute_names.h
-        points/converter/converter_data_source.h
+        dew/converter/export.h
+        dew/converter/converter.h
+        dew/converter/connection_cli.h
+        dew/converter/default_attribute_names.h
+        dew/converter/converter_data_source.h
 )
 
 set(private_headers
@@ -86,37 +86,37 @@ set(sources
         object_backend.cpp
 )
 
-add_library(points_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(points_converter_objects PRIVATE fmt glm unordered_dense points_render points_common vio_objstore libzstd_static)
-target_link_libraries(points_converter_objects PRIVATE laszip)
-target_include_directories(points_converter_objects
+add_library(dew_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
+target_link_libraries(dew_converter_objects PRIVATE fmt glm unordered_dense dew_render dew_common vio_objstore libzstd_static)
+target_link_libraries(dew_converter_objects PRIVATE laszip)
+target_include_directories(dew_converter_objects
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:include>
 )
-target_include_directories(points_converter_objects
+target_include_directories(dew_converter_objects
         PRIVATE
         ${libmorton_SOURCE_DIR}/include
         ${zstd_SOURCE_DIR}/lib
         ${zstd_SOURCE_DIR}/lib/common
 )
-setWarningflagsForTarget(points_converter_objects)
+setWarningflagsForTarget(dew_converter_objects)
 
 if (MSVC)
-    target_compile_options(points_converter_objects PRIVATE /arch:AVX2)
+    target_compile_options(dew_converter_objects PRIVATE /arch:AVX2)
 else ()
-    #target_compile_options(points_converter_objects PRIVATE -mavx2)
+    #target_compile_options(dew_converter_objects PRIVATE -mavx2)
 endif ()
 
 if (BUILD_SHARED_LIBS)
-    target_compile_definitions(points_converter_objects PRIVATE POINTS_CONVERTER_EXPORTS)
-    #    target_compile_options(points_converter_objects PRIVATE -fsanitize=address)
-    #    target_link_libraries(points_converter_objects PRIVATE -fsanitize=address)
+    target_compile_definitions(dew_converter_objects PRIVATE DEW_CONVERTER_EXPORTS)
+    #    target_compile_options(dew_converter_objects PRIVATE -fsanitize=address)
+    #    target_link_libraries(dew_converter_objects PRIVATE -fsanitize=address)
 endif ()
 
-add_library(points_converter empty_dylib_function.cpp $<TARGET_OBJECTS:points_converter_objects>)
-#target_compile_options(points_converter PRIVATE -fsanitize=address)
-#target_link_options(points_converter PRIVATE -fsanitize=address)
-target_link_libraries(points_converter PUBLIC points_converter_objects)
-target_link_libraries(points_converter PRIVATE laszip)
+add_library(dew_converter empty_dylib_function.cpp $<TARGET_OBJECTS:dew_converter_objects>)
+#target_compile_options(dew_converter PRIVATE -fsanitize=address)
+#target_link_options(dew_converter PRIVATE -fsanitize=address)
+target_link_libraries(dew_converter PUBLIC dew_converter_objects)
+target_link_libraries(dew_converter PRIVATE laszip)

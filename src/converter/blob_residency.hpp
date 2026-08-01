@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -44,7 +44,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 enum class blob_residency_state_t : uint8_t
@@ -156,7 +156,7 @@ public:
   // local_spilled entry is demoted to its remote_* state: a punch may have raced the crash and the
   // remote copy is the authoritative one (local bytes are unverifiable-cheaply).
   std::vector<uint8_t> serialize(bool clean_shutdown) const;
-  [[nodiscard]] points_error_t deserialize(const uint8_t *data, uint32_t size);
+  [[nodiscard]] dew_error_t deserialize(const uint8_t *data, uint32_t size);
 
 private:
   uint32_t get_or_create(uint64_t offset, uint32_t size);
@@ -173,4 +173,4 @@ private:
   uint32_t _generation = 1; // bumped per checkpoint serialize; entries record the gen of their remote fact
 };
 
-} // namespace points::converter
+} // namespace dew::converter

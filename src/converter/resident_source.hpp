@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -21,13 +21,13 @@
 #include "morton.hpp"                     // morton192_t
 #include "point_buffer_render_helper.hpp" // dyn_points_data_handler_t
 
-#include <points/common/format.h> // points_type_t
+#include <dew/common/format.h> // dew_type_t
 
 #include <array>
 #include <cstdint>
 #include <memory>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // A downloaded leaf kept resident in CPU memory so the renderer can grow a virtual octree from it without
@@ -42,9 +42,9 @@ struct resident_source_t
   morton::morton192_t node_min = {};                       // the leaf's loose-cube morton_min (split origin)
   node_aabb_t leaf_loose_aabb = {};                        // walker_data.aabb of the leaf
   int leaf_lod = 0;                                        // walker_data.lod of the leaf
-  points_type_t morton_type = points_type_m64;             // header.point_format.type
+  dew_type_t morton_type = dew_type_m64;             // header.point_format.type
   uint32_t point_count = 0;
   size_t cpu_bytes = 0;                                    // codes + decoded_vertex + attrs, for CPU budget
 };
 
-} // namespace points::converter
+} // namespace dew::converter

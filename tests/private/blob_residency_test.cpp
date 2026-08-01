@@ -13,7 +13,7 @@
 
 namespace
 {
-using namespace points::converter;
+using namespace dew::converter;
 
 TEST_CASE("residency: local blobs have no entries and accounting tracks resident bytes")
 {
@@ -150,7 +150,7 @@ TEST_CASE("residency: serialize round-trip, clean and unclean shutdown")
 #ifndef _WIN32
 TEST_CASE("hole punch reclaims blocks or reports unsupported")
 {
-  char path[] = "/tmp/points_hole_punch_test_XXXXXX";
+  char path[] = "/tmp/dew_hole_punch_test_XXXXXX";
   int fd = mkstemp(path);
   REQUIRE(fd >= 0);
 
@@ -162,15 +162,15 @@ TEST_CASE("hole punch reclaims blocks or reports unsupported")
   struct stat before = {};
   REQUIRE(fstat(fd, &before) == 0);
 
-  auto result = points::converter::file_hole_punch(fd, 4096, (1 << 20) - 8192);
-  if (result.status == points::converter::hole_punch_status_t::unsupported)
+  auto result = dew::converter::file_hole_punch(fd, 4096, (1 << 20) - 8192);
+  if (result.status == dew::converter::hole_punch_status_t::unsupported)
   {
     // Legit on exotic filesystems: the backend degrades to mark-only eviction.
     WARN("hole punch unsupported on this filesystem -- degraded mode only");
   }
   else
   {
-    REQUIRE(result.status == points::converter::hole_punch_status_t::ok);
+    REQUIRE(result.status == dew::converter::hole_punch_status_t::ok);
     struct stat after = {};
     REQUIRE(fstat(fd, &after) == 0);
     REQUIRE(after.st_size == before.st_size);     // logical size unchanged (KEEP_SIZE semantics)

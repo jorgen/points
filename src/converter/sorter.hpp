@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -22,8 +22,8 @@
 #include "converter.hpp"
 
 
-namespace points::converter
+namespace dew::converter
 {
-void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const points_converter_header_t &public_header, points_t &points, points_error_t &error, bool store_original_order = false);
+void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const dew_converter_header_t &public_header, points_t &points, dew_error_t &error, bool store_original_order = false);
 }
 

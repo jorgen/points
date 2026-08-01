@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -28,7 +28,7 @@
 #include <ankerl/unordered_dense.h>
 #include <deque>
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct lod_child_storage_info_t
@@ -41,7 +41,7 @@ using child_storage_map_t = ankerl::unordered_dense::map<input_data_id_t, lod_ch
 
 // Shared with the leaf-collapse path: slice a subset window out of a whole (decoded) buffer, and
 // scatter source attributes into destination buffers by an (input id, source index) permutation.
-points_converter_buffer_t morton_buffer_for_subset(const points_converter_buffer_t &buffer, points_type_t format, offset_in_subset_t offset, point_count_t count);
+dew_converter_buffer_t morton_buffer_for_subset(const dew_converter_buffer_t &buffer, dew_type_t format, offset_in_subset_t offset, point_count_t count);
 void quantize_attributres(storage_handler_t &cache, const child_storage_map_t &child_storage_map, const std::vector<std::pair<input_data_id_t, uint32_t>> &indecies,
                           const attribute_lod_mapping_t &lod_attrib_mapping, attribute_buffers_t &buffers);
 struct lod_node_worker_data_t
@@ -142,4 +142,4 @@ private:
   morton::morton192_t _lod_complete_morton = {};
 };
 
-} // namespace points::converter
+} // namespace dew::converter

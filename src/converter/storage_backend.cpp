@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -31,10 +31,10 @@
 
 #include <cstdlib>
 
-namespace points::converter
+namespace dew::converter
 {
 
-std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, std::string_view connection, vio::event_loop_t &event_loop, points_error_t &error)
+std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, std::string_view connection, vio::event_loop_t &event_loop, dew_error_t &error)
 {
   auto parsed = parse_url(url);
 
@@ -73,9 +73,9 @@ std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url
   return std::make_unique<object_backend_t>(std::move(io.value()), event_loop);
 }
 
-std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, points_error_t &error)
+std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, dew_error_t &error)
 {
   return create_storage_backend(url, std::string_view{}, event_loop, error);
 }
 
-} // namespace points::converter
+} // namespace dew::converter

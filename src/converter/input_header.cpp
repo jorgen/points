@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -19,9 +19,9 @@
 
 #include <assert.h>
 
-using namespace points::converter;
+using namespace dew::converter;
 
-void points_converter_attributes_add_attribute(struct points_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum points_type_t format, enum points_components_t components)
+void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components)
 {
   attributes->attribute_names.emplace_back(new char[name_size + 1]);
   memcpy(attributes->attribute_names.back().get(), name, name_size);
@@ -29,10 +29,10 @@ void points_converter_attributes_add_attribute(struct points_converter_attribute
   attributes->attributes.push_back({attributes->attribute_names.back().get(), name_size, format, components});
 }
 
-namespace points::converter
+namespace dew::converter
 {
 
-void attributes_copy(const points_converter_attributes_t &source, points_converter_attributes_t &target)
+void attributes_copy(const dew_converter_attributes_t &source, dew_converter_attributes_t &target)
 {
   assert(target.attributes.empty());
   assert(target.attribute_names.empty());
@@ -89,4 +89,4 @@ void attribute_buffers_adjust_buffers_to_size(const std::vector<point_format_t> 
     buffer.size = size_for_format(attributes_def[i].type) * uint32_t(attributes_def[i].components) * point_count;
   }
 }
-} // namespace points::converter
+} // namespace dew::converter

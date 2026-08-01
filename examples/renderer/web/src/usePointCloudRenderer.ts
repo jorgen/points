@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { loadPointsRender, type Aabb, type Connection, type MemoryStats, type Renderer } from './pointsRender';
+import { loadDewRender, type Aabb, type Connection, type MemoryStats, type Renderer } from './dewRender';
 import { installDecodeWorkerPool } from './decodeWorkerPool';
 import { detectDeviceProfile } from './deviceProfile';
 
@@ -8,24 +8,24 @@ import { detectDeviceProfile } from './deviceProfile';
 const DEVICE_PROFILE = detectDeviceProfile();
 
 // Install the off-main-thread decode pool iff its wasm module was built and copied to public/. Probing the
-// artifact keeps it a safe opt-in: a render-only build (no points_decode_worker.mjs) transparently falls back
-// to inline decode. Runs at most once; the wasm data source reads globalThis.__pointsDecodePool on create.
+// artifact keeps it a safe opt-in: a render-only build (no dew_decode_worker.mjs) transparently falls back
+// to inline decode. Runs at most once; the wasm data source reads globalThis.__dewDecodePool on create.
 let decodePoolProbe: Promise<void> | null = null;
 function ensureDecodeWorkerPool(): Promise<void> {
   if (!decodePoolProbe) {
     decodePoolProbe = (async () => {
       try {
-        const url = new URL('points_decode_worker.mjs', document.baseURI).href;
+        const url = new URL('dew_decode_worker.mjs', document.baseURI).href;
         const res = await fetch(url, { method: 'HEAD' });
         if (res.ok) {
           // Each worker owns an independent wasm heap, so mobile runs fewer of them (device profile).
           installDecodeWorkerPool(DEVICE_PROFILE.decodeWorkers);
-          console.info(`[points] off-main-thread decode enabled (${DEVICE_PROFILE.decodeWorkers} workers)`);
+          console.info(`[dew] off-main-thread decode enabled (${DEVICE_PROFILE.decodeWorkers} workers)`);
         } else {
-          console.info('[points] decode worker module absent — using inline decode');
+          console.info('[dew] decode worker module absent — using inline decode');
         }
       } catch {
-        console.info('[points] decode worker probe failed — using inline decode');
+        console.info('[dew] decode worker probe failed — using inline decode');
       }
     })();
   }
@@ -33,7 +33,7 @@ function ensureDecodeWorkerPool(): Promise<void> {
 }
 
 /** DOM id of the canvas the renderer draws into (used as the Emscripten WebGL context selector). */
-export const CANVAS_ID = 'points-cloud-canvas';
+export const CANVAS_ID = 'dew-canvas';
 
 export type RendererStatus = 'idle' | 'connecting' | 'ready' | 'error';
 
@@ -172,11 +172,11 @@ export function usePointCloudRenderer(
     void (async () => {
       let renderer: Renderer | null = null;
       try {
-        const mod = await loadPointsRender();
+        const mod = await loadDewRender();
         if (cancelled) return;
 
         // Stand up the decode-worker pool (if built) before createRenderer: the data source reads
-        // globalThis.__pointsDecodePool at construction to pick the worker vs. inline decode path.
+        // globalThis.__dewDecodePool at construction to pick the worker vs. inline decode path.
         await ensureDecodeWorkerPool();
         if (cancelled) return;
 

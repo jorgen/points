@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2020  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -17,19 +17,19 @@
 ************************************************************************/
 #pragma once
 
-#include <points/render/renderer.h>
-#include <points/render/data_source.h>
+#include <dew/render/renderer.h>
+#include <dew/render/data_source.h>
 
 #include "renderer_callbacks.hpp"
 #include "camera.hpp"
 
-struct points_renderer_t
+struct dew_renderer_t
 {
-  points_renderer_t()
+  dew_renderer_t()
     : callbacks(this)
   {}
-  std::vector<points_camera_t*> cameras;
-  std::vector<points_data_source_t> data_sources;
-  std::vector<points_draw_group_t> to_render;
-  points::render::callback_manager_t callbacks;
+  std::vector<dew_camera_t*> cameras;
+  std::vector<dew_data_source_t> data_sources;
+  std::vector<dew_draw_group_t> to_render;
+  dew::render::callback_manager_t callbacks;
 };

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "converter.hpp"
-#include <points/converter/converter.h>
+#include <dew/converter/converter.h>
 
 #include "compressor.hpp"
 #include "perf_stats.hpp"
@@ -30,16 +30,16 @@
 #include <filesystem>
 #include <vector>
 
-using namespace points::converter;
+using namespace dew::converter;
 
-struct points_converter_t *points_converter_create(const char *url, uint64_t url_size, enum points_converter_open_file_semantics_t semantics, points_error_t **error)
+struct dew_converter_t *dew_converter_create(const char *url, uint64_t url_size, enum dew_converter_open_file_semantics_t semantics, dew_error_t **error)
 {
-  auto *converter = new points_converter_t(url, url_size, semantics);
+  auto *converter = new dew_converter_t(url, url_size, semantics);
   if (converter->error.code != 0)
   {
     if (error)
     {
-      *error = new points_error_t();
+      *error = new dew_error_t();
       (*error)->code = converter->error.code;
       (*error)->msg = converter->error.msg;
     }
@@ -49,12 +49,12 @@ struct points_converter_t *points_converter_create(const char *url, uint64_t url
   return converter;
 }
 
-struct points_converter_t *points_converter_create_with_connection(const char *url, uint64_t url_size, const char *connection, uint64_t connection_size, enum points_converter_open_file_semantics_t semantics, points_error_t **error)
+struct dew_converter_t *dew_converter_create_with_connection(const char *url, uint64_t url_size, const char *connection, uint64_t connection_size, enum dew_converter_open_file_semantics_t semantics, dew_error_t **error)
 {
-  // Cloud destinations route through an IMPLICIT local cache + incremental JLP2 upload: one
+  // Cloud destinations route through an IMPLICIT local cache + incremental DEW2 upload: one
   // conversion pipeline (local IO for LOD reads, resumable, band uploads) instead of the retired
-  // direct object-per-blob write mode. The cache lives in $POINTS_CACHE_DIR (or the OS cache dir)
-  // named by a hash of the destination URL, capped via $POINTS_CACHE_MAX_BYTES (0/unset = uncapped).
+  // direct object-per-blob write mode. The cache lives in $DEW_CACHE_DIR (or the OS cache dir)
+  // named by a hash of the destination URL, capped via $DEW_CACHE_MAX_BYTES (0/unset = uncapped).
   // Local URLs (file:// / bare paths / dir:// / mem://) keep the classic single-store behavior.
   {
     std::string url_string(url, url_size);
@@ -65,7 +65,7 @@ struct points_converter_t *points_converter_create_with_connection(const char *u
       if (scheme == "s3" || scheme == "az" || scheme == "azure" || scheme == "http" || scheme == "https")
       {
         std::string cache_dir;
-        if (const char *env_dir = std::getenv("POINTS_CACHE_DIR"))
+        if (const char *env_dir = std::getenv("DEW_CACHE_DIR"))
           cache_dir = env_dir;
         else if (const char *home = std::getenv("HOME"))
 #ifdef __APPLE__
@@ -83,13 +83,13 @@ struct points_converter_t *points_converter_create_with_connection(const char *u
         for (char c : url_string)
           hash = (hash ^ uint8_t(c)) * 1099511628211ull;
         char name[32];
-        snprintf(name, sizeof(name), "%016llx.jlp", static_cast<unsigned long long>(hash));
+        snprintf(name, sizeof(name), "%016llx.dew", static_cast<unsigned long long>(hash));
         std::string cache_path = cache_dir + "/" + name;
-        auto *converter = points_converter_create_with_destination(cache_path.c_str(), cache_path.size(), url, url_size, connection, connection_size, semantics, error);
+        auto *converter = dew_converter_create_with_destination(cache_path.c_str(), cache_path.size(), url, url_size, connection, connection_size, semantics, error);
         if (converter)
         {
-          if (const char *env_cap = std::getenv("POINTS_CACHE_MAX_BYTES"))
-            points_converter_set_cache_max_bytes(converter, strtoull(env_cap, nullptr, 10));
+          if (const char *env_cap = std::getenv("DEW_CACHE_MAX_BYTES"))
+            dew_converter_set_cache_max_bytes(converter, strtoull(env_cap, nullptr, 10));
         }
         return converter;
       }
@@ -97,7 +97,7 @@ struct points_converter_t *points_converter_create_with_connection(const char *u
   }
 
   // Install the connection string (credentials/endpoint/region) for the output URL's provider before the
-  // storage backend is created inside points_converter_create. A no-op for local (file/dir/mem) URLs.
+  // storage backend is created inside dew_converter_create. A no-op for local (file/dir/mem) URLs.
   bool applied = false;
   if (connection && connection_size > 0)
   {
@@ -106,7 +106,7 @@ struct points_converter_t *points_converter_create_with_connection(const char *u
     {
       if (error)
       {
-        *error = new points_error_t();
+        *error = new dew_error_t();
         (*error)->code = result.error().code != 0 ? result.error().code : -1;
         (*error)->msg = result.error().msg;
       }
@@ -114,7 +114,7 @@ struct points_converter_t *points_converter_create_with_connection(const char *u
     }
     applied = true;
   }
-  auto *converter = points_converter_create(url, url_size, semantics, error);
+  auto *converter = dew_converter_create(url, url_size, semantics, error);
   // The override was consumed when the backend was created (its bucket/prefix are baked in), so clear it
   // now; leaving it set would leak into a later create with a different URL in the same process.
   if (applied)
@@ -125,11 +125,11 @@ struct points_converter_t *points_converter_create_with_connection(const char *u
   return converter;
 }
 
-struct points_converter_t *points_converter_create_with_destination(const char *cache_path, uint64_t cache_path_size, const char *destination_url, uint64_t destination_url_size, const char *connection, uint64_t connection_size,
-                                                                    enum points_converter_open_file_semantics_t semantics, points_error_t **error)
+struct dew_converter_t *dew_converter_create_with_destination(const char *cache_path, uint64_t cache_path_size, const char *destination_url, uint64_t destination_url_size, const char *connection, uint64_t connection_size,
+                                                                    enum dew_converter_open_file_semantics_t semantics, dew_error_t **error)
 {
   if (!destination_url || destination_url_size == 0)
-    return points_converter_create(cache_path, cache_path_size, semantics, error);
+    return dew_converter_create(cache_path, cache_path_size, semantics, error);
   std::string cache(cache_path, cache_path_size);
   // The cache must be a local packed file: reject remote schemes early with a clear error.
   auto scheme_end = cache.find("://");
@@ -137,22 +137,22 @@ struct points_converter_t *points_converter_create_with_destination(const char *
   {
     if (error)
     {
-      *error = new points_error_t();
+      *error = new dew_error_t();
       (*error)->code = 1;
       (*error)->msg = "cache_path must be a local file path (the destination is where the dataset uploads)";
     }
     return nullptr;
   }
-  points::converter::destination_config_t destination;
+  dew::converter::destination_config_t destination;
   destination.url.assign(destination_url, destination_url_size);
   if (connection && connection_size)
     destination.connection.assign(connection, connection_size);
-  auto *converter = new points_converter_t(cache_path, cache_path_size, semantics, destination);
+  auto *converter = new dew_converter_t(cache_path, cache_path_size, semantics, destination);
   if (converter->error.code != 0)
   {
     if (error)
     {
-      *error = new points_error_t();
+      *error = new dew_error_t();
       (*error)->code = converter->error.code;
       (*error)->msg = converter->error.msg;
     }
@@ -162,22 +162,22 @@ struct points_converter_t *points_converter_create_with_destination(const char *
   return converter;
 }
 
-void points_converter_set_cache_max_bytes(points_converter_t *converter, uint64_t max_bytes)
+void dew_converter_set_cache_max_bytes(dew_converter_t *converter, uint64_t max_bytes)
 {
   converter->processor.set_cache_max_bytes(max_bytes);
 }
 
-void points_converter_set_read_cache_bytes(points_converter_t *converter, uint64_t max_bytes)
+void dew_converter_set_read_cache_bytes(dew_converter_t *converter, uint64_t max_bytes)
 {
   converter->processor.storage_handler().set_read_cache_size(max_bytes);
 }
 
-void points_converter_set_upload_callbacks(points_converter_t *converter, points_converter_upload_callbacks_t callbacks, void *user_ptr)
+void dew_converter_set_upload_callbacks(dew_converter_t *converter, dew_converter_upload_callbacks_t callbacks, void *user_ptr)
 {
   converter->processor.set_upload_callbacks(callbacks, user_ptr);
 }
 
-bool points_converter_get_upload_state(points_converter_t *converter, points_converter_upload_state_t *state)
+bool dew_converter_get_upload_state(dew_converter_t *converter, dew_converter_upload_state_t *state)
 {
   memset(state, 0, sizeof(*state));
   auto upload = converter->processor.upload_stats();
@@ -186,7 +186,7 @@ bool points_converter_get_upload_state(points_converter_t *converter, points_con
   state->objects_written = upload.objects_written;
   state->upload_parked = upload.parked ? 1 : 0;
   state->destination_complete = upload.complete ? 1 : 0;
-  points::converter::storage_handler_t::cache_tier_stats_t cache = {};
+  dew::converter::storage_handler_t::cache_tier_stats_t cache = {};
   const bool have_cache = converter->processor.storage_handler().get_cache_tier_stats(cache);
   state->cache_resident_bytes = cache.resident_bytes;
   state->cache_max_bytes = cache.cap_bytes;
@@ -194,54 +194,54 @@ bool points_converter_get_upload_state(points_converter_t *converter, points_con
   return have_cache;
 }
 
-void points_converter_wait_local_complete(points_converter_t *converter)
+void dew_converter_wait_local_complete(dew_converter_t *converter)
 {
   converter->processor.wait_local_complete();
 }
 
-void points_converter_destroy(points_converter_t *destroy)
+void dew_converter_destroy(dew_converter_t *destroy)
 {
   delete destroy;
 }
 
-void points_converter_set_file_converter_callbacks(points_converter_t *converter, points_converter_file_convert_callbacks_t callbacks)
+void dew_converter_set_file_converter_callbacks(dew_converter_t *converter, dew_converter_file_convert_callbacks_t callbacks)
 {
   converter->processor.set_converter_callbacks(callbacks);
 }
 
-void points_converter_set_runtime_callbacks(points_converter_t *converter, points_converter_runtime_callbacks_t callbacks, void *user_ptr)
+void dew_converter_set_runtime_callbacks(dew_converter_t *converter, dew_converter_runtime_callbacks_t callbacks, void *user_ptr)
 {
   converter->processor.set_runtime_callbacks(callbacks, user_ptr);
 }
 
-void points_converter_set_compression(points_converter_t *converter, enum points_converter_compression_t compression)
+void dew_converter_set_compression(dew_converter_t *converter, enum dew_converter_compression_t compression)
 {
   converter->processor.storage_handler().set_compressor(static_cast<compression_method_t>(compression));
 }
 
-void points_converter_set_store_original_order(points_converter_t *converter, bool store)
+void dew_converter_set_store_original_order(dew_converter_t *converter, bool store)
 {
   auto config = converter->processor.tree_config();
   config.store_original_order = store;
   converter->processor.set_pre_init_tree_config(config);
 }
 
-void points_converter_set_compression_level(points_converter_t *converter, int level)
+void dew_converter_set_compression_level(dew_converter_t *converter, int level)
 {
   converter->processor.storage_handler().set_compression_level(level);
 }
 
-void points_converter_set_node_point_limit(points_converter_t *converter, uint32_t points)
+void dew_converter_set_node_point_limit(dew_converter_t *converter, uint32_t points)
 {
   converter->processor.set_pre_init_node_point_limit(points);
 }
 
-void points_converter_set_read_chunk_bytes(points_converter_t *converter, uint64_t bytes)
+void dew_converter_set_read_chunk_bytes(dew_converter_t *converter, uint64_t bytes)
 {
   converter->processor.set_pre_init_read_chunk_bytes(bytes);
 }
 
-void points_converter_add_data_file(points_converter_t *converter, points_converter_str_buffer *buffers, uint32_t buffer_count)
+void dew_converter_add_data_file(dew_converter_t *converter, dew_converter_str_buffer *buffers, uint32_t buffer_count)
 {
   std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> input_files;
   input_files.reserve(buffer_count);
@@ -257,21 +257,21 @@ void points_converter_add_data_file(points_converter_t *converter, points_conver
   converter->processor.add_files(std::move(input_files));
 }
 
-void points_converter_wait_idle(points_converter_t *converter)
+void dew_converter_wait_idle(dew_converter_t *converter)
 {
   converter->processor.wait_idle();
 }
 
-points_converter_conversion_status_t points_converter_status(points_converter_t *converter)
+dew_converter_conversion_status_t dew_converter_status(dew_converter_t *converter)
 {
   if (converter->processor.has_errors())
-    return points_conversion_status_error;
+    return dew_conversion_status_error;
   if (!converter->processor.is_idle() || converter->processor.upload_active())
-    return points_conversion_status_in_progress;
-  return points_conversion_status_completed;
+    return dew_conversion_status_in_progress;
+  return dew_conversion_status_completed;
 }
 
-static void fill_converter_stats(const compression_stats_t &src, points_converter_stats_t *dst)
+static void fill_converter_stats(const compression_stats_t &src, dew_converter_stats_t *dst)
 {
   memset(dst, 0, sizeof(*dst));
   dst->input_file_count = src.input_file_count;
@@ -300,7 +300,7 @@ static void fill_converter_stats(const compression_stats_t &src, points_converte
   }
 }
 
-bool points_converter_get_compression_stats(struct points_converter_t *converter, struct points_converter_stats_t *stats)
+bool dew_converter_get_compression_stats(struct dew_converter_t *converter, struct dew_converter_stats_t *stats)
 {
   if (!converter)
     return false;
@@ -309,7 +309,7 @@ bool points_converter_get_compression_stats(struct points_converter_t *converter
   return true;
 }
 
-static void fill_live_io_stats(points_converter_io_stats_t &dst, const io_counter_t &src)
+static void fill_live_io_stats(dew_converter_io_stats_t &dst, const io_counter_t &src)
 {
   dst.total_bytes = src.total_bytes.load(std::memory_order_relaxed);
   dst.total_time_us = src.total_time_us.load(std::memory_order_relaxed);
@@ -319,7 +319,7 @@ static void fill_live_io_stats(points_converter_io_stats_t &dst, const io_counte
   dst.low_mbps = src.low_mbps();
 }
 
-static void fill_io_stats(points_converter_io_stats_t &dst, const perf_stats_t::deserialized_perf_stats_t::counter_data_t &src)
+static void fill_io_stats(dew_converter_io_stats_t &dst, const perf_stats_t::deserialized_perf_stats_t::counter_data_t &src)
 {
   dst.total_bytes = src.total_bytes;
   dst.total_time_us = src.total_time_us;
@@ -329,7 +329,7 @@ static void fill_io_stats(points_converter_io_stats_t &dst, const perf_stats_t::
   dst.low_mbps = src.low_mbps();
 }
 
-bool points_converter_get_perf_stats(points_converter_t *converter, points_converter_perf_stats_t *perf_stats)
+bool dew_converter_get_perf_stats(dew_converter_t *converter, dew_converter_perf_stats_t *perf_stats)
 {
   if (!converter)
     return false;
@@ -356,7 +356,7 @@ bool points_converter_get_perf_stats(points_converter_t *converter, points_conve
   return true;
 }
 
-bool points_converter_get_live_perf_stats(struct points_converter_t *converter, struct points_converter_perf_stats_t *perf_stats)
+bool dew_converter_get_live_perf_stats(struct dew_converter_t *converter, struct dew_converter_perf_stats_t *perf_stats)
 {
   if (!converter)
     return false;

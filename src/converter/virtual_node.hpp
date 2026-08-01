@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #include "frustum_tree_walker.hpp" // node_aabb_t + glm
 #include "morton.hpp"
-#include "node_data_loader.hpp" // points_buffer_t, points_draw_type_t
+#include "node_data_loader.hpp" // dew_buffer_t, dew_draw_type_t
 #include "render_node_states.hpp"
 
 #include <array>
@@ -27,7 +27,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace points::converter
+namespace dew::converter
 {
 
 enum class virtual_mat_state : uint8_t
@@ -67,10 +67,10 @@ struct virtual_node_t
   render_node_fade_state fade_state = render_node_fade_state::fade_in;
   float fade_ms = 0.0f;
 
-  points_draw_type_t draw_type = points_dyn_points_1;
-  points_buffer_t gpu_buffers[4] = {}; // [0]=vertex [1]=color [2]=camera uniform [3]=rep_level
-  points_draw_buffer_t draw_list[6] = {};
-  points_buffer_t params_buffer = {};
+  dew_draw_type_t draw_type = dew_dyn_points_1;
+  dew_buffer_t gpu_buffers[4] = {}; // [0]=vertex [1]=color [2]=camera uniform [3]=rep_level
+  dew_draw_buffer_t draw_list[6] = {};
+  dew_buffer_t params_buffer = {};
   glm::vec4 params_data = {1.0f, 1.0f, 0.0f, 0.0f};
   glm::mat4 camera_view = {};
   size_t gpu_memory_size = 0;
@@ -81,4 +81,4 @@ struct virtual_node_t
   bool children_built = false;
 };
 
-} // namespace points::converter
+} // namespace dew::converter

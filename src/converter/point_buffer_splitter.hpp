@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -26,7 +26,7 @@
 #include <fmt/printf.h>
 
 
-namespace points::converter
+namespace dew::converter
 {
 template <typename T, size_t C>
 void verify_points_range(const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &min, const morton::morton192_t &max)
@@ -198,16 +198,16 @@ inline void point_buffer_subdivide(const read_only_points_t &points, input_stora
 {
   switch (points.header.point_format.type)
   {
-  case points_type_m32:
+  case dew_type_m32:
     point_buffer_subdivide_type<morton::morton32_t::component_type, morton::morton32_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
-  case points_type_m64:
+  case dew_type_m64:
     point_buffer_subdivide_type<morton::morton64_t::component_type, morton::morton64_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
-  case points_type_m128:
+  case dew_type_m128:
     point_buffer_subdivide_type<morton::morton128_t::component_type, morton::morton128_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
-  case points_type_m192:
+  case dew_type_m192:
     point_buffer_subdivide_type<morton::morton192_t::component_type, morton::morton192_t::component_count::value>(points, storage_map, subset, lod, node_min, children);
     break;
   default:
@@ -216,5 +216,5 @@ inline void point_buffer_subdivide(const read_only_points_t &points, input_stora
   }
 }
 
-} // namespace points::converter
+} // namespace dew::converter
 

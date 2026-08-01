@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-using namespace points::converter;
+using namespace dew::converter;
 
 TEST_CASE("byte_shuffle round trip single byte type")
 {

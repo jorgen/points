@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -21,28 +21,28 @@
 #include "data_source.hpp"
 #include "glm_include.hpp"
 #include "renderer_callbacks.hpp"
-#include <points/render/renderer.h>
+#include <dew/render/renderer.h>
 
-struct points_axis_gizmo_data_source_t : public points::render::data_source_cpp_t
+struct dew_axis_gizmo_data_source_t : public dew::render::data_source_cpp_t
 {
-  points_axis_gizmo_data_source_t(points::render::callback_manager_t &callbacks, const glm::dvec3 &center, double axis_length);
+  dew_axis_gizmo_data_source_t(dew::render::callback_manager_t &callbacks, const glm::dvec3 &center, double axis_length);
 
-  void add_to_frame(const points::render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
+  void add_to_frame(const dew::render::frame_camera_cpp_t &camera, dew_to_render_t *to_render) override;
   void rebuild_vertices();
 
-  points::render::callback_manager_t &callbacks;
+  dew::render::callback_manager_t &callbacks;
 
   glm::dvec3 center;
   double axis_length;
 
-  points_buffer_t camera_buffer;
+  dew_buffer_t camera_buffer;
   glm::mat4 camera_matrix;
 
-  points_buffer_t vertex_buffer;
+  dew_buffer_t vertex_buffer;
   std::vector<glm::vec3> vertices;
 
-  points_buffer_t color_buffer;
+  dew_buffer_t color_buffer;
   std::vector<glm::u8vec3> colors;
 
-  points_draw_buffer_t render_list[3];
+  dew_draw_buffer_t render_list[3];
 };

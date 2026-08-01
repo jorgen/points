@@ -4,10 +4,10 @@ add_executable(converter_example
         converter_example.cpp
 )
 
-CmDepTargetLinkLibrary(converter_example PRIVATE points_converter points_common points_render fmt)
+CmDepTargetLinkLibrary(converter_example PRIVATE dew_converter dew_common dew_render fmt)
 if(MSVC)
   target_link_options(converter_example PRIVATE "setargv.obj")
 endif()
-copy_dll_for_target(converter_example points_converter points_common points_render)
+copy_dll_for_target(converter_example dew_converter dew_common dew_render)
 setWarningFlagsForTarget(converter_example)
 set_example_properties(converter_example)

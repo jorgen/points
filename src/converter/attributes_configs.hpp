@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 
 #include <conversion_types.hpp>
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct attribute_source_lod_into_t
@@ -55,7 +55,7 @@ struct attribute_lod_mapping_t
 
 struct attribute_config_t
 {
-  points_converter_attributes_t attributes;
+  dew_converter_attributes_t attributes;
 };
 
 struct serialized_attributes_t
@@ -73,13 +73,13 @@ struct attribute_index_t
 class attributes_configs_t
 {
 public:
-  attributes_id_t get_attribute_config_index(points_converter_attributes_t &&attr);
+  attributes_id_t get_attribute_config_index(dew_converter_attributes_t &&attr);
   // keep_original_order: LOD buffers drop the synthetic original-order attribute (meaningless once
   // sampled); collapse keeps it (values reorder with the merge; chunk attribution is lost).
   attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end, bool keep_original_order = false);
-  attribute_lod_mapping_t get_lod_attribute_mapping(points_type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const;
+  attribute_lod_mapping_t get_lod_attribute_mapping(dew_type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const;
 
-  const points_converter_attributes_t &get(attributes_id_t id);
+  const dew_converter_attributes_t &get(attributes_id_t id);
 
   std::vector<point_format_t> get_format_components(attributes_id_t id);
   point_format_t get_point_format(attributes_id_t id);
@@ -87,7 +87,7 @@ public:
   attribute_index_t get_attribute_index(attributes_id_t id, const std::string &name) const;
 
   serialized_attributes_t serialize() const;
-  [[nodiscard]] points_error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
+  [[nodiscard]] dew_error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
 
   uint32_t attrib_name_registry_count() const;
   uint32_t attrib_name_registry_get(uint32_t index, char *name, uint32_t buffer_size) const;
@@ -102,6 +102,6 @@ private:
   std::vector<std::string> _attribute_name_registry;
 };
 
-} // namespace points::converter
+} // namespace dew::converter
 
 #endif // ATTRIBUTES_CONFIGS_HPP

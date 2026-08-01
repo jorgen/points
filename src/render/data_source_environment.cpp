@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -16,13 +16,13 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include "data_source_environment.hpp"
-#include <points/render/environment_data_source.h>
+#include <dew/render/environment_data_source.h>
 
 #include "renderer.hpp"
 
-using namespace points::render;
+using namespace dew::render;
 
-points_environment_data_source_t::points_environment_data_source_t(callback_manager_t &a_callbacks, double ground_z, double grid_size)
+dew_environment_data_source_t::dew_environment_data_source_t(callback_manager_t &a_callbacks, double ground_z, double grid_size)
   : callbacks(a_callbacks)
   , ground_z_d(ground_z)
   , grid_size_d(grid_size)
@@ -30,25 +30,25 @@ points_environment_data_source_t::points_environment_data_source_t(callback_mana
   , camera_pos(0)
   , params(float(grid_size), 0.0f, 0.0f, 0.0f)
 {
-  callbacks.do_create_buffer(inverse_vp_buffer, points_buffer_type_uniform);
-  callbacks.do_initialize_buffer(inverse_vp_buffer, points_type_r32, points_components_4x4, int(sizeof(inverse_vp)), &inverse_vp);
+  callbacks.do_create_buffer(inverse_vp_buffer, dew_buffer_type_uniform);
+  callbacks.do_initialize_buffer(inverse_vp_buffer, dew_type_r32, dew_components_4x4, int(sizeof(inverse_vp)), &inverse_vp);
 
-  callbacks.do_create_buffer(camera_pos_buffer, points_buffer_type_uniform);
-  callbacks.do_initialize_buffer(camera_pos_buffer, points_type_r32, points_components_3, int(sizeof(camera_pos)), &camera_pos);
+  callbacks.do_create_buffer(camera_pos_buffer, dew_buffer_type_uniform);
+  callbacks.do_initialize_buffer(camera_pos_buffer, dew_type_r32, dew_components_3, int(sizeof(camera_pos)), &camera_pos);
 
-  callbacks.do_create_buffer(params_buffer, points_buffer_type_uniform);
-  callbacks.do_initialize_buffer(params_buffer, points_type_r32, points_components_4, int(sizeof(params)), &params);
+  callbacks.do_create_buffer(params_buffer, dew_buffer_type_uniform);
+  callbacks.do_initialize_buffer(params_buffer, dew_type_r32, dew_components_4, int(sizeof(params)), &params);
 
   vertices.reserve(3);
   vertices.emplace_back(-1.0f, -1.0f);
   vertices.emplace_back(3.0f, -1.0f);
   vertices.emplace_back(-1.0f, 3.0f);
 
-  callbacks.do_create_buffer(vertex_buffer, points_buffer_type_vertex);
-  callbacks.do_initialize_buffer(vertex_buffer, points_type_r32, points_components_2, int(sizeof(*vertices.data()) * vertices.size()), vertices.data());
+  callbacks.do_create_buffer(vertex_buffer, dew_buffer_type_vertex);
+  callbacks.do_initialize_buffer(vertex_buffer, dew_type_r32, dew_components_2, int(sizeof(*vertices.data()) * vertices.size()), vertices.data());
 }
 
-void points_environment_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, points_to_render_t *to_render)
+void dew_environment_data_source_t::add_to_frame(const frame_camera_cpp_t &camera, dew_to_render_t *to_render)
 {
   // Camera-relative inverse VP: removes translation so shader never sees large world coords.
   // direction = (inv_vp_rel * clip_pos).xyz / w  -- gives ray direction directly.
@@ -64,39 +64,39 @@ void points_environment_data_source_t::add_to_frame(const frame_camera_cpp_t &ca
 
   callbacks.do_modify_buffer(params_buffer, 0, sizeof(params), &params);
 
-  draw_buffers[0].buffer_mapping = points_environment_bm_inverse_view_projection;
+  draw_buffers[0].buffer_mapping = dew_environment_bm_inverse_view_projection;
   draw_buffers[0].user_ptr = inverse_vp_buffer.user_ptr;
-  draw_buffers[1].buffer_mapping = points_environment_bm_camera_pos;
+  draw_buffers[1].buffer_mapping = dew_environment_bm_camera_pos;
   draw_buffers[1].user_ptr = camera_pos_buffer.user_ptr;
-  draw_buffers[2].buffer_mapping = points_environment_bm_vertex;
+  draw_buffers[2].buffer_mapping = dew_environment_bm_vertex;
   draw_buffers[2].user_ptr = vertex_buffer.user_ptr;
-  draw_buffers[3].buffer_mapping = points_environment_bm_params;
+  draw_buffers[3].buffer_mapping = dew_environment_bm_params;
   draw_buffers[3].user_ptr = params_buffer.user_ptr;
 
-  points_draw_group_t draw_group = {};
+  dew_draw_group_t draw_group = {};
   draw_group.buffers = draw_buffers;
   draw_group.buffers_size = 4;
-  draw_group.draw_type = points_environment_bg;
+  draw_group.draw_type = dew_environment_bg;
   draw_group.draw_size = 3;
-  points_to_render_add_render_group(to_render, draw_group);
+  dew_to_render_add_render_group(to_render, draw_group);
 }
 
-struct points_environment_data_source_t *points_environment_data_source_create(struct points_renderer_t *renderer, double ground_z, double grid_size)
+struct dew_environment_data_source_t *dew_environment_data_source_create(struct dew_renderer_t *renderer, double ground_z, double grid_size)
 {
-  return new points_environment_data_source_t(renderer->callbacks, ground_z, grid_size);
+  return new dew_environment_data_source_t(renderer->callbacks, ground_z, grid_size);
 }
 
-void points_environment_data_source_destroy(struct points_environment_data_source_t *env)
+void dew_environment_data_source_destroy(struct dew_environment_data_source_t *env)
 {
   delete env;
 }
 
-struct points_data_source_t points_environment_data_source_get(struct points_environment_data_source_t *env)
+struct dew_data_source_t dew_environment_data_source_get(struct dew_environment_data_source_t *env)
 {
   return env->data_source;
 }
 
-void points_environment_data_source_set_ground_z(struct points_environment_data_source_t *env, double ground_z)
+void dew_environment_data_source_set_ground_z(struct dew_environment_data_source_t *env, double ground_z)
 {
   env->ground_z_d = ground_z;
 }

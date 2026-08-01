@@ -1,29 +1,29 @@
 #pragma once
 #include <memory>
 #include <camera.hpp>
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
+#include <dew/render/camera.h>
+#include <dew/render/renderer.h>
 
-namespace points::render
+namespace dew::render
 {
 struct renderer_deleter
 {
-  void operator()(points_renderer_t *r) const { points_renderer_destroy(r); }
+  void operator()(dew_renderer_t *r) const { dew_renderer_destroy(r); }
 };
-using unique_renderer = std::unique_ptr<points_renderer_t, renderer_deleter>;
+using unique_renderer = std::unique_ptr<dew_renderer_t, renderer_deleter>;
 
 struct camera_deleter
 {
-  void operator()(points_camera_t *c) const { points_camera_destroy(c); }
+  void operator()(dew_camera_t *c) const { dew_camera_destroy(c); }
 };
-using unique_camera = std::unique_ptr<points_camera_t, camera_deleter>;
+using unique_camera = std::unique_ptr<dew_camera_t, camera_deleter>;
 
 namespace camera_manipulator
 {
 struct arcball_deleter
 {
-  void operator()(points_arcball_t *a) const { points_arcball_destroy(a); }
+  void operator()(dew_arcball_t *a) const { dew_arcball_destroy(a); }
 };
-using unique_arcball = std::unique_ptr<points_arcball_t, arcball_deleter>;
+using unique_arcball = std::unique_ptr<dew_arcball_t, arcball_deleter>;
 } // namespace camera_manipulator
-} // namespace points::render
+} // namespace dew::render

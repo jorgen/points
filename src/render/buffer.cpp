@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2020  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -15,15 +15,15 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <points/render/buffer.h>
+#include <dew/render/buffer.h>
 #include "buffer.hpp"
 
-void points_buffer_set_rendered(struct points_buffer_t *buffer)
+void dew_buffer_set_rendered(struct dew_buffer_t *buffer)
 {
   buffer->rendered = true;
 }
 
-void points_buffer_release_data(struct points_buffer_t *buffer)
+void dew_buffer_release_data(struct dew_buffer_t *buffer)
 {
   if (buffer->releaseBuffer)
     buffer->releaseBuffer();

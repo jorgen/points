@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2023  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -97,5 +97,5 @@ private:
   void serialize_payload(uint8_t *data) const;
 
 public:
-  [[nodiscard]] points_error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
+  [[nodiscard]] dew_error_t deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
 };

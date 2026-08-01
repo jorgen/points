@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -22,7 +22,7 @@
 // Shared io/gpu/fade lifecycle enums, used by both render_node_t and virtual_node_t (so a virtual node can
 // reuse the exact same upload/eviction/crossfade state machine without a circular include).
 
-namespace points::converter
+namespace dew::converter
 {
 
 enum class render_node_io_state : uint8_t
@@ -46,4 +46,4 @@ enum class render_node_fade_state : uint8_t
   fade_out,
 };
 
-} // namespace points::converter
+} // namespace dew::converter

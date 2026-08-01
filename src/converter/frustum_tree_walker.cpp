@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include <atomic>
 #include <fmt/printf.h>
 
-namespace points::converter
+namespace dew::converter
 {
 frustum_tree_walker_t::frustum_tree_walker_t(const glm::dmat4 view_perspective, lod_params_t lod_params, std::vector<std::string> attribute_names)
   : m_view_perspective(view_perspective)
@@ -258,4 +258,4 @@ void walk_tree_direct(const tree_registry_t &tree_registry, attribute_index_map_
   walk_tree(tree_registry, attribute_index_map, root, walker);
 }
 
-} // namespace points::converter
+} // namespace dew::converter

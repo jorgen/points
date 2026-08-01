@@ -10,7 +10,7 @@ build/
 
 # Local test / scratch artifacts
 test_backend_dir/
-test_backend_packed.jlp
+test_backend_packed.dew
 test_cache_file
 screenshot_*.png
 screenshot_*.jpeg

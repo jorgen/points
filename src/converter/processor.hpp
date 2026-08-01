@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 #endif
 #include <vector>
 
-#include <points/converter/converter.h>
+#include <dew/converter/converter.h>
 
 #include <vio/event_loop.h>
 #include <vio/event_pipe.h>
@@ -43,7 +43,7 @@
 #include "storage_handler.hpp"
 #include "tree_handler.hpp"
 
-namespace points::converter
+namespace dew::converter
 {
 enum class processor_open_file_semantics_t
 {
@@ -60,7 +60,7 @@ enum class file_existence_requirement_t
 };
 
 // Destination mode: convert into a local cache file (the primary `url`) while finalized subtrees
-// upload incrementally to `url`'s bucket in the JLP2 layout. Empty url = classic local-only mode.
+// upload incrementally to `url`'s bucket in the DEW2 layout. Empty url = classic local-only mode.
 struct destination_config_t
 {
   std::string url;               // s3:// az:// dir:// mem://; empty = no destination
@@ -72,14 +72,14 @@ class frustum_tree_walker_t;
 class processor_t : public vio::about_to_block_t
 {
 public:
-  processor_t(std::string url, file_existence_requirement_t existence_requirement, points_error_t &error, const destination_config_t &destination = {});
+  processor_t(std::string url, file_existence_requirement_t existence_requirement, dew_error_t &error, const destination_config_t &destination = {});
   ~processor_t();
-  points_error_t upgrade_to_write(bool truncate);
+  dew_error_t upgrade_to_write(bool truncate);
   void set_pre_init_tree_config(const tree_config_t &tree_config);
   void set_pre_init_node_point_limit(uint32_t node_point_limit);
   void set_pre_init_read_chunk_bytes(uint64_t bytes);
-  void set_runtime_callbacks(const points_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr);
-  void set_converter_callbacks(const points_converter_file_convert_callbacks_t &convert_callbacks);
+  void set_runtime_callbacks(const dew_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr);
+  void set_converter_callbacks(const dew_converter_file_convert_callbacks_t &convert_callbacks);
   void add_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&input_files);
   void walk_tree(frustum_tree_walker_t &walker);
   tree_config_t tree_config();
@@ -90,7 +90,7 @@ public:
   // Full quiesce: conversion pipeline idle AND (destination mode) the uploader drained/parked --
   // after this the dataset is durable at the destination (unless parked on errors).
   void wait_idle();
-  // Conversion-only quiesce: the cache file is a complete valid JLP; uploads may still be running.
+  // Conversion-only quiesce: the cache file is a complete valid DEW; uploads may still be running.
   void wait_local_complete();
   bool upload_active() const;
   upload_stats_t upload_stats() const;
@@ -121,14 +121,14 @@ public:
     return _perf_stats;
   }
 
-  const points_converter_attributes_t &get_attributes(attributes_id_t id);
+  const dew_converter_attributes_t &get_attributes(attributes_id_t id);
 
 private:
   std::string _url;
   vio::thread_pool_t _thread_pool;
-  points_converter_runtime_callbacks_t _runtime_callbacks;
+  dew_converter_runtime_callbacks_t _runtime_callbacks;
   void *_runtime_callback_user_ptr;
-  points_converter_file_convert_callbacks_t _convert_callbacks;
+  dew_converter_file_convert_callbacks_t _convert_callbacks;
 
   vio::thread_with_event_loop_t _thread_with_event_loop;
   vio::event_loop_t &_event_loop;
@@ -153,11 +153,11 @@ private:
 #ifndef __EMSCRIPTEN__
   std::unique_ptr<upload_handler_t> _upload_handler;
 #endif
-  points_converter_upload_callbacks_t _upload_callbacks = {};
+  dew_converter_upload_callbacks_t _upload_callbacks = {};
   void *_upload_callback_user_ptr = nullptr;
 
 public:
-  void set_upload_callbacks(const points_converter_upload_callbacks_t &callbacks, void *user_ptr)
+  void set_upload_callbacks(const dew_converter_upload_callbacks_t &callbacks, void *user_ptr)
   {
     _upload_callbacks = callbacks;
     _upload_callback_user_ptr = user_ptr;
@@ -172,14 +172,14 @@ private:
   vio::event_pipe_t<std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>>> _files_added;
 
 
-  vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t>> _input_init;
+  vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, dew_converter_header_t>> _input_init;
   vio::event_pipe_t<input_data_id_t> _sub_added;
-  vio::event_pipe_t<std::pair<points_t, points_error_t>> _sorted_points;
+  vio::event_pipe_t<std::pair<points_t, dew_error_t>> _sorted_points;
   vio::event_pipe_t<file_error_t> _point_reader_file_errors;
   vio::event_pipe_t<input_data_id_t> _point_reader_done_with_file;
 
   vio::event_pipe_t<void> _storage_index_write_done;
-  vio::event_pipe_t<points_error_t> _storage_handler_error;
+  vio::event_pipe_t<dew_error_t> _storage_handler_error;
   vio::event_pipe_t<input_data_id_t> _tree_done_with_input;
 
   vio::thread_with_event_loop_t _input_event_loop_thread;
@@ -194,15 +194,15 @@ private:
 
   void handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files);
   vio::task_t<void> do_handle_new_files(std::vector<std::pair<input_data_id_t, input_name_ref_t>> file_refs, tree_config_t tree_config);
-  void handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, points_converter_header_t> &&event);
+  void handle_input_init_done(std::tuple<input_data_id_t, attributes_id_t, dew_converter_header_t> &&event);
   void handle_sub_added(input_data_id_t &&event);
-  void handle_sorted_points(std::pair<points_t, points_error_t> &&event);
+  void handle_sorted_points(std::pair<points_t, dew_error_t> &&event);
   void handle_file_errors(file_error_t &&error);
   void handle_file_reading_done(input_data_id_t &&file);
   void handle_index_write_done();
-  void handle_storage_error(points_error_t &&errors);
+  void handle_storage_error(dew_error_t &&errors);
   void handle_points_written(const storage_header_t &header, attributes_id_t attributes, std::vector<storage_location_t> &&locations);
   void handle_tree_done_with_input(input_data_id_t &&events);
   void maybe_start_lod();
 };
-} // namespace points::converter
+} // namespace dew::converter

@@ -61,12 +61,12 @@ cmrc_add_resource_library(renderer_example_textures ALIAS renderer_example::text
         textures/top.jpg
 )
 
-set(_renderer_example_deps points_render points_converter fmt glm renderer_example::shaders renderer_example::fonts renderer_example::textures SDL3::SDL3)
+set(_renderer_example_deps dew_render dew_converter fmt glm renderer_example::shaders renderer_example::fonts renderer_example::textures SDL3::SDL3)
 if(TARGET SDL3::SDL3main)
     list(APPEND _renderer_example_deps SDL3::SDL3main)
 endif()
 CmDepTargetLinkLibrary(renderer_example PRIVATE ${_renderer_example_deps})
-copy_dll_for_target(renderer_example points_render points_converter points_common SDL3::SDL3)
+copy_dll_for_target(renderer_example dew_render dew_converter dew_common SDL3::SDL3)
 setWarningFlagsForTarget(renderer_example)
 if(NOT MSVC)
     target_compile_options(renderer_example PRIVATE -Wno-language-extension-token)

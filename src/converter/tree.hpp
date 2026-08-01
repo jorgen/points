@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -24,7 +24,7 @@
 #include "morton.hpp"
 
 
-namespace points::converter
+namespace dew::converter
 {
 class storage_handler_t;
 
@@ -199,13 +199,13 @@ tree_id_t tree_add_points(tree_registry_t &tree_registry, storage_handler_t &cac
 
 serialized_tree_t tree_serialize(const tree_t &tree);
 
-bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, points_error_t &error);
+bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, dew_error_t &error);
 
 // Recompute tree_t::leaves_collapsed after deserialization (needs the registry's chunk table).
 void tree_compute_leaves_collapsed(tree_t &tree, const tree_registry_t &tree_registry);
 
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry);
 
-[[nodiscard]] points_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry);
-} // namespace points::converter
+[[nodiscard]] dew_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry);
+} // namespace dew::converter
 

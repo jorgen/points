@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -18,23 +18,23 @@
 
 #include "error.hpp"
 
-#include "points/common/error.h"
+#include "dew/common/error.h"
 
-struct points_error_t *points_error_create()
+struct dew_error_t *dew_error_create()
 {
-  return new points_error_t();
+  return new dew_error_t();
 }
 
-void points_error_destroy(points_error_t *error)
+void dew_error_destroy(dew_error_t *error)
 {
   delete error;
 }
-void points_error_set_info(points_error_t *error, int code, const char *str, size_t str_len)
+void dew_error_set_info(dew_error_t *error, int code, const char *str, size_t str_len)
 {
   error->code = code;
   error->msg = std::string(str, str_len);
 }
-void points_error_get_info(const points_error_t *error, int *code, const char **str, size_t *str_len)
+void dew_error_get_info(const dew_error_t *error, int *code, const char **str, size_t *str_len)
 {
   *code = error->code;
   *str = error->msg.c_str();

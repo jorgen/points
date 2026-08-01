@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-// The JLP2 bucket layout: how a converted dataset lives in an object store as one immutable object
+// The DEW2 bucket layout: how a converted dataset lives in an object store as one immutable object
 // per blob plus an append-only band index. Written incrementally by the upload handler as subtrees
 // finalize; readable mid-conversion as a consistent morton-prefix.
 //
@@ -46,7 +46,7 @@
 #include <string>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // ---- object names -------------------------------------------------------------------------------
@@ -58,8 +58,17 @@ inline const char *bucket_root_manifest_name()
 }
 
 // ---- root manifest (fixed 256 bytes; the commit point) -------------------------------------------
-constexpr uint32_t k_root_manifest_magic = 0x32504c4au; // 'JLP2'
+// New datasets are written with the 'DEW2' magic; 'JLP2' is the same layout under the format's old
+// name and is accepted everywhere DEW2 is, so datasets converted before the rename keep opening.
+// (dew_copy rewrites a bucket and therefore migrates the magic as a side effect.)
+constexpr uint32_t k_root_manifest_magic = 0x32574544u;             // 'DEW2'
+constexpr uint32_t k_root_manifest_magic_legacy_jlp2 = 0x32504c4au; // 'JLP2' (pre-rename datasets)
 constexpr uint32_t k_root_manifest_size = 256;
+
+inline bool is_root_manifest_magic(uint32_t magic)
+{
+  return magic == k_root_manifest_magic || magic == k_root_manifest_magic_legacy_jlp2;
+}
 struct root_manifest_t
 {
   uint32_t version = 1;
@@ -75,7 +84,7 @@ struct root_manifest_t
 };
 
 std::shared_ptr<uint8_t[]> serialize_root_manifest(const root_manifest_t &manifest);
-[[nodiscard]] points_error_t deserialize_root_manifest(const uint8_t *data, uint32_t size, root_manifest_t &out);
+[[nodiscard]] dew_error_t deserialize_root_manifest(const uint8_t *data, uint32_t size, root_manifest_t &out);
 
 // ---- band manifest (immutable, one per band) -----------------------------------------------------
 constexpr uint32_t k_band_manifest_magic = 0x32444e42u; // 'BND2'
@@ -102,6 +111,6 @@ struct band_manifest_t
 };
 
 std::vector<uint8_t> serialize_band_manifest(const band_manifest_t &manifest);
-[[nodiscard]] points_error_t deserialize_band_manifest(const uint8_t *data, uint32_t size, band_manifest_t &out);
+[[nodiscard]] dew_error_t deserialize_band_manifest(const uint8_t *data, uint32_t size, band_manifest_t &out);
 
-} // namespace points::converter
+} // namespace dew::converter

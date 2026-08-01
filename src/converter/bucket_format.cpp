@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -24,7 +24,7 @@
 #include <cassert>
 #include <cstring>
 
-namespace points::converter
+namespace dew::converter
 {
 
 std::string bucket_data_object_name(uint32_t object_id)
@@ -59,15 +59,15 @@ std::shared_ptr<uint8_t[]> serialize_root_manifest(const root_manifest_t &manife
   return data;
 }
 
-points_error_t deserialize_root_manifest(const uint8_t *data, uint32_t size, root_manifest_t &out)
+dew_error_t deserialize_root_manifest(const uint8_t *data, uint32_t size, root_manifest_t &out)
 {
-  const points_error_t invalid = {1, "Invalid JLP2 root manifest"};
+  const dew_error_t invalid = {1, "Invalid DEW2 root manifest"};
   if (size < k_root_manifest_size)
     return invalid;
   const uint8_t *ptr = data;
   const uint8_t *end = data + size;
   uint32_t magic = 0;
-  if (!read_memory(ptr, end, magic) || magic != k_root_manifest_magic)
+  if (!read_memory(ptr, end, magic) || !is_root_manifest_magic(magic))
     return invalid;
   bool ok = read_memory(ptr, end, out.version);
   ok = ok && read_memory(ptr, end, out.dataset_uuid);
@@ -118,9 +118,9 @@ std::vector<uint8_t> serialize_band_manifest(const band_manifest_t &manifest)
   return out;
 }
 
-points_error_t deserialize_band_manifest(const uint8_t *data, uint32_t size, band_manifest_t &out)
+dew_error_t deserialize_band_manifest(const uint8_t *data, uint32_t size, band_manifest_t &out)
 {
-  const points_error_t invalid = {1, "Invalid JLP2 band manifest"};
+  const dew_error_t invalid = {1, "Invalid DEW2 band manifest"};
   const uint8_t *ptr = data;
   const uint8_t *end = data + size;
   uint32_t magic = 0;
@@ -145,4 +145,4 @@ points_error_t deserialize_band_manifest(const uint8_t *data, uint32_t size, ban
   return {};
 }
 
-} // namespace points::converter
+} // namespace dew::converter

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -18,17 +18,17 @@
 #include "attributes_configs.hpp"
 
 #include "input_header.hpp"
-#include "points/converter/default_attribute_names.h"
+#include "dew/converter/default_attribute_names.h"
 
 #include "fixed_size_vector.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 #include <algorithm>
 #include <mutex>
 
-namespace points::converter
+namespace dew::converter
 {
 
-static bool compare_attribute(const points_converter_attribute_t &a, const points_converter_attribute_t &b)
+static bool compare_attribute(const dew_converter_attribute_t &a, const dew_converter_attribute_t &b)
 {
   if (a.name_size != b.name_size)
     return false;
@@ -38,7 +38,7 @@ static bool compare_attribute(const points_converter_attribute_t &a, const point
     return false;
   return memcmp(a.name, b.name, a.name_size) == 0;
 }
-static bool compare_attributes(const points_converter_attributes_t &a, const points_converter_attributes_t &b)
+static bool compare_attributes(const dew_converter_attributes_t &a, const dew_converter_attributes_t &b)
 {
   if (a.attributes.size() != b.attributes.size())
     return false;
@@ -50,7 +50,7 @@ static bool compare_attributes(const points_converter_attributes_t &a, const poi
   return true;
 }
 
-bool attributes_name_in_registry(const points_converter_attribute_t &attribute, const std::vector<std::string> &registry)
+bool attributes_name_in_registry(const dew_converter_attribute_t &attribute, const std::vector<std::string> &registry)
 {
   for (auto &name : registry)
   {
@@ -62,7 +62,7 @@ bool attributes_name_in_registry(const points_converter_attribute_t &attribute, 
   return false;
 }
 
-static void insert_new_names(const points_converter_attributes_t &source, std::vector<std::string> &target)
+static void insert_new_names(const dew_converter_attributes_t &source, std::vector<std::string> &target)
 {
   for (auto &attrib : source.attributes)
   {
@@ -73,7 +73,7 @@ static void insert_new_names(const points_converter_attributes_t &source, std::v
   }
 }
 
-attributes_id_t attributes_configs_t::get_attribute_config_index(points_converter_attributes_t &&attr)
+attributes_id_t attributes_configs_t::get_attribute_config_index(dew_converter_attributes_t &&attr)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   for (int i = 0; i < int(_attributes_configs.size()); i++)
@@ -91,7 +91,7 @@ attributes_id_t attributes_configs_t::get_attribute_config_index(points_converte
   return {uint32_t(ret)};
 }
 
-static bool contains_attribute(const points_converter_attributes_t &attributes, const points_converter_attribute_t &attribute)
+static bool contains_attribute(const dew_converter_attributes_t &attributes, const dew_converter_attribute_t &attribute)
 {
   for (auto &to_check_attrib : attributes.attributes)
   {
@@ -103,7 +103,7 @@ static bool contains_attribute(const points_converter_attributes_t &attributes, 
   return false;
 }
 
-static void add_missing_attributes(const points_converter_attributes_t &source, points_converter_attributes_t &target)
+static void add_missing_attributes(const dew_converter_attributes_t &source, dew_converter_attributes_t &target)
 {
   for (auto &source_attrib : source.attributes)
   {
@@ -130,7 +130,7 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
   attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
 
   auto lod_type = morton_type_from_lod(lod);
-  points_converter_attributes_t target;
+  dew_converter_attributes_t target;
   {
     std::unique_lock<std::mutex> lock(_mutex);
     attributes_copy(_attributes_configs[attrib_begin->data].attributes, target);
@@ -145,8 +145,8 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
       auto &attrs = target.attributes;
       for (int oi = 1; oi < int(attrs.size()); ++oi)
       {
-        if (attrs[oi].name_size == strlen(POINTS_ATTRIBUTE_ORIGINAL_ORDER) &&
-            memcmp(attrs[oi].name, POINTS_ATTRIBUTE_ORIGINAL_ORDER, attrs[oi].name_size) == 0)
+        if (attrs[oi].name_size == strlen(DEW_ATTRIBUTE_ORIGINAL_ORDER) &&
+            memcmp(attrs[oi].name, DEW_ATTRIBUTE_ORIGINAL_ORDER, attrs[oi].name_size) == 0)
         {
           attrs.erase(attrs.begin() + oi);
           target.attribute_names.erase(target.attribute_names.begin() + oi);
@@ -155,13 +155,13 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
       }
     }
     target.attributes.front().type = lod_type;
-    target.attributes.front().components = points_components_1;
+    target.attributes.front().components = dew_components_1;
   }
   auto id = get_attribute_config_index(std::move(target));
   return get_lod_attribute_mapping(lod_type, id, attrib_begin, attrib_end);
 }
 
-const points_converter_attributes_t &attributes_configs_t::get(attributes_id_t id)
+const dew_converter_attributes_t &attributes_configs_t::get(attributes_id_t id)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   return _attributes_configs[id.data].attributes;
@@ -186,14 +186,14 @@ static bool attributes_ids_increase(const attributes_id_t *begin, const attribut
 }
 #endif
 
-static bool is_attribute_names_equal(const points_converter_attribute_t &a, const points_converter_attribute_t &b)
+static bool is_attribute_names_equal(const dew_converter_attribute_t &a, const dew_converter_attribute_t &b)
 {
   if (a.name_size != b.name_size)
     return false;
   return memcmp(a.name, b.name, a.name_size) == 0;
 }
 
-attribute_source_lod_into_t create_attribute_source_lod_into(const points_converter_attribute_t &attr, const points_converter_attributes_t &attributes)
+attribute_source_lod_into_t create_attribute_source_lod_into(const dew_converter_attribute_t &attr, const dew_converter_attributes_t &attributes)
 {
   for (int i = 0; i < int(attributes.attributes.size()); i++)
   {
@@ -206,7 +206,7 @@ attribute_source_lod_into_t create_attribute_source_lod_into(const points_conver
   return {-1, {}};
 }
 
-attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const points_type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const
+attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(const dew_type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const
 {
   (void)point_type;
   assert(begin < end);
@@ -328,7 +328,7 @@ serialized_attributes_t attributes_configs_t::serialize() const
   return ret;
 }
 
-points_error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+dew_error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
   auto input_bytes = data.get();
   auto end = input_bytes + size;
@@ -349,14 +349,14 @@ points_error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[]
     memcpy(&attrib_count, input_bytes, sizeof(attrib_count));
     input_bytes += sizeof(uint32_t);
 
-    points_converter_attributes_t attributes;
+    dew_converter_attributes_t attributes;
     for (uint32_t j = 0; j < attrib_count; j++)
     {
-      if (input_bytes + sizeof(points_type_t) + sizeof(points_components_t) + sizeof(uint32_t) > end)
+      if (input_bytes + sizeof(dew_type_t) + sizeof(dew_components_t) + sizeof(uint32_t) > end)
         return {3, "Invalid input size for attribute details"};
 
-      points_type_t format;
-      points_components_t components;
+      dew_type_t format;
+      dew_components_t components;
       uint32_t name_size;
 
       memcpy(&format, input_bytes, sizeof(format));
@@ -402,4 +402,4 @@ uint32_t attributes_configs_t::attrib_name_registry_get(uint32_t index, char *na
   return size - 1;
 }
 
-} // namespace points::converter
+} // namespace dew::converter

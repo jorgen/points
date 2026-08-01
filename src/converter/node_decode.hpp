@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -30,7 +30,7 @@
 
 #include <memory>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // Backing store kept alive by loaded_node_data_t::_impl_data: it owns the decoded buffers the result's raw
@@ -50,4 +50,4 @@ struct loaded_node_impl_data_t
 render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_config_t &tree_config,
                                        std::shared_ptr<dyn_points_data_handler_t> salvage_handler = nullptr);
 
-} // namespace points::converter
+} // namespace dew::converter

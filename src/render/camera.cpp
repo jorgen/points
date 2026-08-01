@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -15,8 +15,8 @@
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#include <points/render/camera.h>
-#include <points/render/aabb.h>
+#include <dew/render/camera.h>
+#include <dew/render/aabb.h>
 #include "camera.hpp"
 
 #include "glm_include.hpp"
@@ -25,25 +25,25 @@
 
 #include <fmt/printf.h>
 
-struct points_camera_t *points_camera_create()
+struct dew_camera_t *dew_camera_create()
 {
-  auto *ret = new points_camera_t();
+  auto *ret = new dew_camera_t();
   ret->projection = glm::perspective(45.0, 16.0 / 9.0, 0.01, 1000.0);
   ret->view = glm::mat4(1);
   return ret;
 }
 
-void points_camera_destroy(struct points_camera_t *camera)
+void dew_camera_destroy(struct dew_camera_t *camera)
 {
   delete camera;
 }
 
-void points_camera_look_at(struct points_camera_t *camera, const double eye[3], const double center[3], const double up[3])
+void dew_camera_look_at(struct dew_camera_t *camera, const double eye[3], const double center[3], const double up[3])
 {
   camera->view = glm::lookAt(glm::make_vec3(eye), glm::make_vec3(center), glm::make_vec3(up));
 }
 
-void points_camera_look_at_aabb(struct points_camera_t *camera, struct points_aabb_t *aabb, const double direction[3], const double up[3])
+void dew_camera_look_at_aabb(struct dew_camera_t *camera, struct dew_aabb_t *aabb, const double direction[3], const double up[3])
 {
   double half_x = (aabb->max[0] - aabb->min[0]) / 2;
   double half_y = (aabb->max[1] - aabb->min[1]) / 2;
@@ -60,32 +60,32 @@ void points_camera_look_at_aabb(struct points_camera_t *camera, struct points_aa
   camera->view = glm::lookAt(aabb_center + (direction_vector * distance * 2.0), aabb_center, glm::make_vec3(up));
 }
 
-void points_camera_get_view_matrix(struct points_camera_t *camera, double data[16])
+void dew_camera_get_view_matrix(struct dew_camera_t *camera, double data[16])
 {
   memcpy(data, glm::value_ptr(camera->view), sizeof(camera->view));
 }
 
-void points_camera_set_view_matrix(struct points_camera_t *camera, const double data[16])
+void dew_camera_set_view_matrix(struct dew_camera_t *camera, const double data[16])
 {
   camera->view = glm::make_mat4(data);
 }
 
-void points_camera_get_perspective_matrix(struct points_camera_t *camera, double data[16])
+void dew_camera_get_perspective_matrix(struct dew_camera_t *camera, double data[16])
 {
   memcpy(data, glm::value_ptr(camera->projection), sizeof(camera->projection));
 }
 
-void points_camera_set_perspective_matrix(struct points_camera_t *camera, const double data[16])
+void dew_camera_set_perspective_matrix(struct dew_camera_t *camera, const double data[16])
 {
   camera->projection = glm::make_mat4(data);
 }
 
-void points_camera_set_perspective(struct points_camera_t *camera, double fov, double width, double height, double near, double far)
+void dew_camera_set_perspective(struct dew_camera_t *camera, double fov, double width, double height, double near, double far)
 {
   camera->projection = glm::perspective(fov, width / height, near, far);
 }
 
-void points_camera_perspective_properties(struct points_camera_t *camera, double *fov, double *aspect, double *near, double *far)
+void dew_camera_perspective_properties(struct dew_camera_t *camera, double *fov, double *aspect, double *near, double *far)
 {
   if (fov)
     *fov = 2.0 * atan(1.0 / camera->projection[1][1]);
@@ -114,14 +114,14 @@ static glm::dvec3 arcball_forward_dir(double yaw, double pitch, const glm::dvec3
   return glm::dvec3(sign * sp, cp * sy, cp * cy);
 }
 
-static void arcball_update_view(points_arcball_t *arcball)
+static void arcball_update_view(dew_arcball_t *arcball)
 {
   glm::dvec3 forward = arcball_forward_dir(arcball->yaw, arcball->pitch, arcball->up);
   glm::dvec3 eye = arcball->center - forward * arcball->distance;
   arcball->camera->view = glm::lookAt(eye, arcball->center, arcball->up);
 }
 
-static void arcball_extract_angles(points_arcball_t *arcball)
+static void arcball_extract_angles(dew_arcball_t *arcball)
 {
   glm::dvec3 eye = glm::dvec3(glm::inverse(arcball->camera->view)[3]);
   glm::dvec3 diff = arcball->center - eye;
@@ -157,7 +157,7 @@ static void arcball_extract_angles(points_arcball_t *arcball)
 }
 
 // Snapshot the current view as the "home" the reset button returns to.
-static void arcball_capture_home(points_arcball_t *arcball)
+static void arcball_capture_home(dew_arcball_t *arcball)
 {
   arcball->home_center = arcball->center;
   arcball->home_up = arcball->up;
@@ -166,9 +166,9 @@ static void arcball_capture_home(points_arcball_t *arcball)
   arcball->home_pitch = arcball->pitch;
 }
 
-struct points_arcball_t *points_arcball_create(struct points_camera_t *camera, const double center[3])
+struct dew_arcball_t *dew_arcball_create(struct dew_camera_t *camera, const double center[3])
 {
-  auto ret = new points_arcball_t;
+  auto ret = new dew_arcball_t;
   ret->camera = camera;
   ret->center = glm::make_vec3(center);
   ret->up = glm::dvec3(0, 1, 0);
@@ -178,12 +178,12 @@ struct points_arcball_t *points_arcball_create(struct points_camera_t *camera, c
   return ret;
 }
 
-void points_arcball_destroy(struct points_arcball_t *arcball)
+void dew_arcball_destroy(struct dew_arcball_t *arcball)
 {
   delete arcball;
 }
 
-void points_arcball_reset(struct points_arcball_t *arcball)
+void dew_arcball_reset(struct dew_arcball_t *arcball)
 {
   arcball->center = arcball->home_center;
   arcball->up = arcball->home_up;
@@ -193,7 +193,7 @@ void points_arcball_reset(struct points_arcball_t *arcball)
   arcball_update_view(arcball);
 }
 
-void points_arcball_detect_upside_down(struct points_arcball_t *arcball)
+void dew_arcball_detect_upside_down(struct dew_arcball_t *arcball)
 {
   (void)arcball;
 }
@@ -204,7 +204,7 @@ static double normalize_angle(double angle)
   return angle - two_pi * std::floor((angle + M_PI) / two_pi);
 }
 
-void points_arcball_rotate(struct points_arcball_t *arcball, float normalized_dx, float normalized_dy, float normalized_dz)
+void dew_arcball_rotate(struct dew_arcball_t *arcball, float normalized_dx, float normalized_dy, float normalized_dz)
 {
   (void)normalized_dz;
   arcball->yaw += normalized_dx * M_PI;
@@ -214,7 +214,7 @@ void points_arcball_rotate(struct points_arcball_t *arcball, float normalized_dx
   arcball_update_view(arcball);
 }
 
-void points_arcball_pan(struct points_arcball_t *arcball, float normalized_dx, float normalized_dy)
+void dew_arcball_pan(struct dew_arcball_t *arcball, float normalized_dx, float normalized_dy)
 {
   glm::dvec3 forward = arcball_forward_dir(arcball->yaw, arcball->pitch, arcball->up);
   glm::dvec3 right = glm::normalize(glm::cross(forward, arcball->up));
@@ -224,7 +224,7 @@ void points_arcball_pan(struct points_arcball_t *arcball, float normalized_dx, f
   arcball_update_view(arcball);
 }
 
-void points_arcball_pan_ground(struct points_arcball_t *arcball, float normalized_dx, float normalized_dy)
+void dew_arcball_pan_ground(struct dew_arcball_t *arcball, float normalized_dx, float normalized_dy)
 {
   glm::dvec3 forward = arcball_forward_dir(arcball->yaw, 0.0, arcball->up);
   glm::dvec3 right = glm::normalize(glm::cross(forward, arcball->up));
@@ -233,34 +233,34 @@ void points_arcball_pan_ground(struct points_arcball_t *arcball, float normalize
   arcball_update_view(arcball);
 }
 
-void points_arcball_dolly(struct points_arcball_t *arcball, float normalized_dz)
+void dew_arcball_dolly(struct dew_arcball_t *arcball, float normalized_dz)
 {
   glm::dvec3 forward = arcball_forward_dir(arcball->yaw, arcball->pitch, arcball->up);
   arcball->center += forward * (double(-normalized_dz) * arcball->distance);
   arcball_update_view(arcball);
 }
 
-void points_arcball_zoom(struct points_arcball_t *arcball, float normalized_zoom)
+void dew_arcball_zoom(struct dew_arcball_t *arcball, float normalized_zoom)
 {
   arcball->distance *= (1.0 + normalized_zoom);
   arcball->distance = glm::max(arcball->distance, 0.01);
   arcball_update_view(arcball);
 }
 
-struct points_fps_t *points_fps_create(struct points_camera_t *camera)
+struct dew_fps_t *dew_fps_create(struct dew_camera_t *camera)
 {
-  points_fps_t *ret = new points_fps_t();
+  dew_fps_t *ret = new dew_fps_t();
   ret->camera = camera;
-  points_fps_reset(ret);
+  dew_fps_reset(ret);
   return ret;
 }
 
-void points_fps_destroy(struct points_fps_t *fps)
+void dew_fps_destroy(struct dew_fps_t *fps)
 {
   delete fps;
 }
 
-void points_fps_reset(struct points_fps_t *fps)
+void dew_fps_reset(struct dew_fps_t *fps)
 {
   fps->inverse_view = glm::inverse(fps->camera->view);
   fps->pitch = 0.0;
@@ -268,7 +268,7 @@ void points_fps_reset(struct points_fps_t *fps)
   fps->roll = 0.0;
 }
 
-void points_fps_rotate(struct points_fps_t *fps, float normalized_dx, float normalized_dy, float normalized_dz)
+void dew_fps_rotate(struct dew_fps_t *fps, float normalized_dx, float normalized_dy, float normalized_dz)
 {
   auto view_inverse = fps->inverse_view;
   if (normalized_dx)
@@ -305,7 +305,7 @@ void points_fps_rotate(struct points_fps_t *fps, float normalized_dx, float norm
   fps->camera->view = glm::inverse(view_inverse);
 }
 
-void points_fps_move(struct points_fps_t *fps, float dx, float dy, float dz)
+void dew_fps_move(struct dew_fps_t *fps, float dx, float dy, float dz)
 {
   auto view_inverse = glm::inverse(fps->camera->view);
 
@@ -325,7 +325,7 @@ void points_fps_move(struct points_fps_t *fps, float dx, float dy, float dz)
   fps->roll = 0.0;
 }
 
-void points_arcball_set_up_axis(struct points_arcball_t *arcball, const double up[3])
+void dew_arcball_set_up_axis(struct dew_arcball_t *arcball, const double up[3])
 {
   arcball->up = glm::make_vec3(up);
   arcball_extract_angles(arcball);
@@ -333,23 +333,23 @@ void points_arcball_set_up_axis(struct points_arcball_t *arcball, const double u
   arcball_capture_home(arcball);
 }
 
-void points_arcball_get_up_axis(struct points_arcball_t *arcball, double up[3])
+void dew_arcball_get_up_axis(struct dew_arcball_t *arcball, double up[3])
 {
   memcpy(up, glm::value_ptr(arcball->up), 3 * sizeof(double));
 }
 
-void points_arcball_get_center(struct points_arcball_t *arcball, double center[3])
+void dew_arcball_get_center(struct dew_arcball_t *arcball, double center[3])
 {
   memcpy(center, glm::value_ptr(arcball->center), 3 * sizeof(double));
 }
 
-void points_camera_get_eye(struct points_camera_t *camera, double eye[3])
+void dew_camera_get_eye(struct dew_camera_t *camera, double eye[3])
 {
   glm::dvec3 e = glm::dvec3(glm::inverse(camera->view)[3]);
   memcpy(eye, glm::value_ptr(e), 3 * sizeof(double));
 }
 
-void points_camera_get_forward(struct points_camera_t *camera, double forward[3])
+void dew_camera_get_forward(struct dew_camera_t *camera, double forward[3])
 {
   glm::dmat4 inv = glm::inverse(camera->view);
   glm::dvec3 f = -glm::dvec3(inv[2]);

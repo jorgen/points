@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 #include "point_buffer_splitter.hpp"
 #include <cassert>
 
-namespace points::converter
+namespace dew::converter
 {
 tree_t &tree_cache_create_root_tree(tree_registry_t &tree_cache)
 {
@@ -647,7 +647,7 @@ serialized_tree_t tree_serialize(const tree_t &tree)
   return {std::move(data), int(tree_size)};
 }
 
-bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, points_error_t &error)
+bool tree_deserialize(const serialized_tree_t &serialized_tree, tree_t &tree, dew_error_t &error)
 {
   const uint8_t *ptr = serialized_tree.data.get();
   const uint8_t *end_ptr = ptr + serialized_tree.size;
@@ -866,7 +866,7 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   return {std::move(data), int(tree_registry_size)};
 }
 
-points_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry)
+dew_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry)
 {
   const uint8_t *ptr = data.get();
   const uint8_t *end_ptr = ptr + data_size;
@@ -963,4 +963,4 @@ points_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data,
   tree_registry.tree_id_initialized.resize(tree_registry_count);
   return {};
 }
-} // namespace points::converter
+} // namespace dew::converter

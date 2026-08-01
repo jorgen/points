@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 
 #include "memory_writer.hpp"
 
-namespace points::converter
+namespace dew::converter
 {
 void input_storage_map_t::add_storage(input_data_id_t id, attributes_id_t attributes_id, std::vector<storage_location_t> &&storage)
 {
@@ -160,4 +160,4 @@ std::pair<bool, const uint8_t *> input_storage_map_t::deserialize(const uint8_t 
   return {true, ptr};
 }
 
-} // namespace points::converter
+} // namespace dew::converter

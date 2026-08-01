@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -31,7 +31,7 @@
 #include "tree_lod_generator.hpp"
 #include "upload_handler.hpp" // band_job_t
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct waiting_for_root_t
@@ -50,7 +50,7 @@ public:
   // the loop thread before _tree_registry / the event pipes it touches are destroyed.
   void begin_shutdown();
   void stop_loop();
-  [[nodiscard]] points_error_t deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size);
+  [[nodiscard]] dew_error_t deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size);
   void request_root();
   void set_tree_initialization_config(const tree_config_t &config);
   void set_tree_initialization_node_point_limit(uint32_t limit);
@@ -215,4 +215,4 @@ public:
 
 private:
 };
-} // namespace points::converter
+} // namespace dew::converter

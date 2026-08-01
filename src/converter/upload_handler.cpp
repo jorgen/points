@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -29,12 +29,12 @@
 #include <cstring>
 #include <future>
 
-namespace points::converter
+namespace dew::converter
 {
 
-static points_error_t from_vio_error(const vio::error_t &e)
+static dew_error_t from_vio_error(const vio::error_t &e)
 {
-  points_error_t r;
+  dew_error_t r;
   r.code = e.code;
   r.msg = e.msg;
   return r;
@@ -77,7 +77,7 @@ upload_handler_t::upload_handler_t(std::unique_ptr<vio::objstore::io_manager_t> 
   memcpy(_uuid, dataset_uuid, sizeof(_uuid));
 }
 
-upload_handler_t::upload_handler_t(const std::string &destination_url, const std::string &connection, storage_handler_t &storage, vio::thread_pool_t &pool, const uint8_t (&dataset_uuid)[16], points_error_t &error)
+upload_handler_t::upload_handler_t(const std::string &destination_url, const std::string &connection, storage_handler_t &storage, vio::thread_pool_t &pool, const uint8_t (&dataset_uuid)[16], dew_error_t &error)
   : _loop_thread()
   , _loop(_loop_thread.event_loop())
   , _storage(storage)
@@ -104,14 +104,14 @@ void upload_handler_t::stop()
   _loop_thread.stop_and_join();
 }
 
-points_error_t upload_handler_t::bootstrap()
+dew_error_t upload_handler_t::bootstrap()
 {
   // Synchronous bootstrap on the uploader loop (called before any band exists).
-  std::promise<points_error_t> done;
+  std::promise<dew_error_t> done;
   auto fut = done.get_future();
   _loop.run_in_loop([this, &done]() -> vio::task_t<void> {
-    return [](upload_handler_t *self, std::promise<points_error_t> &promise) -> vio::task_t<void> {
-      points_error_t error = {};
+    return [](upload_handler_t *self, std::promise<dew_error_t> &promise) -> vio::task_t<void> {
+      dew_error_t error = {};
       root_manifest_t root;
       std::vector<uint8_t> buffer(k_root_manifest_size);
       auto info = co_await self->_io->object_info(bucket_root_manifest_name());
@@ -126,7 +126,7 @@ points_error_t upload_handler_t::bootstrap()
         memcpy(root.dataset_uuid, self->_uuid, sizeof(root.dataset_uuid));
         auto data = serialize_root_manifest(root);
         auto put = co_await self->_io->write_object(bucket_root_manifest_name(), std::move(data), k_root_manifest_size);
-        promise.set_value(put.has_value() ? points_error_t{} : from_vio_error(put.error()));
+        promise.set_value(put.has_value() ? dew_error_t{} : from_vio_error(put.error()));
         co_return;
       }
       auto read = co_await self->_io->read_object(bucket_root_manifest_name(), buffer.data(), {});
@@ -143,7 +143,7 @@ points_error_t upload_handler_t::bootstrap()
       }
       if (memcmp(root.dataset_uuid, self->_uuid, sizeof(root.dataset_uuid)) != 0)
       {
-        promise.set_value(points_error_t{1, "Destination bucket belongs to a different dataset generation (uuid mismatch)"});
+        promise.set_value(dew_error_t{1, "Destination bucket belongs to a different dataset generation (uuid mismatch)"});
         co_return;
       }
       self->_band_count = root.band_count;
@@ -156,7 +156,7 @@ points_error_t upload_handler_t::bootstrap()
         auto band_info = co_await self->_io->object_info(bucket_band_name(band));
         if (!band_info.has_value() || !band_info.value().exists)
         {
-          promise.set_value(points_error_t{1, "Committed band manifest missing from destination"});
+          promise.set_value(dew_error_t{1, "Committed band manifest missing from destination"});
           co_return;
         }
         std::vector<uint8_t> band_buffer(band_info.value().size);
@@ -186,7 +186,7 @@ points_error_t upload_handler_t::bootstrap()
         self->_stats.bands_committed = self->_band_count;
         self->_stats.complete = root.complete != 0;
       }
-      promise.set_value(points_error_t{});
+      promise.set_value(dew_error_t{});
       co_return;
     }(this, done);
   });
@@ -222,19 +222,19 @@ void upload_handler_t::handle_band(band_job_t &&job)
   }(this, std::move(next));
 }
 
-vio::task_t<points_error_t> upload_handler_t::read_cache_blob(storage_location_t location, std::vector<uint8_t> &out)
+vio::task_t<dew_error_t> upload_handler_t::read_cache_blob(storage_location_t location, std::vector<uint8_t> &out)
 {
   auto request = _storage.read(location, /*raw=*/true);
   co_await pool_read_wait_t{request, _pool, _loop};
   if (request->error.code != 0)
-    co_return points_error_t{request->error};
+    co_return dew_error_t{request->error};
   out.assign(static_cast<const uint8_t *>(request->buffer_info.data), static_cast<const uint8_t *>(request->buffer_info.data) + request->buffer_info.size);
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-vio::task_t<points_error_t> upload_handler_t::put_with_retry(std::string name, std::shared_ptr<uint8_t[]> data, uint64_t size)
+vio::task_t<dew_error_t> upload_handler_t::put_with_retry(std::string name, std::shared_ptr<uint8_t[]> data, uint64_t size)
 {
-  points_error_t last = {};
+  dew_error_t last = {};
   for (int attempt = 0; attempt < 5; attempt++)
   {
     if (attempt)
@@ -244,7 +244,7 @@ vio::task_t<points_error_t> upload_handler_t::put_with_retry(std::string name, s
     {
       std::unique_lock<std::mutex> lock(_stats_mutex);
       _stats.bytes_uploaded += size;
-      co_return points_error_t{};
+      co_return dew_error_t{};
     }
     last = from_vio_error(r.error());
   }
@@ -274,7 +274,7 @@ vio::detached_task_t upload_handler_t::put_data_object_windowed(put_window_t *wi
 
 vio::task_t<void> upload_handler_t::process_band(band_job_t job)
 {
-  auto park = [this](const points_error_t &error) {
+  auto park = [this](const dew_error_t &error) {
     _parked = true;
     {
       std::unique_lock<std::mutex> lock(_stats_mutex);
@@ -335,7 +335,7 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
     serialized.data = std::make_shared<uint8_t[]>(tree_bytes.size());
     memcpy(serialized.data.get(), tree_bytes.data(), tree_bytes.size());
     auto tree = std::make_unique<tree_t>();
-    points_error_t tree_error = {};
+    dew_error_t tree_error = {};
     if (!tree_deserialize(serialized, *tree, tree_error))
     {
       while (window.in_flight >= 1)
@@ -394,7 +394,7 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
     auto reserialized = tree_serialize(*tree);
     if (!reserialized.data)
     {
-      park(points_error_t{1, "Failed to serialize tree for upload"});
+      park(dew_error_t{1, "Failed to serialize tree for upload"});
       co_return;
     }
     remapped_trees.emplace_back(tree_id, std::move(reserialized));
@@ -439,7 +439,7 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
       {
         while (window.in_flight >= 1)
           co_await window.wait_for_room(1);
-        park(points_error_t{1, fmt::format("Terminal band missing bucket location for tree {}", i)});
+        park(dew_error_t{1, fmt::format("Terminal band missing bucket location for tree {}", i)});
         co_return;
       }
       registry.locations[i] = it->second;
@@ -451,7 +451,7 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
     {
       while (window.in_flight >= 1)
         co_await window.wait_for_room(1);
-      park(points_error_t{1, "Failed to serialize registry for upload"});
+      park(dew_error_t{1, "Failed to serialize registry for upload"});
       co_return;
     }
     registry_location.file_id = _next_object_id++;
@@ -479,7 +479,7 @@ vio::task_t<void> upload_handler_t::process_band(band_job_t job)
   auto band_bytes = serialize_band_manifest(manifest);
   if (band_bytes.empty())
   {
-    park(points_error_t{1, "Failed to serialize band manifest"});
+    park(dew_error_t{1, "Failed to serialize band manifest"});
     co_return;
   }
   auto band_data = std::make_shared<uint8_t[]>(band_bytes.size());
@@ -553,4 +553,4 @@ void upload_handler_t::wait_drained()
   _drained_cv.wait(lock, [&] { return _stats.parked || _stats.bands_committed >= _enqueued_bands + _bootstrap_band_count; });
 }
 
-} // namespace points::converter
+} // namespace dew::converter

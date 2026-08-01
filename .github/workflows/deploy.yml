@@ -1,6 +1,6 @@
-name: Deploy points.limilind.com
+name: Deploy points.limilind.com (dewfall web)
 
-# Builds and deploys the points web service (the React SPA + WebGL2/WASM renderer, served by a prism
+# Builds and deploys the dewfall web service (the React SPA + WebGL2/WASM renderer, served by a prism
 # static-file backend). Runs only when something that affects the bundle changes, so ordinary library work
 # (tools/, tests/, native-only paths) does not redeploy. Merging to master rebuilds the image and redeploys.
 on:
@@ -54,7 +54,7 @@ jobs:
       - name: Build the WebGL2 renderer WASM
         run: |
           emcmake cmake -S . -B cmake-build-wasm -DCMAKE_BUILD_TYPE=Release
-          cmake --build cmake-build-wasm --target points_render_wasm
+          cmake --build cmake-build-wasm --target dew_render_wasm
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -81,6 +81,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # NOTE: the image name and the `update.sh points` service name below are deployment identifiers
+      # owned by the droplet stack (github.com/jorgen/limilind-edge) — rename them there first, then here.
+      # The project itself is now "dewfall"; these are the last "points" names left on purpose.
       - uses: docker/build-push-action@v6
         with:
           context: .

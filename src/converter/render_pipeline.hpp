@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -26,14 +26,14 @@
 
 namespace vio { class thread_pool_t; }
 
-struct points_to_render_t;
+struct dew_to_render_t;
 
-namespace points::render
+namespace dew::render
 {
 struct frame_camera_cpp_t;
 }
 
-namespace points::converter
+namespace dew::converter
 {
 
 using render_node_ptr = std::unique_ptr<render_node_t>;
@@ -118,7 +118,7 @@ int emit_draws(
     render::callback_manager_t &callbacks,
     const render::frame_camera_cpp_t &camera,
     const tree_config_t &tree_config,
-    points_to_render_t *to_render,
+    dew_to_render_t *to_render,
     float fade_duration_ms,
     int viewport_height,
     double render_density_px,
@@ -135,4 +135,4 @@ void handle_attribute_change(
     render::callback_manager_t &callbacks,
     render::node_data_loader_t *node_loader);
 
-} // namespace points::converter
+} // namespace dew::converter

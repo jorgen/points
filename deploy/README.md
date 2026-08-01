@@ -8,7 +8,7 @@ backend is a tiny `prism` static-file server.
 ## Layout
 
 - `examples/renderer/web/` — the SPA (the existing renderer example is the frontend).
-- `backend/` — `points_server`, a `prism` static-file server (`app.static_files("/", dist, spa_fallback=true)`
+- `backend/` — `dew_server`, a `prism` static-file server (`app.static_files("/", dist, spa_fallback=true)`
   + `/api/health`). Self-contained CMake project consuming vio/structify/prism.
 - `deploy/Dockerfile` — multi-stage image (emsdk builds the renderer WASM → node builds the SPA → the prism
   server is built against pinned vio/structify/prism → slim runtime serving `/app/dist` on `:8080`).
@@ -20,15 +20,15 @@ backend is a tiny `prism` static-file server.
 ```bash
 # 1. Build the renderer WASM (needs EMSDK):
 cmake --preset emscripten
-cmake --build cmake-build-wasm --target points_render_wasm   # NB: not the preset default (points_data_wasm)
+cmake --build cmake-build-wasm --target dew_render_wasm   # NB: not the preset default (dew_data_wasm)
 
 # 2. Dev SPA (Vite proxies nothing; the WASM talks to S3 directly):
 cd examples/renderer/web && npm ci && npm run dev            # copy-wasm runs automatically
 
 # Or the production path: build the SPA, then serve it with the prism backend:
 cd examples/renderer/web && npm run build                    # -> examples/renderer/web/dist
-cmake -S backend -B backend/build -G Ninja && cmake --build backend/build --target points_server
-./backend/build/points_server examples/renderer/web/dist 8080
+cmake -S backend -B backend/build -G Ninja && cmake --build backend/build --target dew_server
+./backend/build/dew_server examples/renderer/web/dist 8080
 ```
 
 ## Deploy (two repos)
@@ -39,7 +39,7 @@ cmake -S backend -B backend/build -G Ninja && cmake --build backend/build --targ
 1. In **this** repo, add GitHub secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (same values
    as the other limilind apps).
 2. In **`limilind-edge`**: add a `points` compose service (`image ghcr.io/jorgen/points`,
-   `networks: [web]`, `POINTS_HOST=0.0.0.0`/`POINTS_PORT=8080`, no Postgres), append
+   `networks: [web]`, `DEW_HOST=0.0.0.0`/`DEW_PORT=8080`, no Postgres), append
    `;points.limilind.com=points:8080` to `GATEWAY_ROUTES` (+ `.env`), add a `points` welcome card, and add a
    GoDaddy A-record `points.limilind.com` → droplet IP. The gateway auto-issues the TLS cert by SNI.
 

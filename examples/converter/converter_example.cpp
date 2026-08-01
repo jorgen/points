@@ -7,21 +7,21 @@
 #include <cinttypes>
 #include <numeric>
 
-#include <points/converter/connection_cli.h>
-#include <points/converter/converter.h>
+#include <dew/converter/connection_cli.h>
+#include <dew/converter/converter.h>
 
 struct callback_data_t
 {
   bool had_errors = false;
-  points_converter_t *converter = nullptr;
+  dew_converter_t *converter = nullptr;
 };
 
 void converter_progress_callback_t(void *user_data, float progress)
 {
   (void)progress;
   auto *data = static_cast<callback_data_t *>(user_data);
-  points_converter_perf_stats_t stats;
-  points_converter_get_live_perf_stats(data->converter, &stats);
+  dew_converter_perf_stats_t stats;
+  dew_converter_get_live_perf_stats(data->converter, &stats);
   fmt::print(stderr, "\r[{:.1f}s] read: {} ops  sort: {} ops  write: {} ops  {:.1f} MB/s",
              stats.total_time_seconds,
              stats.source_read.operation_count,
@@ -29,8 +29,8 @@ void converter_progress_callback_t(void *user_data, float progress)
              stats.source_write.operation_count,
              stats.overall_mbps);
   // Destination mode only (returns false otherwise): the incremental-upload side of the pipeline.
-  points_converter_upload_state_t upload = {};
-  if (points_converter_get_upload_state(data->converter, &upload))
+  dew_converter_upload_state_t upload = {};
+  if (dew_converter_get_upload_state(data->converter, &upload))
   {
     fmt::print(stderr, "  up: {:.1f} MB / {} bands{}", double(upload.bytes_uploaded) / (1024.0 * 1024.0), upload.bands_committed, upload.upload_parked ? " [PARKED]" : "");
     if (upload.cache_max_bytes)
@@ -44,16 +44,16 @@ void converter_warning_callback_t(void *user_data, const char *message)
   fmt::print("Warning: {}\n", message);
 }
 
-static std::string get_error_string(const points_error_t *error)
+static std::string get_error_string(const dew_error_t *error)
 {
   int code;
   const char *str;
   size_t str_len;
-  points_error_get_info(error, &code, &str, &str_len);
+  dew_error_get_info(error, &code, &str, &str_len);
   return {str, str_len};
 }
 
-void converter_error_callback_t(void *user_data, const struct points_error_t *error)
+void converter_error_callback_t(void *user_data, const struct dew_error_t *error)
 {
   auto *data = static_cast<callback_data_t *>(user_data);
   data->had_errors = true;
@@ -67,7 +67,7 @@ void converter_done_callback_t(void *user_data)
   fmt::print(stderr, "\n");
 }
 
-void upload_error_callback_t(void *user_data, const struct points_error_t *error, uint8_t parked)
+void upload_error_callback_t(void *user_data, const struct dew_error_t *error, uint8_t parked)
 {
   auto *data = static_cast<callback_data_t *>(user_data);
   if (parked)
@@ -88,41 +88,41 @@ std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
   return std::unique_ptr<T, Deleter>(t, d);
 }
 
-static points_converter_compression_t parse_compression(const char *str)
+static dew_converter_compression_t parse_compression(const char *str)
 {
   if (std::strcmp(str, "none") == 0)
-    return points_converter_compression_none;
+    return dew_converter_compression_none;
   if (std::strcmp(str, "zstd") == 0)
-    return points_converter_compression_zstd;
+    return dew_converter_compression_zstd;
   if (std::strcmp(str, "huff0") == 0)
-    return points_converter_compression_huff0;
+    return dew_converter_compression_huff0;
   fmt::print(stderr, "Unknown compression '{}', using zstd\n", str);
-  return points_converter_compression_zstd;
+  return dew_converter_compression_zstd;
 }
 
-static const char *type_name(points_type_t type)
+static const char *type_name(dew_type_t type)
 {
   switch (type)
   {
-  case points_type_u8: return "u8";
-  case points_type_i8: return "i8";
-  case points_type_u16: return "u16";
-  case points_type_i16: return "i16";
-  case points_type_u32: return "u32";
-  case points_type_i32: return "i32";
-  case points_type_m32: return "m32";
-  case points_type_r32: return "r32";
-  case points_type_u64: return "u64";
-  case points_type_i64: return "i64";
-  case points_type_m64: return "m64";
-  case points_type_r64: return "r64";
-  case points_type_m128: return "m128";
-  case points_type_m192: return "m192";
+  case dew_type_u8: return "u8";
+  case dew_type_i8: return "i8";
+  case dew_type_u16: return "u16";
+  case dew_type_i16: return "i16";
+  case dew_type_u32: return "u32";
+  case dew_type_i32: return "i32";
+  case dew_type_m32: return "m32";
+  case dew_type_r32: return "r32";
+  case dew_type_u64: return "u64";
+  case dew_type_i64: return "i64";
+  case dew_type_m64: return "m64";
+  case dew_type_r64: return "r64";
+  case dew_type_m128: return "m128";
+  case dew_type_m192: return "m192";
   default: return "?";
   }
 }
 
-static std::string format_str(points_type_t type, points_components_t components)
+static std::string format_str(dew_type_t type, dew_components_t components)
 {
   return fmt::format("{}x{}", type_name(type), static_cast<int>(components));
 }
@@ -154,7 +154,7 @@ static std::string format_number(uint64_t n)
   return result;
 }
 
-static void print_compression_stats(const points_converter_stats_t &stats)
+static void print_compression_stats(const dew_converter_stats_t &stats)
 {
   fmt::print("\nCompression Statistics:\n");
   fmt::print("  Input files:    {}\n", format_number(stats.input_file_count));
@@ -190,7 +190,7 @@ static void print_compression_stats(const points_converter_stats_t &stats)
              format_number(total_compressed), total_ratio);
 }
 
-static void print_perf_stats(const points_converter_perf_stats_t &ps)
+static void print_perf_stats(const dew_converter_perf_stats_t &ps)
 {
   double overall = ps.total_time_seconds > 0 ? ps.total_bytes_written_mb / ps.total_time_seconds : 0;
 
@@ -232,7 +232,7 @@ struct args_t
   std::string connection;        // --connection spec (inline / @file / env:VAR) for a cloud output URL
   std::string cache;             // --cache: explicit local cache file for a cloud output (destination mode)
   uint64_t cache_max_bytes = 0;  // --cache-max-bytes: resident cap for the cache file; 0 = unlimited
-  points_converter_compression_t compression;
+  dew_converter_compression_t compression;
   bool inspect = false;
   uint32_t node_point_limit = 0; // points per node / blob-size lever; 0 = converter default
 };
@@ -325,8 +325,8 @@ bool parse_arguments(int argc, char *argv[], args_t &args)
 int main(int argc, char **argv)
 {
   args_t args;
-  args.output = "out.jlp";
-  args.compression = points_converter_compression_zstd;
+  args.output = "out.dew";
+  args.compression = dew_converter_compression_zstd;
   if (!parse_arguments(argc, argv, args))
     return 1;
 
@@ -338,23 +338,23 @@ int main(int argc, char **argv)
       return 1;
     }
     auto &filename = args.input[0];
-    points_error_t *err = nullptr;
-    auto *conv = points_converter_create(filename.c_str(), filename.size(), points_open_file_semantics_read_only, &err);
+    dew_error_t *err = nullptr;
+    auto *conv = dew_converter_create(filename.c_str(), filename.size(), dew_open_file_semantics_read_only, &err);
     if (!conv)
     {
       const char *err_str = "unknown";
       size_t err_len = 0;
       if (err)
-        points_error_get_info(err, nullptr, &err_str, &err_len);
+        dew_error_get_info(err, nullptr, &err_str, &err_len);
       fmt::print(stderr, "Failed to read stats from '{}': {}\n", filename, err_str);
       if (err)
-        points_error_destroy(err);
+        dew_error_destroy(err);
       return 1;
     }
-    points_converter_stats_t stats;
-    points_converter_get_compression_stats(conv, &stats);
+    dew_converter_stats_t stats;
+    dew_converter_get_compression_stats(conv, &stats);
     print_compression_stats(stats);
-    points_converter_destroy(conv);
+    dew_converter_destroy(conv);
     return 0;
   }
 
@@ -364,57 +364,57 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  std::vector<points_converter_str_buffer> input_str_buf(args.input.size());
-  std::transform(args.input.begin(), args.input.end(), input_str_buf.begin(), [](const std::string &str) -> points_converter_str_buffer { return {str.c_str(), static_cast<uint32_t>(str.size())}; });
+  std::vector<dew_converter_str_buffer> input_str_buf(args.input.size());
+  std::transform(args.input.begin(), args.input.end(), input_str_buf.begin(), [](const std::string &str) -> dew_converter_str_buffer { return {str.c_str(), static_cast<uint32_t>(str.size())}; });
 
   std::string connection;
   {
     std::string conn_error;
-    if (!points::converter::cli::resolve_connection_spec(args.connection, connection, conn_error))
+    if (!dew::converter::cli::resolve_connection_spec(args.connection, connection, conn_error))
     {
       fmt::print(stderr, "Connection error: {}\n", conn_error);
       return 1;
     }
   }
-  points_error_t *create_error = nullptr;
+  dew_error_t *create_error = nullptr;
   // --cache pins an explicit local cache file for a cloud destination; without it a cloud URL still
   // converts through an implicit cache in the OS cache dir (create_with_connection reroutes).
   auto converter = args.cache.empty()
-                     ? create_unique_ptr(points_converter_create_with_connection(args.output.data(), args.output.size(), connection.data(), connection.size(), points_open_file_semantics_truncate, &create_error), &points_converter_destroy)
-                     : create_unique_ptr(points_converter_create_with_destination(args.cache.data(), args.cache.size(), args.output.data(), args.output.size(), connection.data(), connection.size(), points_open_file_semantics_truncate, &create_error),
-                                         &points_converter_destroy);
+                     ? create_unique_ptr(dew_converter_create_with_connection(args.output.data(), args.output.size(), connection.data(), connection.size(), dew_open_file_semantics_truncate, &create_error), &dew_converter_destroy)
+                     : create_unique_ptr(dew_converter_create_with_destination(args.cache.data(), args.cache.size(), args.output.data(), args.output.size(), connection.data(), connection.size(), dew_open_file_semantics_truncate, &create_error),
+                                         &dew_converter_destroy);
   if (!converter)
   {
     if (create_error)
     {
       auto error_str = get_error_string(create_error);
       fmt::print(stderr, "Failed to create converter: {}\n", error_str);
-      points_error_destroy(create_error);
+      dew_error_destroy(create_error);
     }
     return 1;
   }
   if (args.cache_max_bytes)
-    points_converter_set_cache_max_bytes(converter.get(), args.cache_max_bytes);
+    dew_converter_set_cache_max_bytes(converter.get(), args.cache_max_bytes);
   callback_data_t cb_data;
   cb_data.converter = converter.get();
-  points_converter_runtime_callbacks_t runtime_callbacks = {&converter_progress_callback_t, &converter_warning_callback_t, &converter_error_callback_t, &converter_done_callback_t};
-  points_converter_set_runtime_callbacks(converter.get(), runtime_callbacks, &cb_data);
-  points_converter_upload_callbacks_t upload_callbacks = {};
+  dew_converter_runtime_callbacks_t runtime_callbacks = {&converter_progress_callback_t, &converter_warning_callback_t, &converter_error_callback_t, &converter_done_callback_t};
+  dew_converter_set_runtime_callbacks(converter.get(), runtime_callbacks, &cb_data);
+  dew_converter_upload_callbacks_t upload_callbacks = {};
   upload_callbacks.error = &upload_error_callback_t;
   upload_callbacks.done = &upload_done_callback_t;
-  points_converter_set_upload_callbacks(converter.get(), upload_callbacks, &cb_data);
-  points_converter_set_compression(converter.get(), args.compression);
+  dew_converter_set_upload_callbacks(converter.get(), upload_callbacks, &cb_data);
+  dew_converter_set_compression(converter.get(), args.compression);
   if (args.node_point_limit > 0)
-    points_converter_set_node_point_limit(converter.get(), args.node_point_limit);
-  points_converter_add_data_file(converter.get(), input_str_buf.data(), int(input_str_buf.size()));
-  points_converter_wait_idle(converter.get());
+    dew_converter_set_node_point_limit(converter.get(), args.node_point_limit);
+  dew_converter_add_data_file(converter.get(), input_str_buf.data(), int(input_str_buf.size()));
+  dew_converter_wait_idle(converter.get());
 
-  points_converter_perf_stats_t perf_stats;
-  points_converter_get_live_perf_stats(converter.get(), &perf_stats);
+  dew_converter_perf_stats_t perf_stats;
+  dew_converter_get_live_perf_stats(converter.get(), &perf_stats);
   print_perf_stats(perf_stats);
 
-  points_converter_stats_t stats;
-  points_converter_get_compression_stats(converter.get(), &stats);
+  dew_converter_stats_t stats;
+  dew_converter_get_compression_stats(converter.get(), &stats);
   print_compression_stats(stats);
 
   return cb_data.had_errors ? 1 : 0;

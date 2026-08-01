@@ -31,7 +31,7 @@
     },
     {
       "name": "emscripten",
-      "description": "WebAssembly read-only data library (needs EMSDK; build target points_data_wasm)",
+      "description": "WebAssembly read-only data library (needs EMSDK; build target dew_data_wasm)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/cmake-build-wasm",
       "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
@@ -93,7 +93,7 @@
     { "name": "msvc-release", "configurePreset": "msvc-release" },
     { "name": "static-debug", "configurePreset": "static-debug" },
     { "name": "static-release", "configurePreset": "static-release" },
-    { "name": "emscripten", "configurePreset": "emscripten", "targets": [ "points_data_wasm" ] }
+    { "name": "emscripten", "configurePreset": "emscripten", "targets": [ "dew_data_wasm" ] }
   ],
   "testPresets": [
     { "name": "debug", "configurePreset": "debug" },

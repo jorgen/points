@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // Delta encoding for morton codes (in-place).
@@ -94,4 +94,4 @@ inline uint32_t popcount32(uint32_t x)
 #endif
 }
 
-} // namespace points::converter
+} // namespace dew::converter

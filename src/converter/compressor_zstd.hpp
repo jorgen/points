@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #include "compressor.hpp"
 
-namespace points::converter
+namespace dew::converter
 {
 
 class compressor_zstd_t : public compressor_t
@@ -39,4 +39,4 @@ private:
   int _compression_level = 9;
 };
 
-} // namespace points::converter
+} // namespace dew::converter

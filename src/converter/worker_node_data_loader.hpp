@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -39,10 +39,10 @@
 #include <unordered_map>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
-// True iff the web app installed a decode-worker pool as globalThis.__pointsDecodePool. The data source only
+// True iff the web app installed a decode-worker pool as globalThis.__dewDecodePool. The data source only
 // routes decode through a worker when this is true; otherwise it keeps the inline (main-thread) decode path.
 bool decode_worker_pool_available();
 
@@ -81,11 +81,11 @@ private:
   void post_to_worker(uint64_t id, pending_t &p);
 
   storage_handler_t &_storage_handler;
-  emscripten::val _pool; // globalThis.__pointsDecodePool
+  emscripten::val _pool; // globalThis.__dewDecodePool
   uint64_t _next_handle = 1;
   std::unordered_map<uint64_t, pending_t> _pending;
 };
 
-} // namespace points::converter
+} // namespace dew::converter
 
 #endif // __EMSCRIPTEN__

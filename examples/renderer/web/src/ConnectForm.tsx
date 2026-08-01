@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import type { Connection } from './pointsRender';
+import type { Connection } from './dewRender';
 
 export interface FormValues {
   /** Dataset URL, e.g. s3://bucket/prefix. */

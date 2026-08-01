@@ -1,0 +1,135 @@
+// Loads the Emscripten renderer module (dew_render.mjs, built from examples/renderer/renderer_wasm.cpp)
+// and exposes typed wrappers for its embind API. The .mjs + .wasm are served from the app root (copied
+// into public/ by scripts/copy-wasm.mjs); the module is imported at runtime so Vite never bundles the
+// Emscripten glue or the WebAssembly binary.
+
+// A connection has two parts: the dataset `url` (scheme + bucket/prefix, e.g. s3://bucket/prefix) and a
+// `connectionString` -- the remaining connection parameters as a ";"-separated key=value list, using the
+// EXACT same grammar and keys as the CLI tools (converter --connection, dew_copy -s/-d), e.g.
+//   endpoint=https://host:9000;access_key_id=..;secret_access_key=..;region=us-east-1;path_style=true
+export interface Connection {
+  /** Dataset location: scheme + bucket/prefix, e.g. "s3://bucket/prefix". */
+  url: string;
+  /** All other connection parameters as the ";"-separated CLI connection-string grammar. */
+  connectionString: string;
+}
+
+export interface Aabb {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+/** One WebGL2 renderer bound to a canvas + dataset. Mirrors the embind `Renderer` class. */
+/** Wasm heap + memory-budget telemetry (see Renderer.getMemoryStats). */
+export interface MemoryStats {
+  /** Current wasm heap size in bytes (never shrinks within a page load). */
+  heapBytes: number;
+  /** Link-time heap ceiling in bytes. */
+  heapMax: number;
+  /** The configured total CPU-memory budget in bytes. */
+  budgetBytes: number;
+  /** Estimated CPU bytes held by in-flight + decoded-awaiting-upload nodes last frame. */
+  backlogBytes: number;
+  /** Compressed read-cache occupancy in bytes. */
+  readCacheBytes: number;
+  /** CPU bytes pinned by virtual-subtree residents + salvage handlers. */
+  residentBytes: number;
+  /** Heap-pressure brake: 0 none, 1 high (>=80% of ceiling), 2 critical (>=90%). */
+  brakeLevel: number;
+}
+
+export interface Renderer {
+  /** Pump the streaming loops and draw once, at the given drawing-buffer pixel size. */
+  frame(width: number, height: number): void;
+  /** Orbit. Deltas are normalized (pixel movement / canvas CSS size). */
+  cameraRotate(ndx: number, ndy: number): void;
+  cameraRoll(nd: number): void;
+  cameraPan(ndx: number, ndy: number): void;
+  /** Pan within the dataset's ground plane (the desktop app's ctrl+right-drag). */
+  cameraPanGround(ndx: number, ndy: number): void;
+  cameraDolly(nd: number): void;
+  cameraZoom(nz: number): void;
+  /** Restore the initial fitted view. */
+  resetView(): void;
+  setAttribute(name: string): void;
+  getAttributeNames(): string[];
+  getAabb(): Aabb;
+  getPointsRendered(): number;
+  /** Point splat world size. */
+  setPointSize(v: number): void;
+  /** Level-of-detail scale base (higher = coarser LOD kept). */
+  setLodScaleBase(v: number): void;
+  /** Octree refinement budget: smaller screen-space pixel error = more detail (+ more streaming). */
+  setPixelErrorThreshold(v: number): void;
+  /** Runtime per-node LOD: target on-screen spacing (px) between drawn points → uniform density. */
+  setRenderDensityPx(v: number): void;
+  /** GPU memory budget in MB; the streamer evicts to stay under it. */
+  setGpuMemoryBudgetMb(mb: number): void;
+  /** Per-frame GPU upload budget in MB (streaming convergence speed). */
+  setUploadBudgetPerFrameMb(mb: number): void;
+  /** Max concurrent in-flight IO requests (streaming convergence speed). */
+  setMaxInFlightIo(n: number): void;
+  /**
+   * Total CPU-memory budget (MB) for the streaming renderer: derives the read-cache size, the decoded-
+   * backlog cap, the virtual-resident budget and an in-flight-IO clamp. GPU memory is budgeted separately
+   * (setGpuMemoryBudgetMb) — GL buffers live outside the wasm heap. Values below 64 clamp to 64.
+   */
+  setMemoryBudgetMb(mb: number): void;
+  /** Wasm heap + memory-budget telemetry (heap values are from the last rendered frame). */
+  getMemoryStats(): MemoryStats;
+  /** Virtual subnodes: render-time balanced LOD for spanning leaves. Off = leaves fall back to monoliths. */
+  setEnableVirtualSubtrees(on: boolean): void;
+  getEnableVirtualSubtrees(): boolean;
+  /** Telemetry: promoted spanning-leaf count, virtual GPU bytes, resident CPU bytes, virtual nodes drawn. */
+  getVirtualPromoted(): number;
+  getVirtualGpuBytes(): number;
+  getResidentCpuBytes(): number;
+  getVirtualNodesDrawn(): number;
+  /** Toggle the per-node bounding-box overlay. */
+  setShowBoundingBoxes(show: boolean): void;
+  /** Register the JS redraw callback; the renderer invokes it whenever the frame becomes dirty. */
+  setRequestUpdate(cb: () => void): void;
+  /** Release GL + streaming resources. Idempotent; the instance must not be used afterwards. */
+  dispose(): void;
+}
+
+interface DewRenderModule {
+  createRenderer(canvasSelector: string, url: string, connectionString: string): Promise<Renderer | null>;
+}
+
+type ModuleFactory = (moduleArg?: Record<string, unknown>) => Promise<DewRenderModule>;
+
+let modulePromise: Promise<DewRenderModule> | null = null;
+
+/** Load (once) and instantiate the Emscripten renderer module. */
+export function loadDewRender(): Promise<DewRenderModule> {
+  if (!modulePromise) {
+    modulePromise = instantiate().catch((err: unknown) => {
+      modulePromise = null; // allow a retry after a transient failure
+      throw err;
+    });
+  }
+  return modulePromise;
+}
+
+async function instantiate(): Promise<DewRenderModule> {
+  // Resolve the artifacts against the app base so this works at the site root or under a sub-path.
+  const base = document.baseURI;
+  const glueUrl = new URL('dew_render.mjs', base).href;
+  // Import the Emscripten glue through a Blob URL rather than a normal module specifier: dew_render.mjs
+  // is a /public asset, and Vite's dev server refuses to serve a public file through its module-transform
+  // pipeline ("...should not be imported from source code"). A Blob import runs entirely in the browser,
+  // bypassing Vite in both dev and build. locateFile then points the module at its .wasm, which is fetched
+  // as a plain static asset (that Vite does serve).
+  const source = await fetch(glueUrl).then((r) => {
+    if (!r.ok) throw new Error(`failed to fetch ${glueUrl}: HTTP ${r.status}`);
+    return r.text();
+  });
+  const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+  try {
+    const factory = (await import(/* @vite-ignore */ blobUrl)).default as ModuleFactory;
+    return await factory({ locateFile: (path: string) => new URL(path, base).href });
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}

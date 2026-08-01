@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2022  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -25,8 +25,8 @@
 #include "worker_node_data_loader.hpp" // decode-worker loader (used when the web app installs a worker pool)
 #include <emscripten/heap.h>           // emscripten_get_heap_size/_max (heap-pressure brake probe)
 #endif
-#include <points/common/format.h>
-#include <points/converter/converter_data_source.h>
+#include <dew/common/format.h>
+#include <dew/converter/converter_data_source.h>
 
 #include <vio/objstore/create_object_store.h> // apply_connection_override, clear_*_config_override
 
@@ -38,8 +38,8 @@
 
 #include "renderer.hpp"
 
-using namespace points;
-using namespace points::converter;
+using namespace dew;
+using namespace dew::converter;
 
 // Estimate a leaf's resident_source_t CPU footprint from its data_handler (matches build_resident_source's
 // cpu_bytes), so in-flight async builds count against the CPU-resident budget before they finalize (bug #2).
@@ -87,7 +87,7 @@ static uint64_t braked_read_cache_bytes(const derived_budgets_t &d, brake_level_
   return d.read_cache_bytes;
 }
 
-points_converter_data_source_t::points_converter_data_source_t(const std::string &a_url, render::callback_manager_t &a_callbacks)
+dew_converter_data_source_t::dew_converter_data_source_t(const std::string &a_url, render::callback_manager_t &a_callbacks)
   : url(a_url)
   , processor(a_url, file_existence_requirement_t::exist, error)
   , callbacks(a_callbacks)
@@ -97,9 +97,9 @@ points_converter_data_source_t::points_converter_data_source_t(const std::string
     return;
   }
   data_source.user_ptr = this;
-  data_source.add_to_frame = [](points_frame_camera_t *camera, points_to_render_t *to_render, void *user_ptr)
+  data_source.add_to_frame = [](dew_frame_camera_t *camera, dew_to_render_t *to_render, void *user_ptr)
   {
-    auto *thiz = static_cast<points_converter_data_source_t *>(user_ptr);
+    auto *thiz = static_cast<dew_converter_data_source_t *>(user_ptr);
     thiz->add_to_frame(camera, to_render);
   };
 
@@ -107,7 +107,7 @@ points_converter_data_source_t::points_converter_data_source_t(const std::string
 
 #ifdef __EMSCRIPTEN__
   // On the web, route decode through a pool of Web Workers when the app installed one (globalThis
-  // .__pointsDecodePool); otherwise fall back to decoding inline on the main thread.
+  // .__dewDecodePool); otherwise fall back to decoding inline on the main thread.
   if (decode_worker_pool_available())
     node_loader = std::make_unique<worker_node_data_loader_t>(processor.storage_handler());
   else
@@ -135,7 +135,7 @@ points_converter_data_source_t::points_converter_data_source_t(const std::string
   last_frame_time = std::chrono::high_resolution_clock::now();
 }
 
-points_converter_data_source_t::~points_converter_data_source_t()
+dew_converter_data_source_t::~dew_converter_data_source_t()
 {
   // Runs before members destruct (esp. convert_pool, which is declared after render_list and would otherwise
   // drain queued jobs against already-freed nodes). destroy_render_node spin-waits each in-flight convert /
@@ -153,7 +153,7 @@ points_converter_data_source_t::~points_converter_data_source_t()
   pending_destroy.clear();
 }
 
-void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camera, points_to_render_t *to_render)
+void dew_converter_data_source_t::add_to_frame(dew_frame_camera_t *c_camera, dew_to_render_t *to_render)
 {
   using clock = std::chrono::high_resolution_clock;
   auto t_start = clock::now();
@@ -619,7 +619,7 @@ void points_converter_data_source_t::add_to_frame(points_frame_camera_t *c_camer
   frame_timings.total_ms = to_ms(t_end - t_start);
 }
 
-struct points_converter_data_source_t *points_converter_data_source_create_with_connection(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, points_error_t *error, struct points_renderer_t *renderer)
+struct dew_converter_data_source_t *dew_converter_data_source_create_with_connection(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, dew_error_t *error, struct dew_renderer_t *renderer)
 {
   if (!error)
     return nullptr;
@@ -640,7 +640,7 @@ struct points_converter_data_source_t *points_converter_data_source_create_with_
     applied = true;
   }
 
-  auto ret = std::make_unique<points_converter_data_source_t>(url_str, renderer->callbacks);
+  auto ret = std::make_unique<dew_converter_data_source_t>(url_str, renderer->callbacks);
 
   // The override was consumed when the backend was created (its bucket/prefix are baked in), so clear it
   // now; leaving it set would leak into a later create with a different URL in the same process.
@@ -660,82 +660,82 @@ struct points_converter_data_source_t *points_converter_data_source_create_with_
   return ret.release();
 }
 
-struct points_converter_data_source_t *points_converter_data_source_create(const char *url, uint32_t url_len, points_error_t *error, struct points_renderer_t *renderer)
+struct dew_converter_data_source_t *dew_converter_data_source_create(const char *url, uint32_t url_len, dew_error_t *error, struct dew_renderer_t *renderer)
 {
-  return points_converter_data_source_create_with_connection(url, url_len, nullptr, 0, error, renderer);
+  return dew_converter_data_source_create_with_connection(url, url_len, nullptr, 0, error, renderer);
 }
 
-void points_converter_data_source_destroy(struct points_converter_data_source_t *converter_data_source)
+void dew_converter_data_source_destroy(struct dew_converter_data_source_t *converter_data_source)
 {
   delete converter_data_source;
 }
 
-struct points_data_source_t points_converter_data_source_get(struct points_converter_data_source_t *converter_data_source)
+struct dew_data_source_t dew_converter_data_source_get(struct dew_converter_data_source_t *converter_data_source)
 {
   return converter_data_source->data_source;
 }
 
-void points_converter_data_source_request_aabb(struct points_converter_data_source_t *converter_data_source, points_converter_data_source_request_aabb_callback_t callback, void *user_ptr)
+void dew_converter_data_source_request_aabb(struct dew_converter_data_source_t *converter_data_source, dew_converter_data_source_request_aabb_callback_t callback, void *user_ptr)
 {
   auto callback_cpp = [callback, user_ptr](double aabb_min[3], double aabb_max[3]) { callback(aabb_min, aabb_max, user_ptr); };
 
   converter_data_source->processor.request_aabb(callback_cpp);
 }
 
-uint32_t points_converter_data_attribute_count(struct points_converter_data_source_t *converter_data_source)
+uint32_t dew_converter_data_attribute_count(struct dew_converter_data_source_t *converter_data_source)
 {
   return converter_data_source->processor.attrib_name_registry_count();
 }
 
-uint32_t points_converter_data_get_attribute_name(struct points_converter_data_source_t *converter_data_source, int index, char *name, uint32_t name_size)
+uint32_t dew_converter_data_get_attribute_name(struct dew_converter_data_source_t *converter_data_source, int index, char *name, uint32_t name_size)
 {
   return converter_data_source->processor.attrib_name_registry_get(index, name, name_size);
 }
 
-void points_converter_data_set_rendered_attribute(struct points_converter_data_source_t *converter_data_source, const char *name, uint32_t name_len)
+void dew_converter_data_set_rendered_attribute(struct dew_converter_data_source_t *converter_data_source, const char *name, uint32_t name_len)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->next_attribute_name.assign(name, name_len);
 }
 
-void points_converter_data_source_set_viewport(struct points_converter_data_source_t *converter_data_source, int width, int height)
+void dew_converter_data_source_set_viewport(struct dew_converter_data_source_t *converter_data_source, int width, int height)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->viewport_width = width;
   converter_data_source->viewport_height = height;
 }
 
-void points_converter_data_source_set_pixel_error_threshold(struct points_converter_data_source_t *converter_data_source, double threshold)
+void dew_converter_data_source_set_pixel_error_threshold(struct dew_converter_data_source_t *converter_data_source, double threshold)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->screen_fraction_threshold = threshold;
 }
 
-void points_converter_data_source_set_render_density_px(struct points_converter_data_source_t *converter_data_source, double density_px)
+void dew_converter_data_source_set_render_density_px(struct dew_converter_data_source_t *converter_data_source, double density_px)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->render_density_px = density_px > 0.0 ? density_px : 0.01;
 }
 
-void points_converter_data_source_set_gpu_memory_budget(struct points_converter_data_source_t *converter_data_source, size_t budget_bytes)
+void dew_converter_data_source_set_gpu_memory_budget(struct dew_converter_data_source_t *converter_data_source, size_t budget_bytes)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->gpu_memory_budget = budget_bytes;
 }
 
-void points_converter_data_source_set_upload_budget_per_frame(struct points_converter_data_source_t *converter_data_source, size_t budget_bytes)
+void dew_converter_data_source_set_upload_budget_per_frame(struct dew_converter_data_source_t *converter_data_source, size_t budget_bytes)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->upload_budget_per_frame = budget_bytes;
 }
 
-void points_converter_data_source_set_max_in_flight_io(struct points_converter_data_source_t *converter_data_source, int max_requests)
+void dew_converter_data_source_set_max_in_flight_io(struct dew_converter_data_source_t *converter_data_source, int max_requests)
 {
   std::unique_lock<std::mutex> lock(converter_data_source->mutex);
   converter_data_source->max_in_flight_io = max_requests;
 }
 
-void points_converter_data_source_set_memory_budget(struct points_converter_data_source_t *cds, uint64_t total_bytes)
+void dew_converter_data_source_set_memory_budget(struct dew_converter_data_source_t *cds, uint64_t total_bytes)
 {
   constexpr uint64_t min_budget = 64 * 1024 * 1024;
   if (total_bytes < min_budget)
@@ -752,13 +752,13 @@ void points_converter_data_source_set_memory_budget(struct points_converter_data
   cds->processor.storage_handler().set_decompressed_cache_size(cds->derived_budgets.decompressed_cache_bytes);
 }
 
-uint64_t points_converter_data_source_get_memory_budget(struct points_converter_data_source_t *cds)
+uint64_t dew_converter_data_source_get_memory_budget(struct dew_converter_data_source_t *cds)
 {
   std::unique_lock<std::mutex> lock(cds->mutex);
   return cds->total_memory_budget;
 }
 
-void points_converter_data_source_get_memory_stats(struct points_converter_data_source_t *cds,
+void dew_converter_data_source_get_memory_stats(struct dew_converter_data_source_t *cds,
   uint64_t *heap_bytes, uint64_t *heap_max, uint64_t *budget_bytes, uint64_t *backlog_bytes,
   uint64_t *read_cache_bytes, uint64_t *resident_cpu_bytes, uint32_t *brake_level)
 {
@@ -780,7 +780,7 @@ void points_converter_data_source_get_memory_stats(struct points_converter_data_
     *read_cache_bytes = cds->processor.storage_handler().read_cache_current_bytes();
 }
 
-uint64_t points_converter_data_source_get_points_rendered(struct points_converter_data_source_t *converter_data_source)
+uint64_t dew_converter_data_source_get_points_rendered(struct dew_converter_data_source_t *converter_data_source)
 {
   return converter_data_source->points_rendered_last_frame;
 }
@@ -788,13 +788,13 @@ uint64_t points_converter_data_source_get_points_rendered(struct points_converte
 // True while the last frame left a node crossfade in progress. The dirty-driven host (renderer_wasm) polls
 // this after a draw to re-arm the next frame so a fade-in/out keeps playing to completion even with no camera
 // input or IO in flight. (The per-node LOD detail is distance-driven, not time-animated, so it is not here.)
-uint8_t points_converter_data_source_is_animating(struct points_converter_data_source_t *cds)
+uint8_t dew_converter_data_source_is_animating(struct dew_converter_data_source_t *cds)
 {
   auto &t = cds->frame_timings;
   return ((t.nodes_fading_in + t.nodes_fading_out) > 0 || cds->virtual_animating) ? 1 : 0;
 }
 
-void points_converter_data_source_get_frame_timings(struct points_converter_data_source_t *cds, double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms, double *refine_strategy_ms, double *frontier_scheduling_ms,
+void dew_converter_data_source_get_frame_timings(struct dew_converter_data_source_t *cds, double *tree_walk_ms, double *buffer_reconciliation_ms, double *gpu_upload_ms, double *refine_strategy_ms, double *frontier_scheduling_ms,
                                              double *draw_emission_ms, double *eviction_ms, double *total_ms,
                                              int *registry_node_count, int *active_set_size, int *nodes_drawn,
                                              int *transitioning_count, int *nodes_evicted, int *nodes_reconcile_destroyed,
@@ -823,18 +823,18 @@ void points_converter_data_source_get_frame_timings(struct points_converter_data
   if (io_in_flight) *io_in_flight = t.io_in_flight;
 }
 
-void points_converter_data_source_set_debug_transitions(struct points_converter_data_source_t *cds, uint8_t enabled)
+void dew_converter_data_source_set_debug_transitions(struct dew_converter_data_source_t *cds, uint8_t enabled)
 {
   cds->debug_transitions = enabled;
 }
 
-void points_converter_data_source_set_show_bounding_boxes(struct points_converter_data_source_t *cds, uint8_t enabled)
+void dew_converter_data_source_set_show_bounding_boxes(struct dew_converter_data_source_t *cds, uint8_t enabled)
 {
   cds->show_bounding_boxes = enabled;
   cds->bbox_data_source->enabled = enabled;
 }
 
-void points_converter_data_source_set_enable_virtual_subtrees(struct points_converter_data_source_t *cds, uint8_t enabled)
+void dew_converter_data_source_set_enable_virtual_subtrees(struct dew_converter_data_source_t *cds, uint8_t enabled)
 {
   const bool on = enabled != 0;
   if (on == cds->enable_virtual_subtrees)
@@ -856,14 +856,14 @@ void points_converter_data_source_set_enable_virtual_subtrees(struct points_conv
         continue;
       }
       if (node.virtual_root)
-        points::converter::destroy_virtual_subtree(node.virtual_root, cds->callbacks, &cds->virtual_gpu_used);
+        dew::converter::destroy_virtual_subtree(node.virtual_root, cds->callbacks, &cds->virtual_gpu_used);
       node.resident.reset();
       node.is_virtual_source = false;
       node.draw_suppressed = false;
       if (node.monolith_freed) // R3 freed it -> reload the monolith
       {
         node.monolith_freed = false;
-        node.io_state = points::converter::render_node_io_state::none;
+        node.io_state = dew::converter::render_node_io_state::none;
       }
     }
     cds->resident_cpu_used = 0;
@@ -882,18 +882,18 @@ void points_converter_data_source_set_enable_virtual_subtrees(struct points_conv
     {
       auto &node = *np;
       if (node.walker_data.is_leaf && !node.resident_handler && !node.is_virtual_source && !node.resident_building &&
-          node.point_count > cds->virtual_min_points && node.gpu_state == points::converter::render_node_gpu_state::uploaded)
+          node.point_count > cds->virtual_min_points && node.gpu_state == dew::converter::render_node_gpu_state::uploaded)
         node.salvage_lost = true;
     }
   }
 }
 
-uint8_t points_converter_data_source_get_enable_virtual_subtrees(struct points_converter_data_source_t *cds)
+uint8_t dew_converter_data_source_get_enable_virtual_subtrees(struct dew_converter_data_source_t *cds)
 {
   return cds->enable_virtual_subtrees ? 1 : 0;
 }
 
-void points_converter_data_source_get_virtual_stats(struct points_converter_data_source_t *cds,
+void dew_converter_data_source_get_virtual_stats(struct dew_converter_data_source_t *cds,
   uint32_t *promoted, uint64_t *gpu_bytes, uint64_t *resident_cpu_bytes, uint32_t *nodes_drawn)
 {
   if (promoted)
@@ -906,12 +906,12 @@ void points_converter_data_source_get_virtual_stats(struct points_converter_data
     *nodes_drawn = uint32_t(cds->virtual_nodes_drawn_last);
 }
 
-struct points_data_source_t points_converter_data_source_get_bbox_data_source(struct points_converter_data_source_t *cds)
+struct dew_data_source_t dew_converter_data_source_get_bbox_data_source(struct dew_converter_data_source_t *cds)
 {
   return cds->bbox_data_source->data_source;
 }
 
-void points_converter_data_source_get_tight_aabb(struct points_converter_data_source_t *cds, double min[3], double max[3])
+void dew_converter_data_source_get_tight_aabb(struct dew_converter_data_source_t *cds, double min[3], double max[3])
 {
   auto &ta = cds->tight_aabb_accumulator;
   memcpy(min, &ta.min, sizeof(double) * 3);

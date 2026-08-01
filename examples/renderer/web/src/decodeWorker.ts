@@ -3,7 +3,7 @@
 // blob bytes here (via decodeWorkerPool.ts) and gets GPU-ready vertex/attribute/rep_level buffers back as
 // Transferable ArrayBuffers (zero-copy).
 //
-// Pairs with src/wasm/decode_worker.cpp (the wasm module built as `PointsDecodeWorker`). Classic
+// Pairs with src/wasm/decode_worker.cpp (the wasm module built as `DewDecodeWorker`). Classic
 // "wasm-in-a-worker" glue: load the module, decode on message, transfer the results back. A pool of these is
 // managed by decodeWorkerPool.ts; the C++ worker_node_data_loader is the consumer.
 
@@ -16,7 +16,7 @@ type DecodeRequest = {
   wantSalvage?: boolean;                             // leaf: also return the raw points+attr blobs (virtual LOD)
 };
 
-// Load the decode module (points_decode_worker.mjs) the same Vite-safe way the render module does: fetch the
+// Load the decode module (dew_decode_worker.mjs) the same Vite-safe way the render module does: fetch the
 // Emscripten glue as text and import it through a Blob URL, so the /public asset never goes through Vite's
 // module-transform pipeline. locateFile then resolves the sibling .wasm. Resolved against the app origin
 // root (where copy-wasm places the artifacts); a sub-path deployment would need the base passed in.
@@ -27,7 +27,7 @@ function getModule(): Promise<any> {
 }
 
 async function instantiate(): Promise<any> {
-  const glueUrl = new URL('/points_decode_worker.mjs', self.location.href).href;
+  const glueUrl = new URL('/dew_decode_worker.mjs', self.location.href).href;
   const source = await fetch(glueUrl).then((r) => {
     if (!r.ok) throw new Error(`failed to fetch ${glueUrl}: HTTP ${r.status}`);
     return r.text();

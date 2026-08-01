@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -21,30 +21,30 @@
 #include "data_source.hpp"
 #include "glm_include.hpp"
 #include "renderer_callbacks.hpp"
-#include <points/render/renderer.h>
+#include <dew/render/renderer.h>
 
-struct points_environment_data_source_t : public points::render::data_source_cpp_t
+struct dew_environment_data_source_t : public dew::render::data_source_cpp_t
 {
-  points_environment_data_source_t(points::render::callback_manager_t &callbacks, double ground_z, double grid_size);
+  dew_environment_data_source_t(dew::render::callback_manager_t &callbacks, double ground_z, double grid_size);
 
-  void add_to_frame(const points::render::frame_camera_cpp_t &camera, points_to_render_t *to_render) override;
+  void add_to_frame(const dew::render::frame_camera_cpp_t &camera, dew_to_render_t *to_render) override;
 
-  points::render::callback_manager_t &callbacks;
+  dew::render::callback_manager_t &callbacks;
 
   double ground_z_d;
   double grid_size_d;
 
-  points_buffer_t inverse_vp_buffer;
+  dew_buffer_t inverse_vp_buffer;
   glm::mat4 inverse_vp;
 
-  points_buffer_t camera_pos_buffer;
+  dew_buffer_t camera_pos_buffer;
   glm::vec3 camera_pos;
 
-  points_buffer_t params_buffer;
+  dew_buffer_t params_buffer;
   glm::vec4 params;
 
-  points_buffer_t vertex_buffer;
+  dew_buffer_t vertex_buffer;
   std::vector<glm::vec2> vertices;
 
-  points_draw_buffer_t draw_buffers[4];
+  dew_draw_buffer_t draw_buffers[4];
 };

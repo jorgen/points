@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -26,10 +26,10 @@
 #include <cstring>
 #include <fcntl.h>
 
-namespace points::converter
+namespace dew::converter
 {
 
-static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, points_error_t &error)
+static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, dew_error_t &error)
 {
   assert(error.code == 0);
   auto buffer = std::make_unique<uint8_t[]>(location.size);
@@ -46,7 +46,7 @@ static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop
   return buffer;
 }
 
-packed_file_backend_t::packed_file_backend_t(std::string file_name, vio::event_loop_t &event_loop, points_error_t &error)
+packed_file_backend_t::packed_file_backend_t(std::string file_name, vio::event_loop_t &event_loop, dew_error_t &error)
   : _file_name(std::move(file_name))
   , _event_loop(event_loop)
 {
@@ -121,13 +121,13 @@ uint64_t packed_file_backend_t::run_eviction_pass()
   return reclaimed;
 }
 
-vio::task_t<points_error_t> packed_file_backend_t::run_spill_pass()
+vio::task_t<dew_error_t> packed_file_backend_t::run_spill_pass()
 {
   if (!_residency || !_spill || !_file)
-    co_return points_error_t{};
+    co_return dew_error_t{};
   const uint64_t cap = _residency->cap();
   if (!cap)
-    co_return points_error_t{};
+    co_return dew_error_t{};
   const uint64_t low = cap - 2 * (cap / 8);
   // Descending offset ≈ highest morton ≈ produced most recently ≈ consumed latest by the LOD
   // generator (inputs stream in rising-morton order) -- spilling these avoids a refetch storm from
@@ -148,7 +148,7 @@ vio::task_t<points_error_t> packed_file_backend_t::run_spill_pass()
     buffer.resize(size);
     auto read_result = co_await vio::read_file(_event_loop, **_file, buffer.data(), size, int64_t(offset));
     if (!read_result.has_value() || uint32_t(read_result.value()) != size)
-      co_return points_error_t{1, "Failed to read blob for spill"};
+      co_return dew_error_t{1, "Failed to read blob for spill"};
     uint64_t remote_id = 0;
     auto err = co_await _spill->spill_blob(buffer.data(), size, remote_id);
     if (err.code != 0)
@@ -164,13 +164,13 @@ vio::task_t<points_error_t> packed_file_backend_t::run_spill_pass()
     _residency->mark_spilled(offset, size, remote_id);
     pending_reclaim += size;
   }
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-vio::task_t<points_error_t> packed_file_backend_t::spill_bootstrap()
+vio::task_t<dew_error_t> packed_file_backend_t::spill_bootstrap()
 {
   if (!_residency || !_spill)
-    co_return points_error_t{};
+    co_return dew_error_t{};
   _residency->for_each([&](const blob_residency_entry_t &e) {
     if (e.state == blob_residency_state_t::local_spilled || e.state == blob_residency_state_t::remote_spilled)
       _spill->add_live(e.remote_id);
@@ -196,7 +196,7 @@ bool packed_file_backend_t::exists() const
   return _file_exists;
 }
 
-points_error_t packed_file_backend_t::open_for_write(bool truncate)
+dew_error_t packed_file_backend_t::open_for_write(bool truncate)
 {
   vio::file_open_flags_t open_flags(vio::file_open_flag_t::rdwr);
   if (!_file_exists)
@@ -215,7 +215,7 @@ points_error_t packed_file_backend_t::open_for_write(bool truncate)
   auto open_result = vio::open_file(_event_loop, _file_name, open_flags, open_mode);
   if (!open_result.has_value())
   {
-    points_error_t error;
+    dew_error_t error;
     error.code = open_result.error().code;
     error.msg = open_result.error().msg;
     return error;
@@ -243,14 +243,14 @@ points_error_t packed_file_backend_t::open_for_write(bool truncate)
   return {};
 }
 
-points_error_t packed_file_backend_t::read_index(index_load_t &out)
+dew_error_t packed_file_backend_t::read_index(index_load_t &out)
 {
-  points_error_t error;
+  dew_error_t error;
   uv_fs_t request = {};
   struct close_on_error_t
   {
     std::optional<vio::auto_close_file_t> &file;
-    points_error_t &error;
+    dew_error_t &error;
     ~close_on_error_t()
     {
       if (error.code != 0)
@@ -359,7 +359,7 @@ points_error_t packed_file_backend_t::read_index(index_load_t &out)
   return error;
 }
 
-points_error_t packed_file_backend_t::restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+dew_error_t packed_file_backend_t::restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
   return _blob_manager.deserialize(data, size);
 }
@@ -390,7 +390,7 @@ void packed_file_backend_t::allocate_blob(uint32_t size, blob_kind_t kind, stora
   }
 }
 
-vio::task_t<points_error_t> packed_file_backend_t::write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data)
+vio::task_t<dew_error_t> packed_file_backend_t::write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data)
 {
   assert(location.size > 0);
   assert(data != nullptr);
@@ -424,12 +424,12 @@ vio::task_t<points_error_t> packed_file_backend_t::write_allocated(storage_locat
     if (err.code != 0)
       co_return err;
     _residency->mark_spilled_remote(location.offset, location.size, remote_id);
-    co_return points_error_t{};
+    co_return dew_error_t{};
   }
 
   auto &file = **_file;
   auto result = co_await vio::write_file(_event_loop, file, data.get(), location.size, int64_t(location.offset));
-  points_error_t error;
+  dew_error_t error;
   if (!result.has_value())
   {
     if (_residency && _spill && result.error().code == UV_ENOSPC)
@@ -442,7 +442,7 @@ vio::task_t<points_error_t> packed_file_backend_t::write_allocated(storage_locat
         co_return err;
       _residency->mark_spilled_remote(location.offset, location.size, remote_id);
       _residency->account_freed(location.size);
-      co_return points_error_t{};
+      co_return dew_error_t{};
     }
     error.code = result.error().code;
     error.msg = result.error().msg;
@@ -450,7 +450,7 @@ vio::task_t<points_error_t> packed_file_backend_t::write_allocated(storage_locat
   co_return error;
 }
 
-vio::task_t<points_error_t> packed_file_backend_t::read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read)
+vio::task_t<dew_error_t> packed_file_backend_t::read_blob(storage_location_t location, uint8_t *dst, uint32_t &bytes_read)
 {
 
   // Cache-tier dispatch: one hash lookup in a map that stays EMPTY until upload/spill pressure
@@ -471,7 +471,7 @@ vio::task_t<points_error_t> packed_file_backend_t::read_blob(storage_location_t 
         // pointer would corrupt freed heap.
         if (auto *entry_after = _residency->find(location.offset))
           _residency->end_local_read(*entry_after);
-        points_error_t error;
+        dew_error_t error;
         if (!result.has_value())
         {
           error.code = result.error().code;
@@ -486,7 +486,7 @@ vio::task_t<points_error_t> packed_file_backend_t::read_blob(storage_location_t 
       if (entry->state == blob_residency_state_t::remote_spilled)
       {
         if (!_spill)
-          co_return points_error_t{1, "Blob is spilled but no spill store is attached"};
+          co_return dew_error_t{1, "Blob is spilled but no spill store is attached"};
         auto err = co_await _spill->read(entry->remote_id, dst, location.size);
         if (err.code == 0)
           bytes_read = location.size;
@@ -496,20 +496,20 @@ vio::task_t<points_error_t> packed_file_backend_t::read_blob(storage_location_t 
       // data/{object_id:08x} (remote_id = object_id << 32; no Range header, capacity-checked).
       // The spill io_manager IS the destination bucket.
       if (!_spill_io)
-        co_return points_error_t{1, "Blob was evicted to the destination; destination reads not attached"};
+        co_return dew_error_t{1, "Blob was evicted to the destination; destination reads not attached"};
       assert(uint32_t(entry->remote_id & 0xFFFFFFFFu) == 0 && "dataset objects hold exactly one blob");
       auto remote = co_await _spill_io->read_object_all(bucket_data_object_name(uint32_t(entry->remote_id >> 32)), dst, location.size);
       if (!remote.has_value())
-        co_return points_error_t{int(remote.error().code), remote.error().msg};
+        co_return dew_error_t{int(remote.error().code), remote.error().msg};
       if (remote.value() != location.size)
-        co_return points_error_t{1, "Destination object size does not match the blob"};
+        co_return dew_error_t{1, "Destination object size does not match the blob"};
       bytes_read = location.size;
-      co_return points_error_t{};
+      co_return dew_error_t{};
     }
   }
   auto &file = **_file;
   auto result = co_await vio::read_file(_event_loop, file, dst, location.size, int64_t(location.offset));
-  points_error_t error;
+  dew_error_t error;
   if (!result.has_value())
   {
     error.code = result.error().code;
@@ -522,10 +522,10 @@ vio::task_t<points_error_t> packed_file_backend_t::read_blob(storage_location_t 
   co_return error;
 }
 
-vio::task_t<points_error_t> packed_file_backend_t::write_index(checkpoint_t checkpoint)
+vio::task_t<dew_error_t> packed_file_backend_t::write_index(checkpoint_t checkpoint)
 {
   auto make_error = [](std::string msg) {
-    points_error_t e;
+    dew_error_t e;
     e.code = -1;
     e.msg = std::move(msg);
     return e;
@@ -675,7 +675,7 @@ vio::task_t<points_error_t> packed_file_backend_t::write_index(checkpoint_t chec
       _residency->account_freed(uint64_t(attributes_location.size) + stats_location.size + perf_location.size + residency_location.size + serialized_blob_location.size);
   };
   auto make_io_error = [](const vio::error_t &e) {
-    points_error_t error;
+    dew_error_t error;
     error.code = e.code;
     error.msg = e.msg;
     return error;
@@ -812,7 +812,7 @@ vio::task_t<points_error_t> packed_file_backend_t::write_index(checkpoint_t chec
     if (!clean_snapshot)
       run_eviction_pass();
   }
-  co_return points_error_t{};
+  co_return dew_error_t{};
 }
 
-} // namespace points::converter
+} // namespace dew::converter

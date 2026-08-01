@@ -11,15 +11,15 @@ that calls `frame()` and then goes idle — nothing renders continuously.
 
 ## Prerequisites
 
-1. Build the renderer module (produces `points_render.mjs` + `points_render.wasm`):
+1. Build the renderer module (produces `dew_render.mjs` + `dew_render.wasm`):
 
    ```bash
    cmake --preset emscripten
-   cmake --build cmake-build-wasm --target points_render_wasm
+   cmake --build cmake-build-wasm --target dew_render_wasm
    ```
 
    `scripts/copy-wasm.mjs` finds the artifacts in `cmake-build-wasm/src/wasm/` automatically; set
-   `POINTS_WASM_DIR` if your build directory differs.
+   `DEW_WASM_DIR` if your build directory differs.
 
 2. Node 18+ and a point-cloud dataset in an S3-compatible store (see the converter to produce one).
 
@@ -32,7 +32,7 @@ npm run dev      # http://localhost:5173  (copies the wasm artifacts in first)
 
 Enter the **Dataset URL** and a **connection string**, then click **Connect**. The URL is the dataset
 location (`scheme://bucket/prefix`); the connection string is every *other* parameter, in the exact same
-`key=value;…` grammar as the CLI tools (`converter --connection`, `jlp_copy -s/-d`). For a local minio
+`key=value;…` grammar as the CLI tools (`converter --connection`, `dew_copy -s/-d`). For a local minio
 dataset:
 
 - Dataset URL `s3://pointstest/synth`

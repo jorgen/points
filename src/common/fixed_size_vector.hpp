@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2023  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include <memory>
 #include <utility>
 
-namespace points
+namespace dew
 {
 template<typename T>
 class fixed_capacity_vector_t

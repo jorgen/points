@@ -1,14 +1,14 @@
 
 set(public_headers
-        points/render/export.h
-        points/render/camera.h
-        points/render/renderer.h
-        points/render/aabb.h
-        points/render/aabb_data_source.h
-        points/render/flat_points_data_source.h
-        points/render/axis_gizmo_data_source.h
-        points/render/origin_anchor_data_source.h
-        points/render/environment_data_source.h)
+        dew/render/export.h
+        dew/render/camera.h
+        dew/render/renderer.h
+        dew/render/aabb.h
+        dew/render/aabb_data_source.h
+        dew/render/flat_points_data_source.h
+        dew/render/axis_gizmo_data_source.h
+        dew/render/origin_anchor_data_source.h
+        dew/render/environment_data_source.h)
 
 set(private_headers
         camera.hpp
@@ -38,23 +38,23 @@ set(sources
         data_source_origin_anchor.cpp
         data_source_environment.cpp
 )
-add_library(points_render_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(points_render_objects PRIVATE fmt glm)
-target_link_libraries(points_render_objects PUBLIC points_common)
-target_link_libraries(points_render_objects PRIVATE laszip)
-target_include_directories(points_render_objects
+add_library(dew_render_objects OBJECT ${public_headers} ${private_headers} ${sources})
+target_link_libraries(dew_render_objects PRIVATE fmt glm)
+target_link_libraries(dew_render_objects PUBLIC dew_common)
+target_link_libraries(dew_render_objects PRIVATE laszip)
+target_include_directories(dew_render_objects
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:include>
 )
-target_include_directories(points_render_objects SYSTEM PRIVATE ${stbimage_SOURCE_DIR})
-#target_include_directories(points_render_objects PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-setWarningflagsForTarget(points_render_objects)
+target_include_directories(dew_render_objects SYSTEM PRIVATE ${stbimage_SOURCE_DIR})
+#target_include_directories(dew_render_objects PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+setWarningflagsForTarget(dew_render_objects)
 if (BUILD_SHARED_LIBS)
-    target_compile_definitions(points_render_objects PRIVATE POINTS_RENDER_EXPORTS)
+    target_compile_definitions(dew_render_objects PRIVATE DEW_RENDER_EXPORTS)
 endif ()
 
-add_library(points_render empty_dylib_function.cpp $<TARGET_OBJECTS:points_render_objects>)
-target_link_libraries(points_render PUBLIC points_render_objects)
-target_link_libraries(points_render PRIVATE laszip)
+add_library(dew_render empty_dylib_function.cpp $<TARGET_OBJECTS:dew_render_objects>)
+target_link_libraries(dew_render PUBLIC dew_render_objects)
+target_link_libraries(dew_render PRIVATE laszip)

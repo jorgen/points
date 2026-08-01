@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2021  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include <points/converter/converter.h>
+#include <dew/converter/converter.h>
 
 #include "error.hpp"
 #include "morton.hpp"
@@ -27,7 +27,7 @@
 #include <memory>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 struct input_data_id_t
 {
@@ -67,7 +67,7 @@ inline bool input_data_id_is_collapsed_leaf(input_data_id_t input)
 struct file_error_t
 {
   input_data_id_t input_id;
-  points_error_t error;
+  dew_error_t error;
 };
 
 struct attributes_id_t
@@ -91,19 +91,19 @@ struct input_name_ref_t
   uint32_t name_length;
 };
 
-} // namespace points::converter (temporarily close for public type)
+} // namespace dew::converter (temporarily close for public type)
 
-struct points_converter_attributes_t
+struct dew_converter_attributes_t
 {
-  std::vector<points_converter_attribute_t> attributes;
+  std::vector<dew_converter_attribute_t> attributes;
   std::vector<std::unique_ptr<char[]>> attribute_names;
 };
 
-namespace points::converter
+namespace dew::converter
 {
 struct attribute_buffers_t
 {
-  std::vector<points_converter_buffer_t> buffers;
+  std::vector<dew_converter_buffer_t> buffers;
   std::vector<std::unique_ptr<uint8_t[]>> data;
 };
 
@@ -142,14 +142,14 @@ struct point_format_t
 {
   point_format_t() = default;
 
-  point_format_t(points_type_t a_type, points_components_t a_components)
+  point_format_t(dew_type_t a_type, dew_components_t a_components)
     : type(a_type)
     , components(a_components)
   {
   }
 
-  points_type_t type;
-  points_components_t components;
+  dew_type_t type;
+  dew_components_t components;
 };
 
 struct storage_header_t
@@ -174,7 +174,7 @@ inline void storage_header_initialize(storage_header_t &header)
 // Split a serialized points blob (a storage_header_t followed by the point bytes) into the header + a view of
 // the point data. Storage-free -- it only reads the buffer -- so the decode path and a decode Web Worker can
 // call it without pulling in the storage handler. (Moved here from storage_handler.hpp.)
-inline bool deserialize_points(const points_converter_buffer_t &data, storage_header_t &header, points_converter_buffer_t &point_data, points_error_t &error)
+inline bool deserialize_points(const dew_converter_buffer_t &data, storage_header_t &header, dew_converter_buffer_t &point_data, dew_error_t &error)
 {
   if (data.size < sizeof(header))
   {
@@ -203,12 +203,12 @@ struct tree_config_t
   bool store_original_order = false;
   // Max points per octree node: subdivision keeps every node at or below this, which is the primary
   // lever on per-node blob size. The default (200k) keeps the data-heavy attributes (xyz, gps_time)
-  // under ~1MB compressed. Set via points_converter_set_node_point_limit.
+  // under ~1MB compressed. Set via dew_converter_set_node_point_limit.
   uint32_t node_point_limit = 200000;
   // Read/sort chunk BYTE target: the reader sizes each input chunk to about this many bytes
   // (computed from the file's per-point width, clamped to [node_point_limit, k_max_chunk_points]).
   // Big chunks amortize read+sort; leaf collapse cuts them back to per-node units at finality.
-  // Set via points_converter_set_read_chunk_bytes. (Registry v3 serializes the grown struct.)
+  // Set via dew_converter_set_read_chunk_bytes. (Registry v3 serializes the grown struct.)
   uint64_t read_chunk_byte_target = 64ull << 20;
 };
 // Chunk point-count clamp: 8M points default cap (a decompressed morton blob is count x up to 24B --
@@ -286,11 +286,11 @@ struct points_subset_t
   offset_in_subset_t offset;
   point_count_t count;
 };
-} // namespace points::converter
+} // namespace dew::converter
 
 
 template <>
-struct fmt::formatter<points::converter::storage_location_t>
+struct fmt::formatter<dew::converter::storage_location_t>
 {
   template <typename ParseContext>
   constexpr auto parse(ParseContext &ctx)
@@ -299,7 +299,7 @@ struct fmt::formatter<points::converter::storage_location_t>
   }
 
   template <typename FormatContext>
-  auto format(points::converter::storage_location_t const &location, FormatContext &ctx)
+  auto format(dew::converter::storage_location_t const &location, FormatContext &ctx)
   {
     return fmt::format_to(ctx.out(), "storage_location_t(file_id={}, size={}, offset={})", location.file_id, location.size, location.offset);
   }

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #include <string>
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct parsed_url_t
@@ -29,7 +29,7 @@ struct parsed_url_t
 };
 
 // Minimal scheme split. "s3://bucket/key" -> {"s3", "bucket/key"}; "file:///a/b" -> {"file", "/a/b"};
-// "/a/b.jlp" -> {"", "/a/b.jlp"}. Scheme is lower-cased; a bare path (no "://") keeps its scheme empty
+// "/a/b.dew" -> {"", "/a/b.dew"}. Scheme is lower-cased; a bare path (no "://") keeps its scheme empty
 // so the storage-backend factory can fall back to the single-file (packed) backend.
 inline parsed_url_t parse_url(const std::string &url)
 {
@@ -47,4 +47,4 @@ inline parsed_url_t parse_url(const std::string &url)
   return out;
 }
 
-} // namespace points::converter
+} // namespace dew::converter

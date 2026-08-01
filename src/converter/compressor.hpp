@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 enum class compression_method_t : uint8_t
@@ -63,7 +63,7 @@ struct compression_result_t
 {
   std::shared_ptr<uint8_t[]> data;
   uint32_t size = 0;
-  points_error_t error;
+  dew_error_t error;
 };
 
 class compressor_t
@@ -116,4 +116,4 @@ std::unique_ptr<compressor_t> create_compressor(compression_method_t method);
 compression_result_t try_compress_constant(const void *data, uint32_t size, const point_format_t &format);
 compression_result_t decompress_any(const void *data, uint32_t size);
 
-} // namespace points::converter
+} // namespace dew::converter

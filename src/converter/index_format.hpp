@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -24,11 +24,13 @@
 #include <cstring>
 #include <memory>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // The dataset index / superblock. A fixed 128-byte block:
-//   magic {'J','L','P',0} followed by 5 storage_location_t (16 bytes each) = 84 bytes,
+//   magic {'D','E','W',0} followed by 5 storage_location_t (16 bytes each) = 84 bytes,
+//   (the pre-rename magic {'J','L','P',0} is accepted on read so existing caches/datasets keep opening;
+//   the superblock is rewritten on every checkpoint, so a cache self-migrates on first use)
 // then the extras region in the previously-zeroed spare bytes (fully backward compatible --
 // legacy files carry zeros there, and zero means "absent" for every extra):
 //   offset  84: residency_table storage_location_t (16B; zero = no cache-tier residency table)
@@ -55,7 +57,7 @@ inline std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   auto *data = serialized_index.get();
   memset(data, 0, index_size);
 
-  uint8_t magic[] = {'J', 'L', 'P', 0};
+  uint8_t magic[] = {'D', 'E', 'W', 0};
   memcpy(data, magic, sizeof(magic));
   data += sizeof(magic);
 
@@ -86,14 +88,15 @@ inline std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   return serialized_index;
 }
 
-[[nodiscard]] inline points_error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry,
+[[nodiscard]] inline dew_error_t deserialize_index(const uint8_t *buffer, uint32_t buffer_size, storage_location_t &free_blobs, storage_location_t &attribute_configs, storage_location_t &tree_registry,
                                                      storage_location_t &compression_stats, storage_location_t &perf_stats, index_extras_t *extras = nullptr)
 {
   (void)buffer_size; // buffer size is validated by the caller
-  uint8_t magic[] = {'J', 'L', 'P', 0};
-  if (memcmp(buffer, magic, sizeof(magic)) != 0)
+  uint8_t magic[] = {'D', 'E', 'W', 0};
+  uint8_t magic_legacy_jlp[] = {'J', 'L', 'P', 0};
+  if (memcmp(buffer, magic, sizeof(magic)) != 0 && memcmp(buffer, magic_legacy_jlp, sizeof(magic_legacy_jlp)) != 0)
   {
-    points_error_t ret;
+    dew_error_t ret;
     ret.code = 1;
     ret.msg = "Wrong magic.";
     return ret;
@@ -127,4 +130,4 @@ inline std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   return {};
 }
 
-} // namespace points::converter
+} // namespace dew::converter

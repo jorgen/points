@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2023  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -378,7 +378,7 @@ bool free_blob_manager_t::claim_blob(offset_t offset, blob_size_t size)
   return true;
 }
 
-points_error_t free_blob_manager_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
+dew_error_t free_blob_manager_t::deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
   if (size < sizeof(_next_offset) + sizeof(uint32_t))
   {

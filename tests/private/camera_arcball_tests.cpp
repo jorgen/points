@@ -2,35 +2,35 @@
 #include "approx_abs.h"
 #include "render_guards.h"
 #include <camera.hpp>
-#include <points/render/camera.h>
+#include <dew/render/camera.h>
 
 #include <cmath>
 
-using namespace points::render;
-using namespace points::render::camera_manipulator;
+using namespace dew::render;
+using namespace dew::render::camera_manipulator;
 
 static constexpr double MARGIN = 1e-6;
 
 TEST_CASE("arcball create initial state")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 0, 10};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
 
   REQUIRE(arc->distance == approx_abs(10.0, MARGIN));
 
   double arc_center[3];
-  points_arcball_get_center(arc.get(), arc_center);
+  dew_arcball_get_center(arc.get(), arc_center);
   REQUIRE(arc_center[0] == approx_abs(0.0, MARGIN));
   REQUIRE(arc_center[1] == approx_abs(0.0, MARGIN));
   REQUIRE(arc_center[2] == approx_abs(0.0, MARGIN));
 
   double arc_up[3];
-  points_arcball_get_up_axis(arc.get(), arc_up);
+  dew_arcball_get_up_axis(arc.get(), arc_up);
   REQUIRE(arc_up[0] == approx_abs(0.0, MARGIN));
   REQUIRE(arc_up[1] == approx_abs(1.0, MARGIN));
   REQUIRE(arc_up[2] == approx_abs(0.0, MARGIN));
@@ -38,66 +38,66 @@ TEST_CASE("arcball create initial state")
 
 TEST_CASE("arcball rotate yaw")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 0, 10};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
   double initial_yaw = arc->yaw;
 
   float dx = 0.25f;
-  points_arcball_rotate(arc.get(), dx, 0.0f, 0.0f);
+  dew_arcball_rotate(arc.get(), dx, 0.0f, 0.0f);
 
   REQUIRE(arc->yaw == approx_abs(initial_yaw + dx * M_PI, MARGIN));
   REQUIRE(arc->pitch == approx_abs(0.0, 0.01));
 
   // Eye should have moved laterally
   double cam_eye[3];
-  points_camera_get_eye(cam.get(), cam_eye);
+  dew_camera_get_eye(cam.get(), cam_eye);
   // After yaw rotation from (0,0,10), eye should no longer be on Z axis
   REQUIRE(std::abs(cam_eye[0]) > 0.1);
 }
 
 TEST_CASE("arcball rotate pitch clamped")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 0, 10};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
 
   // Very large pitch rotation — should be clamped to ±89°
-  points_arcball_rotate(arc.get(), 0.0f, 10.0f, 0.0f);
+  dew_arcball_rotate(arc.get(), 0.0f, 10.0f, 0.0f);
 
   constexpr double max_pitch = 89.0 * M_PI / 180.0;
   REQUIRE(arc->pitch == approx_abs(max_pitch, MARGIN));
 
   // Try negative
-  points_arcball_rotate(arc.get(), 0.0f, -20.0f, 0.0f);
+  dew_arcball_rotate(arc.get(), 0.0f, -20.0f, 0.0f);
   REQUIRE(arc->pitch == approx_abs(-max_pitch, MARGIN));
 }
 
 TEST_CASE("arcball pan moves center")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 0, 10};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
 
   double center_before[3];
-  points_arcball_get_center(arc.get(), center_before);
+  dew_arcball_get_center(arc.get(), center_before);
 
-  points_arcball_pan(arc.get(), 0.1f, 0.2f);
+  dew_arcball_pan(arc.get(), 0.1f, 0.2f);
 
   double center_after[3];
-  points_arcball_get_center(arc.get(), center_after);
+  dew_arcball_get_center(arc.get(), center_after);
 
   // Center should have moved
   double dx = center_after[0] - center_before[0];
@@ -107,21 +107,21 @@ TEST_CASE("arcball pan moves center")
 
 TEST_CASE("arcball dolly moves center forward")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 0, 10};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
 
   double center_before[3];
-  points_arcball_get_center(arc.get(), center_before);
+  dew_arcball_get_center(arc.get(), center_before);
 
-  points_arcball_dolly(arc.get(), 0.1f);
+  dew_arcball_dolly(arc.get(), 0.1f);
 
   double center_after[3];
-  points_arcball_get_center(arc.get(), center_after);
+  dew_arcball_get_center(arc.get(), center_after);
 
   // Center should have shifted along the forward direction
   double dz = center_after[2] - center_before[2];
@@ -130,85 +130,85 @@ TEST_CASE("arcball dolly moves center forward")
 
 TEST_CASE("arcball zoom changes distance")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 0, 10};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
   double initial_distance = arc->distance;
 
   // Positive zoom (zoom out)
-  points_arcball_zoom(arc.get(), 0.5f);
+  dew_arcball_zoom(arc.get(), 0.5f);
   REQUIRE(arc->distance == approx_abs(initial_distance * 1.5, MARGIN));
 
   // Negative zoom (zoom in)
   double current = arc->distance;
-  points_arcball_zoom(arc.get(), -0.3f);
+  dew_arcball_zoom(arc.get(), -0.3f);
   REQUIRE(arc->distance == approx_abs(current * 0.7, MARGIN));
 }
 
 TEST_CASE("arcball zoom clamps minimum")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 0, 0.02};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
 
   // Zoom in extremely
-  points_arcball_zoom(arc.get(), -0.999f);
+  dew_arcball_zoom(arc.get(), -0.999f);
 
   REQUIRE(arc->distance >= 0.01 - MARGIN);
 }
 
 TEST_CASE("arcball set up axis Z-up")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 10, 0};
   double center[] = {0, 0, 0};
   double up[] = {0, 0, 1};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
 
   double new_up[] = {0, 0, 1};
-  points_arcball_set_up_axis(arc.get(), new_up);
+  dew_arcball_set_up_axis(arc.get(), new_up);
 
   double arc_up[3];
-  points_arcball_get_up_axis(arc.get(), arc_up);
+  dew_arcball_get_up_axis(arc.get(), arc_up);
   REQUIRE(arc_up[0] == approx_abs(0.0, MARGIN));
   REQUIRE(arc_up[1] == approx_abs(0.0, MARGIN));
   REQUIRE(arc_up[2] == approx_abs(1.0, MARGIN));
 
   // View matrix should have been recomputed — verify by checking eye position
   double cam_eye[3];
-  points_camera_get_eye(cam.get(), cam_eye);
+  dew_camera_get_eye(cam.get(), cam_eye);
   double dist = std::sqrt(cam_eye[0] * cam_eye[0] + cam_eye[1] * cam_eye[1] + cam_eye[2] * cam_eye[2]);
   REQUIRE(dist == approx_abs(arc->distance, 0.01));
 }
 
 TEST_CASE("arcball reset restores the initial fitted view")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 0, 10};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
 
   // Capture the initial ("home") view the arcball was created at.
   double view_home[16];
-  points_camera_get_view_matrix(cam.get(), view_home);
+  dew_camera_get_view_matrix(cam.get(), view_home);
 
   // Rotate to a new orientation — the view must actually change.
-  points_arcball_rotate(arc.get(), 0.3f, 0.2f, 0.0f);
+  dew_arcball_rotate(arc.get(), 0.3f, 0.2f, 0.0f);
   double view_rotated[16];
-  points_camera_get_view_matrix(cam.get(), view_rotated);
+  dew_camera_get_view_matrix(cam.get(), view_rotated);
   bool changed = false;
   for (int i = 0; i < 16; i++)
     if (std::abs(view_rotated[i] - view_home[i]) > 1e-3)
@@ -216,10 +216,10 @@ TEST_CASE("arcball reset restores the initial fitted view")
   REQUIRE(changed);
 
   // Reset restores the initial fitted view (not a no-op re-derivation of the current one).
-  points_arcball_reset(arc.get());
+  dew_arcball_reset(arc.get());
 
   double view_after[16];
-  points_camera_get_view_matrix(cam.get(), view_after);
+  dew_camera_get_view_matrix(cam.get(), view_after);
 
   for (int i = 0; i < 16; i++)
     REQUIRE(view_after[i] == approx_abs(view_home[i], 1e-4));
@@ -227,52 +227,52 @@ TEST_CASE("arcball reset restores the initial fitted view")
 
 TEST_CASE("arcball get center and up axis")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {5, 3, 2};
   double center[] = {1, 2, 3};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
-  unique_arcball arc(points_arcball_create(cam.get(), center));
+  unique_arcball arc(dew_arcball_create(cam.get(), center));
 
   double arc_center[3];
-  points_arcball_get_center(arc.get(), arc_center);
+  dew_arcball_get_center(arc.get(), arc_center);
   REQUIRE(arc_center[0] == approx_abs(1.0, MARGIN));
   REQUIRE(arc_center[1] == approx_abs(2.0, MARGIN));
   REQUIRE(arc_center[2] == approx_abs(3.0, MARGIN));
 
   double arc_up[3];
-  points_arcball_get_up_axis(arc.get(), arc_up);
+  dew_arcball_get_up_axis(arc.get(), arc_up);
   REQUIRE(arc_up[0] == approx_abs(0.0, MARGIN));
   REQUIRE(arc_up[1] == approx_abs(1.0, MARGIN));
   REQUIRE(arc_up[2] == approx_abs(0.0, MARGIN));
 }
 
-TEST_CASE("points_camera_get_eye")
+TEST_CASE("dew_camera_get_eye")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye_in[] = {5, 0, 0};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye_in, center, up);
+  dew_camera_look_at(cam.get(), eye_in, center, up);
 
   double eye_out[3];
-  points_camera_get_eye(cam.get(), eye_out);
+  dew_camera_get_eye(cam.get(), eye_out);
   REQUIRE(eye_out[0] == approx_abs(5.0, MARGIN));
   REQUIRE(eye_out[1] == approx_abs(0.0, MARGIN));
   REQUIRE(eye_out[2] == approx_abs(0.0, MARGIN));
 }
 
-TEST_CASE("points_camera_get_forward")
+TEST_CASE("dew_camera_get_forward")
 {
-  unique_camera cam(points_camera_create());
+  unique_camera cam(dew_camera_create());
   double eye[] = {0, 0, 10};
   double center[] = {0, 0, 0};
   double up[] = {0, 1, 0};
-  points_camera_look_at(cam.get(), eye, center, up);
+  dew_camera_look_at(cam.get(), eye, center, up);
 
   double forward[3];
-  points_camera_get_forward(cam.get(), forward);
+  dew_camera_get_forward(cam.get(), forward);
   REQUIRE(forward[0] == approx_abs(0.0, MARGIN));
   REQUIRE(forward[1] == approx_abs(0.0, MARGIN));
   REQUIRE(forward[2] == approx_abs(-1.0, MARGIN));

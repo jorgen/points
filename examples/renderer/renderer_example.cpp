@@ -11,15 +11,15 @@
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl3.h>
 
-#include <points/render/aabb.h>
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
-#include <points/render/environment_data_source.h>
-#include <points/render/axis_gizmo_data_source.h>
-#include <points/render/origin_anchor_data_source.h>
+#include <dew/render/aabb.h>
+#include <dew/render/camera.h>
+#include <dew/render/renderer.h>
+#include <dew/render/environment_data_source.h>
+#include <dew/render/axis_gizmo_data_source.h>
+#include <dew/render/origin_anchor_data_source.h>
 
-#include <points/converter/converter.h>
-#include <points/converter/converter_data_source.h>
+#include <dew/converter/converter.h>
+#include <dew/converter/converter_data_source.h>
 
 #include <cctype>
 #include <cmath>
@@ -38,12 +38,12 @@ std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
   return std::unique_ptr<T, Deleter>(t, d);
 }
 
-static double halfway(const points_aabb_t &aabb, int dimension)
+static double halfway(const dew_aabb_t &aabb, int dimension)
 {
   double aabb_width = aabb.max[dimension] - aabb.min[dimension];
   return aabb.min[dimension] + (aabb_width / 2);
 }
-static void get_aabb_center(const points_aabb_t &aabb, double (&center)[3])
+static void get_aabb_center(const dew_aabb_t &aabb, double (&center)[3])
 {
   center[0] = halfway(aabb, 0);
   center[1] = halfway(aabb, 1);
@@ -51,7 +51,7 @@ static void get_aabb_center(const points_aabb_t &aabb, double (&center)[3])
 }
 
 template <size_t N>
-points_converter_str_buffer make_str_buffer(const char (&data)[N])
+dew_converter_str_buffer make_str_buffer(const char (&data)[N])
 {
   return {data, N};
 }
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
   int width = 800;
   int height = 600;
 
-  SDL_Window *window = SDL_CreateWindow("points", width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  SDL_Window *window = SDL_CreateWindow("dewfall", width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
   if (!window)
   {
     fmt::print(stderr, "Failed to create window.");
@@ -134,16 +134,16 @@ int main(int argc, char **argv)
   io.Fonts->AddFontFromMemoryTTF((void *)proggy.begin(), (int)proggy.size(), 10.0f);
 
   // std::string file = "test.las";
-  auto renderer = create_unique_ptr(points_renderer_create(), &points_renderer_destroy);
-  auto camera = create_unique_ptr(points_camera_create(), &points_camera_destroy);
-  gl_renderer points_gl_renderer(renderer.get(), camera.get());
+  auto renderer = create_unique_ptr(dew_renderer_create(), &dew_renderer_destroy);
+  auto camera = create_unique_ptr(dew_camera_create(), &dew_camera_destroy);
+  gl_renderer dew_gl_renderer(renderer.get(), camera.get());
 
-  points_aabb_t aabb;
+  dew_aabb_t aabb;
 
-  auto error = create_unique_ptr(points_error_create(), &points_error_destroy);
+  auto error = create_unique_ptr(dew_error_create(), &dew_error_destroy);
   bool render_converter_points = true;
 
-  // Dataset selection. A dataset is either a local .jlp file (a bare path or file://) or a cloud object
+  // Dataset selection. A dataset is either a local .dew file (a bare path or file://) or a cloud object
   // store addressed by URL: s3://bucket/prefix or az://container/prefix. Cloud credentials / endpoint /
   // region come from the connection string (semicolon-separated key=value; see vio connection_string.h),
   // e.g. "anonymous=true;region=eu-north-1" for a public S3 bucket, or "account=...;account_key=..." /
@@ -163,7 +163,7 @@ int main(int argc, char **argv)
     snprintf(conn_buf, sizeof(conn_buf), "%s", init_conn.c_str());
   }
 
-  auto converter_points = create_unique_ptr((points_converter_data_source_t *)nullptr, &points_converter_data_source_destroy);
+  auto converter_points = create_unique_ptr((dew_converter_data_source_t *)nullptr, &dew_converter_data_source_destroy);
   std::string load_error;
 
   auto try_open = [&]() -> bool {
@@ -173,14 +173,14 @@ int main(int argc, char **argv)
     // field empty. Azure and private buckets need an explicit connection string.
     if (conn.empty() && url.rfind("s3://", 0) == 0)
       conn = "anonymous=true";
-    converter_points.reset(points_converter_data_source_create_with_connection(
+    converter_points.reset(dew_converter_data_source_create_with_connection(
       url.c_str(), uint32_t(url.size()), conn.c_str(), uint32_t(conn.size()), error.get(), renderer.get()));
     if (!converter_points)
     {
       int code;
       const char *str;
       size_t str_len;
-      points_error_get_info(error.get(), &code, &str, &str_len);
+      dew_error_get_info(error.get(), &code, &str, &str_len);
       load_error.assign(str, str_len);
       fprintf(stderr, "Failed to open dataset '%s': %d - %s\n", url.c_str(), code, str);
       return false;
@@ -226,7 +226,7 @@ int main(int argc, char **argv)
 
     ImGui::SetNextWindowPos(ImVec2(width * 0.5f, height * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::Begin("Open dataset", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-    ImGui::TextUnformatted("Local .jlp file, or a cloud object store:");
+    ImGui::TextUnformatted("Local .dew file, or a cloud object store:");
     ImGui::BulletText("s3://bucket/prefix");
     ImGui::BulletText("az://container/prefix");
     ImGui::PushItemWidth(440);
@@ -236,7 +236,7 @@ int main(int argc, char **argv)
     ImGui::TextDisabled("Cloud only. Public bucket: anonymous=true. Azure: account=...;account_key=... or ...;sas=...");
     if (ImGui::Button("Browse local file..."))
     {
-      SDL_DialogFileFilter filters[] = {{"Points files", "jlp"}};
+      SDL_DialogFileFilter filters[] = {{"Dewfall files", "dew"}};
       SDL_ShowOpenFileDialog(
         [](void *ud, const char *const *files, int) {
           auto *b = static_cast<browse_state_t *>(ud);
@@ -270,14 +270,14 @@ int main(int argc, char **argv)
     SDL_GL_SwapWindow(window);
   }
 
-  uint32_t attribute_count = points_converter_data_attribute_count(converter_points.get());
+  uint32_t attribute_count = dew_converter_data_attribute_count(converter_points.get());
   std::vector<std::string> attribute_names;
   attribute_names.resize(attribute_count);
   {
     char buffer[256];
     for (uint32_t i = 0; i < attribute_count; i++)
     {
-      auto str_size = points_converter_data_get_attribute_name(converter_points.get(), i, buffer, sizeof(buffer));
+      auto str_size = dew_converter_data_get_attribute_name(converter_points.get(), i, buffer, sizeof(buffer));
       attribute_names[i].assign(buffer, str_size);
     }
   }
@@ -313,7 +313,7 @@ int main(int argc, char **argv)
   if (!attribute_names.empty())
   {
     auto &name = attribute_names[selected_attribute];
-    points_converter_data_set_rendered_attribute(converter_points.get(), name.c_str(), uint32_t(name.size()));
+    dew_converter_data_set_rendered_attribute(converter_points.get(), name.c_str(), uint32_t(name.size()));
   }
   {
     struct aabb_callback_state_t
@@ -333,7 +333,7 @@ int main(int argc, char **argv)
       memcpy(state->aabb_max, aabb_max, sizeof(state->aabb_max));
       state->cv.notify_one();
     };
-    points_converter_data_source_request_aabb(converter_points.get(), callback, &state);
+    dew_converter_data_source_request_aabb(converter_points.get(), callback, &state);
     state.cv.wait(lock);
     memcpy(aabb.min, state.aabb_min, sizeof(state.aabb_min));
     memcpy(aabb.max, state.aabb_max, sizeof(state.aabb_max));
@@ -342,9 +342,9 @@ int main(int argc, char **argv)
   double ground_z = aabb.min[2];
   double grid_size = std::max({aabb.max[0] - aabb.min[0], aabb.max[1] - aabb.min[1]}) / 10.0;
   auto environment = create_unique_ptr(
-    points_environment_data_source_create(renderer.get(), ground_z, grid_size),
-    &points_environment_data_source_destroy);
-  points_renderer_add_data_source(renderer.get(), points_environment_data_source_get(environment.get()));
+    dew_environment_data_source_create(renderer.get(), ground_z, grid_size),
+    &dew_environment_data_source_destroy);
+  dew_renderer_add_data_source(renderer.get(), dew_environment_data_source_get(environment.get()));
 
   float screen_fraction_threshold = 0.65f;
   float render_density_px = 0.8f;
@@ -356,37 +356,37 @@ int main(int argc, char **argv)
   bool show_bounding_boxes = false;
   bool debug_transitions = false;
 
-  points_renderer_add_data_source(renderer.get(), points_converter_data_source_get(converter_points.get()));
-  points_renderer_add_data_source(renderer.get(), points_converter_data_source_get_bbox_data_source(converter_points.get()));
-  points_converter_data_source_set_viewport(converter_points.get(), width, height);
-  points_converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
-  points_converter_data_source_set_max_in_flight_io(converter_points.get(), max_in_flight_io);
+  dew_renderer_add_data_source(renderer.get(), dew_converter_data_source_get(converter_points.get()));
+  dew_renderer_add_data_source(renderer.get(), dew_converter_data_source_get_bbox_data_source(converter_points.get()));
+  dew_converter_data_source_set_viewport(converter_points.get(), width, height);
+  dew_converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
+  dew_converter_data_source_set_max_in_flight_io(converter_points.get(), max_in_flight_io);
 
   std::vector<uint32_t> storage_ids;
   std::vector<uint32_t> storage_subs;
   std::vector<std::string> storage_strings;
-  // auto aabb_ds = create_unique_ptr(points_flat_points_aabb_data_source_create(renderer.get(), aabb.min),
-  //                                  &points_flat_points_aabb_data_source_destroy);
-  // flat_points_renderer_add_data_source(renderer.get(), points_flat_points_aabb_data_source_get(aabb_ds.get()));
-  // points_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
-  // points_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
-  //(void)points_flat_points;
+  // auto aabb_ds = create_unique_ptr(dew_flat_points_aabb_data_source_create(renderer.get(), aabb.min),
+  //                                  &dew_flat_points_aabb_data_source_destroy);
+  // flat_points_renderer_add_data_source(renderer.get(), dew_flat_points_aabb_data_source_get(aabb_ds.get()));
+  // dew_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  // dew_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  //(void)dew_flat_points;
 
   double view_direction[3] = {0.0, -1.0, 0.0};
   double up[3] = {0.0, 0.0, 1.0};
   double z_up[3] = {0.0, 0.0, 1.0};
 
-  points_camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
-  points_camera_look_at_aabb(camera.get(), &aabb, view_direction, up);
+  dew_camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
+  dew_camera_look_at_aabb(camera.get(), &aabb, view_direction, up);
 
-  points_aabb_t aabb2;
+  dew_aabb_t aabb2;
   aabb2.min[0] = 0.0;
   aabb2.min[1] = 0.0;
   aabb2.min[2] = 0.0;
   aabb2.max[0] = 0.0;
   aabb2.max[1] = 0.0;
   aabb2.max[2] = 0.0;
-  // int aabb2_id =  -1; //points_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
+  // int aabb2_id =  -1; //dew_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
 
   bool loop = true;
   bool left_pressed = false;
@@ -397,17 +397,17 @@ int main(int argc, char **argv)
 
   double arcball_center[3];
   get_aabb_center(aabb, arcball_center);
-  auto arcball = create_unique_ptr(points_arcball_create(camera.get(), arcball_center), &points_arcball_destroy);
-  points_arcball_set_up_axis(arcball.get(), z_up);
-  auto fps = create_unique_ptr((points_fps_t *)nullptr, &points_fps_destroy);
+  auto arcball = create_unique_ptr(dew_arcball_create(camera.get(), arcball_center), &dew_arcball_destroy);
+  dew_arcball_set_up_axis(arcball.get(), z_up);
+  auto fps = create_unique_ptr((dew_fps_t *)nullptr, &dew_fps_destroy);
 
   double dx_aabb = aabb.max[0] - aabb.min[0], dy_aabb = aabb.max[1] - aabb.min[1], dz_aabb = aabb.max[2] - aabb.min[2];
   double gizmo_length = std::sqrt(dx_aabb * dx_aabb + dy_aabb * dy_aabb + dz_aabb * dz_aabb) * 0.05;
-  auto axis_gizmo = create_unique_ptr(points_axis_gizmo_data_source_create(renderer.get(), arcball_center, gizmo_length), &points_axis_gizmo_data_source_destroy);
-  points_renderer_add_data_source(renderer.get(), points_axis_gizmo_data_source_get(axis_gizmo.get()));
+  auto axis_gizmo = create_unique_ptr(dew_axis_gizmo_data_source_create(renderer.get(), arcball_center, gizmo_length), &dew_axis_gizmo_data_source_destroy);
+  dew_renderer_add_data_source(renderer.get(), dew_axis_gizmo_data_source_get(axis_gizmo.get()));
 
-  auto origin_anchor = create_unique_ptr(points_origin_anchor_data_source_create(renderer.get(), arcball_center, 1.0), &points_origin_anchor_data_source_destroy);
-  points_renderer_add_data_source(renderer.get(), points_origin_anchor_data_source_get(origin_anchor.get()));
+  auto origin_anchor = create_unique_ptr(dew_origin_anchor_data_source_create(renderer.get(), arcball_center, 1.0), &dew_origin_anchor_data_source_destroy);
+  dew_renderer_add_data_source(renderer.get(), dew_origin_anchor_data_source_get(origin_anchor.get()));
 
   while (loop)
   {
@@ -427,17 +427,17 @@ int main(int argc, char **argv)
           if (fps)
           {
             if (event.key.key == SDLK_W || event.key.key == SDLK_UP)
-              points_fps_move(fps.get(), 0.0f, 0.0f, -1.3f);
+              dew_fps_move(fps.get(), 0.0f, 0.0f, -1.3f);
             if (event.key.key == SDLK_S || event.key.key == SDLK_DOWN)
-              points_fps_move(fps.get(), 0.0f, 0.0f, 1.3f);
+              dew_fps_move(fps.get(), 0.0f, 0.0f, 1.3f);
             if (event.key.key == SDLK_A || event.key.key == SDLK_LEFT)
-              points_fps_move(fps.get(), -1.3f, 0.0f, 0.0f);
+              dew_fps_move(fps.get(), -1.3f, 0.0f, 0.0f);
             if (event.key.key == SDLK_D || event.key.key == SDLK_RIGHT)
-              points_fps_move(fps.get(), 1.3f, 0.0f, 0.0f);
+              dew_fps_move(fps.get(), 1.3f, 0.0f, 0.0f);
             if (event.key.key == SDLK_Q)
-              points_fps_move(fps.get(), 0.0f, -1.3f, 0.0f);
+              dew_fps_move(fps.get(), 0.0f, -1.3f, 0.0f);
             if (event.key.key == SDLK_E)
-              points_fps_move(fps.get(), 0.0f, 1.3f, 0.0f);
+              dew_fps_move(fps.get(), 0.0f, 1.3f, 0.0f);
           }
 
           if (event.key.key == SDLK_LCTRL || event.key.key == SDLK_RCTRL)
@@ -472,21 +472,21 @@ int main(int argc, char **argv)
           {
             float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
-              points_arcball_dolly(arcball.get(), dy);
+              dew_arcball_dolly(arcball.get(), dy);
           }
           else if (right_pressed && !left_pressed && ctrl_modifier)
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
-              points_arcball_pan_ground(arcball.get(), dx, dy);
+              dew_arcball_pan_ground(arcball.get(), dx, dy);
           }
           else if (middle_pressed || (right_pressed && !left_pressed))
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
-              points_arcball_pan(arcball.get(), dx, dy);
+              dew_arcball_pan(arcball.get(), dx, dy);
           }
           else if (left_pressed && ctrl_modifier)
           {
@@ -494,18 +494,18 @@ int main(int argc, char **argv)
             float dy = -(float(event.motion.yrel) / float(height));
             float avg = (dx + dy) / 2;
             if (arcball)
-              points_arcball_rotate(arcball.get(), 0.0f, 0.0f, avg);
+              dew_arcball_rotate(arcball.get(), 0.0f, 0.0f, avg);
             else if (fps)
-              points_fps_rotate(fps.get(), 0.0f, 0.0f, avg);
+              dew_fps_rotate(fps.get(), 0.0f, 0.0f, avg);
           }
           else if (left_pressed)
           {
             float dx = (float(event.motion.xrel) / float(width));
             float dy = -(float(event.motion.yrel) / float(height));
             if (arcball)
-              points_arcball_rotate(arcball.get(), dx, dy, 0.0f);
+              dew_arcball_rotate(arcball.get(), dx, dy, 0.0f);
             else
-              points_fps_rotate(fps.get(), dx, dy, 0.0f);
+              dew_fps_rotate(fps.get(), dx, dy, 0.0f);
           }
           break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -525,15 +525,15 @@ int main(int argc, char **argv)
         case SDL_EVENT_MOUSE_WHEEL:
           if (arcball && event.wheel.y)
           {
-            points_arcball_zoom(arcball.get(), -float(event.wheel.y) / 30);
+            dew_arcball_zoom(arcball.get(), -float(event.wheel.y) / 30);
           }
           break;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
           SDL_GetWindowSizeInPixels(window, &width, &height);
           glViewport(0, 0, width, height);
-          points_camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
+          dew_camera_set_perspective(camera.get(), 45, width, height, 0.1, 100000);
           if (converter_points)
-            points_converter_data_source_set_viewport(converter_points.get(), width, height);
+            dew_converter_data_source_set_viewport(converter_points.get(), width, height);
           break;
         }
         default:
@@ -545,24 +545,24 @@ int main(int argc, char **argv)
     if (arcball)
     {
       double gizmo_center[3];
-      points_arcball_get_center(arcball.get(), gizmo_center);
+      dew_arcball_get_center(arcball.get(), gizmo_center);
       if (axis_gizmo)
-        points_axis_gizmo_data_source_set_center(axis_gizmo.get(), gizmo_center);
+        dew_axis_gizmo_data_source_set_center(axis_gizmo.get(), gizmo_center);
       if (origin_anchor)
-        points_origin_anchor_data_source_set_center(origin_anchor.get(), gizmo_center);
+        dew_origin_anchor_data_source_set_center(origin_anchor.get(), gizmo_center);
     }
 
     clear clear_mask = clear(int(clear::color) | int(clear::depth));
 
-    points_gl_renderer.draw(clear_mask, width, height);
+    dew_gl_renderer.draw(clear_mask, width, height);
 
     {
       double tight_min[3], tight_max[3];
-      points_converter_data_source_get_tight_aabb(converter_points.get(), tight_min, tight_max);
+      dew_converter_data_source_get_tight_aabb(converter_points.get(), tight_min, tight_max);
       if (tight_min[2] < ground_z)
       {
         ground_z = tight_min[2];
-        points_environment_data_source_set_ground_z(environment.get(), ground_z);
+        dew_environment_data_source_set_ground_z(environment.get(), ground_z);
       }
     }
 
@@ -578,13 +578,13 @@ int main(int argc, char **argv)
       {
         fps.reset();
         double eye[3], fwd[3];
-        points_camera_get_eye(camera.get(), eye);
-        points_camera_get_forward(camera.get(), fwd);
+        dew_camera_get_eye(camera.get(), eye);
+        dew_camera_get_forward(camera.get(), fwd);
         double dx = aabb.max[0] - aabb.min[0], dy = aabb.max[1] - aabb.min[1], dz = aabb.max[2] - aabb.min[2];
         double orbit_dist = std::sqrt(dx * dx + dy * dy + dz * dz) * 0.5;
         double new_center[3] = {eye[0] + fwd[0] * orbit_dist, eye[1] + fwd[1] * orbit_dist, eye[2] + fwd[2] * orbit_dist};
-        arcball.reset(points_arcball_create(camera.get(), new_center));
-        points_arcball_set_up_axis(arcball.get(), z_up);
+        arcball.reset(dew_arcball_create(camera.get(), new_center));
+        dew_arcball_set_up_axis(arcball.get(), z_up);
       }
     }
     if (ImGui::RadioButton("FPS", fps.get()))
@@ -592,29 +592,29 @@ int main(int argc, char **argv)
       if (!fps)
       {
         arcball.reset();
-        fps.reset(points_fps_create(camera.get()));
+        fps.reset(dew_fps_create(camera.get()));
       }
     }
     // if (ImGui::Checkbox("Render flat", &render_flat_points))
     //{
     //   if (render_flat_points)
     //   {
-    //     points_renderer_add_data_source(renderer.get(), points_flat_points_data_source_get(points_flat_points.get()));
+    //     dew_renderer_add_data_source(renderer.get(), dew_flat_points_data_source_get(dew_flat_points.get()));
     //   }
     //   else
     //   {
-    //     points_renderer_remove_data_source(renderer.get(), points_flat_points_data_source_get(points_flat_points.get()));
+    //     dew_renderer_remove_data_source(renderer.get(), dew_flat_points_data_source_get(dew_flat_points.get()));
     //   }
     // }
     if (ImGui::Checkbox("Render converter", &render_converter_points))
     {
       if (render_converter_points)
       {
-        points_renderer_add_data_source(renderer.get(), points_converter_data_source_get(converter_points.get()));
+        dew_renderer_add_data_source(renderer.get(), dew_converter_data_source_get(converter_points.get()));
       }
       else
       {
-        points_renderer_remove_data_source(renderer.get(), points_converter_data_source_get(converter_points.get()));
+        dew_renderer_remove_data_source(renderer.get(), dew_converter_data_source_get(converter_points.get()));
       }
     }
     if (ImGui::BeginCombo("Attribute", attribute_names[selected_attribute].c_str()))
@@ -626,7 +626,7 @@ int main(int argc, char **argv)
         {
           selected_attribute = i;
           auto &name = attribute_names[selected_attribute];
-          points_converter_data_set_rendered_attribute(converter_points.get(), name.c_str(), uint32_t(name.size()));
+          dew_converter_data_set_rendered_attribute(converter_points.get(), name.c_str(), uint32_t(name.size()));
         }
         if (is_selected)
         {
@@ -637,32 +637,32 @@ int main(int argc, char **argv)
     }
     if (ImGui::SliderFloat("Screen Fraction Threshold", &screen_fraction_threshold, 0.01f, 1.0f, "%.2f", ImGuiSliderFlags_Logarithmic))
     {
-      points_converter_data_source_set_pixel_error_threshold(converter_points.get(), double(screen_fraction_threshold));
+      dew_converter_data_source_set_pixel_error_threshold(converter_points.get(), double(screen_fraction_threshold));
     }
     if (ImGui::SliderFloat("Render Density (px)", &render_density_px, 0.5f, 6.0f, "%.1f"))
     {
-      points_converter_data_source_set_render_density_px(converter_points.get(), double(render_density_px));
+      dew_converter_data_source_set_render_density_px(converter_points.get(), double(render_density_px));
     }
     if (ImGui::SliderInt("GPU Memory Budget (MB)", &gpu_memory_budget_mb, 64, 4096))
     {
-      points_converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
+      dew_converter_data_source_set_gpu_memory_budget(converter_points.get(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
     }
     if (ImGui::SliderInt("Max In-Flight IO", &max_in_flight_io, 8, 512))
     {
-      points_converter_data_source_set_max_in_flight_io(converter_points.get(), max_in_flight_io);
+      dew_converter_data_source_set_max_in_flight_io(converter_points.get(), max_in_flight_io);
     }
     if (ImGui::Checkbox("Show Bounding Boxes", &show_bounding_boxes))
     {
-      points_converter_data_source_set_show_bounding_boxes(converter_points.get(), show_bounding_boxes);
+      dew_converter_data_source_set_show_bounding_boxes(converter_points.get(), show_bounding_boxes);
     }
     if (ImGui::Checkbox("Debug Transitions", &debug_transitions))
     {
-      points_converter_data_source_set_debug_transitions(converter_points.get(), debug_transitions);
+      dew_converter_data_source_set_debug_transitions(converter_points.get(), debug_transitions);
     }
-    ImGui::SliderFloat("Point World Size", &points_gl_renderer.point_world_size, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    ImGui::SliderFloat("LOD Scale Base", &points_gl_renderer.lod_scale_base, 1.0f, 5.0f, "%.1f");
+    ImGui::SliderFloat("Point World Size", &dew_gl_renderer.point_world_size, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("LOD Scale Base", &dew_gl_renderer.lod_scale_base, 1.0f, 5.0f, "%.1f");
     {
-      uint64_t points_rendered = points_converter_data_source_get_points_rendered(converter_points.get());
+      uint64_t points_rendered = dew_converter_data_source_get_points_rendered(converter_points.get());
       if (points_rendered >= 1000000)
         ImGui::Text("Points Rendered: %.2f M", double(points_rendered) / 1000000.0);
       else if (points_rendered >= 1000)
@@ -676,7 +676,7 @@ int main(int argc, char **argv)
       int registry_nodes, active_set, nodes_drawn, transitioning, evicted, reconcile_destroyed;
       int walker_nodes, walker_trees_pending, io_in_flight;
       uint64_t walker_total_pts;
-      points_converter_data_source_get_frame_timings(converter_points.get(), &tree_walk, &reconciliation, &upload, &refine, &frontier, &draw, &eviction, &total,
+      dew_converter_data_source_get_frame_timings(converter_points.get(), &tree_walk, &reconciliation, &upload, &refine, &frontier, &draw, &eviction, &total,
                                                                   &registry_nodes, &active_set, &nodes_drawn, &transitioning, &evicted, &reconcile_destroyed,
                                                                   &walker_nodes, &walker_total_pts, &walker_trees_pending, &io_in_flight);
       ImGui::Text("Total:          %.2f ms", total);

@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jorgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #include <cstring>
 
-namespace points::converter
+namespace dew::converter
 {
 
 // Layout: for each component c, for each byte b within the type,
@@ -82,4 +82,4 @@ void byte_unshuffle(const uint8_t *src, uint8_t *dst, uint32_t total_size, uint3
   }
 }
 
-} // namespace points::converter
+} // namespace dew::converter

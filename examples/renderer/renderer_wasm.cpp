@@ -14,16 +14,16 @@
 
 #include "gl_renderer.h"
 
-#include <points/render/aabb.h>
-#include <points/render/camera.h>
-#include <points/render/renderer.h>
-#include <points/render/environment_data_source.h>
-#include <points/render/axis_gizmo_data_source.h>
-#include <points/render/origin_anchor_data_source.h>
+#include <dew/render/aabb.h>
+#include <dew/render/camera.h>
+#include <dew/render/renderer.h>
+#include <dew/render/environment_data_source.h>
+#include <dew/render/axis_gizmo_data_source.h>
+#include <dew/render/origin_anchor_data_source.h>
 
-#include <points/converter/converter_data_source.h>
+#include <dew/converter/converter_data_source.h>
 
-#include "error.hpp" // the full points_error_t (code + std::string msg)
+#include "error.hpp" // the full dew_error_t (code + std::string msg)
 
 #include <vio/objstore/create_object_store.h> // parse_connection_string, apply_connection_override
 #include <vio/platform/wasm/event_loop_impl.h> // vio::wasm::pump / set_wake_hook
@@ -65,22 +65,22 @@ public:
     // Destroy the scene overlays (environment/gizmo/anchor) alongside the point-cloud source.
     if (_axis_gizmo)
     {
-      points_axis_gizmo_data_source_destroy(_axis_gizmo);
+      dew_axis_gizmo_data_source_destroy(_axis_gizmo);
       _axis_gizmo = nullptr;
     }
     if (_origin_anchor)
     {
-      points_origin_anchor_data_source_destroy(_origin_anchor);
+      dew_origin_anchor_data_source_destroy(_origin_anchor);
       _origin_anchor = nullptr;
     }
     if (_environment)
     {
-      points_environment_data_source_destroy(_environment);
+      dew_environment_data_source_destroy(_environment);
       _environment = nullptr;
     }
     if (_cds)
     {
-      points_converter_data_source_destroy(_cds);
+      dew_converter_data_source_destroy(_cds);
       _cds = nullptr;
     }
     // renderer/camera/arcball are owned by the render library; gl_renderer holds only non-owning refs.
@@ -112,7 +112,7 @@ public:
     _gl->draw(static_cast<clear>(int(clear::color) | int(clear::depth)), _width, _height);
     // Rendering is dirty-driven: re-arm the next frame while a fade (node crossfade or LOD fade-in) is still
     // in progress, so it keeps animating with no camera input or IO in flight. Goes idle when animation ends.
-    if (_cds && points_converter_data_source_is_animating(_cds))
+    if (_cds && dew_converter_data_source_is_animating(_cds))
       mark_dirty();
   }
 
@@ -120,44 +120,44 @@ public:
   // arcball owns the actual math. Each marks the frame dirty so JS schedules a redraw.
   void cameraRotate(float ndx, float ndy)
   {
-    points_arcball_rotate(_arcball, ndx, ndy, 0.0f);
+    dew_arcball_rotate(_arcball, ndx, ndy, 0.0f);
     mark_dirty();
   }
   void cameraRoll(float nd)
   {
-    points_arcball_rotate(_arcball, 0.0f, 0.0f, nd);
+    dew_arcball_rotate(_arcball, 0.0f, 0.0f, nd);
     mark_dirty();
   }
   void cameraPan(float ndx, float ndy)
   {
-    points_arcball_pan(_arcball, ndx, ndy);
+    dew_arcball_pan(_arcball, ndx, ndy);
     mark_dirty();
   }
   void cameraDolly(float nd)
   {
-    points_arcball_dolly(_arcball, nd);
+    dew_arcball_dolly(_arcball, nd);
     mark_dirty();
   }
   void cameraZoom(float nz)
   {
-    points_arcball_zoom(_arcball, nz);
+    dew_arcball_zoom(_arcball, nz);
     mark_dirty();
   }
 
   void setAttribute(const std::string &name)
   {
-    points_converter_data_set_rendered_attribute(_cds, name.c_str(), uint32_t(name.size()));
+    dew_converter_data_set_rendered_attribute(_cds, name.c_str(), uint32_t(name.size()));
     mark_dirty();
   }
 
   val getAttributeNames()
   {
     val out = val::array();
-    uint32_t count = points_converter_data_attribute_count(_cds);
+    uint32_t count = dew_converter_data_attribute_count(_cds);
     char buf[256];
     for (uint32_t i = 0; i < count; ++i)
     {
-      uint32_t n = points_converter_data_get_attribute_name(_cds, int(i), buf, sizeof(buf));
+      uint32_t n = dew_converter_data_get_attribute_name(_cds, int(i), buf, sizeof(buf));
       size_t len = ::strnlen(buf, n < sizeof(buf) ? n : sizeof(buf)); // the C API may include a trailing NUL
       out.set(i, std::string(buf, buf + len));
     }
@@ -181,7 +181,7 @@ public:
 
   double getPointsRendered()
   {
-    return double(points_converter_data_source_get_points_rendered(_cds));
+    return double(dew_converter_data_source_get_points_rendered(_cds));
   }
 
   // --- appearance (gl_renderer public fields) ---
@@ -202,13 +202,13 @@ public:
   // Octree refinement budget: a smaller screen-space pixel error draws more detail (and streams more).
   void setPixelErrorThreshold(double v)
   {
-    points_converter_data_source_set_pixel_error_threshold(_cds, v);
+    dew_converter_data_source_set_pixel_error_threshold(_cds, v);
     mark_dirty();
   }
   // Runtime per-node LOD: target on-screen size (px) of a drawn point's morton cell -> uniform density.
   void setRenderDensityPx(double v)
   {
-    points_converter_data_source_set_render_density_px(_cds, v);
+    dew_converter_data_source_set_render_density_px(_cds, v);
     mark_dirty();
   }
   // GPU memory budget in MB; the streamer evicts to stay under it.
@@ -216,7 +216,7 @@ public:
   {
     if (mb < 0.0)
       mb = 0.0;
-    points_converter_data_source_set_gpu_memory_budget(_cds, static_cast<size_t>(mb) * 1024u * 1024u);
+    dew_converter_data_source_set_gpu_memory_budget(_cds, static_cast<size_t>(mb) * 1024u * 1024u);
     mark_dirty();
   }
 
@@ -226,14 +226,14 @@ public:
   {
     if (mb < 0.0)
       mb = 0.0;
-    points_converter_data_source_set_upload_budget_per_frame(_cds, static_cast<size_t>(mb) * 1024u * 1024u);
+    dew_converter_data_source_set_upload_budget_per_frame(_cds, static_cast<size_t>(mb) * 1024u * 1024u);
     mark_dirty();
   }
   void setMaxInFlightIo(int n)
   {
     if (n < 1)
       n = 1;
-    points_converter_data_source_set_max_in_flight_io(_cds, n);
+    dew_converter_data_source_set_max_in_flight_io(_cds, n);
     mark_dirty();
   }
 
@@ -244,7 +244,7 @@ public:
   {
     if (mb < 64.0)
       mb = 64.0;
-    points_converter_data_source_set_memory_budget(_cds, static_cast<uint64_t>(mb) * 1024u * 1024u);
+    dew_converter_data_source_set_memory_budget(_cds, static_cast<uint64_t>(mb) * 1024u * 1024u);
     mark_dirty();
   }
   // {heapBytes, heapMax, budgetBytes, backlogBytes, readCacheBytes, residentBytes, brakeLevel}. heapBytes/
@@ -254,7 +254,7 @@ public:
   {
     uint64_t heap_bytes = 0, heap_max = 0, budget = 0, backlog = 0, read_cache = 0, resident = 0;
     uint32_t brake = 0;
-    points_converter_data_source_get_memory_stats(_cds, &heap_bytes, &heap_max, &budget, &backlog, &read_cache, &resident, &brake);
+    dew_converter_data_source_get_memory_stats(_cds, &heap_bytes, &heap_max, &budget, &backlog, &read_cache, &resident, &brake);
     val stats = val::object();
     stats.set("heapBytes", double(heap_bytes));
     stats.set("heapMax", double(heap_max));
@@ -269,42 +269,42 @@ public:
   // --- virtual subnodes (A/B toggle + telemetry) ---
   void setEnableVirtualSubtrees(bool on)
   {
-    points_converter_data_source_set_enable_virtual_subtrees(_cds, on ? 1 : 0);
+    dew_converter_data_source_set_enable_virtual_subtrees(_cds, on ? 1 : 0);
     mark_dirty();
   }
   bool getEnableVirtualSubtrees()
   {
-    return points_converter_data_source_get_enable_virtual_subtrees(_cds) != 0;
+    return dew_converter_data_source_get_enable_virtual_subtrees(_cds) != 0;
   }
   double getVirtualPromoted()
   {
     uint32_t p = 0;
-    points_converter_data_source_get_virtual_stats(_cds, &p, nullptr, nullptr, nullptr);
+    dew_converter_data_source_get_virtual_stats(_cds, &p, nullptr, nullptr, nullptr);
     return double(p);
   }
   double getVirtualGpuBytes()
   {
     uint64_t b = 0;
-    points_converter_data_source_get_virtual_stats(_cds, nullptr, &b, nullptr, nullptr);
+    dew_converter_data_source_get_virtual_stats(_cds, nullptr, &b, nullptr, nullptr);
     return double(b);
   }
   double getResidentCpuBytes()
   {
     uint64_t b = 0;
-    points_converter_data_source_get_virtual_stats(_cds, nullptr, nullptr, &b, nullptr);
+    dew_converter_data_source_get_virtual_stats(_cds, nullptr, nullptr, &b, nullptr);
     return double(b);
   }
   double getVirtualNodesDrawn()
   {
     uint32_t d = 0;
-    points_converter_data_source_get_virtual_stats(_cds, nullptr, nullptr, nullptr, &d);
+    dew_converter_data_source_get_virtual_stats(_cds, nullptr, nullptr, nullptr, &d);
     return double(d);
   }
 
   // --- scene overlays ---
   void setShowBoundingBoxes(bool show)
   {
-    points_converter_data_source_set_show_bounding_boxes(_cds, show ? 1 : 0);
+    dew_converter_data_source_set_show_bounding_boxes(_cds, show ? 1 : 0);
     mark_dirty();
   }
 
@@ -312,13 +312,13 @@ public:
   // Pan within the dataset's ground plane (the desktop app's ctrl+right-drag gesture).
   void cameraPanGround(float ndx, float ndy)
   {
-    points_arcball_pan_ground(_arcball, ndx, ndy);
+    dew_arcball_pan_ground(_arcball, ndx, ndy);
     mark_dirty();
   }
   // Restore the initial fitted view (the arcball was created at the AABB-fit camera, so reset returns to it).
   void resetView()
   {
-    points_arcball_reset(_arcball);
+    dew_arcball_reset(_arcball);
     mark_dirty();
   }
 
@@ -342,8 +342,8 @@ private:
   {
     _width = w;
     _height = h;
-    points_camera_set_perspective(_camera, 45.0, double(w), double(h), 0.1, 100000.0);
-    points_converter_data_source_set_viewport(_cds, w, h);
+    dew_camera_set_perspective(_camera, 45.0, double(w), double(h), 0.1, 100000.0);
+    dew_converter_data_source_set_viewport(_cds, w, h);
   }
 
   // Per-frame overlay upkeep (mirrors the desktop example): keep the gizmo + origin anchor on the current
@@ -353,20 +353,20 @@ private:
     if (_arcball)
     {
       double c[3];
-      points_arcball_get_center(_arcball, c);
+      dew_arcball_get_center(_arcball, c);
       if (_axis_gizmo)
-        points_axis_gizmo_data_source_set_center(_axis_gizmo, c);
+        dew_axis_gizmo_data_source_set_center(_axis_gizmo, c);
       if (_origin_anchor)
-        points_origin_anchor_data_source_set_center(_origin_anchor, c);
+        dew_origin_anchor_data_source_set_center(_origin_anchor, c);
     }
     if (_environment && _cds)
     {
       double tmin[3], tmax[3];
-      points_converter_data_source_get_tight_aabb(_cds, tmin, tmax);
+      dew_converter_data_source_get_tight_aabb(_cds, tmin, tmax);
       if (tmin[2] < _ground_z)
       {
         _ground_z = tmin[2];
-        points_environment_data_source_set_ground_z(_environment, _ground_z);
+        dew_environment_data_source_set_ground_z(_environment, _ground_z);
       }
     }
   }
@@ -380,16 +380,16 @@ private:
   }
 
   EMSCRIPTEN_WEBGL_CONTEXT_HANDLE _gl_ctx = 0;
-  points_renderer_t *_renderer = nullptr;
-  points_camera_t *_camera = nullptr;
+  dew_renderer_t *_renderer = nullptr;
+  dew_camera_t *_camera = nullptr;
   std::unique_ptr<gl_renderer> _gl;
-  points_converter_data_source_t *_cds = nullptr;
-  points_arcball_t *_arcball = nullptr;
+  dew_converter_data_source_t *_cds = nullptr;
+  dew_arcball_t *_arcball = nullptr;
   // Scene overlays ported from the desktop example: procedural sky + ground grid, corner axis gizmo, and a
   // small origin anchor at the orbit center.
-  points_environment_data_source_t *_environment = nullptr;
-  points_axis_gizmo_data_source_t *_axis_gizmo = nullptr;
-  points_origin_anchor_data_source_t *_origin_anchor = nullptr;
+  dew_environment_data_source_t *_environment = nullptr;
+  dew_axis_gizmo_data_source_t *_axis_gizmo = nullptr;
+  dew_origin_anchor_data_source_t *_origin_anchor = nullptr;
   double _ground_z = 0.0;
   int _width = 0;
   int _height = 0;
@@ -439,12 +439,12 @@ renderer_wasm_t *create_renderer(std::string canvas_selector, std::string url, s
 
   // 3. Render object graph + streaming data source. data_source_create opens the dataset, which drives
   //    the (Asyncify) busy-yield in request_root -- this call suspends until the root tree is loaded.
-  r->_renderer = points_renderer_create();
-  r->_camera = points_camera_create();
+  r->_renderer = dew_renderer_create();
+  r->_camera = dew_camera_create();
   r->_gl = std::make_unique<gl_renderer>(r->_renderer, r->_camera);
 
-  points_error_t err{};
-  r->_cds = points_converter_data_source_create(url.c_str(), uint32_t(url.size()), &err, r->_renderer);
+  dew_error_t err{};
+  r->_cds = dew_converter_data_source_create(url.c_str(), uint32_t(url.size()), &err, r->_renderer);
   if (err.code != 0 || !r->_cds)
   {
     emscripten_console_error(err.msg.empty() ? "createRenderer: failed to open dataset" : err.msg.c_str());
@@ -453,56 +453,56 @@ renderer_wasm_t *create_renderer(std::string canvas_selector, std::string url, s
   }
   // 4. Fit the camera to the dataset AABB (request is async; suspend until the callback fires). This acts on
   //    the converter data source directly, so it does not need the source registered with the renderer yet.
-  points_converter_data_source_request_aabb(r->_cds, &renderer_wasm_t::on_aabb, r);
+  dew_converter_data_source_request_aabb(r->_cds, &renderer_wasm_t::on_aabb, r);
   while (!r->_aabb_ready)
   {
     vio::wasm::pump();
     emscripten_sleep(0);
   }
 
-  // 5. Add the scene overlays + the point cloud. Data sources draw in ADD ORDER (points_renderer_frame
+  // 5. Add the scene overlays + the point cloud. Data sources draw in ADD ORDER (dew_renderer_frame
   //    emits them in the order they were added, with no sorting), and the environment paints a full-screen
   //    sky + ground grid with depth-test OFF -- so it MUST be added before the point cloud or it would paint
   //    over it. Mirror the desktop example: environment first, then the points.
   const double extent[3] = {r->_aabb_max[0] - r->_aabb_min[0], r->_aabb_max[1] - r->_aabb_min[1], r->_aabb_max[2] - r->_aabb_min[2]};
   r->_ground_z = r->_aabb_min[2];
   const double grid_size = std::max(extent[0], extent[1]) / 10.0;
-  r->_environment = points_environment_data_source_create(r->_renderer, r->_ground_z, grid_size);
-  points_renderer_add_data_source(r->_renderer, points_environment_data_source_get(r->_environment));
+  r->_environment = dew_environment_data_source_create(r->_renderer, r->_ground_z, grid_size);
+  dew_renderer_add_data_source(r->_renderer, dew_environment_data_source_get(r->_environment));
 
-  points_renderer_add_data_source(r->_renderer, points_converter_data_source_get(r->_cds));
+  dew_renderer_add_data_source(r->_renderer, dew_converter_data_source_get(r->_cds));
 
   // The node bounding-box overlay is a sub-source of the converter (visibility toggled by
   // setShowBoundingBoxes). It must be registered with the renderer to draw at all; add it AFTER the points
   // so its lines (drawn with depth-test off) paint on top of them. Mirrors the desktop example.
-  points_renderer_add_data_source(r->_renderer, points_converter_data_source_get_bbox_data_source(r->_cds));
+  dew_renderer_add_data_source(r->_renderer, dew_converter_data_source_get_bbox_data_source(r->_cds));
 
   // 6. Perspective + arcball. Default to a Z-up dataset viewed from -Y (matches the desktop example).
   const int w0 = 1, h0 = 1; // real size arrives with the first frame() call
   r->apply_size(w0, h0);
-  points_aabb_t aabb;
+  dew_aabb_t aabb;
   std::memcpy(aabb.min, r->_aabb_min, 3 * sizeof(double));
   std::memcpy(aabb.max, r->_aabb_max, 3 * sizeof(double));
   const double dir[3] = {0.0, -1.0, 0.0};
   const double up[3] = {0.0, 0.0, 1.0};
-  points_camera_look_at_aabb(r->_camera, &aabb, dir, up);
+  dew_camera_look_at_aabb(r->_camera, &aabb, dir, up);
   const double center[3] = {(r->_aabb_min[0] + r->_aabb_max[0]) * 0.5, (r->_aabb_min[1] + r->_aabb_max[1]) * 0.5, (r->_aabb_min[2] + r->_aabb_max[2]) * 0.5};
-  r->_arcball = points_arcball_create(r->_camera, center);
-  points_arcball_set_up_axis(r->_arcball, up);
+  r->_arcball = dew_arcball_create(r->_camera, center);
+  dew_arcball_set_up_axis(r->_arcball, up);
 
   // 7. Orbit-center overlays: the corner XYZ axis gizmo + a small origin anchor, sized to ~5% of the AABB
   //    diagonal (scale-appropriate for arbitrary datasets). update_overlays() keeps them on the orbit center.
   const double diag = std::sqrt(extent[0] * extent[0] + extent[1] * extent[1] + extent[2] * extent[2]);
   const double overlay_size = diag * 0.05;
-  r->_axis_gizmo = points_axis_gizmo_data_source_create(r->_renderer, center, overlay_size);
-  points_renderer_add_data_source(r->_renderer, points_axis_gizmo_data_source_get(r->_axis_gizmo));
-  r->_origin_anchor = points_origin_anchor_data_source_create(r->_renderer, center, overlay_size);
-  points_renderer_add_data_source(r->_renderer, points_origin_anchor_data_source_get(r->_origin_anchor));
+  r->_axis_gizmo = dew_axis_gizmo_data_source_create(r->_renderer, center, overlay_size);
+  dew_renderer_add_data_source(r->_renderer, dew_axis_gizmo_data_source_get(r->_axis_gizmo));
+  r->_origin_anchor = dew_origin_anchor_data_source_create(r->_renderer, center, overlay_size);
+  dew_renderer_add_data_source(r->_renderer, dew_origin_anchor_data_source_get(r->_origin_anchor));
 
   return r;
 }
 
-EMSCRIPTEN_BINDINGS(points_render)
+EMSCRIPTEN_BINDINGS(dew_render)
 {
   class_<renderer_wasm_t>("Renderer")
     .function("setRequestUpdate", &renderer_wasm_t::setRequestUpdate)

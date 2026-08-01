@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2020  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 #include "glm_include.hpp"
 #include <array>
 
-namespace points::render
+namespace dew::render
 {
 
 enum class frustum_intersection_t
@@ -104,4 +104,4 @@ struct frustum_t
     return intersecting ? frustum_intersection_t::intersects : frustum_intersection_t::inside;
   }
 };
-} // namespace points::render
+} // namespace dew::render

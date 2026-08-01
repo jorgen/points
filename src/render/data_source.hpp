@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2020  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -17,10 +17,10 @@
 ************************************************************************/
 #pragma once
 
-#include <points/render/data_source.h>
+#include <dew/render/data_source.h>
 #include "glm_include.hpp"
 
-namespace points::render
+namespace dew::render
 {
 
 struct frame_camera_cpp_t
@@ -33,9 +33,9 @@ struct frame_camera_cpp_t
   glm::dmat4 inverse_view_projection;
 };
 
-inline frame_camera_cpp_t cast_to_frame_camera_cpp(const points_frame_camera_t &camera)
+inline frame_camera_cpp_t cast_to_frame_camera_cpp(const dew_frame_camera_t &camera)
 {
-  static_assert(sizeof(frame_camera_cpp_t) == sizeof(points_frame_camera_t), "Conversion types not the same size");
+  static_assert(sizeof(frame_camera_cpp_t) == sizeof(dew_frame_camera_t), "Conversion types not the same size");
   frame_camera_cpp_t ret;
   memcpy(&ret, &camera, sizeof(ret));
   return ret;
@@ -46,7 +46,7 @@ struct data_source_cpp_t
   data_source_cpp_t()
   {
     data_source.user_ptr = this;
-    data_source.add_to_frame = [](points_frame_camera_t *camera, points_to_render_t *to_render, void *user_ptr)
+    data_source.add_to_frame = [](dew_frame_camera_t *camera, dew_to_render_t *to_render, void *user_ptr)
     {
       auto *thiz = static_cast<data_source_cpp_t *>(user_ptr);
       frame_camera_cpp_t c = cast_to_frame_camera_cpp(*camera);
@@ -54,9 +54,9 @@ struct data_source_cpp_t
     };
   };
   virtual ~data_source_cpp_t() {}
-  virtual void add_to_frame(const frame_camera_cpp_t &camera, points_to_render_t *to_render) = 0;
-  points_data_source_t data_source;
+  virtual void add_to_frame(const frame_camera_cpp_t &camera, dew_to_render_t *to_render) = 0;
+  dew_data_source_t data_source;
 };
-} // namespace points::render
+} // namespace dew::render
 
 

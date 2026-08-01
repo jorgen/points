@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include <cstring>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 native_node_data_loader_t::native_node_data_loader_t(storage_handler_t &storage_handler)
@@ -87,4 +87,4 @@ void native_node_data_loader_t::cancel(render::load_handle_t handle)
   }
 }
 
-} // namespace points::converter
+} // namespace dew::converter

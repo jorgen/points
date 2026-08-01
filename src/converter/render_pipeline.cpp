@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -30,7 +30,7 @@
 #include <cstring>
 #include <thread>
 
-namespace points::converter
+namespace dew::converter
 {
 
 bool render_node_less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs)
@@ -401,7 +401,7 @@ io_upload_stats_t process_io_and_upload(
     std::shared_ptr<uint8_t[]> normalized_data;
     uint32_t normalized_size = 0;
     bool should_normalize = (attr_min < attr_max) &&
-                           !(loaded.attribute_type == points_type_u16 && loaded.attribute_components == points_components_3);
+                           !(loaded.attribute_type == dew_type_u16 && loaded.attribute_components == dew_components_3);
     if (should_normalize)
     {
       normalized_data = normalize_attribute_to_float(loaded.attribute_data, loaded.attribute_data_size,
@@ -414,31 +414,31 @@ io_upload_stats_t process_io_and_upload(
 
     // GPU buffer creation + transfer
     auto tg0 = clock::now();
-    callbacks.do_create_buffer(node.gpu_buffers[0], points_buffer_type_vertex);
+    callbacks.do_create_buffer(node.gpu_buffers[0], dew_buffer_type_vertex);
     callbacks.do_initialize_buffer(node.gpu_buffers[0], loaded.vertex_type, loaded.vertex_components, int(loaded.vertex_data_size), loaded.vertex_data);
 
-    callbacks.do_create_buffer(node.gpu_buffers[1], points_buffer_type_vertex);
+    callbacks.do_create_buffer(node.gpu_buffers[1], dew_buffer_type_vertex);
     if (should_normalize)
-      callbacks.do_initialize_buffer(node.gpu_buffers[1], points_type_r32, loaded.attribute_components, int(normalized_size), normalized_data.get());
+      callbacks.do_initialize_buffer(node.gpu_buffers[1], dew_type_r32, loaded.attribute_components, int(normalized_size), normalized_data.get());
     else
       callbacks.do_initialize_buffer(node.gpu_buffers[1], loaded.attribute_type, loaded.attribute_components, int(loaded.attribute_data_size), loaded.attribute_data);
 
     // Per-point rep_level (u8x1, normalized to [0,1] in the shader) for the per-point LOD test.
     if (loaded.rep_level_data && loaded.rep_level_data_size)
     {
-      callbacks.do_create_buffer(node.gpu_buffers[3], points_buffer_type_vertex);
-      callbacks.do_initialize_buffer(node.gpu_buffers[3], points_type_u8, points_components_1, int(loaded.rep_level_data_size), loaded.rep_level_data);
+      callbacks.do_create_buffer(node.gpu_buffers[3], dew_buffer_type_vertex);
+      callbacks.do_initialize_buffer(node.gpu_buffers[3], dew_type_u8, dew_components_1, int(loaded.rep_level_data_size), loaded.rep_level_data);
     }
 
     auto offset = to_glm(tree_config.offset) + to_glm(node.offset);
     node.camera_view = glm::mat4(camera_frame.projection * glm::translate(camera_frame.view, offset));
-    callbacks.do_create_buffer(node.gpu_buffers[2], points_buffer_type_uniform);
-    callbacks.do_initialize_buffer(node.gpu_buffers[2], points_type_r32, points_components_4x4, sizeof(node.camera_view), &node.camera_view);
+    callbacks.do_create_buffer(node.gpu_buffers[2], dew_buffer_type_uniform);
+    callbacks.do_initialize_buffer(node.gpu_buffers[2], dew_type_r32, dew_components_4x4, sizeof(node.camera_view), &node.camera_view);
 
-    bool is_mono = (loaded.draw_type == points_dyn_points_1);
+    bool is_mono = (loaded.draw_type == dew_dyn_points_1);
     node.params_data = glm::vec4(0.0f, 1.0f, 0.0f, is_mono ? 1.0f : 0.0f);
-    callbacks.do_create_buffer(node.params_buffer, points_buffer_type_uniform);
-    callbacks.do_initialize_buffer(node.params_buffer, points_type_r32, points_components_4, sizeof(node.params_data), &node.params_data);
+    callbacks.do_create_buffer(node.params_buffer, dew_buffer_type_uniform);
+    callbacks.do_initialize_buffer(node.params_buffer, dew_type_r32, dew_components_4, sizeof(node.params_data), &node.params_data);
 
     node.gpu_state = render_node_gpu_state::uploaded;
     // A spanning leaf may later want virtual subdivision, which needs the pre-reorder morton codes. Salvage the
@@ -515,7 +515,7 @@ int emit_draws(
     render::callback_manager_t &callbacks,
     const render::frame_camera_cpp_t &camera,
     const tree_config_t &tree_config,
-    points_to_render_t *to_render,
+    dew_to_render_t *to_render,
     float fade_duration_ms,
     int viewport_height,
     double render_density_px,
@@ -549,16 +549,16 @@ int emit_draws(
     if (node.params_buffer.user_ptr)
       callbacks.do_destroy_buffer(node.params_buffer);
 
-    node.draw_list[0] = {points_dyn_points_bm_vertex, node.gpu_buffers[0].user_ptr};
-    node.draw_list[1] = {points_dyn_points_bm_color, node.gpu_buffers[1].user_ptr};
-    node.draw_list[2] = {points_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
-    node.draw_list[3] = {points_dyn_points_bm_replevel, node.gpu_buffers[3].user_ptr};
+    node.draw_list[0] = {dew_dyn_points_bm_vertex, node.gpu_buffers[0].user_ptr};
+    node.draw_list[1] = {dew_dyn_points_bm_color, node.gpu_buffers[1].user_ptr};
+    node.draw_list[2] = {dew_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
+    node.draw_list[3] = {dew_dyn_points_bm_replevel, node.gpu_buffers[3].user_ptr};
 
     // Submit the prefix down to the finest level the nearest part of the node needs; the shader culls the rest
     // per point (near dense, far coarse). One opaque draw -- no per-node screen-door split.
     const uint32_t draw_size = compute_lod_draw_size(node, camera, tree_config, viewport_height, render_density_px);
-    points_draw_group_t draw_group = {node.draw_type, node.draw_list, 4, int(draw_size), node.walker_data.lod, lod_px_scale, lod_density_scale};
-    points_to_render_add_render_group(to_render, draw_group);
+    dew_draw_group_t draw_group = {node.draw_type, node.draw_list, 4, int(draw_size), node.walker_data.lod, lod_px_scale, lod_density_scale};
+    dew_to_render_add_render_group(to_render, draw_group);
 
     points_rendered += draw_size;
     nodes_drawn++;
@@ -591,31 +591,31 @@ int emit_draws(
     node.camera_view = glm::mat4(camera.projection * glm::translate(camera.view, offset));
     callbacks.do_modify_buffer(node.gpu_buffers[2], 0, sizeof(node.camera_view), &node.camera_view);
 
-    bool is_mono = (node.draw_type == points_dyn_points_1);
+    bool is_mono = (node.draw_type == dew_dyn_points_1);
     node.params_data = glm::vec4(alpha, 1.0f, is_mono ? 1.0f : 0.0f, is_mono ? 1.0f : 0.0f);
 
     if (!node.params_buffer.user_ptr)
     {
-      callbacks.do_create_buffer(node.params_buffer, points_buffer_type_uniform);
-      callbacks.do_initialize_buffer(node.params_buffer, points_type_r32, points_components_4, sizeof(node.params_data), &node.params_data);
+      callbacks.do_create_buffer(node.params_buffer, dew_buffer_type_uniform);
+      callbacks.do_initialize_buffer(node.params_buffer, dew_type_r32, dew_components_4, sizeof(node.params_data), &node.params_data);
     }
     else
     {
       callbacks.do_modify_buffer(node.params_buffer, 0, sizeof(node.params_data), &node.params_data);
     }
 
-    node.draw_list[0] = {points_dyn_points_bm_vertex, node.gpu_buffers[0].user_ptr};
-    node.draw_list[1] = {points_dyn_points_bm_color, node.gpu_buffers[1].user_ptr};
-    node.draw_list[2] = {points_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
-    node.draw_list[3] = {points_dyn_points_bm_old_color, node.gpu_buffers[1].user_ptr};
-    node.draw_list[4] = {points_dyn_points_bm_params, node.params_buffer.user_ptr};
-    node.draw_list[5] = {points_dyn_points_bm_replevel, node.gpu_buffers[3].user_ptr};
+    node.draw_list[0] = {dew_dyn_points_bm_vertex, node.gpu_buffers[0].user_ptr};
+    node.draw_list[1] = {dew_dyn_points_bm_color, node.gpu_buffers[1].user_ptr};
+    node.draw_list[2] = {dew_dyn_points_bm_camera, node.gpu_buffers[2].user_ptr};
+    node.draw_list[3] = {dew_dyn_points_bm_old_color, node.gpu_buffers[1].user_ptr};
+    node.draw_list[4] = {dew_dyn_points_bm_params, node.params_buffer.user_ptr};
+    node.draw_list[5] = {dew_dyn_points_bm_replevel, node.gpu_buffers[3].user_ptr};
 
     // Node-level crossfade animates the whole node via its params alpha; same per-point LOD submit + shader
     // cull as the steady pass so density is consistent across the fade<->steady transition.
     const uint32_t draw_size = compute_lod_draw_size(node, camera, tree_config, viewport_height, render_density_px);
-    points_draw_group_t draw_group = {points_dyn_points_crossfade, node.draw_list, 6, int(draw_size), node.walker_data.lod, lod_px_scale, lod_density_scale};
-    points_to_render_add_render_group(to_render, draw_group);
+    dew_draw_group_t draw_group = {dew_dyn_points_crossfade, node.draw_list, 6, int(draw_size), node.walker_data.lod, lod_px_scale, lod_density_scale};
+    dew_to_render_add_render_group(to_render, draw_group);
 
     points_rendered += draw_size;
     nodes_drawn++;
@@ -663,4 +663,4 @@ void handle_attribute_change(
   }
 }
 
-} // namespace points::converter
+} // namespace dew::converter

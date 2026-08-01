@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -24,7 +24,7 @@
 
 #include <cstring>
 
-namespace points::converter
+namespace dew::converter
 {
 
 namespace
@@ -59,13 +59,13 @@ std::shared_ptr<uint8_t[]> copy_val_to_wasm(const emscripten::val &v, uint32_t &
 
 bool decode_worker_pool_available()
 {
-  emscripten::val pool = emscripten::val::global("__pointsDecodePool");
+  emscripten::val pool = emscripten::val::global("__dewDecodePool");
   return !pool.isNull() && !pool.isUndefined();
 }
 
 worker_node_data_loader_t::worker_node_data_loader_t(storage_handler_t &storage_handler)
   : _storage_handler(storage_handler)
-  , _pool(emscripten::val::global("__pointsDecodePool"))
+  , _pool(emscripten::val::global("__dewDecodePool"))
 {
 }
 
@@ -184,11 +184,11 @@ render::loaded_node_data_t worker_node_data_loader_t::get_data(render::load_hand
   render::loaded_node_data_t out;
   out.point_count = reply["pointCount"].as<uint32_t>();
   out.has_lod_order = reply["hasLodOrder"].as<bool>();
-  out.draw_type = static_cast<points_draw_type_t>(reply["drawType"].as<int>());
-  out.vertex_type = static_cast<points_type_t>(reply["vertexType"].as<int>());
-  out.vertex_components = static_cast<points_components_t>(reply["vertexComponents"].as<int>());
-  out.attribute_type = static_cast<points_type_t>(reply["attributeType"].as<int>());
-  out.attribute_components = static_cast<points_components_t>(reply["attributeComponents"].as<int>());
+  out.draw_type = static_cast<dew_draw_type_t>(reply["drawType"].as<int>());
+  out.vertex_type = static_cast<dew_type_t>(reply["vertexType"].as<int>());
+  out.vertex_components = static_cast<dew_components_t>(reply["vertexComponents"].as<int>());
+  out.attribute_type = static_cast<dew_type_t>(reply["attributeType"].as<int>());
+  out.attribute_components = static_cast<dew_components_t>(reply["attributeComponents"].as<int>());
 
   emscripten::val off = reply["offset"];
   out.offset[0] = off[0].as<double>();
@@ -218,9 +218,9 @@ render::loaded_node_data_t worker_node_data_loader_t::get_data(render::load_hand
     auto rr0 = std::make_shared<read_request_t>();
     uint32_t pts_size = 0;
     rr0->buffer = copy_val_to_wasm(salvage_points, pts_size);
-    rr0->buffer_info = points_converter_buffer_t(rr0->buffer.get(), pts_size);
+    rr0->buffer_info = dew_converter_buffer_t(rr0->buffer.get(), pts_size);
     rr0->_done = true;
-    points_error_t derr{};
+    dew_error_t derr{};
     deserialize_points(rr0->buffer_info, handler->header, handler->data_info[0], derr);
     handler->read_request.push_back(std::move(rr0));
 
@@ -230,7 +230,7 @@ render::loaded_node_data_t worker_node_data_loader_t::get_data(render::load_hand
       auto rr1 = std::make_shared<read_request_t>();
       uint32_t attr_size = 0;
       rr1->buffer = copy_val_to_wasm(salvage_attr, attr_size);
-      rr1->buffer_info = points_converter_buffer_t(rr1->buffer.get(), attr_size);
+      rr1->buffer_info = dew_converter_buffer_t(rr1->buffer.get(), attr_size);
       rr1->_done = true;
       handler->data_info[1] = rr1->buffer_info;
       handler->read_request.push_back(std::move(rr1));
@@ -259,6 +259,6 @@ void worker_node_data_loader_t::cancel(render::load_handle_t handle)
   _pending.erase(it);
 }
 
-} // namespace points::converter
+} // namespace dew::converter
 
 #endif // __EMSCRIPTEN__

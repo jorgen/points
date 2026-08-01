@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2024  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -27,7 +27,7 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct native_load_request_t
@@ -66,4 +66,4 @@ private:
   std::unordered_map<uint64_t, pending_request_t> _pending;
 };
 
-} // namespace points::converter
+} // namespace dew::converter

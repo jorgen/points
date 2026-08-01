@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 #pragma once
 
 // Incremental uploader: ships finalized subtrees ("bands" -- tree SETS, not morton intervals) from
-// the local cache to the destination bucket in the JLP2 layout. Bands derive exclusively from
+// the local cache to the destination bucket in the DEW2 layout. Bands derive exclusively from
 // COMMITTED checkpoints: the tree handler emits a band job after each successful checkpoint commit,
 // listing the newly-final trees by their (immutable) cache blob locations. This handler then, on
 // its own event loop:
@@ -62,7 +62,7 @@
 #include <string>
 #include <vector>
 
-namespace points::converter
+namespace dew::converter
 {
 
 struct band_job_t
@@ -95,14 +95,14 @@ public:
   upload_handler_t(std::unique_ptr<vio::objstore::io_manager_t> io, storage_handler_t &storage, vio::thread_pool_t &pool, const uint8_t (&dataset_uuid)[16]);
   // Create the io_manager from a destination URL + connection string, bound to the uploader's own
   // loop. On failure `error` is set and the handler must not be used.
-  upload_handler_t(const std::string &destination_url, const std::string &connection, storage_handler_t &storage, vio::thread_pool_t &pool, const uint8_t (&dataset_uuid)[16], points_error_t &error);
+  upload_handler_t(const std::string &destination_url, const std::string &connection, storage_handler_t &storage, vio::thread_pool_t &pool, const uint8_t (&dataset_uuid)[16], dew_error_t &error);
   ~upload_handler_t();
 
   // Reconcile with an existing bucket (resume): reads the root manifest + band manifests, rebuilds
   // the dedup map / tree table / next ids. Fresh bucket -> writes an empty root manifest with our
   // uuid. A uuid mismatch is an error (the bucket belongs to a different cache generation).
   // Blocking (bootstrap-time); call before any enqueue_band.
-  [[nodiscard]] points_error_t bootstrap();
+  [[nodiscard]] dew_error_t bootstrap();
 
   // Which trees are already uploaded (from bootstrap), with their band -- the processor seeds the
   // registry's tree_state/tree_band from this (the bucket is authoritative).
@@ -114,7 +114,7 @@ public:
 
   // set BEFORE the first enqueue. on_band_committed fires after the root manifest lands.
   void set_on_band_committed(std::function<void(uint32_t band_id, std::vector<uint32_t> tree_ids, const morton::morton192_t &watermark)> cb) { _on_band_committed = std::move(cb); }
-  void set_on_error(std::function<void(const points_error_t &, bool parked)> cb) { _on_error = std::move(cb); }
+  void set_on_error(std::function<void(const dew_error_t &, bool parked)> cb) { _on_error = std::move(cb); }
 
   upload_stats_t stats() const
   {
@@ -131,14 +131,14 @@ public:
 private:
   void handle_band(band_job_t &&job);
   vio::task_t<void> process_band(band_job_t job);
-  vio::task_t<points_error_t> put_with_retry(std::string name, std::shared_ptr<uint8_t[]> data, uint64_t size);
+  vio::task_t<dew_error_t> put_with_retry(std::string name, std::shared_ptr<uint8_t[]> data, uint64_t size);
   // Bounded window of concurrent data-object PUTs (uploader-loop only; coroutines interleave at
   // co_await points, no threads involved). process_band launches puts through it and must drain
   // it (wait_for_room(1)) before ANY exit path -- the detached puts reference the window.
   struct put_window_t
   {
     int in_flight = 0;
-    points_error_t first_error = {};
+    dew_error_t first_error = {};
     std::coroutine_handle<> waiter = {};
     struct room_awaiter_t
     {
@@ -166,7 +166,7 @@ private:
   // PUT one data object data/{object_id:08x} whose content is exactly `bytes` (copied here).
   vio::detached_task_t put_data_object_windowed(put_window_t *window, uint32_t object_id, std::shared_ptr<uint8_t[]> data, uint64_t size);
   // Read a cache blob's raw bytes, parking the wait on the pool so the uploader loop stays free.
-  vio::task_t<points_error_t> read_cache_blob(storage_location_t location, std::vector<uint8_t> &out);
+  vio::task_t<dew_error_t> read_cache_blob(storage_location_t location, std::vector<uint8_t> &out);
 
   vio::thread_with_event_loop_t _loop_thread;
   vio::event_loop_t &_loop;
@@ -189,7 +189,7 @@ private:
   std::vector<std::pair<uint32_t, uint32_t>> _bootstrap_tree_bands; // (tree_id, band_id)
 
   std::function<void(uint32_t, std::vector<uint32_t>, const morton::morton192_t &)> _on_band_committed;
-  std::function<void(const points_error_t &, bool)> _on_error;
+  std::function<void(const dew_error_t &, bool)> _on_error;
 
   mutable std::mutex _stats_mutex;
   std::condition_variable _drained_cv;
@@ -198,4 +198,4 @@ private:
   uint32_t _bootstrap_band_count = 0; // bands that were already committed when we bootstrapped
 };
 
-} // namespace points::converter
+} // namespace dew::converter

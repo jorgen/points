@@ -1,5 +1,5 @@
 /************************************************************************
-** Points - point cloud management software.
+** dewfall - point cloud management software.
 ** Copyright (C) 2026  Jørgen Lind
 **
 ** This program is free software: you can redistribute it and/or modify
@@ -30,7 +30,7 @@
 #include <windows.h>
 #endif
 
-namespace points::converter
+namespace dew::converter
 {
 
 // Alignment the platform requires for a punch to take effect. Linux fallocate handles arbitrary
@@ -127,4 +127,4 @@ hole_punch_result_t file_hole_punch(int fd, uint64_t offset, uint64_t length)
 
 #endif
 
-} // namespace points::converter
+} // namespace dew::converter
