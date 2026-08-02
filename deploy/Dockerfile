@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# Multi-stage build for dewfall (points.limilind.com): one image serving the built React SPA, which loads
+# Multi-stage build for dewfall (dewfall.limilind.com): one image serving the built React SPA, which loads
 # the WebGL2 point-cloud renderer compiled to WebAssembly. The app is entirely client-side — the point
 # cloud is streamed straight from S3 by the WASM's own fetch client — so the server only serves static
 # files. Build context is the repo root:
@@ -18,9 +18,11 @@ COPY . ./
 # 'emscripten' defaults to dew_data_wasm, so the target is named explicitly.) Fetches the pinned CmDep
 # dependencies (vio, zstd, fmt, glm, ...) during configure.
 RUN emcmake cmake -S . -B /wasm-build -DCMAKE_BUILD_TYPE=Release \
- && cmake --build /wasm-build --target dew_render_wasm \
+ && cmake --build /wasm-build --target dew_render_wasm dew_decode_worker \
  && test -f /wasm-build/src/wasm/dew_render.mjs \
- && test -f /wasm-build/src/wasm/dew_render.wasm
+ && test -f /wasm-build/src/wasm/dew_render.wasm \
+ && test -f /wasm-build/src/wasm/dew_decode_worker.mjs \
+ && test -f /wasm-build/src/wasm/dew_decode_worker.wasm
 
 # ---------- SPA (React + Vite) ----------
 FROM node:20-slim AS web
@@ -28,8 +30,10 @@ WORKDIR /web
 COPY examples/renderer/web/package.json examples/renderer/web/package-lock.json ./
 RUN npm ci
 COPY examples/renderer/web/ ./
-# The renderer bundle from the wasm stage; copy-wasm.mjs (npm prebuild) pulls it from DEW_WASM_DIR.
-COPY --from=wasm /wasm-build/src/wasm/dew_render.mjs /wasm-build/src/wasm/dew_render.wasm /wasm-artifacts/
+# The renderer bundle + decode-worker module from the wasm stage; copy-wasm.mjs (npm prebuild) pulls
+# them from DEW_WASM_DIR. The worker enables off-main-thread decode (the app probes for it via HEAD).
+COPY --from=wasm /wasm-build/src/wasm/dew_render.mjs /wasm-build/src/wasm/dew_render.wasm \
+                 /wasm-build/src/wasm/dew_decode_worker.mjs /wasm-build/src/wasm/dew_decode_worker.wasm /wasm-artifacts/
 ENV DEW_WASM_DIR=/wasm-artifacts
 RUN npm run build   # copy-wasm -> tsc --noEmit && vite build -> /web/dist
 
@@ -44,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Pinned dependency commits — keep in sync with .github/workflows/deploy.yml.
 ARG VIO_REF=2051451f4067e580a09d036323834b69ce44661c
 ARG STRUCTIFY_REF=7ff77ebeb8da5c28d24d88a55abde350e0f0e0e4
-ARG PRISM_REF=95ce77f03a7c3c2ebea966bae39eeffa79a48302
+ARG PRISM_REF=20dbed48e9bf6f63690c2f24f58182f4525ba853
 RUN git clone --filter=blob:none https://github.com/jorgen/vio.git       /deps/vio       && git -C /deps/vio       checkout -q "$VIO_REF" \
  && git clone --filter=blob:none https://github.com/jorgen/structify.git /deps/structify && git -C /deps/structify checkout -q "$STRUCTIFY_REF" \
  && git clone --filter=blob:none https://github.com/jorgen/prism.git     /deps/prism     && git -C /deps/prism     checkout -q "$PRISM_REF"

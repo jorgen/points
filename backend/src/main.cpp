@@ -49,7 +49,7 @@ std::uint16_t parse_port(const std::string &text, std::uint16_t fallback)
 }
 } // namespace
 
-// points.limilind.com is entirely client-side: the WebGL2 renderer runs in the browser as WebAssembly and
+// dewfall.limilind.com is entirely client-side: the WebGL2 renderer runs in the browser as WebAssembly and
 // streams the point cloud straight from S3 via the WASM's own fetch client. So this server only hands out
 // the built SPA (with an SPA fallback) plus a health endpoint for the deploy check. TLS / host routing are
 // terminated by the limilind-edge gateway; this process speaks plain HTTP on DEW_PORT.
@@ -68,7 +68,7 @@ VIO_MAIN(loop, argc, argv)
     port = parse_port(argv[2], port);
   }
 
-  std::println("points server on http://localhost:{} (dist: {})", port, dist);
+  std::println("dewfall server on http://localhost:{} (dist: {})", port, dist);
   co_return co_await prism::run(loop, host, port,
                                 [dist](prism::app_t &app)
                                 {
