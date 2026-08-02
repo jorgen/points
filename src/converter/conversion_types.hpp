@@ -213,10 +213,12 @@ struct tree_config_t
   // LOD nodes carry only the visual attributes (rgb/intensity/classification + position) unless this
   // opts back into duplicating everything. Set via dew_converter_set_lod_all_attributes. (v4 field.)
   uint8_t lod_all_attributes = 0;
-  // LOD sampling: coarsen each node's representative-cell width until reps <= children/4, floored at
-  // the classic lod-9 rule. Guarantees the pyramid converges (~1/3 total overhead) on any density.
-  // 0 disables (classic fixed rule). (v4 field.)
-  uint8_t lod_adaptive_sampling = 1;
+  // EXPERIMENTAL, default OFF: coarsen each LOD node's cell until reps <= children/4. This compounds
+  // bottom-up (each level keeps a quarter of the one below) and drives the top LOD levels to a single
+  // point, which the renderer draws as an empty far field -- the render density system is calibrated to
+  // the fixed lod-9 sampling rate, so coarsening beyond it needs the renderer taught per-node density
+  // first. Left in place (gated) for that future redesign; do NOT enable for rendered datasets. (v4.)
+  uint8_t lod_adaptive_sampling = 0;
   uint8_t reserved_[6] = {};
 };
 // Chunk point-count clamp: 8M points default cap (a decompressed morton blob is count x up to 24B --
