@@ -320,18 +320,27 @@ int cmd_info(int argc, char **argv)
                  total_ratio);
     }
 
-    if (stats.input_file_size_bytes > 0)
+    // Compact size breakdown: leaf (full-resolution) vs LOD pyramid vs total, so the LOD overhead is
+    // easy to read off and compare across conversions.
     {
-      uint64_t total_compressed = 0;
+      uint64_t leaf_compressed = 0, lod_compressed = 0;
       for (uint32_t i = 0; i < stats.attribute_count; i++)
-        total_compressed += stats.attributes[i].compressed_bytes;
+      {
+        leaf_compressed += stats.attributes[i].compressed_bytes - stats.attributes[i].lod_compressed_bytes;
+        lod_compressed += stats.attributes[i].lod_compressed_bytes;
+      }
+      const uint64_t total_compressed = leaf_compressed + lod_compressed;
       if (total_compressed > 0)
       {
-        double source_ratio = double(stats.input_file_size_bytes) / double(total_compressed);
-        fmt::print("\nSource vs DEW:  {} -> {} ({:.2f}x)\n",
-                   format_bytes(stats.input_file_size_bytes),
-                   format_bytes(total_compressed),
-                   source_ratio);
+        fmt::print("\nCompressed size:\n");
+        fmt::print("  Leaf nodes:  {:>12}\n", format_bytes(leaf_compressed));
+        fmt::print("  LOD tree:    {:>12}  ({:.0f}% of total)\n", format_bytes(lod_compressed),
+                   100.0 * double(lod_compressed) / double(total_compressed));
+        fmt::print("  Total:       {:>12}\n", format_bytes(total_compressed));
+        if (stats.input_file_size_bytes > 0)
+          fmt::print("Source vs DEW:  {} -> {} ({:.2f}x)\n",
+                     format_bytes(stats.input_file_size_bytes), format_bytes(total_compressed),
+                     double(stats.input_file_size_bytes) / double(total_compressed));
       }
     }
 
