@@ -47,6 +47,7 @@ public:
   ~object_backend_t() override;
 
   [[nodiscard]] bool exists() const override;
+  [[nodiscard]] std::string exists_error() const override;
   [[nodiscard]] dew_error_t open_for_write(bool truncate) override;
   [[nodiscard]] dew_error_t read_index(index_load_t &out) override;
   [[nodiscard]] dew_error_t restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size) override;
@@ -69,6 +70,7 @@ private:
   std::unique_ptr<vio::objstore::io_manager_t> _io;
   vio::event_loop_t &_event_loop;
   bool _exists = false;
+  std::string _exists_error; // why the probe failed, when it FAILED rather than cleanly found nothing
   bool _dew2 = false;          // layout sniffed from the manifest content in do_read_index
   uint64_t _manifest_size = 0; // from the open-time HEAD; discriminates 128 (legacy) vs 256 (DEW2)
   uint64_t _next_id = 0;

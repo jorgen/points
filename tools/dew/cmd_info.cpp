@@ -6,6 +6,8 @@
 #include <dew/converter/connection_cli.h>
 #include <dew/converter/converter.h>
 
+#include <vio/objstore/create_object_store.h> // apply_connection_override / clear_*_config_override
+
 #include "blob_residency.hpp"
 #include "bucket_format.hpp"
 #include "index_format.hpp"
@@ -149,15 +151,29 @@ using tool::type_name;
 int cmd_info(int argc, char **argv)
 {
   argh::parser cmdl;
+  cmdl.add_params({"-C", "--connection"});
   cmdl.parse(argc, argv);
   const auto &files = cmdl.pos_args(); // [0] is the subcommand name
   if (cmdl[{"-h", "--help"}] || files.size() < 2)
   {
-    fmt::print(stderr, "Usage: dew info <file.dew|dir://...|s3://...> [more datasets ...]\n");
+    fmt::print(stderr, "Usage: dew info [options] <file.dew|dir://...|s3://...> [more datasets ...]\n\n");
+    fmt::print(stderr, "Options:\n");
+    fmt::print(stderr, "  -C, --connection <spec>  connection string for cloud datasets (inline key=value;... /\n");
+    fmt::print(stderr, "                           @file / env:VAR), e.g. 'region=eu-north-1;anonymous=true'\n");
     return cmdl[{"-h", "--help"}] ? 0 : 1;
   }
-  if (!tool::check_options(cmdl, {}, {}))
+  if (!tool::check_options(cmdl, {}, {"C", "connection"}))
     return 1;
+
+  std::string connection;
+  {
+    std::string conn_error;
+    if (!dew::converter::cli::resolve_connection_spec(cmdl({"-C", "--connection"}).str(), connection, conn_error))
+    {
+      fmt::print(stderr, "Connection error: {}\n", conn_error);
+      return 1;
+    }
+  }
 
   int exit_code = 0;
   for (size_t arg = 1; arg < files.size(); arg++)
@@ -178,8 +194,25 @@ int cmd_info(int argc, char **argv)
         print_dir_bucket_state(parsed.path);
     }
 
+    bool connection_applied = false;
+    if (!connection.empty())
+    {
+      auto result = vio::objstore::apply_connection_override(files[arg], connection);
+      if (!result)
+      {
+        fmt::print(stderr, "Error: connection rejected for '{}': {}\n", filename, result.error().msg);
+        exit_code = 1;
+        continue;
+      }
+      connection_applied = true;
+    }
     dew_error_t *err = nullptr;
     converter_handle_t conv(dew_converter_create(filename, len, dew_open_file_semantics_read_only, &err));
+    if (connection_applied)
+    {
+      vio::objstore::clear_s3_config_override();
+      vio::objstore::clear_azure_config_override();
+    }
     if (!conv)
     {
       const char *err_str = "unknown";

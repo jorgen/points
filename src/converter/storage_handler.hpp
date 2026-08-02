@@ -148,6 +148,10 @@ public:
   {
     return _backend && _backend->exists();
   }
+  [[nodiscard]] std::string file_exists_error() const
+  {
+    return _backend ? _backend->exists_error() : std::string();
+  }
   [[nodiscard]] dew_error_t read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
                                    std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size);
   [[nodiscard]] dew_error_t deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size);

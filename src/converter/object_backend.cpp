@@ -121,6 +121,8 @@ vio::task_t<dew_error_t> object_backend_t::probe_exists(bool &out)
 {
   auto r = co_await _io->object_info(k_manifest_name);
   out = r.has_value() && r->exists;
+  if (!r.has_value())
+    _exists_error = r.error().msg; // probe FAILED (auth/region/network) -- not the same as a clean 404
   _manifest_size = out ? r->size : 0; // 128 = legacy superblock, 256 = DEW2 root manifest
   co_return dew_error_t{};
 }
@@ -141,6 +143,11 @@ object_backend_t::~object_backend_t()
 bool object_backend_t::exists() const
 {
   return _exists;
+}
+
+std::string object_backend_t::exists_error() const
+{
+  return _exists_error;
 }
 
 dew_error_t object_backend_t::open_for_write(bool truncate)

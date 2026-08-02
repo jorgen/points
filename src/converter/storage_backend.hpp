@@ -83,6 +83,12 @@ struct storage_backend_t
 
   // ---- bootstrap (constructed on / called from the processor thread) ----
   [[nodiscard]] virtual bool exists() const = 0;
+  // Why exists() is false when the answer is not a clean "absent": a remote existence probe can FAIL
+  // (wrong region, missing credentials, network) rather than return 404. Empty when absent-or-unknown.
+  [[nodiscard]] virtual std::string exists_error() const
+  {
+    return {};
+  }
   [[nodiscard]] virtual dew_error_t open_for_write(bool truncate) = 0;
   [[nodiscard]] virtual dew_error_t read_index(index_load_t &out) = 0;
   // Rebuild the packed allocator from its serialized blob; a no-op for object backends.

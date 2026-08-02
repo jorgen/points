@@ -23,6 +23,8 @@
 
 #include "morton_tree_coordinate_transform.hpp"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <functional>
 
@@ -90,7 +92,11 @@ processor_t::processor_t(std::string url, file_existence_requirement_t existence
   {
     if (!_storage_handler.file_exists())
     {
-      error = {1, "File does not exist"};
+      auto probe_error = _storage_handler.file_exists_error();
+      if (!probe_error.empty())
+        error = {1, fmt::format("Failed to reach the dataset: {} (pass a connection string with region/credentials, e.g. region=eu-north-1;anonymous=true for a public bucket)", probe_error)};
+      else
+        error = {1, "File does not exist"};
       return;
     }
   }

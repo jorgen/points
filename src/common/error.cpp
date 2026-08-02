@@ -36,7 +36,11 @@ void dew_error_set_info(dew_error_t *error, int code, const char *str, size_t st
 }
 void dew_error_get_info(const dew_error_t *error, int *code, const char **str, size_t *str_len)
 {
-  *code = error->code;
-  *str = error->msg.c_str();
-  *str_len = error->msg.size();
+  // Every out-pointer is optional: callers routinely pass null for the fields they don't need.
+  if (code)
+    *code = error->code;
+  if (str)
+    *str = error->msg.c_str();
+  if (str_len)
+    *str_len = error->msg.size();
 }

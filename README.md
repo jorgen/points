@@ -64,6 +64,8 @@ dew convert *.laz -o s3://bucket/set \
     -C 'region=eu-north-1'                 # convert straight into a bucket: finished subtrees
                                            # upload incrementally while the conversion runs
 dew info output.dew                        # compression / performance / cache statistics
+dew info s3://bucket/set \
+    -C 'region=eu-north-1;anonymous=true'  # ...works on cloud datasets too
 dew extract output.dew --summary           # octree overview (--trees, --tree N, --node N:L:I)
 dew extract output.dew xyz -n 10           # peek at attribute data (or extract it with -o)
 dew copy output.dew s3://bucket/set        # copy/migrate a dataset (local <-> bucket)

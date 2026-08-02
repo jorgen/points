@@ -28,7 +28,10 @@
 struct dew_converter_t
 {
   dew_converter_t(const char *url, uint64_t url_size, enum dew_converter_open_file_semantics_t semantics, const dew::converter::destination_config_t &destination = {})
-    : processor(std::string(url, url_size), dew::converter::file_existence_requirement_t::can_exist, error, destination)
+    // read_only demands the dataset EXISTS: with can_exist a failed existence probe (missing file, but
+    // also an unreachable bucket -- wrong region, missing credentials) silently opened an empty
+    // converter that reported "no statistics" instead of the actual error.
+    : processor(std::string(url, url_size), semantics == dew_open_file_semantics_read_only ? dew::converter::file_existence_requirement_t::exist : dew::converter::file_existence_requirement_t::can_exist, error, destination)
   {
     if (semantics == dew_open_file_semantics_read_only)
       return;
