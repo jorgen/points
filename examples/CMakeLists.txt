@@ -7,4 +7,3 @@ function(set_example_properties target)
 endfunction()
 
 add_subdirectory(renderer)
-add_subdirectory(converter)

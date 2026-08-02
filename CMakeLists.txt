@@ -91,7 +91,7 @@ if (DEW_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif ()
 
-# CLI tools (dew_info / dew_extract) depend on the native converter/render libraries.
+# The dew CLI depends on the native converter/render libraries.
 if (NOT EMSCRIPTEN)
     add_subdirectory(tools)
 endif ()

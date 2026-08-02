@@ -1,3 +1,7 @@
+#include "commands.hpp"
+#include "tool_common.hpp"
+
+#include <argh.h>
 #include <fmt/format.h>
 
 #include <vio/event_loop.h>
@@ -11,6 +15,7 @@
 #include <input_header.hpp>
 
 #include <algorithm>
+#include <charconv>
 #include <cstdio>
 #include <cstring>
 #include <optional>
@@ -20,6 +25,11 @@
 
 using namespace dew::converter;
 
+namespace
+{
+
+using tool::parse_u32;
+using tool::type_name;
 
 struct extract_args_t
 {
@@ -42,136 +52,145 @@ struct extract_args_t
   uint32_t node_index = 0;
 };
 
-static const char *type_name(dew_type_t type)
+void print_extract_usage()
 {
-  switch (type)
-  {
-  case dew_type_u8:   return "u8";
-  case dew_type_i8:   return "i8";
-  case dew_type_u16:  return "u16";
-  case dew_type_i16:  return "i16";
-  case dew_type_u32:  return "u32";
-  case dew_type_i32:  return "i32";
-  case dew_type_m32:  return "m32";
-  case dew_type_r32:  return "r32";
-  case dew_type_u64:  return "u64";
-  case dew_type_i64:  return "i64";
-  case dew_type_m64:  return "m64";
-  case dew_type_r64:  return "r64";
-  case dew_type_m128: return "m128";
-  case dew_type_m192: return "m192";
-  default:        return "?";
-  }
+  fmt::print(stderr, "Usage: dew extract <file.dew> [<attribute>] [options]\n\n");
+  fmt::print(stderr, "Tree introspection:\n");
+  fmt::print(stderr, "  --summary        High-level overview: root tree ID, tree config, tree count\n");
+  fmt::print(stderr, "  --trees          List all trees with per-level node counts and sub-tree refs\n");
+  fmt::print(stderr, "  --tree N         Full dump of tree N: every node, subsets, storage map\n");
+  fmt::print(stderr, "  --node N:L:I     Single node detail (tree N, level L, index I)\n\n");
+  fmt::print(stderr, "Attribute extraction:\n");
+  fmt::print(stderr, "  --index N        Select buffer at index N (default: 0 for hex mode)\n");
+  fmt::print(stderr, "  --range A-B      Select buffers A through B (inclusive)\n");
+  fmt::print(stderr, "  --random K       Select K random buffers\n");
+  fmt::print(stderr, "  --seed S         Seed for random selection\n");
+  fmt::print(stderr, "  --offset N       Start printing from element N (default: 0)\n");
+  fmt::print(stderr, "  --count N / -n N Number of elements to print (default: 256)\n");
+  fmt::print(stderr, "  -o <path>        Write binary output to file (without: hex dump to stdout)\n");
 }
 
-static bool parse_args(int argc, char **argv, extract_args_t &args)
+bool parse_args(int argc, char **argv, extract_args_t &args, int &exit_code)
 {
-  if (argc < 2)
+  argh::parser cmdl;
+  cmdl.add_params({"--index", "--range", "--random", "--seed", "-o", "--offset", "--count", "-n", "--tree", "--node"});
+  cmdl.parse(argc, argv);
+
+  if (cmdl[{"-h", "--help"}] || cmdl.pos_args().size() < 2)
   {
-    fmt::print(stderr, "Usage: dew_extract <file.dew> [<attribute>] [options]\n\n");
-    fmt::print(stderr, "Tree introspection:\n");
-    fmt::print(stderr, "  --summary        High-level overview: root tree ID, tree config, tree count\n");
-    fmt::print(stderr, "  --trees          List all trees with per-level node counts and sub-tree refs\n");
-    fmt::print(stderr, "  --tree N         Full dump of tree N: every node, subsets, storage map\n");
-    fmt::print(stderr, "  --node N:L:I     Single node detail (tree N, level L, index I)\n\n");
-    fmt::print(stderr, "Attribute extraction:\n");
-    fmt::print(stderr, "  --index N        Select buffer at index N (default: 0 for hex mode)\n");
-    fmt::print(stderr, "  --range A-B      Select buffers A through B (inclusive)\n");
-    fmt::print(stderr, "  --random K       Select K random buffers\n");
-    fmt::print(stderr, "  --seed S         Seed for random selection\n");
-    fmt::print(stderr, "  --offset N       Start printing from element N (default: 0)\n");
-    fmt::print(stderr, "  --count N / -n N Number of elements to print (default: 256)\n");
-    fmt::print(stderr, "  -o <path>        Write binary output to file (without: hex dump to stdout)\n");
+    print_extract_usage();
+    exit_code = cmdl[{"-h", "--help"}] ? 0 : 1;
     return false;
   }
 
-  args.input_path = argv[1];
+  if (!tool::check_options(cmdl, {"summary", "trees"}, {"index", "range", "random", "seed", "o", "offset", "count", "n", "tree", "node"}))
+    return false;
 
-  int i = 2;
-  if (i < argc && argv[i][0] != '-')
+  if (cmdl.pos_args().size() > 3)
   {
-    args.attribute_name = argv[i];
-    i++;
+    fmt::print(stderr, "Error: unexpected argument '{}'\n", cmdl[3]);
+    return false;
   }
 
-  while (i < argc)
+  // The selection modes are mutually exclusive. (The old standalone tool silently let the last
+  // command-line option win; an explicit error beats order-dependent surprises.)
+  const int mode_count = int(bool(cmdl("--index"))) + int(bool(cmdl("--range"))) + int(bool(cmdl("--random"))) +
+                         int(cmdl["--summary"]) + int(cmdl["--trees"]) + int(bool(cmdl("--tree"))) + int(bool(cmdl("--node")));
+  if (mode_count > 1)
   {
-    std::string arg = argv[i];
-    if (arg == "--index" && i + 1 < argc)
+    fmt::print(stderr, "Error: pass only one of --index / --range / --random / --summary / --trees / --tree / --node\n");
+    return false;
+  }
+
+  args.input_path = cmdl[1];
+  if (cmdl.pos_args().size() > 2)
+    args.attribute_name = cmdl[2];
+
+  if (cmdl("--index"))
+  {
+    args.mode = extract_args_t::mode_t::index;
+    if (!parse_u32(cmdl("--index").str(), args.index))
     {
-      args.mode = extract_args_t::mode_t::index;
-      args.index = uint32_t(std::stoul(argv[++i]));
-    }
-    else if (arg == "--range" && i + 1 < argc)
-    {
-      args.mode = extract_args_t::mode_t::range;
-      std::string range_str = argv[++i];
-      auto dash = range_str.find('-');
-      if (dash == std::string::npos)
-      {
-        fmt::print(stderr, "Error: --range requires A-B format\n");
-        return false;
-      }
-      args.range_begin = uint32_t(std::stoul(range_str.substr(0, dash)));
-      args.range_end = uint32_t(std::stoul(range_str.substr(dash + 1)));
-    }
-    else if (arg == "--random" && i + 1 < argc)
-    {
-      args.mode = extract_args_t::mode_t::random;
-      args.random_count = uint32_t(std::stoul(argv[++i]));
-    }
-    else if (arg == "--seed" && i + 1 < argc)
-    {
-      args.seed = uint32_t(std::stoul(argv[++i]));
-      args.has_seed = true;
-    }
-    else if (arg == "-o" && i + 1 < argc)
-    {
-      args.output_path = argv[++i];
-      args.write_binary = true;
-    }
-    else if (arg == "--offset" && i + 1 < argc)
-    {
-      args.print_offset = uint32_t(std::stoul(argv[++i]));
-    }
-    else if ((arg == "--count" || arg == "-n") && i + 1 < argc)
-    {
-      args.print_count = uint32_t(std::stoul(argv[++i]));
-    }
-    else if (arg == "--summary")
-    {
-      args.mode = extract_args_t::mode_t::summary;
-    }
-    else if (arg == "--trees")
-    {
-      args.mode = extract_args_t::mode_t::trees;
-    }
-    else if (arg == "--tree" && i + 1 < argc)
-    {
-      args.mode = extract_args_t::mode_t::tree_detail;
-      args.tree_id = uint32_t(std::stoul(argv[++i]));
-    }
-    else if (arg == "--node" && i + 1 < argc)
-    {
-      args.mode = extract_args_t::mode_t::node_detail;
-      std::string node_str = argv[++i];
-      auto first_colon = node_str.find(':');
-      auto second_colon = first_colon != std::string::npos ? node_str.find(':', first_colon + 1) : std::string::npos;
-      if (first_colon == std::string::npos || second_colon == std::string::npos)
-      {
-        fmt::print(stderr, "Error: --node requires N:L:I format (e.g. 0:1:2)\n");
-        return false;
-      }
-      args.node_tree = uint32_t(std::stoul(node_str.substr(0, first_colon)));
-      args.node_level = uint32_t(std::stoul(node_str.substr(first_colon + 1, second_colon - first_colon - 1)));
-      args.node_index = uint32_t(std::stoul(node_str.substr(second_colon + 1)));
-    }
-    else
-    {
-      fmt::print(stderr, "Error: unknown option '{}'\n", arg);
+      fmt::print(stderr, "Error: --index requires a non-negative integer\n");
       return false;
     }
-    i++;
+  }
+  if (cmdl("--range"))
+  {
+    args.mode = extract_args_t::mode_t::range;
+    std::string range_str = cmdl("--range").str();
+    auto dash = range_str.find('-');
+    if (dash == std::string::npos)
+    {
+      fmt::print(stderr, "Error: --range requires A-B format\n");
+      return false;
+    }
+    if (!parse_u32(range_str.substr(0, dash), args.range_begin) || !parse_u32(range_str.substr(dash + 1), args.range_end))
+    {
+      fmt::print(stderr, "Error: --range requires numeric A-B\n");
+      return false;
+    }
+  }
+  if (cmdl("--random"))
+  {
+    args.mode = extract_args_t::mode_t::random;
+    if (!parse_u32(cmdl("--random").str(), args.random_count))
+    {
+      fmt::print(stderr, "Error: --random requires a non-negative integer\n");
+      return false;
+    }
+  }
+  if (cmdl("--seed"))
+  {
+    if (!parse_u32(cmdl("--seed").str(), args.seed))
+    {
+      fmt::print(stderr, "Error: --seed requires a non-negative integer\n");
+      return false;
+    }
+    args.has_seed = true;
+  }
+  if (cmdl("-o"))
+  {
+    args.output_path = cmdl("-o").str();
+    args.write_binary = true;
+  }
+  if (cmdl("--offset") && !parse_u32(cmdl("--offset").str(), args.print_offset))
+  {
+    fmt::print(stderr, "Error: --offset requires a non-negative integer\n");
+    return false;
+  }
+  if (cmdl({"-n", "--count"}) && !parse_u32(cmdl({"-n", "--count"}).str(), args.print_count))
+  {
+    fmt::print(stderr, "Error: --count requires a non-negative integer\n");
+    return false;
+  }
+  if (cmdl["--summary"])
+    args.mode = extract_args_t::mode_t::summary;
+  if (cmdl["--trees"])
+    args.mode = extract_args_t::mode_t::trees;
+  if (cmdl("--tree"))
+  {
+    args.mode = extract_args_t::mode_t::tree_detail;
+    if (!parse_u32(cmdl("--tree").str(), args.tree_id))
+    {
+      fmt::print(stderr, "Error: --tree requires a non-negative integer\n");
+      return false;
+    }
+  }
+  if (cmdl("--node"))
+  {
+    args.mode = extract_args_t::mode_t::node_detail;
+    std::string node_str = cmdl("--node").str();
+    auto first_colon = node_str.find(':');
+    auto second_colon = first_colon != std::string::npos ? node_str.find(':', first_colon + 1) : std::string::npos;
+    if (first_colon == std::string::npos || second_colon == std::string::npos ||
+        !parse_u32(node_str.substr(0, first_colon), args.node_tree) ||
+        !parse_u32(node_str.substr(first_colon + 1, second_colon - first_colon - 1), args.node_level) ||
+        !parse_u32(node_str.substr(second_colon + 1), args.node_index))
+    {
+      fmt::print(stderr, "Error: --node requires N:L:I format (e.g. 0:1:2)\n");
+      return false;
+    }
   }
 
   // When attribute is given but no mode specified, default to index 0
@@ -184,7 +203,7 @@ static bool parse_args(int argc, char **argv, extract_args_t &args)
   return true;
 }
 
-static void print_hex_values(const uint8_t *data, uint32_t data_size,
+void print_hex_values(const uint8_t *data, uint32_t data_size,
                              point_format_t format, uint32_t offset, uint32_t count,
                              uint32_t buffer_index)
 {
@@ -234,7 +253,7 @@ static void print_hex_values(const uint8_t *data, uint32_t data_size,
   }
 }
 
-static std::string morton_to_hex(const morton::morton192_t &m)
+std::string morton_to_hex(const morton::morton192_t &m)
 {
   if (m.data[2])
     return fmt::format("{:x}-{:016x}-{:016x}", m.data[2], m.data[1], m.data[0]);
@@ -243,7 +262,7 @@ static std::string morton_to_hex(const morton::morton192_t &m)
   return fmt::format("{:x}", m.data[0]);
 }
 
-static int count_children(uint8_t bitmask)
+int count_children(uint8_t bitmask)
 {
   int count = 0;
   for (uint8_t v = bitmask; v; v >>= 1)
@@ -251,7 +270,7 @@ static int count_children(uint8_t bitmask)
   return count;
 }
 
-static vio::task_t<bool> load_tree(vio::event_loop_t &event_loop, vio::file_t &file,
+vio::task_t<bool> load_tree(vio::event_loop_t &event_loop, vio::file_t &file,
                                     const storage_location_t &loc, tree_t &tree)
 {
   if (loc.size == 0)
@@ -270,7 +289,7 @@ static vio::task_t<bool> load_tree(vio::event_loop_t &event_loop, vio::file_t &f
   co_return tree_deserialize(st, tree, err);
 }
 
-static void print_tree_registry_header(const tree_registry_t &reg)
+void print_tree_registry_header(const tree_registry_t &reg)
 {
   fmt::print("Tree registry: root={}, trees={}, node_limit={}, scale={}, offset=[{}, {}, {}]\n",
              reg.root.data, reg.locations.size(), reg.node_limit,
@@ -278,7 +297,7 @@ static void print_tree_registry_header(const tree_registry_t &reg)
              reg.tree_config.offset[0], reg.tree_config.offset[1], reg.tree_config.offset[2]);
 }
 
-static void print_tree_summary(uint32_t tree_idx, const storage_location_t &loc, const tree_t &tree)
+void print_tree_summary(uint32_t tree_idx, const storage_location_t &loc, const tree_t &tree)
 {
   fmt::print("Tree {}: magnitude={}, morton=[{}]-[{}], storage: offset={} size={}\n",
              tree_idx, int(tree.magnitude),
@@ -312,7 +331,7 @@ static void print_tree_summary(uint32_t tree_idx, const storage_location_t &loc,
   }
 }
 
-static void print_tree_detail(uint32_t tree_idx, const tree_t &tree)
+void print_tree_detail(uint32_t tree_idx, const tree_t &tree)
 {
   fmt::print("Tree {}: magnitude={}, morton=[{}]-[{}]\n",
              tree_idx, int(tree.magnitude),
@@ -382,7 +401,7 @@ static void print_tree_detail(uint32_t tree_idx, const tree_t &tree)
   }
 }
 
-static void print_node_detail(uint32_t tree_idx, const tree_t &tree, uint32_t level, uint32_t index)
+void print_node_detail(uint32_t tree_idx, const tree_t &tree, uint32_t level, uint32_t index)
 {
   auto lod = morton::morton_tree_level_to_lod(int(tree.magnitude), int(level));
   fmt::print("Tree {}, Level {} (lod {}), Node [{}]:\n", tree_idx, level, lod, index);
@@ -420,7 +439,7 @@ static void print_node_detail(uint32_t tree_idx, const tree_t &tree, uint32_t le
   }
 }
 
-static vio::task_t<void> run_extract(vio::event_loop_t &event_loop, extract_args_t args, int &exit_code)
+vio::task_t<void> run_extract(vio::event_loop_t &event_loop, extract_args_t args, int &exit_code)
 {
   // Open DEW file
   auto opened_file = vio::open_file(event_loop, args.input_path, vio::file_open_flag_t::rdonly, 0);
@@ -445,8 +464,10 @@ static vio::task_t<void> run_extract(vio::event_loop_t &event_loop, extract_args
     co_return;
   }
 
-  // Check magic
-  if (index_buf[0] != 'J' || index_buf[1] != 'L' || index_buf[2] != 'P' || index_buf[3] != 0)
+  // Check magic: 'DEW\0' current, 'JLP\0' pre-rename (both remain readable).
+  const bool magic_dew = index_buf[0] == 'D' && index_buf[1] == 'E' && index_buf[2] == 'W' && index_buf[3] == 0;
+  const bool magic_jlp = index_buf[0] == 'J' && index_buf[1] == 'L' && index_buf[2] == 'P' && index_buf[3] == 0;
+  if (!magic_dew && !magic_jlp)
   {
     fmt::print(stderr, "Error: '{}' is not a DEW file\n", args.input_path);
     exit_code = 1;
@@ -893,11 +914,14 @@ static vio::task_t<void> run_extract(vio::event_loop_t &event_loop, extract_args
   co_return;
 }
 
-int main(int argc, char **argv)
+} // namespace
+
+int cmd_extract(int argc, char **argv)
 {
   extract_args_t args;
-  if (!parse_args(argc, argv, args))
-    return 1;
+  int parse_exit = 1;
+  if (!parse_args(argc, argv, args, parse_exit))
+    return parse_exit;
 
   int exit_code = 0;
   vio::event_loop_t event_loop;

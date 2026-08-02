@@ -32,7 +32,7 @@ npm run dev      # http://localhost:5173  (copies the wasm artifacts in first)
 
 Enter the **Dataset URL** and a **connection string**, then click **Connect**. The URL is the dataset
 location (`scheme://bucket/prefix`); the connection string is every *other* parameter, in the exact same
-`key=value;…` grammar as the CLI tools (`converter --connection`, `dew_copy -s/-d`). For a local minio
+`key=value;…` grammar as the CLI tools (`dew convert --connection`, `dew copy -s/-d`). For a local minio
 dataset:
 
 - Dataset URL `s3://pointstest/synth`

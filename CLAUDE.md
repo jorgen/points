@@ -21,10 +21,9 @@ Key targets:
 - `dew_common` — shared types library
 - `private_interface_unit_tests` — internal unit tests
 - `public_interface_unit_tests` — public API unit tests
-- `dew_info` — dataset compression stats tool
-- `dew_extract` — attribute buffer extraction and tree inspection tool
-- `dew_copy` — dataset copy/migration tool (local <-> bucket; also migrates pre-rename magics)
-- `converter_example` — converter usage example
+- `dew` — the dewfall CLI: `dew convert` (full LAS/LAZ converter), `dew info` (dataset stats),
+  `dew extract` (octree inspection + attribute extraction), `dew copy` (dataset copy/migration,
+  also migrates pre-rename magics), `dew laz` (LAS/LAZ header/VLR/point introspection)
 - `renderer_example` — OpenGL renderer example
 - `dew_render_wasm` / `dew_data_wasm` / `dew_decode_worker` — Emscripten modules (src/wasm)
 
@@ -73,14 +72,10 @@ src/
     dew/common/          Public C headers (error.h, format.h)
   wasm/                Emscripten modules (renderer, data reader, decode worker)
 examples/
-  converter/           Converter usage example (converter_example.cpp)
   renderer/            OpenGL renderer example (gl_renderer.cpp, renderer_example.cpp)
     web/                 React + WebGL2 front end (Vite; dewfall.limilind.com)
-  dew_info/            Minimal info example
 tools/
-  dew_info/            CLI: dataset compression stats
-  dew_extract/         CLI: attribute buffer extraction and tree introspection
-  dew_copy/            CLI: dataset copy/migration
+  dew/                 The dew CLI: main.cpp dispatch + cmd_{convert,info,extract,copy,laz}.cpp
 tests/
   private/             Internal unit tests (doctest)
   public/              Public API tests
@@ -239,7 +234,7 @@ collapse as reordered values but loses chunk attribution.
 **Magic compatibility (pre-rename datasets):** new writes use `DEW2` (bucket root manifest) and
 `DEW\0` (128B superblock); readers ALSO accept the pre-rename `JLP2` / `JLP\0` byte values, so
 datasets and caches from before the rename keep opening. The local superblock self-migrates on
-the first checkpoint; `dew_copy` migrates a bucket dataset.
+the first checkpoint; `dew copy` migrates a bucket dataset.
 
 Preprocessing flags (bitfield):
 - `0x01` delta encoded, `0x02` constant bands, `0x04` offset subtracted, `0x08` sort permutation
@@ -270,14 +265,17 @@ Managed via cmake-dep (CMake/3rdPartyPackages.cmake):
 | stbimage | b42009b | Image loading |
 | cmakerc | 952ff | CMake resource compiler |
 
-## Debugging .dew Files with dew_extract
+## Debugging .dew Files with dew extract
 
-`dew_extract` is the primary tool for inspecting datasets without a renderer.
+`dew extract` is the primary tool for inspecting datasets without a renderer.
 
 ```bash
 DEW=path/to/file.dew
-EXE=cmake-build-debug/tools/dew_extract/dew_extract
+EXE="cmake-build-debug/tools/dew/dew extract"
 ```
+
+For LAS/LAZ inputs, `dew laz <file>` prints the header (add `--vlrs` for records,
+`--points --offset N -n M` for a point subrange, `--csv` for machine-readable output).
 
 ### List available attributes
 ```bash

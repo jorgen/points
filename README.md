@@ -47,16 +47,37 @@ cmake --build cmake-build-release
 | `dew_converter` | converter library |
 | `dew_render` | rendering library |
 | `dew_common` | shared types |
-| `converter_example` / `renderer_example` | CLI converter + SDL/OpenGL viewer |
-| `dew_info` / `dew_extract` / `dew_copy` | dataset stats, inspection, and copy/migration tools |
+| `dew` | the dewfall CLI — convert, inspect, copy, LAS/LAZ introspection (see below) |
+| `renderer_example` | SDL/OpenGL viewer |
 | `dew_render_wasm` / `dew_decode_worker` | browser renderer + decode-worker modules (Emscripten) |
 
 Tests are doctest (`private_interface_unit_tests`, `public_interface_unit_tests`), on by default via
 `DEW_BUILD_TESTS`.
 
-## Quick start
+## The `dew` CLI
 
-Convert a LAZ file:
+One binary, five subcommands — this is the full-fledged converter and dataset toolbox:
+
+```bash
+dew convert input.laz -o output.dew        # convert (multiple inputs / wildcards work too)
+dew convert *.laz -o s3://bucket/set \
+    -C 'region=eu-north-1'                 # convert straight into a bucket: finished subtrees
+                                           # upload incrementally while the conversion runs
+dew info output.dew                        # compression / performance / cache statistics
+dew extract output.dew --summary           # octree overview (--trees, --tree N, --node N:L:I)
+dew extract output.dew xyz -n 10           # peek at attribute data (or extract it with -o)
+dew copy output.dew s3://bucket/set        # copy/migrate a dataset (local <-> bucket)
+dew laz input.laz                          # LAS/LAZ introspection: header + VLRs (--vlrs)
+dew laz input.laz --points --offset 100000 -n 5   # ...or print/extract a point subrange (--csv)
+```
+
+`dew convert` knobs: `-c/--compression` (zstd default), `-n/--node-points` (blob-size lever),
+`--cache`/`--cache-max-bytes` (local cache for a cloud destination). Run `dew help <command>`
+for everything else.
+
+## Driving the converter from code
+
+The CLI is a thin client of the pure-C API — embed the same pipeline in your own tooling:
 
 ```c
 struct dew_error_t *error = NULL;
@@ -68,7 +89,10 @@ dew_converter_wait_idle(converter, &error);
 dew_converter_destroy(converter);
 ```
 
-Convert straight into a bucket (finished subtrees upload while the conversion runs):
+LAS/LAZ input is built in; arbitrary sources plug in through
+`dew_converter_set_file_converter_callbacks` (pre_init / init / convert_data callbacks that
+stream your format's points into the provided buffers). Converting straight into a bucket is
+one call — finished subtrees upload while the conversion runs:
 
 ```c
 struct dew_converter_t *converter = dew_converter_create_with_destination(
@@ -92,15 +116,6 @@ struct dew_frame_t frame = dew_renderer_frame(renderer, camera);
 // dispatch frame's draw groups by draw_type
 ```
 
-Inspect a dataset:
-
-```bash
-dew_info output.dew                  # compression stats
-dew_extract output.dew --summary     # tree overview
-dew_extract output.dew xyz -n 10     # peek at attribute data
-dew_copy output.dew s3://bucket/set  # copy/migrate a dataset (local <-> bucket)
-```
-
 ## Architecture
 
 ```
@@ -117,7 +132,7 @@ closest-first, decodes them off the main thread, and uploads under byte budgets 
 `src/converter/data_source_converter.*` and `src/converter/render_pipeline.*`.
 
 Datasets written before the rename (`JLP` magics) still open: readers accept both the old and new
-magic bytes, and `dew_copy` rewrites a dataset to the current format.
+magic bytes, and `dew copy` rewrites a dataset to the current format.
 
 ## Roadmap
 

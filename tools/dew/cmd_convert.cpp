@@ -1,3 +1,7 @@
+#include "commands.hpp"
+#include "tool_common.hpp"
+
+#include <argh.h>
 #include <fmt/printf.h>
 #include <fmt/format.h>
 #include <string>
@@ -9,6 +13,14 @@
 
 #include <dew/converter/connection_cli.h>
 #include <dew/converter/converter.h>
+
+namespace
+{
+
+using tool::format_number;
+using tool::get_error_string;
+using tool::method_name;
+using tool::type_name;
 
 struct callback_data_t
 {
@@ -42,15 +54,6 @@ void converter_warning_callback_t(void *user_data, const char *message)
 {
   (void)user_data;
   fmt::print("Warning: {}\n", message);
-}
-
-static std::string get_error_string(const dew_error_t *error)
-{
-  int code;
-  const char *str;
-  size_t str_len;
-  dew_error_get_info(error, &code, &str, &str_len);
-  return {str, str_len};
 }
 
 void converter_error_callback_t(void *user_data, const struct dew_error_t *error)
@@ -88,7 +91,7 @@ std::unique_ptr<T, Deleter> create_unique_ptr(T *t, Deleter d)
   return std::unique_ptr<T, Deleter>(t, d);
 }
 
-static dew_converter_compression_t parse_compression(const char *str)
+dew_converter_compression_t parse_compression(const char *str)
 {
   if (std::strcmp(str, "none") == 0)
     return dew_converter_compression_none;
@@ -100,61 +103,12 @@ static dew_converter_compression_t parse_compression(const char *str)
   return dew_converter_compression_zstd;
 }
 
-static const char *type_name(dew_type_t type)
-{
-  switch (type)
-  {
-  case dew_type_u8: return "u8";
-  case dew_type_i8: return "i8";
-  case dew_type_u16: return "u16";
-  case dew_type_i16: return "i16";
-  case dew_type_u32: return "u32";
-  case dew_type_i32: return "i32";
-  case dew_type_m32: return "m32";
-  case dew_type_r32: return "r32";
-  case dew_type_u64: return "u64";
-  case dew_type_i64: return "i64";
-  case dew_type_m64: return "m64";
-  case dew_type_r64: return "r64";
-  case dew_type_m128: return "m128";
-  case dew_type_m192: return "m192";
-  default: return "?";
-  }
-}
-
-static std::string format_str(dew_type_t type, dew_components_t components)
+std::string format_str(dew_type_t type, dew_components_t components)
 {
   return fmt::format("{}x{}", type_name(type), static_cast<int>(components));
 }
 
-static const char *method_name(uint32_t method)
-{
-  switch (method)
-  {
-  case 0: return "none";
-  case 1: return "blosc2";
-  case 2: return "zstd";
-  case 3: return "huff0";
-  default: return "unknown";
-  }
-}
-
-static std::string format_number(uint64_t n)
-{
-  auto s = std::to_string(n);
-  std::string result;
-  int count = 0;
-  for (int i = static_cast<int>(s.size()) - 1; i >= 0; --i)
-  {
-    if (count > 0 && count % 3 == 0)
-      result.insert(result.begin(), ',');
-    result.insert(result.begin(), s[static_cast<size_t>(i)]);
-    count++;
-  }
-  return result;
-}
-
-static void print_compression_stats(const dew_converter_stats_t &stats)
+void print_compression_stats(const dew_converter_stats_t &stats)
 {
   fmt::print("\nCompression Statistics:\n");
   fmt::print("  Input files:    {}\n", format_number(stats.input_file_count));
@@ -190,7 +144,7 @@ static void print_compression_stats(const dew_converter_stats_t &stats)
              format_number(total_compressed), total_ratio);
 }
 
-static void print_perf_stats(const dew_converter_perf_stats_t &ps)
+void print_perf_stats(const dew_converter_perf_stats_t &ps)
 {
   double overall = ps.total_time_seconds > 0 ? ps.total_bytes_written_mb / ps.total_time_seconds : 0;
 
@@ -255,80 +209,70 @@ uint64_t parse_byte_size(const char *str)
   return value;
 }
 
-bool parse_arguments(int argc, char *argv[], args_t &args)
+void print_convert_usage()
 {
-  for (int i = 1; i < argc; ++i)
+  fmt::print(stderr, "Usage: dew convert [options] <input.las|laz> [more inputs ...]\n\n");
+  fmt::print(stderr, "Convert point cloud input into a .dew dataset -- a local packed file or, with a cloud\n");
+  fmt::print(stderr, "URL, uploaded incrementally while the conversion runs.\n\n");
+  fmt::print(stderr, "Options:\n");
+  fmt::print(stderr, "  -o, --out <url>          output: file path, dir://, s3://, az:// (default: out.dew)\n");
+  fmt::print(stderr, "  -C, --connection <spec>  connection string for a cloud output (inline / @file / env:VAR)\n");
+  fmt::print(stderr, "  -c, --compression <m>    none | zstd | huff0 (default: zstd)\n");
+  fmt::print(stderr, "  -n, --node-points <N>    points per octree node (the blob-size lever)\n");
+  fmt::print(stderr, "      --cache <path>       explicit local cache file for a cloud output\n");
+  fmt::print(stderr, "      --cache-max-bytes <N[K|M|G]>  resident cap for the cache file\n");
+  fmt::print(stderr, "  -i, --inspect            print a dataset's stats instead of converting\n");
+}
+
+bool parse_arguments(int argc, char **argv, args_t &args, int &exit_code)
+{
+  argh::parser cmdl;
+  cmdl.add_params({"-o", "--out", "-u", "--url", "-C", "--connection", "-c", "--compression", "-n", "--node-points", "--cache", "--cache-max-bytes"});
+  cmdl.parse(argc, argv);
+
+  if (cmdl[{"-h", "--help"}])
   {
-    auto need_value = [&](const char *flag) -> const char * {
-      if (i + 1 >= argc)
-      {
-        fmt::print(stderr, "missing value for {}\n", flag);
-        return nullptr;
-      }
-      return argv[++i];
-    };
-    if (std::strcmp(argv[i], "-o") == 0 || std::strcmp(argv[i], "--out") == 0 || std::strcmp(argv[i], "-u") == 0 || std::strcmp(argv[i], "--url") == 0)
+    print_convert_usage();
+    exit_code = 0; // help is not an error
+    return false;
+  }
+  if (!tool::check_options(cmdl, {"i", "inspect"}, {"o", "out", "u", "url", "C", "connection", "c", "compression", "n", "node-points", "cache", "cache-max-bytes"}))
+    return false;
+
+  for (size_t i = 1; i < cmdl.pos_args().size(); i++)
+    args.input.emplace_back(cmdl[i]);
+
+  if (auto v = cmdl({"-o", "--out", "-u", "--url"}))
+    args.output = v.str();
+  args.connection = cmdl({"-C", "--connection"}).str();
+  if (auto v = cmdl({"-c", "--compression"}))
+    args.compression = parse_compression(v.str().c_str());
+  if (auto v = cmdl({"-n", "--node-points"}))
+  {
+    if (!tool::parse_u32(v.str(), args.node_point_limit))
     {
-      const char *value = need_value(argv[i]);
-      if (!value)
-        return false;
-      args.output = value;
-    }
-    else if (std::strcmp(argv[i], "-C") == 0 || std::strcmp(argv[i], "--connection") == 0)
-    {
-      const char *value = need_value(argv[i]);
-      if (!value)
-        return false;
-      args.connection = value;
-    }
-    else if (std::strcmp(argv[i], "-c") == 0 || std::strcmp(argv[i], "--compression") == 0)
-    {
-      const char *value = need_value(argv[i]);
-      if (!value)
-        return false;
-      args.compression = parse_compression(value);
-    }
-    else if (std::strcmp(argv[i], "-n") == 0 || std::strcmp(argv[i], "--node-points") == 0)
-    {
-      const char *value = need_value(argv[i]);
-      if (!value)
-        return false;
-      args.node_point_limit = static_cast<uint32_t>(std::strtoul(value, nullptr, 10));
-    }
-    else if (std::strcmp(argv[i], "--cache") == 0)
-    {
-      const char *value = need_value(argv[i]);
-      if (!value)
-        return false;
-      args.cache = value;
-    }
-    else if (std::strcmp(argv[i], "--cache-max-bytes") == 0)
-    {
-      const char *value = need_value(argv[i]);
-      if (!value)
-        return false;
-      args.cache_max_bytes = parse_byte_size(value);
-    }
-    else if (std::strcmp(argv[i], "-i") == 0 || std::strcmp(argv[i], "--inspect") == 0)
-    {
-      args.inspect = true;
-    }
-    else
-    {
-      args.input.emplace_back(argv[i]);
+      fmt::print(stderr, "Error: --node-points requires a non-negative integer\n");
+      return false;
     }
   }
+  args.cache = cmdl("--cache").str();
+  if (auto v = cmdl("--cache-max-bytes"))
+    args.cache_max_bytes = parse_byte_size(v.str().c_str());
+  args.inspect = cmdl[{"-i", "--inspect"}];
 
   return true;
 }
 
-int main(int argc, char **argv)
+} // namespace
+
+int cmd_convert(int argc, char **argv)
 {
   args_t args;
   args.output = "out.dew";
   args.compression = dew_converter_compression_zstd;
-  if (!parse_arguments(argc, argv, args))
-    return 1;
+  int parse_exit = 1;
+  if (!parse_arguments(argc, argv, args, parse_exit))
+    return parse_exit;
 
   if (args.inspect)
   {
@@ -360,7 +304,7 @@ int main(int argc, char **argv)
 
   if (args.input.empty())
   {
-    fmt::print("No input files specified\n");
+    print_convert_usage();
     return 1;
   }
 

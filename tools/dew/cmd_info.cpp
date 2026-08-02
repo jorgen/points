@@ -1,3 +1,7 @@
+#include "commands.hpp"
+#include "tool_common.hpp"
+
+#include <argh.h>
 #include <fmt/format.h>
 #include <dew/converter/connection_cli.h>
 #include <dew/converter/converter.h>
@@ -15,9 +19,12 @@
 #include <vector>
 
 
+namespace
+{
+
 // ---- cache / destination state sections (private-format introspection) --------------------------
 
-static std::string uuid_hex(const uint8_t (&uuid)[16])
+std::string uuid_hex(const uint8_t (&uuid)[16])
 {
   std::string out;
   for (auto b : uuid)
@@ -27,7 +34,7 @@ static std::string uuid_hex(const uint8_t (&uuid)[16])
 
 // Local packed cache: superblock extras (dataset uuid) + blob residency table. Classic files carry
 // neither and print nothing.
-static void print_local_cache_state(const std::string &path)
+void print_local_cache_state(const std::string &path)
 {
   namespace pc = dew::converter;
   FILE *f = fopen(path.c_str(), "rb");
@@ -108,7 +115,7 @@ static void print_local_cache_state(const std::string &path)
 
 // dir:// DEW2 bucket: the root manifest is a plain file; print its state. (Cloud buckets are opened
 // through the converter above; their manifest is not re-fetched here.)
-static void print_dir_bucket_state(const std::string &dir_path)
+void print_dir_bucket_state(const std::string &dir_path)
 {
   namespace pc = dew::converter;
   auto manifest_path = dir_path + "/" + pc::bucket_root_manifest_name();
@@ -129,144 +136,36 @@ static void print_dir_bucket_state(const std::string &dir_path)
   fmt::print("\n");
 }
 
-struct converter_handle_t
-{
-  dew_converter_t *ptr = nullptr;
-  converter_handle_t(dew_converter_t *p) : ptr(p) {}
-  ~converter_handle_t() { if (ptr) dew_converter_destroy(ptr); }
-  converter_handle_t(const converter_handle_t &) = delete;
-  converter_handle_t &operator=(const converter_handle_t &) = delete;
-  operator dew_converter_t *() const { return ptr; }
-  explicit operator bool() const { return ptr != nullptr; }
-};
+using tool::converter_handle_t;
+using tool::format_bytes;
+using tool::format_number;
+using tool::method_name;
+using tool::print_attribute_table;
+using tool::table_row_t;
+using tool::type_name;
 
-static const char *type_name(dew_type_t type)
+} // namespace
+
+int cmd_info(int argc, char **argv)
 {
-  switch (type)
+  argh::parser cmdl;
+  cmdl.parse(argc, argv);
+  const auto &files = cmdl.pos_args(); // [0] is the subcommand name
+  if (cmdl[{"-h", "--help"}] || files.size() < 2)
   {
-  case dew_type_u8:   return "u8";
-  case dew_type_i8:   return "i8";
-  case dew_type_u16:  return "u16";
-  case dew_type_i16:  return "i16";
-  case dew_type_u32:  return "u32";
-  case dew_type_i32:  return "i32";
-  case dew_type_m32:  return "m32";
-  case dew_type_r32:  return "r32";
-  case dew_type_u64:  return "u64";
-  case dew_type_i64:  return "i64";
-  case dew_type_m64:  return "m64";
-  case dew_type_r64:  return "r64";
-  case dew_type_m128: return "m128";
-  case dew_type_m192: return "m192";
-  default:        return "?";
+    fmt::print(stderr, "Usage: dew info <file.dew|dir://...|s3://...> [more datasets ...]\n");
+    return cmdl[{"-h", "--help"}] ? 0 : 1;
   }
-}
-
-static const char *method_name(uint32_t method)
-{
-  switch (method)
-  {
-  case 0:  return "none";
-  case 1:  return "blosc2";
-  case 2:  return "zstd";
-  case 3:  return "huff0";
-  default: return "unknown";
-  }
-}
-
-static std::string format_bytes(uint64_t bytes)
-{
-  if (bytes < 1024)
-    return fmt::format("{} B", bytes);
-  if (bytes < 1024 * 1024)
-    return fmt::format("{:.1f} KB", bytes / 1024.0);
-  if (bytes < 1024 * 1024 * 1024)
-    return fmt::format("{:.1f} MB", bytes / (1024.0 * 1024.0));
-  return fmt::format("{:.2f} GB", bytes / (1024.0 * 1024.0 * 1024.0));
-}
-
-static std::string format_number(uint64_t n)
-{
-  auto s = std::to_string(n);
-  std::string result;
-  int count = 0;
-  for (int i = int(s.size()) - 1; i >= 0; --i)
-  {
-    if (count > 0 && count % 3 == 0)
-      result.insert(result.begin(), ',');
-    result.insert(result.begin(), s[size_t(i)]);
-    count++;
-  }
-  return result;
-}
-
-struct table_row_t
-{
-  uint64_t buffer_count;
-  uint64_t uncompressed_bytes;
-  uint64_t compressed_bytes;
-};
-
-static void print_attribute_table(const char *title, const dew_converter_stats_t &stats,
-                                  table_row_t (*get_row)(const dew_converter_attribute_stats_t &))
-{
-  fmt::print("{}:\n", title);
-  fmt::print("{:<20s} {:<10s} {:>8s} {:>14s} {:>14s} {:>7s}\n",
-             "Attribute", "Format", "Buffers", "Uncompressed", "Compressed", "Ratio");
-  fmt::print("{:-<80s}\n", "");
-
-  uint64_t total_uncompressed = 0;
-  uint64_t total_compressed = 0;
-  uint64_t total_buffers = 0;
-
-  for (uint32_t i = 0; i < stats.attribute_count; i++)
-  {
-    auto &a = stats.attributes[i];
-    auto row = get_row(a);
-    if (row.buffer_count == 0)
-      continue;
-    double ratio = row.compressed_bytes > 0
-      ? double(row.uncompressed_bytes) / double(row.compressed_bytes)
-      : 0.0;
-    fmt::print("{:<20s} {:<10s} {:>8s} {:>14s} {:>14s} {:>6.2f}x\n",
-               a.name,
-               fmt::format("{}x{}", type_name(a.type), int(a.components)),
-               format_number(row.buffer_count),
-               format_bytes(row.uncompressed_bytes),
-               format_bytes(row.compressed_bytes),
-               ratio);
-    total_uncompressed += row.uncompressed_bytes;
-    total_compressed += row.compressed_bytes;
-    total_buffers += row.buffer_count;
-  }
-
-  fmt::print("{:-<80s}\n", "");
-  double total_ratio = total_compressed > 0
-    ? double(total_uncompressed) / double(total_compressed)
-    : 0.0;
-  fmt::print("{:<20s} {:<10s} {:>8s} {:>14s} {:>14s} {:>6.2f}x\n",
-             "Total", "",
-             format_number(total_buffers),
-             format_bytes(total_uncompressed),
-             format_bytes(total_compressed),
-             total_ratio);
-}
-
-int main(int argc, char **argv)
-{
-  if (argc < 2)
-  {
-    fmt::print(stderr, "Usage: dew_info <file.dew> [file2.dew ...]\n");
+  if (!tool::check_options(cmdl, {}, {}))
     return 1;
-  }
 
   int exit_code = 0;
-  for (int arg = 1; arg < argc; arg++)
+  for (size_t arg = 1; arg < files.size(); arg++)
   {
-    const char *filename = argv[arg];
-    auto len = strlen(filename);
+    const char *filename = files[arg].c_str();
+    auto len = files[arg].size();
 
-    if (argc > 2)
+    if (files.size() > 2)
       fmt::print("=== {} ===\n", filename);
 
     // State sections come first: they read the raw superblock/manifest directly, so they also work
@@ -300,7 +199,7 @@ int main(int argc, char **argv)
     if (stats.attribute_count == 0 && stats.total_buffer_count == 0)
     {
       fmt::print("No compression statistics in this file.\n");
-      if (arg + 1 < argc)
+      if (arg + 1 < files.size())
         fmt::print("\n");
       continue;
     }
@@ -463,7 +362,7 @@ int main(int argc, char **argv)
       }
     }
 
-    if (arg + 1 < argc)
+    if (arg + 1 < files.size())
       fmt::print("\n");
   }
 

@@ -6,6 +6,4 @@ function(set_tool_properties target)
     endif ()
 endfunction()
 
-add_subdirectory(dew_info)
-add_subdirectory(dew_extract)
-add_subdirectory(dew_copy)
+add_subdirectory(dew)

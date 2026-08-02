@@ -25,6 +25,11 @@
 // manifest, see bucket_format.hpp). Credentials come from a per-side connection string (inline / @file / env:VAR) or
 // the standard AWS_*/AZURE_* environment.
 
+#include "commands.hpp"
+#include "tool_common.hpp"
+
+#include <argh.h>
+
 #include <dew/converter/connection_cli.h>
 
 #include "bucket_format.hpp"
@@ -69,7 +74,7 @@ struct copy_args_t
   bool quiet = false;
 };
 
-void print_usage(const char *prog)
+void print_usage()
 {
   fmt::print(stderr,
              "Usage: {} [options] <source-url> <destination-url>\n"
@@ -90,63 +95,44 @@ void print_usage(const char *prog)
              "or 'env:NAME' to read it from an environment variable. Credentials also fall back to the\n"
              "standard AWS_*/AZURE_* environment variables.\n"
              "\n",
-             prog);
+             "dew copy");
   fmt::print(stderr,
              "Examples:\n"
              "  {0} cloud.dew s3://bucket/cloud -d 'endpoint=https://minio:9000;access_key_id=..;secret_access_key=..;path_style=true'\n"
              "  {0} s3://bucket/cloud dir:///data/cloud -s env:PROD_CONN\n",
-             prog);
+             "dew copy");
 }
 
-bool parse_args(int argc, char **argv, copy_args_t &args)
+// Returns 0/1 exit codes via `exit_code` when parsing ends the run (help or error); true = proceed.
+bool parse_args(int argc, char **argv, copy_args_t &args, int &exit_code)
 {
-  std::vector<std::string> positional;
-  for (int i = 1; i < argc; ++i)
+  argh::parser cmdl;
+  cmdl.add_params({"-s", "--source-connection", "-d", "--destination-connection"});
+  cmdl.parse(argc, argv);
+
+  if (cmdl[{"-h", "--help"}])
   {
-    std::string a = argv[i];
-    auto take_value = [&](std::string &out) -> bool {
-      if (i + 1 >= argc)
-      {
-        fmt::print(stderr, "missing value for {}\n", a);
-        return false;
-      }
-      out = argv[++i];
-      return true;
-    };
-    if (a == "-s" || a == "--source-connection")
-    {
-      if (!take_value(args.source_connection_spec))
-        return false;
-    }
-    else if (a == "-d" || a == "--destination-connection")
-    {
-      if (!take_value(args.dest_connection_spec))
-        return false;
-    }
-    else if (a == "-f" || a == "--force")
-      args.force = true;
-    else if (a == "-q" || a == "--quiet")
-      args.quiet = true;
-    else if (a == "-h" || a == "--help")
-    {
-      print_usage(argv[0]);
-      std::exit(0); // help is not an error
-    }
-    else if (!a.empty() && a[0] == '-')
-    {
-      fmt::print(stderr, "unknown option: {}\n", a);
-      return false;
-    }
-    else
-      positional.push_back(std::move(a));
-  }
-  if (positional.size() != 2)
-  {
-    print_usage(argv[0]);
+    print_usage();
+    exit_code = 0; // help is not an error
     return false;
   }
-  args.source_url = std::move(positional[0]);
-  args.dest_url = std::move(positional[1]);
+  if (!tool::check_options(cmdl, {"f", "force", "q", "quiet"}, {"s", "source-connection", "d", "destination-connection"}))
+  {
+    exit_code = 1;
+    return false;
+  }
+  if (cmdl.pos_args().size() != 3) // subcommand name + source + destination
+  {
+    print_usage();
+    exit_code = 1;
+    return false;
+  }
+  args.source_url = cmdl[1];
+  args.dest_url = cmdl[2];
+  args.source_connection_spec = cmdl({"-s", "--source-connection"}).str();
+  args.dest_connection_spec = cmdl({"-d", "--destination-connection"}).str();
+  args.force = cmdl[{"-f", "--force"}];
+  args.quiet = cmdl[{"-q", "--quiet"}];
   return true;
 }
 
@@ -444,11 +430,12 @@ vio::task_t<dew_error_t> do_copy_dew2(storage_backend_t *src, vio::objstore::io_
 
 } // namespace
 
-int main(int argc, char **argv)
+int cmd_copy(int argc, char **argv)
 {
   copy_args_t args;
-  if (!parse_args(argc, argv, args))
-    return 1;
+  int exit_code = 1;
+  if (!parse_args(argc, argv, args, exit_code))
+    return exit_code;
 
   std::string source_connection, dest_connection, conn_error;
   if (!dew::converter::cli::resolve_connection_spec(args.source_connection_spec, source_connection, conn_error))
