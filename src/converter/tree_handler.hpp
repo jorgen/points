@@ -53,6 +53,14 @@ public:
   [[nodiscard]] dew_error_t deserialize_tree_registry(std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t tree_registry_blobs_size);
   void request_root();
   void set_tree_initialization_config(const tree_config_t &config);
+  void set_tree_initialization_scale(double scale);
+  // Read the pre-init config WITHOUT sealing it (for consumers that only need provisional values
+  // while the first batch's source scale may still be adopted).
+  tree_config_t tree_config_peek()
+  {
+    std::unique_lock<std::mutex> lock(_configuration_mutex);
+    return _configuration_initialized ? _tree_registry.tree_config : _pre_init_tree_config;
+  }
   void set_tree_initialization_node_point_limit(uint32_t limit);
   void set_tree_initialization_read_chunk_bytes(uint64_t bytes);
   void about_to_block() override;

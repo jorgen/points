@@ -120,7 +120,7 @@ static void add_missing_attributes(const dew_converter_attributes_t &source, dew
   }
 }
 
-attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end, bool keep_original_order)
+attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end, bool keep_original_order, bool lod_all_attributes)
 {
   fixed_capacity_vector_t<attributes_id_t> attribute_ids_sorted(end - begin);
   memcpy(attribute_ids_sorted.begin(), begin, attribute_ids_sorted.capacity() * sizeof(attributes_id_t));
@@ -151,6 +151,26 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
           attrs.erase(attrs.begin() + oi);
           target.attribute_names.erase(target.attribute_names.begin() + oi);
           break;
+        }
+      }
+    }
+    // LOD attribute slimming: coarse nodes exist to be looked at from afar -- they carry only the
+    // visual attributes (position + rgb/intensity/classification). Duplicating gps_time & friends
+    // into every LOD level dominated dataset size (38% of one benchmark). keep_original_order
+    // doubles as "collapse path" (source data, never slimmed); lod_all_attributes opts out.
+    if (!keep_original_order && !lod_all_attributes)
+    {
+      auto keep = [](const dew_converter_attribute_t &a) {
+        auto is = [&](const char *name) { return a.name_size == strlen(name) && memcmp(a.name, name, a.name_size) == 0; };
+        return is(DEW_ATTRIBUTE_RGB) || is(DEW_ATTRIBUTE_INTENSITY) || is(DEW_ATTRIBUTE_CLASSIFICATION);
+      };
+      auto &attrs = target.attributes;
+      for (int oi = int(attrs.size()) - 1; oi >= 1; --oi)
+      {
+        if (!keep(attrs[oi]))
+        {
+          attrs.erase(attrs.begin() + oi);
+          target.attribute_names.erase(target.attribute_names.begin() + oi);
         }
       }
     }

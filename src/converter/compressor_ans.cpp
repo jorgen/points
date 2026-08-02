@@ -308,13 +308,25 @@ compression_result_t compressor_ans_t::compress(const void *data, uint32_t size,
     // Path B: offset + sort + delta
     uint32_t f64_count = size / 8;
     compression_result_t result_b;
-    if (f64_count > 1 && f64_count <= 65535)
+    // Permutation width implied by element count: u16 up to 65535 elements, u32 beyond.
+    const bool wide_perm = f64_count > 65535;
+    if (f64_count > 1)
     {
       std::vector<uint8_t> working_b(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
       double min_value_b = offset_subtract_f64(working_b.data(), size);
 
-      std::vector<uint16_t> perm(f64_count);
-      sort_with_permutation_f64(working_b.data(), size, perm.data());
+      std::vector<uint16_t> perm;
+      std::vector<uint32_t> perm_wide;
+      if (wide_perm)
+      {
+        perm_wide.resize(f64_count);
+        sort_with_permutation_f64(working_b.data(), size, perm_wide.data());
+      }
+      else
+      {
+        perm.resize(f64_count);
+        sort_with_permutation_f64(working_b.data(), size, perm.data());
+      }
 
       bool delta_applied = delta_encode_morton(working_b.data(), size, 8);
 
@@ -330,8 +342,9 @@ compression_result_t compressor_ans_t::compress(const void *data, uint32_t size,
         if (hdr_b.method != compression_method_t::none)
         {
           // Compress the permutation with FSE
-          uint32_t perm_bytes = f64_count * 2;
-          auto perm_compressed = fse_compress_data(reinterpret_cast<const uint8_t *>(perm.data()), perm_bytes);
+          uint32_t perm_bytes = f64_count * (wide_perm ? 4 : 2);
+          const uint8_t *perm_src = wide_perm ? reinterpret_cast<const uint8_t *>(perm_wide.data()) : reinterpret_cast<const uint8_t *>(perm.data());
+          auto perm_compressed = fse_compress_data(perm_src, perm_bytes);
 
           if (perm_compressed.error.code == 0 && perm_compressed.size > 0)
           {
@@ -477,8 +490,9 @@ compression_result_t compressor_ans_t::decompress(const void *data, uint32_t siz
     offset_meta_size = 8;
   }
 
-  // Read permutation if present
+  // Read permutation if present. Entry width implied by element count (u16 <= 65535, u32 beyond).
   std::vector<uint16_t> permutation;
+  std::vector<uint32_t> permutation_wide;
   uint32_t perm_meta_size = 0;
   if (header.flags & compression_flag_sort_permutation)
   {
@@ -488,11 +502,22 @@ compression_result_t compressor_ans_t::decompress(const void *data, uint32_t siz
     perm_meta_size = 4 + perm_compressed_size;
 
     uint32_t f64_count = header.uncompressed_size / 8;
-    uint32_t perm_bytes = f64_count * 2;
-    permutation.resize(f64_count);
+    const bool wide_perm = f64_count > 65535;
+    uint32_t perm_bytes = f64_count * (wide_perm ? 4 : 2);
+    uint8_t *perm_dst;
+    if (wide_perm)
+    {
+      permutation_wide.resize(f64_count);
+      perm_dst = reinterpret_cast<uint8_t *>(permutation_wide.data());
+    }
+    else
+    {
+      permutation.resize(f64_count);
+      perm_dst = reinterpret_cast<uint8_t *>(permutation.data());
+    }
 
     dew_error_t perm_error;
-    if (!fse_decompress_data(src, perm_compressed_size, reinterpret_cast<uint8_t *>(permutation.data()), perm_bytes, perm_error))
+    if (!fse_decompress_data(src, perm_compressed_size, perm_dst, perm_bytes, perm_error))
     {
       result.error.code = -1;
       result.error.msg = std::string("ANS permutation decompress failed: ") + perm_error.msg;
@@ -598,7 +623,10 @@ compression_result_t compressor_ans_t::decompress(const void *data, uint32_t siz
   // Unsort with permutation
   if (header.flags & compression_flag_sort_permutation)
   {
-    unsort_with_permutation_f64(output.get(), header.uncompressed_size, permutation.data());
+    if (!permutation_wide.empty())
+      unsort_with_permutation_f64(output.get(), header.uncompressed_size, permutation_wide.data());
+    else
+      unsort_with_permutation_f64(output.get(), header.uncompressed_size, permutation.data());
   }
 
   // Restore offset

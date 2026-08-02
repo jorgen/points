@@ -438,8 +438,42 @@ void unsort_with_permutation_f64(uint8_t *data, uint32_t size, const uint16_t *p
 
   auto *values = reinterpret_cast<uint64_t *>(data);
   std::vector<uint64_t> restored(count);
+  // perm entries come from decompressed (untrusted) dataset bytes; an out-of-range index would be an
+  // out-of-bounds heap write. Skip bad entries rather than trust the stream.
   for (uint32_t i = 0; i < count; i++)
-    restored[perm[i]] = values[i];
+    if (perm[i] < count)
+      restored[perm[i]] = values[i];
+  memcpy(data, restored.data(), count * 8);
+}
+
+bool sort_with_permutation_f64(uint8_t *data, uint32_t size, uint32_t *perm_out)
+{
+  uint32_t count = size / 8;
+  if (count == 0)
+    return false;
+
+  std::iota(perm_out, perm_out + count, uint32_t(0));
+  auto *values = reinterpret_cast<uint64_t *>(data);
+  std::sort(perm_out, perm_out + count, [values](uint32_t a, uint32_t b) { return values[a] < values[b]; });
+  std::vector<uint64_t> sorted(count);
+  for (uint32_t i = 0; i < count; i++)
+    sorted[i] = values[perm_out[i]];
+  memcpy(data, sorted.data(), count * 8);
+  return true;
+}
+
+void unsort_with_permutation_f64(uint8_t *data, uint32_t size, const uint32_t *perm)
+{
+  uint32_t count = size / 8;
+  if (count == 0)
+    return;
+
+  auto *values = reinterpret_cast<uint64_t *>(data);
+  std::vector<uint64_t> restored(count);
+  // perm entries come from decompressed (untrusted) dataset bytes; bound them (see u16 overload).
+  for (uint32_t i = 0; i < count; i++)
+    if (perm[i] < count)
+      restored[perm[i]] = values[i];
   memcpy(data, restored.data(), count * 8);
 }
 

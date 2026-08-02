@@ -184,6 +184,13 @@ void tree_handler_t::set_tree_initialization_config(const tree_config_t &config)
   _pre_init_tree_config = config;
 }
 
+void tree_handler_t::set_tree_initialization_scale(double scale)
+{
+  std::unique_lock<std::mutex> lock(_configuration_mutex);
+  assert(!_configuration_initialized);
+  _pre_init_tree_config.scale = scale;
+}
+
 void tree_handler_t::set_tree_initialization_node_point_limit(uint32_t limit)
 {
   std::unique_lock<std::mutex> lock(_configuration_mutex);

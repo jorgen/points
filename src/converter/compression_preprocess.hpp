@@ -56,9 +56,13 @@ void offset_restore_f64(uint8_t *data, uint32_t size, double min_value);
 // Returns true if sorting was applied. perm_out must be pre-allocated with size/8 entries.
 // Only works when element count fits in u16 (<=65535).
 bool sort_with_permutation_f64(uint8_t *data, uint32_t size, uint16_t *perm_out);
+// Wide-permutation variant for buffers past 65535 elements (200k-point node buffers). The stored
+// permutation width is implied by the element count: <= 65535 elements = u16 entries, else u32.
+bool sort_with_permutation_f64(uint8_t *data, uint32_t size, uint32_t *perm_out);
 
 // Restore original order of f64 data using the stored permutation.
 void unsort_with_permutation_f64(uint8_t *data, uint32_t size, const uint16_t *perm);
+void unsort_with_permutation_f64(uint8_t *data, uint32_t size, const uint32_t *perm);
 
 // RGB decorrelation: transform interleaved (R,G,B) u16 triples to (G, R-G, B-G).
 // Operates in-place on raw interleaved data before byte_shuffle.

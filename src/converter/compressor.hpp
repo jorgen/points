@@ -108,6 +108,10 @@ struct compression_stats_t
   std::vector<attribute_compression_stats_t> per_attribute;
 
   void accumulate(const std::string &name, const point_format_t &format, uint32_t uncompressed, uint32_t compressed, double min_val = std::numeric_limits<double>::max(), double max_val = std::numeric_limits<double>::lowest(), uint8_t flags = 0, bool is_lod = false);
+  // Remove one previously-accumulated source buffer (leaf collapse frees ingest chunks after merging
+  // them into per-node units; without this the freed chunks stay counted and every fresh conversion
+  // reports its source data twice). Saturating; no-op for unknown attributes.
+  void subtract_source(const std::string &name, const point_format_t &format, uint32_t point_count, uint32_t extra_uncompressed, uint32_t compressed);
   std::shared_ptr<uint8_t[]> serialize(uint32_t &out_size) const;
   static compression_stats_t deserialize(const uint8_t *data, uint32_t size);
 };

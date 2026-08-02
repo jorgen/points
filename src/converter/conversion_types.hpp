@@ -210,6 +210,14 @@ struct tree_config_t
   // Big chunks amortize read+sort; leaf collapse cuts them back to per-node units at finality.
   // Set via dew_converter_set_read_chunk_bytes. (Registry v3 serializes the grown struct.)
   uint64_t read_chunk_byte_target = 64ull << 20;
+  // LOD nodes carry only the visual attributes (rgb/intensity/classification + position) unless this
+  // opts back into duplicating everything. Set via dew_converter_set_lod_all_attributes. (v4 field.)
+  uint8_t lod_all_attributes = 0;
+  // LOD sampling: coarsen each node's representative-cell width until reps <= children/4, floored at
+  // the classic lod-9 rule. Guarantees the pyramid converges (~1/3 total overhead) on any density.
+  // 0 disables (classic fixed rule). (v4 field.)
+  uint8_t lod_adaptive_sampling = 1;
+  uint8_t reserved_[6] = {};
 };
 // Chunk point-count clamp: 8M points default cap (a decompressed morton blob is count x up to 24B --
 // keep worst-case read spikes bounded); 16M is the hard ceiling (u32 subset offsets stay far clear).

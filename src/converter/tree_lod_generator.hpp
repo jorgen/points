@@ -129,6 +129,13 @@ public:
 private:
   vio::event_loop_t &_loop;
   vio::thread_pool_t &_thread_pool;
+public:
+  const tree_config_t &generation_tree_config() const
+  {
+    return _tree_cache.tree_config;
+  }
+
+private:
   tree_registry_t &_tree_cache;
   storage_handler_t &_file_cache;
   attributes_configs_t &_attributes_configs;

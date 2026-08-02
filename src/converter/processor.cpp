@@ -347,7 +347,8 @@ const dew_converter_attributes_t &processor_t::get_attributes(attributes_id_t id
 
 void processor_t::handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files)
 {
-  auto tree_config_val = _tree_handler.tree_config();
+  // Peek, do not seal: the first batch's pre-init results may still adopt the source scale.
+  auto tree_config_val = _tree_handler.tree_config_peek();
   std::vector<std::pair<input_data_id_t, input_name_ref_t>> file_refs;
   file_refs.reserve(new_files.size());
   for (auto &new_file : new_files)
@@ -405,6 +406,8 @@ vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_d
         result.pre_init_result.id = input_id;
         result.pre_init_result.found_min = pre_init_info.found_aabb_min;
         memcpy(result.pre_init_result.min, pre_init_info.aabb_min, sizeof(result.pre_init_result.min));
+        result.pre_init_result.found_scale = pre_init_info.found_scale != 0;
+        memcpy(result.pre_init_result.scale, pre_init_info.scale, sizeof(result.pre_init_result.scale));
         result.pre_init_result.approximate_point_count = pre_init_info.approximate_point_count;
         result.pre_init_result.approximate_point_size_bytes = pre_init_info.approximate_point_size_bytes;
         result.pre_init_result.input_file_size_bytes = pre_init_info.input_file_size_bytes;
@@ -416,6 +419,27 @@ vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_d
   auto results = co_await vio::schedule_work(_event_loop, _thread_pool, std::move(work_items));
 
   // Process results on the event loop thread
+  for (auto &result : results)
+  {
+    if (!result.has_value())
+      continue;
+    auto &r = result.value();
+    if (r.has_error)
+      continue;
+    // Adopt the finest native scale reported by this batch as the octree scale, BEFORE anything below
+    // consumes (and thereby seals) the tree config. Only while the configuration is still open (first
+    // batch, no resume) and the user did not pin a scale explicitly. Coarser-than-source storage loses
+    // precision; finer only inflates every morton code and densifies the LOD pyramid.
+    if (r.pre_init_result.found_scale && !_tree_scale_explicit && !_tree_handler.configuration_initialized())
+    {
+      const double file_finest = std::min(r.pre_init_result.scale[0], std::min(r.pre_init_result.scale[1], r.pre_init_result.scale[2]));
+      if (file_finest > 0.0 && (_source_scale_adopted <= 0.0 || file_finest < _source_scale_adopted))
+      {
+        _source_scale_adopted = file_finest;
+        _tree_handler.set_tree_initialization_scale(file_finest);
+      }
+    }
+  }
   for (auto &result : results)
   {
     if (!result.has_value())
@@ -559,6 +583,12 @@ dew_error_t processor_t::upgrade_to_write(bool truncate)
 void processor_t::set_pre_init_tree_config(const tree_config_t &tree_config)
 {
   _tree_handler.set_tree_initialization_config(tree_config);
+}
+
+void processor_t::set_tree_scale_override(double scale)
+{
+  _tree_scale_explicit = true;
+  _tree_handler.set_tree_initialization_scale(scale);
 }
 
 void processor_t::set_pre_init_node_point_limit(uint32_t node_point_limit)

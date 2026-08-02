@@ -340,6 +340,9 @@ void tree_collapse_runner_t::apply_results()
       assert(refs->second.tree_count > 0);
       if (--refs->second.tree_count == 0)
       {
+        // The chunk's write was counted in the compression stats; it is dead now -- uncount it so a
+        // fresh conversion doesn't report its source data twice (chunk + collapsed unit).
+        _storage.note_source_blobs_freed(attrib_locations.first, attrib_locations.second, refs->second.point_count);
         tree->storage_map.restore_discarded(std::move(attrib_locations.second));
         _tree_registry.chunk_tree_refs.erase(refs);
       }

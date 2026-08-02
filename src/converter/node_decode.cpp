@@ -87,6 +87,19 @@ render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_conf
     }
   }
 
+  // Slimmed LOD node rendered with an attribute it does not carry: substitute a constant medium-gray
+  // scalar so the node still draws (the walker admits color-less nodes; an empty GL attribute buffer
+  // would be an INVALID_OPERATION draw on WebGL2).
+  if ((!tmp.data_info[1].data || tmp.data_info[1].size == 0) && tmp.point_count > 0)
+  {
+    auto constant = std::make_shared<uint8_t[]>(tmp.point_count);
+    memset(constant.get(), 200, tmp.point_count);
+    tmp.data_info[1] = dew_converter_buffer_t(constant.get(), tmp.point_count);
+    tmp.data[1] = std::move(constant);
+    tmp.format[1] = point_format_t(dew_type_u8, dew_components_1);
+    tmp.draw_type = dew_dyn_points_1;
+  }
+
   auto impl = std::make_shared<loaded_node_impl_data_t>();
   impl->data_handler = std::move(salvage_handler);
   impl->vertex_data = std::move(tmp.data[0]);

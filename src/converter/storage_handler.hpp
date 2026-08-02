@@ -183,6 +183,9 @@ public:
   // Upload tier: a band committed; mark its blobs uploaded in the cache tier (thread-safe; hops to
   // the storage loop). Each pair is (cache blob offset, bucket pack location).
   void note_blobs_uploaded(std::vector<std::pair<uint64_t, storage_location_t>> &&blobs);
+  // Leaf collapse freed a source chunk's blobs: remove their contribution from the compression stats
+  // (thread-safe; hops to the storage loop where the stats live).
+  void note_source_blobs_freed(attributes_id_t attributes_id, std::vector<storage_location_t> locations, uint32_t point_count);
   // Block until every already-posted storage-loop task has run (FIFO barrier). NOT wasm-safe
   // (single-threaded); destination-mode teardown only.
   void drain_posted_events();

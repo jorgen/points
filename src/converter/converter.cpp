@@ -221,8 +221,23 @@ void dew_converter_set_compression(dew_converter_t *converter, enum dew_converte
 
 void dew_converter_set_store_original_order(dew_converter_t *converter, bool store)
 {
-  auto config = converter->processor.tree_config();
+  // Peek: reading tree_config() would SEAL the configuration, silently pinning the default scale
+  // before the first input file's native scale could be adopted.
+  auto config = converter->processor.tree_config_peek();
   config.store_original_order = store;
+  converter->processor.set_pre_init_tree_config(config);
+}
+
+void dew_converter_set_tree_scale(dew_converter_t *converter, double scale)
+{
+  if (scale > 0.0)
+    converter->processor.set_tree_scale_override(scale);
+}
+
+void dew_converter_set_lod_all_attributes(dew_converter_t *converter, uint8_t all)
+{
+  auto config = converter->processor.tree_config_peek();
+  config.lod_all_attributes = all ? 1 : 0;
   converter->processor.set_pre_init_tree_config(config);
 }
 

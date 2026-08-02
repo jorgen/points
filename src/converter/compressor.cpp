@@ -263,6 +263,33 @@ std::shared_ptr<uint8_t[]> compression_stats_t::serialize(uint32_t &out_size) co
   return data;
 }
 
+void compression_stats_t::subtract_source(const std::string &name, const point_format_t &format, uint32_t point_count, uint32_t extra_uncompressed, uint32_t compressed)
+{
+  // Exact (name, format) first; fall back to name-only because the morton attribute is WRITTEN at the
+  // buffer's own morton width, which can differ from the width recorded in the attributes config.
+  attribute_compression_stats_t *match = nullptr;
+  for (auto &attr : per_attribute)
+  {
+    if (attr.name != name)
+      continue;
+    if (attr.format.type == format.type && attr.format.components == format.components)
+    {
+      match = &attr;
+      break;
+    }
+    if (!match)
+      match = &attr;
+  }
+  if (!match)
+    return;
+  // extra_uncompressed covers the storage_header_t the write side prepends to the points buffer.
+  const uint64_t uncompressed = uint64_t(point_count) * uint64_t(size_for_format(match->format.type, match->format.components)) + extra_uncompressed;
+  match->buffer_count -= match->buffer_count > 0 ? 1 : 0;
+  match->uncompressed_bytes -= std::min<uint64_t>(match->uncompressed_bytes, uncompressed);
+  match->compressed_bytes -= std::min<uint64_t>(match->compressed_bytes, compressed);
+  total_buffer_count -= total_buffer_count > 0 ? 1 : 0;
+}
+
 compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32_t size)
 {
   compression_stats_t stats;

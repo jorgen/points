@@ -37,10 +37,12 @@ struct pre_init_info_file_result_t
 {
   input_data_id_t id;
   double min[3];
+  double scale[3];
   uint64_t approximate_point_count;
   uint64_t input_file_size_bytes;
   uint8_t approximate_point_size_bytes;
   bool found_min;
+  bool found_scale;
 };
 
 struct get_pre_init_info_worker_t

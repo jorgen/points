@@ -166,8 +166,11 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
         {
           auto index = attribute_index_map.get_index(attr_id, i);
           attrib_indexes[i] = index;
-          if (index.index == -1)
+          if (index.index == -1 && i == 0)
           {
+            // Only the position attribute is mandatory. Slimmed LOD nodes lack non-visual
+            // attributes; when the selected color is absent the node still renders (the decoder
+            // substitutes a constant) instead of vanishing from the frame.
             valid = false;
             break;
           }
@@ -203,6 +206,12 @@ static void walk_tree(const tree_registry_t &tree_registry, attribute_index_map_
         for (int i = 0; i < 4 && i < attribute_index_map.get_attribute_count(); i++)
         {
           auto attrib_index = attrib_indexes[i];
+          if (attrib_index.index == -1)
+          {
+            to_add.locations[i] = storage_location_t(); // absent: size 0, decoder substitutes
+            to_add.format[i] = point_format_t(dew_type_u8, dew_components_1);
+            continue;
+          }
           auto location = current_tree->storage_map.location(points.input_id, attrib_index.index);
           to_add.locations[i] = location;
           to_add.format[i] = attrib_index.format;

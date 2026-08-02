@@ -76,6 +76,11 @@ public:
   ~processor_t();
   dew_error_t upgrade_to_write(bool truncate);
   void set_pre_init_tree_config(const tree_config_t &tree_config);
+  void set_tree_scale_override(double scale);
+  tree_config_t tree_config_peek()
+  {
+    return _tree_handler.tree_config_peek();
+  }
   void set_pre_init_node_point_limit(uint32_t node_point_limit);
   void set_pre_init_read_chunk_bytes(uint64_t bytes);
   void set_runtime_callbacks(const dew_converter_runtime_callbacks_t &runtime_callbacks, void *user_ptr);
@@ -103,6 +108,10 @@ public:
   {
     return _tree_handler.configuration_initialized();
   }
+
+  // Source-scale adoption state (first pre-init batch may set the octree scale from the input files).
+  bool _tree_scale_explicit = false;
+  double _source_scale_adopted = 0.0;
 
   void about_to_block() override;
 

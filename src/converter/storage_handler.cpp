@@ -704,6 +704,33 @@ bool storage_handler_t::get_cache_tier_stats(cache_tier_stats_t &out) const
 }
 #endif // __EMSCRIPTEN__
 
+// Best-effort: the subtract hops to the storage loop and rides whatever checkpoint commits next, so
+// it is NOT atomic with the registry snapshot that recorded the collapse. In the common (no-crash)
+// case the FIFO storage loop applies it before the collapse's own checkpoint serializes the stats, so
+// the persisted numbers are consistent. An unclean crash between a mid-pass cache-pressure checkpoint
+// and this subtract can leave the reported source total off by the freed chunks' bytes. This is
+// cosmetic (the compression numbers in `dew info` only) and never affects stored data, so it is not
+// worth making transactional (that would need the freed-source descriptors threaded through the
+// checkpoint payload + a format change).
+void storage_handler_t::note_source_blobs_freed(attributes_id_t attributes_id, std::vector<storage_location_t> locations, uint32_t point_count)
+{
+  _event_loop.run_in_loop([this, attributes_id, locations = std::move(locations), point_count]() {
+    const auto &attrs = _attributes_configs.get(attributes_id);
+    const auto formats = _attributes_configs.get_format_components(attributes_id);
+    const auto count = std::min(locations.size(), formats.size());
+    for (size_t i = 0; i < count && i < size_t(attrs.attributes.size()); i++)
+    {
+      if (locations[i].size == 0)
+        continue;
+      const auto &a = attrs.attributes[i];
+      // Buffer 0 (the points/morton buffer) was written with a storage_header_t prepended, so its
+      // recorded uncompressed size includes the header; match that here (see serialize_points).
+      const uint32_t header_bytes = i == 0 ? uint32_t(sizeof(storage_header_t)) : 0;
+      _compression_stats.subtract_source(std::string(a.name, a.name_size), formats[i], point_count, header_bytes, locations[i].size);
+    }
+  });
+}
+
 void storage_handler_t::note_blobs_uploaded(std::vector<std::pair<uint64_t, storage_location_t>> &&blobs)
 {
   // Hop to the storage loop: the residency table is single-threaded there. remote_id encodes the

@@ -781,6 +781,7 @@ void tree_compute_leaves_collapsed(tree_t &tree, const tree_registry_t &tree_reg
 // node_limit) still deserialize -- a realistic node_limit can never equal either magic.
 static constexpr uint32_t k_tree_registry_magic_v2 = 0x32475254u; // 'TRG2' little-endian
 static constexpr uint32_t k_tree_registry_magic_v3 = 0x33475254u; // 'TRG3' little-endian
+static constexpr uint32_t k_tree_registry_magic_v4 = 0x34475254u; // 'TRG4' little-endian (grown tree_config: lod flags)
 
 // The v2 on-disk layout of tree_config_t (before read_chunk_byte_target). Field order matches the
 // live struct so the memcpy'd bytes line up.
@@ -792,6 +793,18 @@ struct tree_config_v2_t
   uint32_t node_point_limit;
 };
 static_assert(sizeof(tree_config_v2_t) == 40, "v2 registry blobs serialized a 40-byte tree_config");
+
+// The exact 48-byte layout v3 registry blobs serialized (v4 grew the struct with the lod flags).
+struct tree_config_v3_t
+{
+  double scale;
+  double offset[3];
+  bool store_original_order;
+  uint32_t node_point_limit;
+  uint64_t read_chunk_byte_target;
+};
+static_assert(sizeof(tree_config_v3_t) == 48, "v3 registry blobs serialized a 48-byte tree_config");
+static_assert(sizeof(tree_config_t) == 56, "v4 registry blobs serialize a 56-byte tree_config");
 
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry)
 {
@@ -824,7 +837,7 @@ serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_r
   uint8_t *ptr = data.get();
   uint8_t *end_ptr = ptr + tree_registry_size;
 
-  if (!write_memory(ptr, end_ptr, k_tree_registry_magic_v3))
+  if (!write_memory(ptr, end_ptr, k_tree_registry_magic_v4))
     return {nullptr, 0};
   if (!write_memory(ptr, end_ptr, tree_registry.node_limit))
     return {nullptr, 0};
@@ -873,8 +886,14 @@ dew_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, ui
   uint32_t first_word = 0;
   if (!read_memory(ptr, end_ptr, first_word))
     return {1, "Invalid tree registry data"};
-  const bool v3 = first_word == k_tree_registry_magic_v3;
+  const bool v4 = first_word == k_tree_registry_magic_v4;
+  const bool v3 = v4 || first_word == k_tree_registry_magic_v3;
   const bool v2 = v3 || first_word == k_tree_registry_magic_v2;
+  // A future 'TRG5'+ blob would otherwise fall through to the v1 branch (first_word treated as
+  // node_limit) and silently misparse. Any 'TRG?' word that is not a known version is a
+  // newer-format dataset; refuse it explicitly. (Real node_limit values never reach ~0x54475254.)
+  if (!v2 && (first_word & 0x00ffffffu) == 0x00475254u)
+    return {1, "Tree registry was written by a newer version of dewfall (unknown 'TRG' format); upgrade to read it"};
   if (v2)
   {
     if (!read_memory(ptr, end_ptr, tree_registry.node_limit))
@@ -888,15 +907,30 @@ dew_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, ui
     return {1, "Invalid tree registry data"};
   if (!read_memory(ptr, end_ptr, tree_registry.root))
     return {1, "Invalid tree registry data"};
-  if (v3)
+  if (v4)
   {
     if (!read_memory(ptr, end_ptr, tree_registry.tree_config))
       return {1, "Invalid tree registry data"};
   }
+  else if (v3)
+  {
+    // v3 serialized the 48-byte config. A resumed pre-v4 conversion keeps the CLASSIC lod behavior
+    // (all attributes, fixed sampling): its earlier passes already wrote LOD that way.
+    tree_config_v3_t old_config;
+    if (!read_memory(ptr, end_ptr, old_config))
+      return {1, "Invalid tree registry data"};
+    tree_registry.tree_config.scale = old_config.scale;
+    memcpy(tree_registry.tree_config.offset, old_config.offset, sizeof(old_config.offset));
+    tree_registry.tree_config.store_original_order = old_config.store_original_order;
+    tree_registry.tree_config.node_point_limit = old_config.node_point_limit;
+    tree_registry.tree_config.read_chunk_byte_target = old_config.read_chunk_byte_target;
+    tree_registry.tree_config.lod_all_attributes = 1;
+    tree_registry.tree_config.lod_adaptive_sampling = 0;
+  }
   else
   {
-    // v1/v2 serialized the 40-byte config (no read_chunk_byte_target); the new field keeps its
-    // compiled-in default.
+    // v1/v2 serialized the 40-byte config (no read_chunk_byte_target); newer fields keep classic
+    // behavior for the same resume reason as v3.
     tree_config_v2_t old_config;
     if (!read_memory(ptr, end_ptr, old_config))
       return {1, "Invalid tree registry data"};
@@ -904,6 +938,8 @@ dew_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, ui
     memcpy(tree_registry.tree_config.offset, old_config.offset, sizeof(old_config.offset));
     tree_registry.tree_config.store_original_order = old_config.store_original_order;
     tree_registry.tree_config.node_point_limit = old_config.node_point_limit;
+    tree_registry.tree_config.lod_all_attributes = 1;
+    tree_registry.tree_config.lod_adaptive_sampling = 0;
   }
   if (v2)
   {

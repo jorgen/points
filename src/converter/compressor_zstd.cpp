@@ -198,13 +198,26 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
     // Path B: offset + sort + delta
     uint32_t f64_count = size / 8;
     compression_result_t result_b;
-    if (f64_count > 1 && f64_count <= 65535)
+    // Permutation width is implied by the element count: u16 up to 65535 elements (the historical
+    // format), u32 beyond -- so 200k-point node buffers (gps_time) can take the sort+delta path too.
+    const bool wide_perm = f64_count > 65535;
+    if (f64_count > 1)
     {
       std::vector<uint8_t> working_b(static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + size);
       double min_value_b = offset_subtract_f64(working_b.data(), size);
 
-      std::vector<uint16_t> perm(f64_count);
-      sort_with_permutation_f64(working_b.data(), size, perm.data());
+      std::vector<uint16_t> perm;
+      std::vector<uint32_t> perm_wide;
+      if (wide_perm)
+      {
+        perm_wide.resize(f64_count);
+        sort_with_permutation_f64(working_b.data(), size, perm_wide.data());
+      }
+      else
+      {
+        perm.resize(f64_count);
+        sort_with_permutation_f64(working_b.data(), size, perm.data());
+      }
 
       // Delta encode the sorted u64 data
       bool delta_applied = delta_encode_morton(working_b.data(), size, 8);
@@ -222,10 +235,11 @@ compression_result_t compressor_zstd_t::compress(const void *data, uint32_t size
         if (hdr_b.method != compression_method_t::none)
         {
           // Compress the permutation
-          uint32_t perm_bytes = f64_count * 2;
+          uint32_t perm_bytes = f64_count * (wide_perm ? 4 : 2);
+          const uint8_t *perm_src = wide_perm ? reinterpret_cast<const uint8_t *>(perm_wide.data()) : reinterpret_cast<const uint8_t *>(perm.data());
           size_t perm_bound = ZSTD_compressBound(perm_bytes);
           std::vector<uint8_t> perm_compressed(perm_bound);
-          size_t perm_compressed_size = ZSTD_compress(perm_compressed.data(), perm_bound, perm.data(), perm_bytes, _compression_level);
+          size_t perm_compressed_size = ZSTD_compress(perm_compressed.data(), perm_bound, perm_src, perm_bytes, _compression_level);
 
           if (!ZSTD_isError(perm_compressed_size))
           {
@@ -373,8 +387,10 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
     offset_meta_size = 8;
   }
 
-  // Read permutation if present
+  // Read permutation if present. Entry width is implied by the element count (u16 up to 65535
+  // elements, u32 beyond) -- matching the compress side.
   std::vector<uint16_t> permutation;
+  std::vector<uint32_t> permutation_wide;
   uint32_t perm_meta_size = 0;
   if (header.flags & compression_flag_sort_permutation)
   {
@@ -384,9 +400,20 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
     perm_meta_size = 4 + perm_compressed_size;
 
     uint32_t f64_count = header.uncompressed_size / 8;
-    uint32_t perm_bytes = f64_count * 2;
-    permutation.resize(f64_count);
-    size_t perm_decompressed = ZSTD_decompress(permutation.data(), perm_bytes, src, perm_compressed_size);
+    const bool wide_perm = f64_count > 65535;
+    uint32_t perm_bytes = f64_count * (wide_perm ? 4 : 2);
+    uint8_t *perm_dst;
+    if (wide_perm)
+    {
+      permutation_wide.resize(f64_count);
+      perm_dst = reinterpret_cast<uint8_t *>(permutation_wide.data());
+    }
+    else
+    {
+      permutation.resize(f64_count);
+      perm_dst = reinterpret_cast<uint8_t *>(permutation.data());
+    }
+    size_t perm_decompressed = ZSTD_decompress(perm_dst, perm_bytes, src, perm_compressed_size);
     if (ZSTD_isError(perm_decompressed))
     {
       result.error.code = -1;
@@ -495,7 +522,10 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
   // Unsort with permutation
   if (header.flags & compression_flag_sort_permutation)
   {
-    unsort_with_permutation_f64(output.get(), header.uncompressed_size, permutation.data());
+    if (!permutation_wide.empty())
+      unsort_with_permutation_f64(output.get(), header.uncompressed_size, permutation_wide.data());
+    else
+      unsort_with_permutation_f64(output.get(), header.uncompressed_size, permutation.data());
   }
 
   // Restore offset

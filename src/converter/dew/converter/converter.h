@@ -87,6 +87,12 @@ struct dew_converter_file_pre_init_info_t
   uint8_t found_aabb_min;
   uint8_t approximate_point_size_bytes;
   uint8_t found_point_count;
+  /* The source file's native coordinate precision (e.g. the LAS header scale factors). When provided
+   * (found_scale) and no explicit tree scale was set, the converter adopts the finest scale across the
+   * first batch of files as the octree scale instead of a fixed default -- storing more precision than
+   * the source carries only inflates the dataset. */
+  double scale[3];
+  uint8_t found_scale;
 };
 
 typedef struct dew_converter_file_pre_init_info_t (*dew_converter_file_pre_init_callback_t)(const char *filename, size_t filename_size, struct dew_error_t **error);
@@ -290,6 +296,16 @@ DEW_CONVERTER_EXPORT void dew_converter_set_compression_level(struct dew_convert
 // control over stored blob size (one node ~ one compressed blob per attribute). Default 200000. Must be
 // called before dew_converter_add_data_file.
 DEW_CONVERTER_EXPORT void dew_converter_set_node_point_limit(struct dew_converter_t *converter, uint32_t points);
+
+/* Explicitly pin the octree coordinate scale (a single value used for all three axes). Without this the
+ * converter adopts the finest native scale of the first batch of input files (LAS header scale), falling
+ * back to 0.00025 when the source reports none. Must be called before dew_converter_add_data_file. */
+DEW_CONVERTER_EXPORT void dew_converter_set_tree_scale(struct dew_converter_t *converter, double scale);
+
+/* LOD nodes carry only the visual attributes (position + rgb/intensity/classification) by default;
+ * pass 1 to duplicate EVERY source attribute into every LOD level (the pre-slimming behavior, at a
+ * substantial size cost). Must be called before dew_converter_add_data_file. */
+DEW_CONVERTER_EXPORT void dew_converter_set_lod_all_attributes(struct dew_converter_t *converter, uint8_t all);
 
 // Read/sort chunk byte target (default 64 MiB): the converter ingests each input in chunks of about
 // this many bytes (computed from the file's per-point width, never below the node point limit,

@@ -147,6 +147,7 @@ static dew_converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(con
   dew_converter_file_pre_init_info_t ret;
   ret.found_aabb_min = false;
   ret.found_point_count = false;
+  ret.found_scale = false;
   ret.input_file_size_bytes = 0;
 
   {
@@ -196,6 +197,10 @@ static dew_converter_file_pre_init_info_t laszip_converter_file_get_aabb_min(con
   ret.approximate_point_size_bytes = (uint8_t)lasheader->point_data_record_length;
   ret.found_aabb_min = true;
   ret.found_point_count = true;
+  ret.scale[0] = lasheader->x_scale_factor;
+  ret.scale[1] = lasheader->y_scale_factor;
+  ret.scale[2] = lasheader->z_scale_factor;
+  ret.found_scale = ret.scale[0] > 0.0 && ret.scale[1] > 0.0 && ret.scale[2] > 0.0;
   return ret;
 }
 

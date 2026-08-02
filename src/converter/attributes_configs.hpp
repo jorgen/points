@@ -76,7 +76,7 @@ public:
   attributes_id_t get_attribute_config_index(dew_converter_attributes_t &&attr);
   // keep_original_order: LOD buffers drop the synthetic original-order attribute (meaningless once
   // sampled); collapse keeps it (values reorder with the merge; chunk attribution is lost).
-  attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end, bool keep_original_order = false);
+  attribute_lod_mapping_t get_lod_attribute_mapping(int lod, const attributes_id_t *begin, const attributes_id_t *end, bool keep_original_order = false, bool lod_all_attributes = false);
   attribute_lod_mapping_t get_lod_attribute_mapping(dew_type_t point_type, const attributes_id_t &target_id, const attributes_id_t *begin, const attributes_id_t *end) const;
 
   const dew_converter_attributes_t &get(attributes_id_t id);
