@@ -1,4 +1,4 @@
-name: Deploy points.limilind.com (dewfall web)
+name: Deploy dewfall.limilind.com
 
 # Builds and deploys the dewfall web service (the React SPA + WebGL2/WASM renderer, served by a prism
 # static-file backend). Runs only when something that affects the bundle changes, so ordinary library work
@@ -81,17 +81,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # NOTE: the image name and the `update.sh points` service name below are deployment identifiers
-      # owned by the droplet stack (github.com/jorgen/limilind-edge) — rename them there first, then here.
-      # The project itself is now "dewfall"; these are the last "points" names left on purpose.
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/Dockerfile
           push: true
           tags: |
-            ghcr.io/jorgen/points:latest
-            ghcr.io/jorgen/points:${{ github.sha }}
+            ghcr.io/jorgen/dewfall:latest
+            ghcr.io/jorgen/dewfall:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -106,8 +103,8 @@ jobs:
       cancel-in-progress: false
     steps:
       # The droplet stack (compose + update.sh) is owned by github.com/jorgen/limilind-edge; here we only
-      # trigger a redeploy of the points service.
-      - name: Redeploy the points service over SSH
+      # trigger a redeploy of the dewfall service.
+      - name: Redeploy the dewfall service over SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -126,4 +123,4 @@ jobs:
           else
             hostkey="-o StrictHostKeyChecking=accept-new"
           fi
-          ssh $hostkey -i "$HOME/.ssh/deploy_key" "deploy@$DEPLOY_HOST" "/opt/stack/update.sh points $SHA"
+          ssh $hostkey -i "$HOME/.ssh/deploy_key" "deploy@$DEPLOY_HOST" "/opt/stack/update.sh dewfall $SHA"

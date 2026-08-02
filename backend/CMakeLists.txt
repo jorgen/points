@@ -5,7 +5,7 @@ if (CCACHE_PROGRAM)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif ()
 
-project(dew_server VERSION 0.1.0 DESCRIPTION "Static-file server for points.limilind.com" LANGUAGES CXX)
+project(dew_server VERSION 0.1.0 DESCRIPTION "Static-file server for dewfall.limilind.com" LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -22,7 +22,8 @@ else ()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")
 endif ()
 
-# This is only the backend (a prism static-file server) for points.limilind.com. # points library cross-compiled to WebAssembly separately (src/wasm, via Emscripten). We own
+# This is only the backend (a prism static-file server) for dewfall.limilind.com. The renderer itself
+# is the dewfall library cross-compiled to WebAssembly separately (src/wasm, via Emscripten). We own
 # vio / structify / prism; consume local checkouts by default so changes in a dependency are picked up
 # without a re-pin (overridden with -DDEW_WEB_*_DIR in CI / Docker).
 set(DEW_WEB_VIO_DIR       "/home/jlind/dev/vio"       CACHE PATH "Local vio checkout")

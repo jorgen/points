@@ -12,10 +12,10 @@ the browser.
 
 Named for the moment a cloud settles into points. Friends call it **dew**.
 
-- **Live demo:** [points.limilind.com](https://points.limilind.com) — the WebGL2/WASM renderer
+- **Live demo:** [dewfall.limilind.com](https://dewfall.limilind.com) — the WebGL2/WASM renderer
   streaming a dataset straight from S3.
 - C++23 core, no RTTI, no exceptions. The public API is pure C (C99/C11 compatible), prefixed `dew_`.
-- GPL-3.0.
+- AGPL-3.0.
 
 ## Highlights
 
@@ -127,4 +127,4 @@ magic bytes, and `dew_copy` rewrites a dataset to the current format.
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE).
+AGPL-3.0 (GNU Affero General Public License v3) — see [LICENSE](LICENSE).

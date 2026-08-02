@@ -1,4 +1,4 @@
-# points.limilind.com
+# dewfall.limilind.com
 
 A limilind subservice (same shape as `cube`/`jorcs`, `lists`, `lineup`): a React + Vite + TypeScript SPA
 that loads the WebGL2 point-cloud renderer compiled to **WebAssembly** and streams the point cloud straight
@@ -34,14 +34,14 @@ cmake -S backend -B backend/build -G Ninja && cmake --build backend/build --targ
 ## Deploy (two repos)
 
 `points` (this repo) only builds+pushes the image and triggers a redeploy. All routing/TLS/DNS live in
-**`github.com/jorgen/limilind-edge`** ("no visible infrastructure"). To bring `points.limilind.com` up:
+**`github.com/jorgen/limilind-edge`** ("no visible infrastructure"). To bring `dewfall.limilind.com` up:
 
 1. In **this** repo, add GitHub secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (same values
    as the other limilind apps).
 2. In **`limilind-edge`**: add a `points` compose service (`image ghcr.io/jorgen/points`,
    `networks: [web]`, `DEW_HOST=0.0.0.0`/`DEW_PORT=8080`, no Postgres), append
-   `;points.limilind.com=points:8080` to `GATEWAY_ROUTES` (+ `.env`), add a `points` welcome card, and add a
-   GoDaddy A-record `points.limilind.com` → droplet IP. The gateway auto-issues the TLS cert by SNI.
+   `;dewfall.limilind.com=dewfall:8080` to `GATEWAY_ROUTES` (+ `.env`), add a `dewfall` welcome card, and add a
+   GoDaddy A-record `dewfall.limilind.com` → droplet IP. The gateway auto-issues the TLS cert by SNI.
 
 ## Public / keyless default (prerequisites)
 
@@ -52,5 +52,5 @@ auto-connects, so the page renders with no input. For that anonymous read to act
   Today vio always SigV4-signs; a small addition to `s3_object_store.h` (skip the `Authorization`/`x-amz-*`
   headers when the access key is empty) is required, then re-pin vio for the WASM build.
 - **Bucket policy**: `s3://limilind-public` needs a public-read policy on `points/*`.
-- **CORS**: `s3://limilind-public` must allow the `points.limilind.com` origin for `GET` + **ranged** reads
+- **CORS**: `s3://limilind-public` must allow the `dewfall.limilind.com` origin for `GET` + **ranged** reads
   (expose `Content-Length`/`Content-Range`; allow `Range`, `Authorization`, `x-amz-*` request headers).

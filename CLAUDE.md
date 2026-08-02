@@ -75,7 +75,7 @@ src/
 examples/
   converter/           Converter usage example (converter_example.cpp)
   renderer/            OpenGL renderer example (gl_renderer.cpp, renderer_example.cpp)
-    web/                 React + WebGL2 front end (Vite; points.limilind.com)
+    web/                 React + WebGL2 front end (Vite; dewfall.limilind.com)
   dew_info/            Minimal info example
 tools/
   dew_info/            CLI: dataset compression stats
@@ -84,7 +84,7 @@ tools/
 tests/
   private/             Internal unit tests (doctest)
   public/              Public API tests
-backend/               prism static-file server for points.limilind.com
+backend/               prism static-file server for dewfall.limilind.com
 deploy/                Dockerfile for the web deployment
 CMake/                 Build modules and dependency definitions (3rdPartyPackages.cmake)
 ```
