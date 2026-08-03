@@ -138,6 +138,15 @@ magic bytes, and `dew copy` rewrites a dataset to the current format.
 
 ## Python bindings
 
+```bash
+pip install dewfall
+```
+
+That one install gives you three things: `import dew`, the `dew` CLI on your PATH, and the C
+headers plus a CMake package config for building native code against dewfall. Wheels are
+[abi3](https://docs.python.org/3/c-api/stable.html), so a single binary per platform covers
+CPython 3.12 and every later version.
+
 `import dew` mirrors the C API as generated [nanobind](https://github.com/wjakob/nanobind)
 bindings — opaque handles become classes with automatic destroy, pointer+length strings become
 `str`, fixed-size arrays become sequences, multi-out-param getters return dicts, and the
@@ -187,9 +196,24 @@ intensity + classification from numpy arrays, chunked feeding, progress, and a r
 python examples/python/numpy_to_dew.py out.dew --points 2000000
 ```
 
-Build with `cmake --preset release -DDEW_BUILD_PYTHON=ON -DPython_EXECUTABLE=$(which python3)`
-(the interpreter needs `pip install libclang`, plus `numpy pytest` for the test suite); the module
-lands in `<build>/bindings/python/`. GL-tier plumbing (`dew_renderer_frame`, buffer callbacks) is
+Because the wheel also ships the libraries, headers and a CMake config, a C or C++ project can
+build against the installed package without a source checkout:
+
+```cmake
+find_package(dew REQUIRED)                       # see dew.get_cmake_dir()
+target_link_libraries(myapp PRIVATE dew::dew_converter)
+```
+
+```bash
+cmake -DCMAKE_PREFIX_PATH="$(python -c 'import dew; print(dew.get_cmake_dir())')" -S . -B build
+```
+
+`dew.get_include()` and `dew.get_lib_dir()` are there for build systems that are not CMake.
+
+To build the bindings from a checkout instead:
+`cmake --preset release -DDEW_BUILD_PYTHON=ON -DPython_EXECUTABLE=$(which python3)` (the
+interpreter needs `pip install libclang`, plus `numpy pytest` for the test suite); the module lands
+in `<build>/bindings/python/dew/`. GL-tier plumbing (`dew_renderer_frame`, buffer callbacks) is
 deliberately not bound.
 
 The bindings are **generated at build time** by `tools/bindgen/`: `parse_headers.py` reads the

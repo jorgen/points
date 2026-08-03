@@ -902,9 +902,15 @@ class Emitter:
         parts += self.registers
         parts.append("} // namespace")
         parts.append("")
-        parts.append("NB_MODULE(dew, m)")
+        # The extension is `dew._dew`, re-exported by dew/__init__.py: the
+        # package directory is what carries get_include()/get_cmake_dir(), the
+        # type stubs and the shipped libraries, and a directory cannot coexist
+        # with a top-level dew.<ext>. This name MUST match the built filename
+        # or import fails with "dynamic module does not define module export
+        # function".
+        parts.append("NB_MODULE(_dew, m)")
         parts.append("{")
-        parts.append('  m.doc() = "Python bindings for the dewfall point cloud library";')
+        parts.append('  m.doc() = "Compiled core of the dewfall point cloud bindings (see the dew package).";')
         parts.append("  dewpy::register_error(m);")
         for call in self.register_calls:
             parts.append(f"  {call}")

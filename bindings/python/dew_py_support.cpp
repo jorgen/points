@@ -21,16 +21,37 @@ std::pair<int, std::string> error_info(const dew_error_t *err)
   return {code, str ? std::string(str, str_len) : std::string("unknown dewfall error")};
 }
 
+/* Build a dew.Error instance carrying .code and .message.
+ *
+ * Deliberately avoids the format-string C-API entry points
+ * (PyObject_CallFunction(type, "s#", ...) and friends): under Py_LIMITED_API
+ * those resolve through the PY_SSIZE_T_CLEAN aliasing and silently fail at
+ * runtime on CPython 3.12, so the abi3 wheel lost .code/.message on exactly
+ * the oldest interpreter it claims to support while working fine on 3.14. The
+ * explicit object-based calls below have unambiguous signatures on every
+ * version. Every return value is checked -- a failure here degrades the
+ * exception, so it must not pass silently. */
 static nb::object make_error_instance(int code, const std::string &message)
 {
-  nb::object inst = nb::steal(PyObject_CallFunction(s_error_type, "s#", message.c_str(), (Py_ssize_t)message.size()));
+  nb::object msg = nb::steal(PyUnicode_FromStringAndSize(message.data(), (Py_ssize_t)message.size()));
+  if (!msg.is_valid())
+  {
+    PyErr_Clear();
+    return nb::none();
+  }
+  nb::object inst = nb::steal(PyObject_CallFunctionObjArgs(s_error_type, msg.ptr(), nullptr));
   if (!inst.is_valid())
   {
     PyErr_Clear();
     return nb::none();
   }
-  PyObject_SetAttrString(inst.ptr(), "code", nb::int_(code).ptr());
-  PyObject_SetAttrString(inst.ptr(), "message", nb::str(message.c_str(), message.size()).ptr());
+  nb::object code_obj = nb::steal(PyLong_FromLong(code));
+  if (!code_obj.is_valid() || PyObject_SetAttrString(inst.ptr(), "code", code_obj.ptr()) != 0 ||
+      PyObject_SetAttrString(inst.ptr(), "message", msg.ptr()) != 0)
+  {
+    PyErr_Clear();
+    return nb::none();
+  }
   return inst;
 }
 

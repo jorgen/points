@@ -1,0 +1,116 @@
+name: Wheels
+
+# One abi3 wheel per platform covering CPython 3.12+ (see pyproject.toml).
+# Runs on demand and on tags; publishing is gated on the tag.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - pyproject.toml
+      - .github/workflows/wheels.yml
+      - bindings/**
+      - tools/bindgen/**
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: wheels-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wheels:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    name: manylinux_2_28 x86_64 }
+          - { os: ubuntu-24.04-arm, name: manylinux_2_28 aarch64 }
+          - { os: macos-15-intel,   name: macOS x86_64 }
+          - { os: macos-14,         name: macOS arm64 }
+          - { os: windows-latest,   name: Windows amd64 }
+          - { os: windows-11-arm,   name: Windows arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheel
+        uses: pypa/cibuildwheel@v3.2.0
+
+      # Independent, symbol-level proof that the binary really is limited-API
+      # and not a version-locked build mislabelled as abi3. The CMake
+      # assertions in bindings/python/CMakeLists.txt catch this at build time;
+      # this catches it in the artifact.
+      - name: Audit abi3 tag
+        shell: bash
+        run: |
+          python -m pip install --quiet abi3audit
+          python -m abi3audit --strict --verbose wheelhouse/*.whl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  sdist:
+    name: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pipx run build --sdist
+      - name: Check the sdist is not carrying the dependency cache
+        run: |
+          size=$(stat -c%s dist/*.tar.gz)
+          echo "sdist is $((size / 1024 / 1024)) MB"
+          test "$size" -lt 26214400 || { echo "sdist exceeds 25MB -- check sdist.exclude"; exit 1; }
+          tar -tzf dist/*.tar.gz | grep -E "^[^/]+/(3rdparty|cmake-build|build)/" && \
+            { echo "sdist contains build/dependency trees"; exit 1; } || true
+      - uses: actions/upload-artifact@v4
+        with: { name: sdist, path: dist/*.tar.gz }
+
+  # The point of an abi3 wheel is that ONE binary serves many interpreters.
+  # Nothing else in this pipeline proves that, so install the cp312 wheel on
+  # every later interpreter and run the real test suite. This is what caught
+  # a limited-API bug that only manifested on 3.12.
+  cross-version:
+    name: ${{ matrix.os }} py${{ matrix.python }}
+    needs: wheels
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+        python: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}
+          path: wheelhouse
+      - name: Install the wheel and run the suite
+        shell: bash
+        run: |
+          python -m pip install --quiet pytest numpy
+          python -m pip install --quiet --no-index --find-links wheelhouse dewfall
+          python -c "import sys, dew; print(sys.version); print(dew.__file__, dew.__version__)"
+          dew --version
+          python -m pytest -q bindings/python/tests
+
+  publish:
+    name: Publish to PyPI
+    needs: [wheels, sdist, cross-version]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # trusted publishing; no long-lived token
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - uses: pypa/gh-action-pypi-publish@release/v1

@@ -107,8 +107,17 @@ def test_look_at_aabb_struct_arg():
 def test_error_exception():
     with pytest.raises(dew.Error) as excinfo:
         dew.Converter("/nonexistent/dir/x.dew", dew.ConverterOpenFileSemantics.open_existing)
-    assert excinfo.value.code != 0
-    assert excinfo.value.message
+    error = excinfo.value
+    # .code/.message are attached by the C++ translator. Building the instance
+    # through the format-string C-API silently failed under Py_LIMITED_API on
+    # CPython 3.12 (but not 3.14), degrading the exception to a bare message --
+    # so assert the whole shape, not just that something was raised.
+    assert error.code != 0
+    assert isinstance(error.code, int)
+    assert error.message
+    assert isinstance(error.message, str)
+    assert str(error) == error.message
+    assert error.args == (error.message,)
 
 
 def test_file_converter_callbacks_require_all_three(tmp_path):
