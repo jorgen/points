@@ -28,6 +28,9 @@
 #elif defined(_WIN32)
 #include <io.h>
 #include <windows.h>
+// FSCTL_SET_SPARSE and FILE_ZERO_DATA_INFORMATION live here, and the project
+// builds with WIN32_LEAN_AND_MEAN, which keeps <windows.h> from pulling it in.
+#include <winioctl.h>
 #endif
 
 namespace dew::converter
