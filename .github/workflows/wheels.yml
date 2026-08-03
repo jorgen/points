@@ -32,10 +32,32 @@ jobs:
           # parenthesized aggregate initialization (P0960) that vendored vio
           # relies on; macos-15 ships Xcode 16.
           - { os: macos-15,         name: macOS arm64 }
-          - { os: windows-latest,   name: Windows amd64 }
-          - { os: windows-11-arm,   name: Windows arm64 }
+          - { os: windows-latest,   name: Windows amd64, msvc_arch: x64 }
+          - { os: windows-11-arm,   name: Windows arm64, msvc_arch: arm64 }
     steps:
       - uses: actions/checkout@v4
+
+      # Ninja needs cl.exe on PATH, and nothing else on these runners provides
+      # it: CMake 3.31 has no generator for the installed Visual Studio 2026,
+      # so both the default (NMake) and an explicit VS generator dead-end, and
+      # bare Ninja finds the runner's MinGW gcc instead. vcvars works with
+      # whichever VS is installed. Done inline rather than with a third-party
+      # action, since this job's artifacts are what gets published.
+      - name: Activate MSVC
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $install = & $vswhere -latest -products * -property installationPath
+          if (-not $install) { throw "vswhere found no Visual Studio installation" }
+          $vcvars = Join-Path $install "VC\Auxiliary\Build\vcvarsall.bat"
+          if (-not (Test-Path $vcvars)) { throw "no vcvarsall.bat under $install (C++ toolset not installed?)" }
+          Write-Host "Using $install"
+          cmd /c "`"$vcvars`" ${{ matrix.msvc_arch }} && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') {
+              "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            }
+          }
 
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0

@@ -3,7 +3,7 @@
 # tools/bindgen/parse_headers.py with ${Python_EXECUTABLE}, which under PEP 517
 # isolation is this very environment. Pinned exactly -- a libclang upgrade can
 # change clang.cindex cursor kinds and so silently alter the generated API.
-requires = ["scikit-build-core>=0.11", "libclang==18.1.1", "ninja>=1.11"]
+requires = ["scikit-build-core>=0.11", "libclang==18.1.1"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -136,22 +136,14 @@ environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
 repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} --exclude libdew_ -w {dest_dir} -v {wheel}"
 
 [tool.cibuildwheel.windows]
+# Ninja, with cl.exe supplied by the vcvars step in .github/workflows/wheels.yml.
+#
+# The alternatives both dead-end on the current runners, which ship Visual
+# Studio 2026: CMake's default generator resolves to NMake Makefiles (no VS it
+# recognises, and no nmake on PATH), and naming a generator explicitly fails
+# because CMake 3.31 has no "Visual Studio 18 2026". Plain Ninja without an
+# MSVC environment picks up the runner's MinGW gcc, which laszip cannot build
+# under. vcvars is the one approach that does not care which VS is installed.
+environment = { CMAKE_GENERATOR = "Ninja" }
 # --no-mangle-all keeps dew_*.dll linkable by name for the shipped headers.
 repair-wheel-command = "delvewheel repair --no-mangle-all -w {dest_dir} {wheel}"
-
-# Windows generator, per architecture.
-#
-# CMake's default here resolves to NMake Makefiles, which scikit-build-core
-# forwards unchanged (it only special-cases "Visual Studio" and "Ninja") -- and
-# nmake is not on PATH. Asking for Ninja instead got further but picked up the
-# MinGW gcc that is on the runner PATH, because nothing activates an MSVC
-# environment and scikit-build-core only sets CC/CXX from sysconfig (unset on
-# Windows CPython); laszip does not build under MinGW. The Visual Studio
-# generator locates the MSVC toolchain itself, with no developer prompt.
-[[tool.cibuildwheel.overrides]]
-select = "*-win_amd64"
-environment = { CMAKE_GENERATOR = "Visual Studio 17 2022", CMAKE_GENERATOR_PLATFORM = "x64" }
-
-[[tool.cibuildwheel.overrides]]
-select = "*-win_arm64"
-environment = { CMAKE_GENERATOR = "Visual Studio 17 2022", CMAKE_GENERATOR_PLATFORM = "ARM64" }
