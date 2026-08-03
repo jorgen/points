@@ -136,9 +136,66 @@ closest-first, decodes them off the main thread, and uploads under byte budgets 
 Datasets written before the rename (`JLP` magics) still open: readers accept both the old and new
 magic bytes, and `dew copy` rewrites a dataset to the current format.
 
+## Python bindings
+
+`import dew` mirrors the C API as generated [nanobind](https://github.com/wjakob/nanobind)
+bindings — opaque handles become classes with automatic destroy, pointer+length strings become
+`str`, fixed-size arrays become sequences, multi-out-param getters return dicts, and the
+`dew_error_t` conventions surface as the `dew.Error` exception:
+
+```python
+import dew
+
+conv = dew.Converter("output.dew", dew.ConverterOpenFileSemantics.truncate)
+conv.set_compression(dew.ConverterCompression.zstd)
+conv.set_runtime_callbacks(progress=lambda p: print(f"{p:.0%}"))
+conv.add_data_file(["input.laz"])          # LAS/LAZ callbacks are the default
+conv.wait_idle()
+print(conv.get_compression_stats().input_file_count)
+```
+
+Python can also *produce* points — implement the file-convert callbacks and write straight into
+the converter's buffers as numpy arrays (they fire on converter-internal threads; the trampolines
+handle the GIL):
+
+```python
+def init(filename, header, attributes):
+    header.point_count = n
+    header.scale = [0.001] * 3
+    attributes.add_attribute(dew.ATTRIBUTE_XYZ, dew.Type.i32, dew.Components.components_3)
+    return my_state(filename)          # per-file state, threaded back to you
+
+def convert_data(state, header, attributes, buffers, max_points):
+    count = fill(buffers[0], state, max_points)   # writable (max_points, 3) numpy VIEW
+    return count, state.done
+
+conv.set_file_converter_callbacks(pre_init=pre_init, init=init, convert_data=convert_data,
+                                  destroy=lambda state: state.close())
+```
+
+The `buffers` alias the converter's own memory and are valid only for the duration of the call —
+fill them, don't keep them. Reporting more points than they hold, registering no attributes,
+leaving `header.scale` unset, or raising from a callback each surface as a converter error rather
+than corrupting the dataset. Dropping a `Converter` drains its pipeline first, so `del` on a
+running conversion blocks rather than racing the teardown; call `wait_idle()` yourself to control
+when that happens.
+
+Build with `cmake --preset release -DDEW_BUILD_PYTHON=ON -DPython_EXECUTABLE=$(which python3)`
+(the interpreter needs `pip install libclang`, plus `numpy pytest` for the test suite); the module
+lands in `<build>/bindings/python/`. GL-tier plumbing (`dew_renderer_frame`, buffer callbacks) is
+deliberately not bound.
+
+The bindings are **generated at build time** by `tools/bindgen/`: `parse_headers.py` reads the
+public headers with libclang into a generator-agnostic JSON IR (`dew_api.json` — raw declarations
+plus a derived object-oriented layer: classes, method roles, error conventions), and
+`generate_nanobind.py` emits the nanobind C++ from it. Other generators (e.g. an inline C++
+wrapper header) can consume the same JSON. Header comments steer the generators via `//=` tags
+(`//= bind: skip`, `//= arrays: buffers[buffer_count]`, `//= py.skip`, `//= blocking`, ...);
+`parse_headers.py --check` lints the surface and fails on anything unclassifiable, so new API is
+either bound or explicitly annotated — never silently dropped.
+
 ## Roadmap
 
-- **Python bindings** — `import dew`: dataset access and conversion from Python.
 - **ML training support** — efficient point/attribute sampling suitable for feeding point cloud
   model training pipelines directly from `.dew` datasets.
 

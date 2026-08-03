@@ -48,6 +48,7 @@ typedef void (*dew_converter_data_source_request_aabb_callback_t)(double aabb_mi
 DEW_CONVERTER_EXPORT void dew_converter_data_source_request_aabb(struct dew_converter_data_source_t *converter_data_source, dew_converter_data_source_request_aabb_callback_t callback, void *user_ptr);
 
 DEW_CONVERTER_EXPORT uint32_t dew_converter_data_attribute_count(struct dew_converter_data_source_t *converter_data_source);
+//= out_string: name[name_buffer_size]
 DEW_CONVERTER_EXPORT uint32_t dew_converter_data_get_attribute_name(struct dew_converter_data_source_t *converter_data_source, int index, char *name, uint32_t name_buffer_size);
 
 DEW_CONVERTER_EXPORT void dew_converter_data_set_rendered_attribute(struct dew_converter_data_source_t *converter_data_source, const char *name, uint32_t name_len);

@@ -25,13 +25,21 @@
 extern "C" {
 #endif
 
+// Encoded image bytes (png/jpg/...) for the six cube faces. The create call
+// decodes and copies them; the pointers are only borrowed for its duration.
 struct dew_skybox_data_t
 {
+  //= arrays: positive_x[positive_x_size]
   void *positive_x;
+  //= arrays: negative_x[negative_x_size]
   void *negative_x;
+  //= arrays: positive_y[positive_y_size]
   void *positive_y;
+  //= arrays: negative_y[negative_y_size]
   void *negative_y;
+  //= arrays: positive_z[positive_z_size]
   void *positive_z;
+  //= arrays: negative_z[negative_z_size]
   void *negative_z;
   int positive_x_size;
   int negative_x_size;

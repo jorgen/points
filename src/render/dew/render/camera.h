@@ -28,6 +28,7 @@ struct dew_camera_t;
 DEW_RENDER_EXPORT struct dew_camera_t *dew_camera_create(void);
 DEW_RENDER_EXPORT void dew_camera_destroy(struct dew_camera_t *camera);
 DEW_RENDER_EXPORT void dew_camera_look_at(struct dew_camera_t *camera, const double eye[3], const double center[3], const double up[3]);
+//= in: aabb
 DEW_RENDER_EXPORT void dew_camera_look_at_aabb(struct dew_camera_t *camera, struct dew_aabb_t *aabb, const double direction[3], const double up[3]);
 DEW_RENDER_EXPORT void dew_camera_get_view_matrix(struct dew_camera_t *camera, double data[16]);
 DEW_RENDER_EXPORT void dew_camera_set_view_matrix(struct dew_camera_t *camera, const double data[16]);

@@ -21,3 +21,11 @@ CmDepFetchPackage(argh 431bf323ac https://github.com/adishavit/argh/archive/431b
 CmDepFetchPackage(unordered_dense 4.1.2 https://github.com/martinus/unordered_dense/archive/refs/tags/v4.1.2.tar.gz SHA256=300410dbcd32800f83b2113dfecbdfe8cd256caa4cfeb117d646021d6e3209ae)
 CmDepFetchPackage(zstd 1.5.7 https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz SHA256=37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3)
 CmDepFetchFile(stbimage b42009b https://raw.githubusercontent.com/nothings/stb/8b5f1f37b5b75829fc72d38e7b5d4bcbf8a26d55/stb_image.h stb_image.h SHA256=91f435e0fc6a620018b878b9859c74dff60d28046f87e649191ad6f35a98c722)
+
+# Python bindings only. The nanobind GitHub tarball does not contain the
+# ext/robin_map submodule, so robin-map is fetched separately and exposed as
+# the tsl::robin_map target before nanobind is added (see bindings/python).
+if (DEW_BUILD_PYTHON)
+    CmDepFetchPackage(nanobind 2.13.0 https://github.com/wjakob/nanobind/archive/refs/tags/v2.13.0.tar.gz SHA256=cb25a582ccade4b6067bc73c78b84ad9dbd0bbe0e537320711d18015ccafc4ef)
+    CmDepFetchPackage(robin_map 1.4.1 https://github.com/Tessil/robin-map/archive/refs/tags/v1.4.1.tar.gz SHA256=0e3f53a377fdcdc5f9fed7a4c0d4f99e82bbb64175233bd13427fef9a771f4a1)
+endif ()

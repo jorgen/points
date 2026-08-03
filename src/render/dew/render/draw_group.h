@@ -24,6 +24,7 @@
 extern "C" {
 #endif
 
+//= py.skip
 struct dew_draw_buffer_t
 {
   int buffer_mapping;
@@ -44,9 +45,11 @@ enum dew_draw_type_t
   dew_node_bbox_lines,
 };
 
+//= py.skip
 struct dew_draw_group_t
 {
   enum dew_draw_type_t draw_type;
+  //= arrays: buffers[buffers_size]
   struct dew_draw_buffer_t *buffers;
   int buffers_size;
   int draw_size;

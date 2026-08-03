@@ -34,6 +34,7 @@ struct dew_frame_camera_t
   double inverse_view_projection[4][4];
 };
 
+//= py.skip
 struct dew_to_render_t;
 typedef void (*dew_add_to_frame_t)(struct dew_frame_camera_t *camera, struct dew_to_render_t *to_render, void *data);
 

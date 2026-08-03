@@ -110,8 +110,10 @@ enum dew_node_bbox_buffer_mapping_t
   dew_node_bbox_bm_color
 };
 
+//= py.skip
 struct dew_frame_t
 {
+  //= arrays: to_render[to_render_size]
   struct dew_draw_group_t* to_render;
   int to_render_size;
 };
@@ -147,12 +149,17 @@ struct dew_renderer_callbacks_t
 DEW_RENDER_EXPORT struct dew_renderer_t* dew_renderer_create(void);
 DEW_RENDER_EXPORT void dew_renderer_destroy(struct dew_renderer_t *renderer);
 DEW_RENDER_EXPORT void dew_renderer_add_camera(struct dew_renderer_t* renderer, struct dew_camera_t* camera);
+//= py.no_keep_alive
 DEW_RENDER_EXPORT void dew_renderer_remove_camera(struct dew_renderer_t* renderer, struct dew_camera_t* camera);
+//= py.skip
 DEW_RENDER_EXPORT struct dew_frame_t dew_renderer_frame(struct dew_renderer_t* renderer, struct dew_camera_t* camera);
+//= py.skip
 DEW_RENDER_EXPORT void dew_renderer_set_callback(struct dew_renderer_t* renderer, struct dew_renderer_callbacks_t callbacks, void *user_ptr);
 DEW_RENDER_EXPORT void dew_renderer_add_data_source(struct dew_renderer_t *renderer, struct dew_data_source_t data_source);
+//= py.no_keep_alive
 DEW_RENDER_EXPORT void dew_renderer_remove_data_source(struct dew_renderer_t *renderer, struct dew_data_source_t data_source);
 
+//= py.skip
 DEW_RENDER_EXPORT void dew_to_render_add_render_group(struct dew_to_render_t *to_render, struct dew_draw_group_t draw_group);
 
 #ifdef __cplusplus

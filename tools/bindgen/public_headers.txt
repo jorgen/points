@@ -1,0 +1,39 @@
+# Public C headers parsed into the binding IR, in umbrella-include order.
+# Each line is relative to src/; the first path component is the module and
+# also the include root (so "common/dew/common/error.h" is included as
+# <dew/common/error.h> with -I src/common).
+#
+# The order matters: headers are not standalone-parseable
+#   - aabb.h before camera.h (camera.h uses struct dew_aabb_t*)
+#   - camera.h before renderer.h (renderer.h uses struct dew_camera_t* without
+#     declaring it; camera.h provides the file-scope forward declaration)
+#   - data_source.h before renderer.h (renderer.h passes dew_data_source_t by value)
+#
+# Deliberately excluded, one '!' line each so a forgotten header is
+# distinguishable from an intentional omission (parse_headers.py audits this):
+!common/dew/common/export.h
+!converter/dew/converter/export.h
+!render/dew/render/export.h
+#   ^ export-macro plumbing, parsed transitively via the headers below
+!converter/dew/converter/connection_cli.h
+#   ^ C++-only helpers (namespaces, STL); not part of the C ABI
+!common/dew/error.h
+#   ^ legacy duplicate of common/dew/common/error.h (same include guard)
+common/dew/common/error.h
+common/dew/common/format.h
+render/dew/render/aabb.h
+render/dew/render/buffer.h
+render/dew/render/draw_group.h
+render/dew/render/camera.h
+render/dew/render/data_source.h
+render/dew/render/renderer.h
+render/dew/render/aabb_data_source.h
+render/dew/render/axis_gizmo_data_source.h
+render/dew/render/environment_data_source.h
+render/dew/render/flat_points_data_source.h
+render/dew/render/origin_anchor_data_source.h
+render/dew/render/skybox_data_source.h
+converter/dew/converter/converter.h
+converter/dew/converter/converter_data_source.h
+converter/dew/converter/laszip_file_convert_callbacks.h
+converter/dew/converter/default_attribute_names.h

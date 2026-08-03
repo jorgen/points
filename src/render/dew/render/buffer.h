@@ -24,8 +24,11 @@
 extern "C" {
 #endif
 
+//= py.skip
 struct dew_buffer_t;
+//= py.skip
 DEW_RENDER_EXPORT void dew_buffer_set_rendered(struct dew_buffer_t *buffer);
+//= py.skip
 DEW_RENDER_EXPORT void dew_buffer_release_data(struct dew_buffer_t *buffer);
 
 #ifdef __cplusplus

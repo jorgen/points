@@ -41,6 +41,7 @@ struct dew_converter_header_t
 struct dew_converter_attributes_t;
 DEW_CONVERTER_EXPORT void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components);
 
+//= py.skip
 struct dew_converter_attribute_t
 {
 #ifdef __cplusplus
@@ -59,6 +60,7 @@ struct dew_converter_attribute_t
   enum dew_components_t components;
 };
 
+//= py.skip
 struct dew_converter_buffer_t
 {
 #ifdef __cplusplus
@@ -158,11 +160,13 @@ struct dew_converter_upload_state_t
   uint64_t cache_spilled_bytes;
 };
 
+//= py.skip
 struct dew_converter_buffer_callbacks_t
 {
   int tmp;
 };
 
+//= py.skip
 struct dew_converter_str_buffer
 {
   const char *data;
@@ -213,6 +217,7 @@ struct dew_converter_stats_t
   uint32_t compression_method;
   uint64_t input_file_size_bytes;
   uint32_t attribute_count;
+  //= arrays: attributes[attribute_count]
   struct dew_converter_attribute_stats_t attributes[32];
 };
 
@@ -280,6 +285,11 @@ DEW_CONVERTER_EXPORT bool dew_converter_get_upload_state(struct dew_converter_t 
 // uploads may still be in flight (contrast dew_converter_wait_idle, which also drains them).
 DEW_CONVERTER_EXPORT void dew_converter_wait_local_complete(struct dew_converter_t *converter);
 
+// Destroying a converter whose pipeline is still running races the internal
+// thread pool (an enqueue after the pool stopped aborts), so callers must reach
+// a quiescent state first -- dew_converter_wait_idle is the usual way.
+// Language bindings whose object destruction is implicit should drain here.
+//= py.drain_on_destroy: dew_converter_wait_idle
 DEW_CONVERTER_EXPORT void dew_converter_destroy(struct dew_converter_t *destroy);
 
 DEW_CONVERTER_EXPORT void dew_converter_set_file_converter_callbacks(struct dew_converter_t *converter, struct dew_converter_file_convert_callbacks_t callbacks);
@@ -314,6 +324,9 @@ DEW_CONVERTER_EXPORT void dew_converter_set_lod_all_attributes(struct dew_conver
 // Must be called before dew_converter_add_data_file.
 DEW_CONVERTER_EXPORT void dew_converter_set_read_chunk_bytes(struct dew_converter_t *converter, uint64_t bytes);
 
+// May block on ingest backpressure, so Python bindings must release the GIL around it.
+//= arrays: buffers[buffer_count]
+//= blocking
 DEW_CONVERTER_EXPORT void dew_converter_add_data_file(struct dew_converter_t *converter, struct dew_converter_str_buffer *buffers, uint32_t buffer_count);
 
 DEW_CONVERTER_EXPORT void dew_converter_wait_idle(struct dew_converter_t *converter);
