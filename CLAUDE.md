@@ -26,6 +26,12 @@ Key targets:
   also migrates pre-rename magics), `dew laz` (LAS/LAZ header/VLR/point introspection)
 - `renderer_example` — OpenGL renderer example
 - `dew_render_wasm` / `dew_data_wasm` / `dew_decode_worker` — Emscripten modules (src/wasm)
+- `dew_python` — the `dew` Python extension (only with `-DDEW_BUILD_PYTHON=ON`, off by default;
+  needs a python3 with `pip install libclang`). Generated at build time from the public headers
+  by `tools/bindgen/`: `parse_headers.py` (libclang → `dew_api.json`) then `generate_nanobind.py`
+  (JSON → nanobind C++). `//=` comment tags in the headers steer both stages; run
+  `parse_headers.py --check` to lint the surface. Packaged as abi3 wheels via `pyproject.toml`
+  (scikit-build-core) — see the Python bindings section of README.md.
 
 Build presets (from CMakePresets.json):
 - `debug` / `release` — Unix/cross-platform (Ninja)
@@ -259,11 +265,15 @@ Managed via cmake-dep (CMake/3rdPartyPackages.cmake):
 | doctest | 2.4.12 | Unit testing |
 | argh | 431bf32 | Argument parsing |
 | unordered_dense | 4.1.2 | Fast hash map/set (ankerl) |
-| vio | fbee13f | Async I/O / event loop library |
-| curl | 7.74.0 | HTTP |
-| libuv | 1.51.0 | Cross-platform async I/O |
+| vio | 86bbea0 | Async I/O / event loop / object store |
 | stbimage | b42009b | Image loading |
 | cmakerc | 952ff | CMake resource compiler |
+| nanobind | 2.13.0 | Python bindings (only when `DEW_BUILD_PYTHON=ON`) |
+| robin_map | 1.4.1 | nanobind's hash map (its release tarballs omit the submodule) |
+
+Pulled in transitively by vio, not listed in `3rdPartyPackages.cmake`: libuv
+(async I/O), LibreSSL (TLS), ada (URL parsing). There is no curl dependency —
+HTTP goes through vio.
 
 ## Debugging .dew Files with dew extract
 
