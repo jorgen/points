@@ -331,7 +331,12 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   auto buffer_size = uint32_t(sizeof(morton::morton_t<MT, C>) * count);
   std::unique_ptr<uint8_t[]> world_morton_unique_ptr(new uint8_t[buffer_size]);
   morton::morton_t<MT, C> *morton_begin = reinterpret_cast<morton::morton_t<MT, C> *>(world_morton_unique_ptr.get());
-  uint64_t tmp[3];
+  // Both fill loops below are `for (i = 0; i < count; i++)`, so an empty batch
+  // leaves this untouched -- and it is read unconditionally by the
+  // morton::encode(tmp, base_morton) after them. count == 0 is a supported case
+  // (see the guard on first/last further down), so zero it. For count > 0 every
+  // element is overwritten, making this identical to the previous behaviour.
+  uint64_t tmp[3] = {};
   const vec_t<T> *point_data = reinterpret_cast<const vec_t<T> *>(points.buffers.buffers[0].data);
 
   bool scale_is_same = smallest_scale == public_header.scale[0] && smallest_scale == public_header.scale[1] && smallest_scale == public_header.scale[2];
