@@ -151,5 +151,8 @@ repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} --exclud
 # MSVC environment picks up the runner's MinGW gcc, which laszip cannot build
 # under. vcvars is the one approach that does not care which VS is installed.
 environment = { CMAKE_GENERATOR = "Ninja" }
+# cibuildwheel only installs delvewheel for its own default repair command, so
+# overriding the command means providing the tool.
+before-build = "pip install delvewheel"
 # --no-mangle-all keeps dew_*.dll linkable by name for the shipped headers.
 repair-wheel-command = "delvewheel repair --no-mangle-all -w {dest_dir} {wheel}"
