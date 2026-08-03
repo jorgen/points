@@ -238,7 +238,7 @@ vio::task_t<dew_error_t> upload_handler_t::put_with_retry(std::string name, std:
   for (int attempt = 0; attempt < 5; attempt++)
   {
     if (attempt)
-      co_await vio::sleep(_loop, std::chrono::milliseconds(250u << attempt)); // 500ms..4s
+      (void)co_await vio::sleep(_loop, std::chrono::milliseconds(250u << attempt)); // 500ms..4s
     auto r = co_await _io->write_object(name, data, size);
     if (r.has_value())
     {
