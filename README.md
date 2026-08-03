@@ -180,6 +180,13 @@ than corrupting the dataset. Dropping a `Converter` drains its pipeline first, s
 running conversion blocks rather than racing the teardown; call `wait_idle()` yourself to control
 when that happens.
 
+`examples/python/numpy_to_dew.py` is a complete, runnable version of the above — xyz + rgb +
+intensity + classification from numpy arrays, chunked feeding, progress, and a read-back:
+
+```bash
+python examples/python/numpy_to_dew.py out.dew --points 2000000
+```
+
 Build with `cmake --preset release -DDEW_BUILD_PYTHON=ON -DPython_EXECUTABLE=$(which python3)`
 (the interpreter needs `pip install libclang`, plus `numpy pytest` for the test suite); the module
 lands in `<build>/bindings/python/`. GL-tier plumbing (`dew_renderer_frame`, buffer callbacks) is

@@ -88,6 +88,8 @@ struct attrs_proxy
   dew_converter_attributes_t *h = nullptr;
   uint32_t count = 0;
   std::string first_name;
+  enum dew_type_t first_type = dew_type_u8;
+  enum dew_components_t first_components = dew_components_1;
 };
 
 /* Nulls attrs_proxy::h on every exit path out of the init trampoline. */
@@ -248,6 +250,13 @@ inline void file_init_tramp(const char *filename, size_t filename_size, dew_conv
                             "attributes.add_attribute(dew.ATTRIBUTE_XYZ, ...) is required");
     if (proxy->first_name != DEW_ATTRIBUTE_XYZ)
       throw nb::value_error("the first attribute registered by init must be dew.ATTRIBUTE_XYZ");
+    /* sort_points dispatches the morton conversion on the first attribute's
+     * format and only implements i32x3 (default: assert(false) on a converter
+     * thread). Coordinates are scaled integers: quantize with header.scale. */
+    if (proxy->first_type != dew_type_i32 || proxy->first_components != dew_components_3)
+      throw nb::value_error("dew.ATTRIBUTE_XYZ must be registered as (dew.Type.i32, "
+                            "dew.Components.components_3): coordinates are integers quantized "
+                            "by header.scale, not floats");
 
     /* The header is now deterministically zeroed rather than stack garbage,
      * which turns "forgot to set it" into silent corruption instead of noise:
@@ -371,7 +380,11 @@ inline void register_file_attributes(nb::module_ &m)
                                 "(this registrar belongs to a file whose init already returned)");
         dew_converter_attributes_add_attribute(self.h, name.data(), uint32_t(name.size()), type, components);
         if (self.count == 0)
+        {
           self.first_name.assign(name);
+          self.first_type = type;
+          self.first_components = components;
+        }
         ++self.count;
       },
       nb::arg("name"), nb::arg("type"), nb::arg("components"),
