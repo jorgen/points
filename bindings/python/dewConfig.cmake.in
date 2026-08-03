@@ -30,7 +30,13 @@ foreach (_dew_component common render converter)
   endif ()
 
   set(_dew_soname "${CMAKE_SHARED_LIBRARY_PREFIX}dew_${_dew_component}${CMAKE_SHARED_LIBRARY_SUFFIX}")
-  set(_dew_library "${_dew_lib_dir}/${_dew_soname}")
+  if (WIN32)
+    # DLLs sit next to the extension module so Windows can resolve them;
+    # only the import libraries live in lib/.
+    set(_dew_library "${_dew_package_dir}/${_dew_soname}")
+  else ()
+    set(_dew_library "${_dew_lib_dir}/${_dew_soname}")
+  endif ()
   if (NOT EXISTS "${_dew_library}")
     set(dew_FOUND FALSE)
     set(dew_NOT_FOUND_MESSAGE "dewfall library not found: ${_dew_library}")

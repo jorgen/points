@@ -24,12 +24,15 @@ __all__ = ["get_include", "get_lib_dir", "get_cmake_dir", "__version__"]
 
 _PACKAGE_DIR = Path(__file__).parent.resolve()
 
-# Windows has no rpath: the extension finds libdew_*.dll through the DLL search
-# path, which must be extended before the import below. Harmless elsewhere.
+# Windows has no rpath. The dew_*.dll ship beside this package's extension
+# module, which Windows searches when loading it, so the import below normally
+# just works -- but register the directory explicitly as well, so an
+# interpreter or loader with a restricted search path still finds them.
 if sys.platform == "win32":  # pragma: no cover - platform specific
-    _lib_dir = _PACKAGE_DIR / "lib"
-    if _lib_dir.is_dir() and hasattr(os, "add_dll_directory"):
-        os.add_dll_directory(str(_lib_dir))
+    if hasattr(os, "add_dll_directory"):
+        for _candidate in (_PACKAGE_DIR, _PACKAGE_DIR / "lib"):
+            if _candidate.is_dir():
+                os.add_dll_directory(str(_candidate))
 
 from ._dew import *  # noqa: E402,F401,F403  (after the DLL path fix above)
 from . import _dew as _ext  # noqa: E402

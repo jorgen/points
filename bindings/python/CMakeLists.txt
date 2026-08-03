@@ -177,9 +177,14 @@ if (SKBUILD)
 
     install(TARGETS dew_python LIBRARY DESTINATION "${_dew_pkg}" COMPONENT dew_python)
 
+    # Windows resolves a module's dependencies from the directory containing it,
+    # so the DLLs go beside the extension rather than in lib/ -- which is also
+    # where delvewheel expects to find them when it repairs the wheel. The
+    # import libraries stay in lib/ for linking. Elsewhere the rpath set above
+    # points at lib/, so the shared libraries live there.
     install(TARGETS dew_common dew_render dew_converter
             LIBRARY DESTINATION "${_dew_pkg}/lib" COMPONENT dew_runtime
-            RUNTIME DESTINATION "${_dew_pkg}/lib" COMPONENT dew_runtime
+            RUNTIME DESTINATION "${_dew_pkg}" COMPONENT dew_runtime
             ARCHIVE DESTINATION "${_dew_pkg}/lib" COMPONENT dew_devel)
 
     # Self-contained (it statically links the object libs and every vendored
