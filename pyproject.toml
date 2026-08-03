@@ -3,7 +3,7 @@
 # tools/bindgen/parse_headers.py with ${Python_EXECUTABLE}, which under PEP 517
 # isolation is this very environment. Pinned exactly -- a libclang upgrade can
 # change clang.cindex cursor kinds and so silently alter the generated API.
-requires = ["scikit-build-core>=0.11", "libclang==18.1.1"]
+requires = ["scikit-build-core>=0.11", "libclang==18.1.1", "ninja>=1.11"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -60,6 +60,10 @@ cmake.define.DEW_BUILD_EXAMPLES = "OFF"
 cmake.define.BUILD_SHARED_LIBS = "ON"
 
 install.strip = true
+
+# A silent fallback to make/nmake when Ninja is missing is how the Windows
+# build ended up configuring for a generator whose tool was not installed.
+ninja.make-fallback = false
 
 # Only OUR install() rules. Vendored dependencies (ada, libuv, zstd, fmt, ...)
 # carry their own install rules, and a default `cmake --install` would dump
@@ -132,5 +136,11 @@ environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
 repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} --exclude libdew_ -w {dest_dir} -v {wheel}"
 
 [tool.cibuildwheel.windows]
+# CMake's default generator on these runners resolves to NMake Makefiles, which
+# scikit-build-core passes through unchanged (it only special-cases "Visual
+# Studio" and "Ninja") -- and nmake is not on PATH, so configure dies with
+# CMAKE_C_COMPILER not set. Ask for Ninja explicitly; it is in
+# build-system.requires, and cibuildwheel provides the MSVC environment.
+environment = { CMAKE_GENERATOR = "Ninja" }
 # --no-mangle-all keeps dew_*.dll linkable by name for the shipped headers.
 repair-wheel-command = "delvewheel repair --no-mangle-all -w {dest_dir} {wheel}"

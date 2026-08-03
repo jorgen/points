@@ -28,7 +28,10 @@ jobs:
           - { os: ubuntu-latest,    name: manylinux_2_28 x86_64 }
           - { os: ubuntu-24.04-arm, name: manylinux_2_28 aarch64 }
           - { os: macos-15-intel,   name: macOS x86_64 }
-          - { os: macos-14,         name: macOS arm64 }
+          # macos-14 defaults to Xcode 15.4, whose Apple Clang lacks C++20
+          # parenthesized aggregate initialization (P0960) that vendored vio
+          # relies on; macos-15 ships Xcode 16.
+          - { os: macos-15,         name: macOS arm64 }
           - { os: windows-latest,   name: Windows amd64 }
           - { os: windows-11-arm,   name: Windows arm64 }
     steps:
