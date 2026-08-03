@@ -36,7 +36,11 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if (WIN32)
-    add_compile_definitions(NOMINMAX=1 WIN32_LEAN_AND_MEAN=1 VC_EXTRALEAN=1)
+    # _CRT_SECURE_NO_WARNINGS: the CRT deprecates std::getenv in favour of the
+    # non-portable _dupenv_s, and the 17 getenv call sites here are deliberate
+    # (debug-hook and cache-toggle environment lookups). With /W4 /WX that
+    # deprecation is a hard build failure on MSVC.
+    add_compile_definitions(NOMINMAX=1 WIN32_LEAN_AND_MEAN=1 VC_EXTRALEAN=1 _CRT_SECURE_NO_WARNINGS=1)
 endif ()
 if (MSVC)
     string(REGEX REPLACE "/GR" "/GR-" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
