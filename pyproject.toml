@@ -136,11 +136,22 @@ environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
 repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} --exclude libdew_ -w {dest_dir} -v {wheel}"
 
 [tool.cibuildwheel.windows]
-# CMake's default generator on these runners resolves to NMake Makefiles, which
-# scikit-build-core passes through unchanged (it only special-cases "Visual
-# Studio" and "Ninja") -- and nmake is not on PATH, so configure dies with
-# CMAKE_C_COMPILER not set. Ask for Ninja explicitly; it is in
-# build-system.requires, and cibuildwheel provides the MSVC environment.
-environment = { CMAKE_GENERATOR = "Ninja" }
 # --no-mangle-all keeps dew_*.dll linkable by name for the shipped headers.
 repair-wheel-command = "delvewheel repair --no-mangle-all -w {dest_dir} {wheel}"
+
+# Windows generator, per architecture.
+#
+# CMake's default here resolves to NMake Makefiles, which scikit-build-core
+# forwards unchanged (it only special-cases "Visual Studio" and "Ninja") -- and
+# nmake is not on PATH. Asking for Ninja instead got further but picked up the
+# MinGW gcc that is on the runner PATH, because nothing activates an MSVC
+# environment and scikit-build-core only sets CC/CXX from sysconfig (unset on
+# Windows CPython); laszip does not build under MinGW. The Visual Studio
+# generator locates the MSVC toolchain itself, with no developer prompt.
+[[tool.cibuildwheel.overrides]]
+select = "*-win_amd64"
+environment = { CMAKE_GENERATOR = "Visual Studio 17 2022", CMAKE_GENERATOR_PLATFORM = "x64" }
+
+[[tool.cibuildwheel.overrides]]
+select = "*-win_arm64"
+environment = { CMAKE_GENERATOR = "Visual Studio 17 2022", CMAKE_GENERATOR_PLATFORM = "ARM64" }
