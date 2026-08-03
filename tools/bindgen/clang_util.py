@@ -66,18 +66,42 @@ def system_include_args():
     at explicitly. DEW_CLANG_EXTRA_ARGS appends/overrides.
     """
     args = []
+    # Clang's builtin headers (stddef.h, stdint.h, stdbool.h). The pip libclang
+    # wheel ships only the shared library, so these must come from a clang
+    # installation -- or, failing that, from GCC, whose versions of these
+    # headers clang parses fine. Without them the parse dies on the first
+    # #include <stddef.h>.
     resource_globs = [
+        # macOS
         "/Library/Developer/CommandLineTools/usr/lib/clang/*/include",
         "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/*/include",
         "/opt/homebrew/opt/llvm/lib/clang/*/include",
+        # Linux clang. RedHat-family (AlmaLinux, Fedora, RHEL, and so the
+        # manylinux images) installs to lib64.
+        "/usr/lib64/clang/*/include",
         "/usr/lib/clang/*/include",
+        "/usr/lib64/llvm-*/lib/clang/*/include",
         "/usr/lib/llvm-*/lib/clang/*/include",
+        # Last resort: GCC's copies of the same freestanding headers.
+        "/opt/rh/gcc-toolset-*/root/usr/lib/gcc/*/*/include",
+        "/usr/lib/gcc/*/*/include",
+        "/usr/lib64/gcc/*/*/include",
     ]
     for pattern in resource_globs:
         matches = sorted(glob.glob(pattern))
         if matches:
             args += ["-isystem", matches[-1]]
             break
+    else:
+        # Not fatal on Windows, where clang picks the MSVC/SDK headers up from
+        # the INCLUDE environment variable instead.
+        if sys.platform != "win32":
+            print(
+                "warning: no clang or gcc builtin-header directory found; the parse will "
+                "likely fail on <stddef.h>. Install clang, or set DEW_CLANG_EXTRA_ARGS "
+                "to point at one with -isystem.",
+                file=sys.stderr,
+            )
     if sys.platform == "darwin":
         try:
             sdk = subprocess.run(
