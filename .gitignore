@@ -14,3 +14,5 @@ test_backend_packed.dew
 test_cache_file
 screenshot_*.png
 screenshot_*.jpeg
+.venv/
+__pycache__/

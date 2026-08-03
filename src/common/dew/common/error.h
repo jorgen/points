@@ -23,10 +23,17 @@
 extern "C" {
 #endif
 
+// In Python the error object surfaces as the dew.Error exception (code, message);
+// the handle class itself is hidden.
+//= py.skip
 struct dew_error_t;
+//= py.skip
 DEW_COMMON_EXPORT struct dew_error_t *dew_error_create(void);
+//= py.skip
 DEW_COMMON_EXPORT void dew_error_destroy(struct dew_error_t *error);
+//= py.skip
 DEW_COMMON_EXPORT void dew_error_set_info(struct dew_error_t *error, int code, const char *str, size_t str_len);
+//= py.skip
 DEW_COMMON_EXPORT void dew_error_get_info(const struct dew_error_t *error, int *code, const char **str, size_t *str_len);
 
 #ifdef __cplusplus

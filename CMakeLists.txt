@@ -56,6 +56,7 @@ endif ()
 
 option(DEW_BUILD_TESTS "Build tests" ON)
 option(DEW_BUILD_EXAMPLES "Build examples" ON)
+option(DEW_BUILD_PYTHON "Build the dew Python bindings (needs python3 + pip libclang)" OFF)
 option(BUILD_SHARED_LIBS "Build shared libs" ON)
 
 if(EMSCRIPTEN)
@@ -94,6 +95,10 @@ endif ()
 # The dew CLI depends on the native converter/render libraries.
 if (NOT EMSCRIPTEN)
     add_subdirectory(tools)
+endif ()
+
+if (DEW_BUILD_PYTHON AND NOT EMSCRIPTEN)
+    add_subdirectory(bindings/python)
 endif ()
 
 if (NOT DEFINED CPACK_GENERATOR)
