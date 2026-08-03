@@ -1,0 +1,66 @@
+# CMake package config for the dewfall libraries as shipped inside the Python
+# wheel, so `pip install dewfall` is enough to build C/C++ against dewfall:
+#
+#   cmake -DCMAKE_PREFIX_PATH="$(python -c 'import dew; print(dew.get_cmake_dir())')" ...
+#   find_package(dew REQUIRED)
+#   target_link_libraries(myapp PRIVATE dew::dew_converter)
+#
+# These are hand-written IMPORTED targets rather than an install(EXPORT) set:
+# the dew_* libraries link their OBJECT libraries PUBLIC, which would drag the
+# whole internal target graph (and every vendored third-party target) into an
+# export set. The public API is pure C and every dependency is already linked
+# statically inside these libraries, so consumers need nothing but the headers
+# and the library file.
+@PACKAGE_INIT@
+
+get_filename_component(_dew_package_dir "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+set(_dew_include_dir "${_dew_package_dir}/include")
+set(_dew_lib_dir "${_dew_package_dir}/lib")
+
+if (NOT IS_DIRECTORY "${_dew_include_dir}")
+  set(dew_FOUND FALSE)
+  set(dew_NOT_FOUND_MESSAGE "dewfall headers not found at ${_dew_include_dir}")
+  return()
+endif ()
+
+foreach (_dew_component common render converter)
+  set(_dew_target dew::dew_${_dew_component})
+  if (TARGET ${_dew_target})
+    continue()
+  endif ()
+
+  set(_dew_soname "${CMAKE_SHARED_LIBRARY_PREFIX}dew_${_dew_component}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+  set(_dew_library "${_dew_lib_dir}/${_dew_soname}")
+  if (NOT EXISTS "${_dew_library}")
+    set(dew_FOUND FALSE)
+    set(dew_NOT_FOUND_MESSAGE "dewfall library not found: ${_dew_library}")
+    return()
+  endif ()
+
+  add_library(${_dew_target} SHARED IMPORTED)
+  set_target_properties(${_dew_target} PROPERTIES
+      IMPORTED_LOCATION "${_dew_library}"
+      INTERFACE_INCLUDE_DIRECTORIES "${_dew_include_dir}")
+
+  if (WIN32)
+    # Link against the import library; the DLL itself is loaded at run time.
+    set(_dew_implib "${_dew_lib_dir}/dew_${_dew_component}${CMAKE_IMPORT_LIBRARY_SUFFIX}")
+    if (NOT EXISTS "${_dew_implib}")
+      set(dew_FOUND FALSE)
+      set(dew_NOT_FOUND_MESSAGE "dewfall import library not found: ${_dew_implib}")
+      return()
+    endif ()
+    set_target_properties(${_dew_target} PROPERTIES IMPORTED_IMPLIB "${_dew_implib}")
+  endif ()
+endforeach ()
+
+# dew_converter's code calls into dew_render and dew_common, so linking the
+# converter alone must bring them along at link time as well as at load time.
+set_property(TARGET dew::dew_converter APPEND PROPERTY
+    INTERFACE_LINK_LIBRARIES dew::dew_render dew::dew_common)
+
+set(dew_INCLUDE_DIRS "${_dew_include_dir}")
+set(dew_LIBRARY_DIRS "${_dew_lib_dir}")
+set(dew_LIBRARIES dew::dew_common dew::dew_render dew::dew_converter)
+
+check_required_components(dew)

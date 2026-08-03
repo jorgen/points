@@ -16,3 +16,8 @@ screenshot_*.png
 screenshot_*.jpeg
 .venv/
 __pycache__/
+
+# python packaging artifacts
+dist/
+wheelhouse/
+*.egg-info/

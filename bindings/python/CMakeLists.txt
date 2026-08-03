@@ -15,7 +15,19 @@ string(REPLACE "/EHs-c-" "/EHsc" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 string(REPLACE "/GR-" "/GR" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 string(REPLACE "-D_HAS_EXCEPTIONS=0" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
-find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+# SKBUILD_SABI_COMPONENT is "Development.SABIModule" when scikit-build-core is
+# targeting abi3, and empty otherwise -- so a plain cmake build is unaffected,
+# while a wheel build gets the component nanobind needs. Without it nanobind
+# silently declines the stable ABI while the wheel is still tagged abi3.
+find_package(Python 3.10 REQUIRED
+    COMPONENTS Interpreter Development.Module ${SKBUILD_SABI_COMPONENT})
+
+# Does this build have to produce a genuine Py_LIMITED_API binary?
+if (SKBUILD_SABI_VERSION AND NOT Python_SOABI MATCHES "[0-9]t")
+    set(DEW_PYTHON_REQUIRE_STABLE_ABI ON)
+else ()
+    set(DEW_PYTHON_REQUIRE_STABLE_ABI OFF)
+endif ()
 
 execute_process(
     COMMAND ${Python_EXECUTABLE} -c "import clang.cindex"
@@ -75,11 +87,64 @@ add_custom_command(OUTPUT ${_generated}
     VERBATIM
     COMMENT "bindgen: dew_api.json -> nanobind C++")
 
-nanobind_add_module(dew_python NB_STATIC ${_generated} dew_py_support.cpp
-    dew_py_support.h custom/file_convert_callbacks.h)
-set_target_properties(dew_python PROPERTIES OUTPUT_NAME "dew")
+if (DEW_PYTHON_REQUIRE_STABLE_ABI)
+    # nanobind has four independent branches that silently set STABLE_ABI FALSE
+    # (cmake/nanobind-config.cmake); scikit-build-core tags the wheel abi3
+    # regardless, so a mislabelled version-locked binary is the default failure
+    # mode. Turn each branch into a named error. (nanobind's own guard for this
+    # is dead code: it tests SKBUILD_ABI_VERSION, missing the "SA".)
+    if (Python_VERSION VERSION_LESS 3.12)
+        message(FATAL_ERROR "abi3 wheel requested but Python is ${Python_VERSION}; nanobind's "
+                            "limited-API support requires CPython >= 3.12")
+    endif ()
+    if (NOT Python_INTERPRETER_ID STREQUAL "Python")
+        message(FATAL_ERROR "abi3 wheel requested but the interpreter is "
+                            "${Python_INTERPRETER_ID}, not CPython")
+    endif ()
+    if (NOT TARGET Python::SABIModule)
+        message(FATAL_ERROR "abi3 wheel requested but Python::SABIModule was not found "
+                            "(SKBUILD_SABI_COMPONENT='${SKBUILD_SABI_COMPONENT}')")
+    endif ()
+    if (SKBUILD_SABI_VERSION VERSION_LESS 3.12)
+        message(FATAL_ERROR "wheel.py-api must be cp312 or later for nanobind, got "
+                            "${SKBUILD_SABI_VERSION}")
+    endif ()
+    nanobind_add_module(dew_python NB_STATIC STABLE_ABI ${_generated} dew_py_support.cpp
+        dew_py_support.h custom/file_convert_callbacks.h)
+else ()
+    nanobind_add_module(dew_python NB_STATIC ${_generated} dew_py_support.cpp
+        dew_py_support.h custom/file_convert_callbacks.h)
+endif ()
+
+set_target_properties(dew_python PROPERTIES OUTPUT_NAME "_dew")
 target_include_directories(dew_python PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(dew_python PRIVATE dew_converter dew_render dew_common)
+
+# Build the extension into a `dew/` directory next to a copy of the package's
+# __init__.py, so the build tree imports exactly the way the wheel does
+# (`import dew` -> package -> ._dew) and the tests exercise that path.
+set_target_properties(dew_python PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/dew")
+add_custom_command(TARGET dew_python POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/dew/__init__.py"
+            "${CMAKE_CURRENT_BINARY_DIR}/dew/__init__.py"
+    VERBATIM
+    COMMENT "staging dew/__init__.py next to the extension")
+
+if (DEW_PYTHON_REQUIRE_STABLE_ABI)
+    # Ground truth after the fact: nanobind links the -abi3 variant of its
+    # runtime and uses the abi3 suffix only on a real limited-API build.
+    if (NOT TARGET nanobind-static-abi3)
+        message(FATAL_ERROR "nanobind declined the stable-ABI build (no nanobind-static-abi3 target)")
+    endif ()
+    get_target_property(_dew_suffix dew_python SUFFIX)
+    if (NOT _dew_suffix STREQUAL "${NB_SUFFIX_S}")
+        message(FATAL_ERROR "extension suffix '${_dew_suffix}' is not the stable-ABI suffix "
+                            "'${NB_SUFFIX_S}' -- the wheel would be tagged abi3 but be version-locked")
+    endif ()
+    message(STATUS "dew python: stable-ABI (abi3) build, suffix ${_dew_suffix}")
+endif ()
 
 if (APPLE)
     # belt-and-braces: CMake's automatic build rpath already points at the
@@ -88,6 +153,66 @@ if (APPLE)
 endif ()
 if (WIN32)
     copy_dll_for_target(dew_python dew_render dew_converter dew_common)
+endif ()
+
+# ---------------------------------------------------------------------------
+# Wheel installation (scikit-build-core only; ordinary builds install nothing)
+#
+# Layout inside site-packages:
+#   dew/__init__.py, dew/_dew.<abi3>.so       the package + extension
+#   dew/lib/libdew_{common,render,converter}  the shared libraries
+#   dew/include/dew/**/*.h                    public C headers
+#   dew/cmake/dewConfig.cmake                 find_package(dew) for consumers
+#   <env>/bin/dew                             the CLI (statically linked)
+# ---------------------------------------------------------------------------
+if (SKBUILD)
+    set(_dew_pkg "${SKBUILD_PLATLIB_DIR}/dew")
+
+    # The extension loads its sibling libraries from dew/lib.
+    if (APPLE)
+        set_target_properties(dew_python PROPERTIES INSTALL_RPATH "@loader_path/lib")
+    elseif (UNIX)
+        set_target_properties(dew_python PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
+    endif ()
+
+    install(TARGETS dew_python LIBRARY DESTINATION "${_dew_pkg}" COMPONENT dew_python)
+
+    install(TARGETS dew_common dew_render dew_converter
+            LIBRARY DESTINATION "${_dew_pkg}/lib" COMPONENT dew_runtime
+            RUNTIME DESTINATION "${_dew_pkg}/lib" COMPONENT dew_runtime
+            ARCHIVE DESTINATION "${_dew_pkg}/lib" COMPONENT dew_devel)
+
+    # Self-contained (it statically links the object libs and every vendored
+    # dependency), so it needs no rpath work to sit on PATH.
+    if (TARGET dew)
+        install(TARGETS dew RUNTIME DESTINATION "${SKBUILD_SCRIPTS_DIR}" COMPONENT dew_cli)
+    endif ()
+
+    install(DIRECTORY
+                "${CMAKE_SOURCE_DIR}/src/common/dew"
+                "${CMAKE_SOURCE_DIR}/src/render/dew"
+                "${CMAKE_SOURCE_DIR}/src/converter/dew"
+            DESTINATION "${_dew_pkg}/include" COMPONENT dew_devel
+            FILES_MATCHING
+                PATTERN "*.h"
+                # legacy duplicate of dew/common/error.h (same include guard);
+                # excluded from the bindgen manifest, keep it out of the wheel too
+                PATTERN "dew/error.h" EXCLUDE)
+
+    include(CMakePackageConfigHelpers)
+    configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/dewConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/dewConfig.cmake"
+        INSTALL_DESTINATION "${_dew_pkg}/cmake"
+        NO_SET_AND_CHECK_MACRO)
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/dewConfigVersion.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMinorVersion)
+    install(FILES
+                "${CMAKE_CURRENT_BINARY_DIR}/dewConfig.cmake"
+                "${CMAKE_CURRENT_BINARY_DIR}/dewConfigVersion.cmake"
+            DESTINATION "${_dew_pkg}/cmake" COMPONENT dew_devel)
 endif ()
 
 if (DEW_BUILD_TESTS)
@@ -108,7 +233,7 @@ if (DEW_BUILD_TESTS)
         add_test(NAME python_bindings_smoke
             COMMAND ${Python_EXECUTABLE} -m pytest -q ${CMAKE_CURRENT_SOURCE_DIR}/tests)
         set_tests_properties(python_bindings_smoke PROPERTIES
-            ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:dew_python>")
+            ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}")
         # The inference rules themselves (class grouping, roles, conventions).
         add_test(NAME bindgen_ir
             COMMAND ${Python_EXECUTABLE} -m pytest -q ${_bindgen_dir}/test_ir.py)

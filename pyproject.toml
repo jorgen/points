@@ -1,0 +1,136 @@
+[build-system]
+# libclang is a BUILD dependency: bindings/python/CMakeLists.txt runs
+# tools/bindgen/parse_headers.py with ${Python_EXECUTABLE}, which under PEP 517
+# isolation is this very environment. Pinned exactly -- a libclang upgrade can
+# change clang.cindex cursor kinds and so silently alter the generated API.
+requires = ["scikit-build-core>=0.11", "libclang==18.1.1"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "dewfall"
+version = "0.0.1"
+description = "Point cloud conversion, inspection and streaming: morton-ordered octrees with LOD"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Jørgen Lind" }]
+keywords = ["point cloud", "lidar", "las", "laz", "octree", "lod", "3d"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Multimedia :: Graphics :: 3D Rendering",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = ["numpy>=1.23"]
+
+[project.urls]
+Homepage = "https://dewfall.limilind.com"
+Source = "https://github.com/jorgen/dewfall"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+build-dir = "build/{wheel_tag}"
+
+# One binary per platform for CPython 3.12+. The floor is nanobind's: it
+# #errors on Py_LIMITED_API below 3.12. bindings/python/CMakeLists.txt asserts
+# the build really is limited-API rather than trusting this tag.
+wheel.py-api = "cp312"
+
+# CMake install() rules place everything (see bindings/python/CMakeLists.txt);
+# only the pure-Python package is copied by scikit-build-core. Naming it
+# explicitly also stops auto-discovery from treating src/ as a package tree.
+wheel.packages = ["bindings/python/dew"]
+
+# CMake 4 hard-errors on cmake_minimum_required(VERSION <3.5); the vendored
+# dependency tree has not been validated against it yet.
+cmake.version = ">=3.30,<4"
+cmake.build-type = "Release"
+cmake.define.DEW_BUILD_PYTHON = "ON"
+cmake.define.DEW_BUILD_TESTS = "OFF"
+cmake.define.DEW_BUILD_EXAMPLES = "OFF"
+cmake.define.BUILD_SHARED_LIBS = "ON"
+
+install.strip = true
+
+# Only OUR install() rules. Vendored dependencies (ada, libuv, zstd, fmt, ...)
+# carry their own install rules, and a default `cmake --install` would dump
+# ~150 third-party headers and libraries into the wheel root.
+install.components = ["dew_python", "dew_runtime", "dew_devel", "dew_cli"]
+
+# 3rdparty/ is the cmake-dep download cache (hundreds of MB, many stale
+# checkouts); build trees and the web front end are equally irrelevant.
+sdist.exclude = [
+    "3rdparty",
+    "cmake-build-*",
+    "build",
+    "dist",           # do not fold previously built artifacts back into the sdist
+    ".idea",
+    ".venv",
+    "assets",
+    "backend",
+    "deploy",
+    # The OpenGL example is never built from a wheel (DEW_BUILD_EXAMPLES=OFF);
+    # its skybox textures and fonts are 3MB of binaries nothing here needs.
+    "examples/renderer/textures",
+    "examples/renderer/fonts",
+    "examples/renderer/web",
+    "test_backend_dir",
+    "test_backend_packed.dew",
+    "test_cache_file",
+    "**/__pycache__",
+    "**/.pytest_cache",
+]
+
+messages.after-failure = """
+A source build of dewfall needs: CMake >= 3.30, a C++23 compiler, and network
+access (dependencies are fetched at configure time). Prebuilt wheels exist for
+CPython 3.12+ on linux-x86_64/aarch64, macOS and Windows -- if pip chose this
+sdist, your platform or interpreter is not one of them.
+"""
+
+[tool.cibuildwheel]
+build = "cp312-*"          # abi3: this one build covers 3.12, 3.13, 3.14, ...
+archs = ["auto64"]
+skip = ["*-musllinux_*"]   # no musllinux aarch64 wheel exists for libclang
+enable = []                # explicitly no free-threaded (no abi3t in nanobind), no PyPy
+build-frontend = "build"
+test-extras = ["test"]
+test-command = [
+    "python -c \"import dew; print(dew.__version__, dew.get_include())\"",
+    "dew --version",
+    "pytest -q {package}/bindings/python/tests",
+]
+
+[tool.cibuildwheel.linux]
+# manylinux_2_28 is AlmaLinux 8 + GCC 14: required for C++23.
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+# Repair is mandatory even with no external deps: it is what retags
+# linux_* -> manylinux_*, which PyPI requires. Exclude our own libraries so
+# auditwheel does not vendor and hash-mangle them (which would break linking
+# against the shipped headers).
+repair-wheel-command = """
+auditwheel repair -w {dest_dir} {wheel} \
+  --exclude libdew_common.so --exclude libdew_render.so --exclude libdew_converter.so
+"""
+
+[tool.cibuildwheel.macos]
+# std::filesystem (src/converter/converter.cpp) is marked introduced-in-10.15
+# by Apple's libc++, and cibuildwheel's cp312 x86_64 default is 10.13, which
+# fails to compile. CMake derives CMAKE_OSX_DEPLOYMENT_TARGET from this, and
+# cibuildwheel computes the wheel tag from it, so they cannot disagree.
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
+repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} --exclude libdew_ -w {dest_dir} -v {wheel}"
+
+[tool.cibuildwheel.windows]
+# --no-mangle-all keeps dew_*.dll linkable by name for the shipped headers.
+repair-wheel-command = "delvewheel repair --no-mangle-all -w {dest_dir} {wheel}"

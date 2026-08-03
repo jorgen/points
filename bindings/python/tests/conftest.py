@@ -13,6 +13,10 @@ try:
 except ImportError:
     repo = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     for candidate in sorted(glob.glob(os.path.join(repo, "cmake-build-*", "bindings", "python"))):
-        if glob.glob(os.path.join(candidate, "dew.*.so")) or glob.glob(os.path.join(candidate, "dew.pyd")):
+        # the build tree mirrors the wheel: <candidate>/dew/{__init__.py,_dew.*}
+        package = os.path.join(candidate, "dew")
+        if os.path.isfile(os.path.join(package, "__init__.py")) and (
+            glob.glob(os.path.join(package, "_dew*.so")) or glob.glob(os.path.join(package, "_dew*.pyd"))
+        ):
             sys.path.insert(0, candidate)
             break
