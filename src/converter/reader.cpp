@@ -69,9 +69,18 @@ struct callback_closer
 void get_data_worker_t::work()
 {
   storage_header_initialize(storage_header);
+  // Stamp the input id BEFORE anything can fail: point_reader_t posts
+  // storage_header.input_id on _done_with_file for every finished file,
+  // including the error returns below, and the processor looks that id up in
+  // the input registry. Leaving it uninitialized until after the init callback
+  // made any init-stage error (a failing user callback, or the xyz-first
+  // check) abort the process on a garbage registry lookup.
+  storage_header.input_id = file.id;
   dew_converter_attributes_t tmp_attributes;
   dew_error_t *local_error = nullptr;
-  void *user_ptr;
+  // The init callback is expected to fill this, but it may fail before doing
+  // so and callback_closer hands it to destroy_user_ptr regardless.
+  void *user_ptr = nullptr;
   dew_converter_header_t public_header;
   file.callbacks.init(file.filename.name, file.filename.name_length, &public_header, &tmp_attributes, &user_ptr, &local_error);
   callback_closer closer(file.callbacks, user_ptr);
@@ -89,7 +98,6 @@ void get_data_worker_t::work()
     return;
   }
 
-  storage_header.input_id = file.id;
   attributes_id_t attributes_id = attribute_configs.get_attribute_config_index(std::move(tmp_attributes));
   auto &attributes = attribute_configs.get(attributes_id);
   auto attribute_info = attribute_configs.get_format_components(attributes_id);
