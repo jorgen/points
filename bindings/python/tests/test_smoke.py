@@ -528,15 +528,21 @@ def test_read_back(synthetic_dataset):
 
     source.request_aabb(on_aabb)
     assert fired.wait(timeout=15.0), "request_aabb callback never fired"
-    # Fires from a converter-internal thread with two 3-tuples. The synthetic
-    # producer wrote x = 0..TOTAL-1, y = i%7, z = i%3 at scale 0.001, so the
-    # box must bracket exactly that -- a value-level round trip through the
-    # converter, the file, and back out of the read path.
+    # Fires from a converter-internal thread with two 3-tuples. This is the
+    # dataset's morton (Z-order) extent, NOT an exact bounding box: it decodes
+    # the smallest and largest Z-order codes, which are real points near but
+    # generally not at the corners. So assert it is a sane, non-degenerate box
+    # contained in what the producer wrote (x = 0..TOTAL-1, y = i%7, z = i%3 at
+    # scale 0.001) -- that still pins the value-level round trip through the
+    # converter, the file, and the read path.
     assert len(box["min"]) == 3 and len(box["max"]) == 3
-    assert box["min"][0] == pytest.approx(0.0, abs=1e-6)
-    assert box["max"][0] == pytest.approx((TOTAL - 1) * 0.001, abs=1e-3)
-    assert box["max"][1] == pytest.approx(6 * 0.001, abs=1e-3)
-    assert box["max"][2] == pytest.approx(2 * 0.001, abs=1e-3)
+    lo, hi = list(box["min"]), list(box["max"])
+    assert hi[0] > lo[0], "the x extent must be non-degenerate"
+    for axis, limit in enumerate(((TOTAL - 1) * 0.001, 6 * 0.001, 2 * 0.001)):
+        assert -1e-6 <= lo[axis] <= limit + 1e-6, f"min[{axis}] outside the written data"
+        assert -1e-6 <= hi[axis] <= limit + 1e-6, f"max[{axis}] outside the written data"
+    # x dominates the Z-order here, so its extreme is the true one
+    assert hi[0] == pytest.approx((TOTAL - 1) * 0.001, abs=1e-3)
 
     # renderer.add_data_source flows the by-value token struct through
     renderer.add_data_source(source.get())
