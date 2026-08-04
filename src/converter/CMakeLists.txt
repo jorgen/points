@@ -1,6 +1,7 @@
 
 set(public_headers
         dew/converter/export.h
+        dew/converter/types.h
         dew/converter/converter.h
         dew/converter/connection_cli.h
         dew/converter/default_attribute_names.h

@@ -24,6 +24,7 @@
 #include <dew/core/error.h>
 #include <dew/core/format.h>
 #include <dew/converter/export.h>
+#include <dew/converter/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,48 +39,9 @@ struct dew_converter_header_t
   double max[3];
 };
 
-struct dew_converter_attributes_t;
-DEW_CONVERTER_EXPORT void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components);
-
-//= py.skip
-struct dew_converter_attribute_t
-{
-#ifdef __cplusplus
-  dew_converter_attribute_t(const char *a_name, uint32_t a_name_size, enum dew_type_t format, enum dew_components_t a_components)
-    : name(a_name)
-    , name_size(a_name_size)
-    , type(format)
-    , components(a_components)
-  {
-  }
-#endif
-
-  const char *name;
-  uint32_t name_size;
-  enum dew_type_t type;
-  enum dew_components_t components;
-};
-
-//= py.skip
-struct dew_converter_buffer_t
-{
-#ifdef __cplusplus
-  dew_converter_buffer_t()
-    : data(nullptr)
-    , size(0)
-  {
-  }
-
-  dew_converter_buffer_t(void *a_data, uint32_t a_size)
-    : data(a_data)
-    , size(a_size)
-  {
-  }
-#endif
-
-  void *data;
-  uint32_t size;
-};
+/* dew_converter_attributes_t, dew_converter_attribute_t and dew_converter_buffer_t moved to
+ * <dew/converter/types.h> (included above) -- they describe data, not conversion, and are shared
+ * with the dataset read path. */
 
 struct dew_converter_file_pre_init_info_t
 {
