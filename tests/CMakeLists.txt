@@ -28,6 +28,7 @@ add_executable(private_interface_unit_tests
         private/camera_arcball_tests.cpp
         private/memory_writer_tests.cpp
         private/memory_budget_tests.cpp
+        private/access_snapshot_tests.cpp
 )
 target_link_libraries(private_interface_unit_tests PRIVATE vio_objstore libzstd_static)
 target_link_libraries(private_interface_unit_tests PRIVATE doctest_main doctest fmt glm unordered_dense laszip)

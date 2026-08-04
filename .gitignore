@@ -12,6 +12,7 @@ build/
 test_backend_dir/
 test_backend_packed.dew
 test_cache_file
+access_snapshot_cache_file
 screenshot_*.png
 screenshot_*.jpeg
 .venv/
