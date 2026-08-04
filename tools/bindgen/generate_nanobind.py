@@ -47,6 +47,9 @@ _CUSTOM_CLASS_SNIPPETS = {
         "dewpy::bind_set_file_converter_callbacks(cls, m);",
     ),
     "dew_laszip_callbacks": ("Converter", "dewpy::bind_use_laszip_callbacks(cls);"),
+    # The C request lifecycle (opaque handle, borrowed buffers, explicit release) is not what a
+    # Python caller wants; Dataset.query_box() runs it end to end and hands back NumPy arrays.
+    "dew_dataset_request_region": ("Dataset", "dewpy::bind_query_box(cls);"),
 }
 
 
@@ -895,6 +898,7 @@ class Emitter:
         parts.append("} // namespace")
         parts.append("")
         parts.append('#include "custom/file_convert_callbacks.h"')
+        parts.append('#include "custom/query.h"')
         parts.append("")
         parts.append("namespace")
         parts.append("{")

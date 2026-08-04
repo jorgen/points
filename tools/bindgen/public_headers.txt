@@ -11,6 +11,7 @@
 #
 # Deliberately excluded, one '!' line each so a forgotten header is
 # distinguishable from an intentional omission (parse_headers.py audits this):
+!access/dew/access/export.h
 !core/dew/core/export.h
 !converter/dew/converter/export.h
 !render/dew/render/export.h
@@ -35,6 +36,7 @@ render/dew/render/environment_data_source.h
 render/dew/render/flat_points_data_source.h
 render/dew/render/origin_anchor_data_source.h
 render/dew/render/skybox_data_source.h
+access/dew/access/query.h
 converter/dew/converter/converter.h
 converter/dew/converter/converter_data_source.h
 converter/dew/converter/laszip_file_convert_callbacks.h

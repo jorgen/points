@@ -94,6 +94,7 @@ enum dew_position_format_t
 };
 
 /* Fires from dew_dataset_poll / dew_request_wait on the CALLING thread. */
+//= py.skip
 typedef void (*dew_request_done_callback_t)(struct dew_request_t *request, enum dew_request_status_t status, void *user_ptr);
 
 struct dew_dataset_options_t
@@ -106,7 +107,8 @@ struct dew_dataset_options_t
 /* Returns immediately with the dataset in `opening`; `error` is only set for arguments that cannot
  * be used at all. A missing or corrupt dataset surfaces as state == dew_dataset_error, so that the
  * failure path is the same on native and under wasm, where opening cannot block. */
-DEW_ACCESS_EXPORT struct dew_dataset_t *dew_dataset_open(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, const struct dew_dataset_options_t *options, struct dew_error_t **error);
+//= nullable: options
+DEW_ACCESS_EXPORT struct dew_dataset_t *dew_dataset_create(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, const struct dew_dataset_options_t *options, struct dew_error_t **error);
 //= py.drain_on_destroy: dew_dataset_close
 DEW_ACCESS_EXPORT void dew_dataset_close(struct dew_dataset_t *dataset);
 
@@ -115,15 +117,22 @@ DEW_ACCESS_EXPORT void dew_dataset_get_error(struct dew_dataset_t *dataset, stru
 
 /* Dispatch completions on the calling thread; returns how many requests reached a terminal state.
  * Required under wasm, where nothing else drives progress. */
+//= py.skip
 DEW_ACCESS_EXPORT uint32_t dew_dataset_poll(struct dew_dataset_t *dataset);
+//= py.skip
 DEW_ACCESS_EXPORT uint32_t dew_dataset_pending_count(struct dew_dataset_t *dataset);
 //= blocking
 DEW_ACCESS_EXPORT enum dew_dataset_state_t dew_dataset_wait_ready(struct dew_dataset_t *dataset, int32_t timeout_ms);
-/* 1 when this build can block in a wait (native). Lets portable callers branch. */
+/* 1 when this build can block in a wait (native). Lets portable callers branch.
+ * py.skip: Python always has the blocking path, since query_box runs the request to completion. */
+//= py.skip
 DEW_ACCESS_EXPORT uint8_t dew_access_can_block(void);
 
 struct dew_dataset_info_t
 {
+  /* The root octree CELL -- a power-of-two cube that contains every point, but which can be
+   * considerably larger than the data. For the actual extent of the points, run a coarse query
+   * (dew_lod_point_budget) and take the bounds of the result. */
   double aabb_min[3];
   double aabb_max[3];
   double scale;
@@ -143,6 +152,7 @@ DEW_ACCESS_EXPORT uint32_t dew_dataset_attribute_count(struct dew_dataset_t *dat
 //= out_string: name[name_buffer_size]
 DEW_ACCESS_EXPORT uint32_t dew_dataset_get_attribute_name(struct dew_dataset_t *dataset, uint32_t index, char *name, uint32_t name_buffer_size);
 
+//= py.skip
 struct dew_region_request_t
 {
   double aabb_min[3];
@@ -159,14 +169,26 @@ struct dew_region_request_t
   void *done_user_ptr;
 };
 
+/* Returns a new request; release it with dew_request_release.
+ *
+ * bind: skip because the generators cannot express "returns a handle of a DIFFERENT class than the
+ * one this method hangs off". Python gets Dataset.query_box() instead, which runs the whole request
+ * and hands back NumPy arrays -- see bindings/python/custom/query.h. */
+//= bind: skip
 DEW_ACCESS_EXPORT struct dew_request_t *dew_dataset_request_region(struct dew_dataset_t *dataset, const struct dew_region_request_t *request, struct dew_error_t **error);
 
+//= py.skip
 DEW_ACCESS_EXPORT enum dew_request_status_t dew_request_status(struct dew_request_t *request);
 //= blocking
+//= py.skip
 DEW_ACCESS_EXPORT enum dew_request_status_t dew_request_wait(struct dew_request_t *request, int32_t timeout_ms);
+//= py.skip
 DEW_ACCESS_EXPORT void dew_request_cancel(struct dew_request_t *request);
+//= py.skip
 DEW_ACCESS_EXPORT void dew_request_get_error(struct dew_request_t *request, struct dew_error_t **error);
+//= py.skip
 DEW_ACCESS_EXPORT void dew_request_release(struct dew_request_t *request);
+//= py.skip
 DEW_ACCESS_EXPORT float dew_request_completion_factor(struct dew_request_t *request);
 
 /* One attribute's contiguous buffer, concatenated across every node in the result. Buffer 0 is
@@ -210,9 +232,12 @@ struct dew_request_result_t
   uint32_t node_count;
 };
 
+//= py.skip
 DEW_ACCESS_EXPORT uint8_t dew_request_get_result(struct dew_request_t *request, struct dew_request_result_t *out);
+//= py.skip
 DEW_ACCESS_EXPORT uint64_t dew_request_attribute_size(struct dew_request_t *request, uint32_t attribute_index);
 //= arrays: dst[dst_bytes]
+//= py.skip
 DEW_ACCESS_EXPORT uint64_t dew_request_copy_attribute(struct dew_request_t *request, uint32_t attribute_index, uint8_t *dst, uint64_t dst_bytes, struct dew_error_t **error);
 
 #ifdef __cplusplus

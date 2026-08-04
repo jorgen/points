@@ -189,11 +189,33 @@ than corrupting the dataset. Dropping a `Converter` drains its pipeline first, s
 running conversion blocks rather than racing the teardown; call `wait_idle()` yourself to control
 when that happens.
 
-`examples/python/numpy_to_dew.py` is a complete, runnable version of the above — xyz + rgb +
-intensity + classification from numpy arrays, chunked feeding, progress, and a read-back:
+Reading a dataset is request-based: ask for a region, get numpy arrays back.
+
+```python
+ds = dew.open_dataset("out.dew")
+result = ds.query_box([0, 0, 0], [10, 10, 10], attributes=["intensity"])
+xyz = result["xyz"]              # (N, 3) float64, absolute world coordinates
+intensity = result["intensity"]  # (N,)   uint16
+```
+
+`query_box` runs the request to completion and copies the results into arrays Python owns, so
+nothing points into library memory once it returns. `clip_points=True` (the default) returns
+exactly the points inside the box — the octree selects whole nodes, so a box query otherwise
+overshoots. `lod="level"` or `lod="budget"` return a subsample instead of every point, for a quick
+look at a large region.
+
+### Runnable examples
+
+All of them live in [`examples/python/`](https://github.com/jorgen/dewfall/tree/master/examples/python):
+
+| Script | What it shows |
+|---|---|
+| [`numpy_to_dew.py`](https://github.com/jorgen/dewfall/blob/master/examples/python/numpy_to_dew.py) | Converting from numpy arrays: xyz + rgb + intensity + classification, chunked feeding, progress, read-back |
+| [`query_box.py`](https://github.com/jorgen/dewfall/blob/master/examples/python/query_box.py) | Querying a sub-box out of a dataset and rendering the points with matplotlib |
 
 ```bash
 python examples/python/numpy_to_dew.py out.dew --points 2000000
+python examples/python/query_box.py out.dew --box 0,0,0,50,50,20 --color intensity -o box.png
 ```
 
 Because the wheel also ships the libraries, headers and a CMake config, a C or C++ project can

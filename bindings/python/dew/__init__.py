@@ -12,15 +12,23 @@ headers, and a CMake package config, reachable through :func:`get_include`,
     conv.add_data_file(["input.laz"])
     conv.wait_idle()
 
-See ``examples/python/numpy_to_dew.py`` for feeding point data straight from
-numpy arrays.
+Reading is request-based: open a dataset and ask for a region.
+
+    ds = dew.open_dataset("scan.dew")
+    result = ds.query_box([0, 0, 0], [10, 10, 10], attributes=["intensity"])
+    xyz = result["xyz"]              # (N, 3) float64
+    intensity = result["intensity"]  # (N,)   uint16
+
+See ``examples/python/`` for runnable scripts: ``numpy_to_dew.py`` feeds point
+data straight from numpy arrays, and ``query_box.py`` converts a dataset,
+queries a sub-box and renders it.
 """
 
 import os
 import sys
 from pathlib import Path
 
-__all__ = ["get_include", "get_lib_dir", "get_cmake_dir", "__version__"]
+__all__ = ["open_dataset", "get_include", "get_lib_dir", "get_cmake_dir", "__version__"]
 
 _PACKAGE_DIR = Path(__file__).parent.resolve()
 
@@ -72,3 +80,27 @@ def get_cmake_dir() -> str:
     then ``find_package(dew REQUIRED)`` and link ``dew::dew_converter``.
     """
     return str(_PACKAGE_DIR / "cmake")
+
+
+def open_dataset(url, connection: str = "", *, memory_budget_bytes: int = 0, decode_threads: int = 0, max_reads_in_flight: int = 0):
+    """Open a converted ``.dew`` dataset for reading.
+
+    A thin wrapper over :class:`Dataset` that fills in the options struct, so the common case is
+    one argument::
+
+        ds = dew.open_dataset("scan.dew")
+
+    ``connection`` carries cloud credentials for ``s3://`` / ``az://`` URLs (same grammar as the
+    converter's); leave it empty for local paths or when credentials come from the environment.
+
+    Raises ``RuntimeError`` if the dataset cannot be opened -- a missing or corrupt dataset is
+    reported through the handle's state rather than by the constructor, so this checks it for you.
+    """
+    options = DatasetOptions()  # noqa: F405
+    options.memory_budget_bytes = memory_budget_bytes
+    options.decode_threads = decode_threads
+    options.max_reads_in_flight = max_reads_in_flight
+    dataset = Dataset(str(url), connection, options)  # noqa: F405
+    if dataset.state() != DatasetState.ready:  # noqa: F405
+        raise RuntimeError(f"could not open dataset {url!r}")
+    return dataset

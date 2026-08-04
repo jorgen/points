@@ -159,7 +159,7 @@ struct dataset_handle_t
   explicit dataset_handle_t(const char *path)
   {
     dew_error_t *error = nullptr;
-    handle = dew_dataset_open(path, uint32_t(strlen(path)), nullptr, 0, nullptr, &error);
+    handle = dew_dataset_create(path, uint32_t(strlen(path)), nullptr, 0, nullptr, &error);
     if (error)
       dew_error_destroy(error);
   }

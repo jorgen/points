@@ -184,6 +184,16 @@ void dataset_impl_t::info(dew_dataset_info_t &out) const
     const auto *root = registry.get(registry.root);
     if (root)
     {
+      // The root octree CELL, which is a power-of-two cube that can be considerably larger than the
+      // data inside it.
+      //
+      // It is tempting to report points_collection_t::min/max instead, since those bound the actual
+      // points -- but they are MORTON CODES, and the smallest morton code in a set is not the
+      // per-axis minimum of that set. Decoding them yields two points on the Z-order curve, not the
+      // corners of a box, and the result is not even guaranteed to satisfy min <= max. (The renderer
+      // decodes them the same way for frustum culling, where a slightly wrong box only costs
+      // accuracy.) A caller that needs the real extent should run a coarse query and take the bounds
+      // of what comes back.
       double lo[3];
       double hi[3];
       convert_morton_to_pos(registry.tree_config.scale, registry.tree_config.offset, root->morton_min, lo);

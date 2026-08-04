@@ -32,6 +32,8 @@ dependencies = ["numpy>=1.23"]
 [project.urls]
 Homepage = "https://dewfall.limilind.com"
 Source = "https://github.com/jorgen/dewfall"
+Examples = "https://github.com/jorgen/dewfall/tree/master/examples/python"
+Issues = "https://github.com/jorgen/dewfall/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]

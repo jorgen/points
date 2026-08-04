@@ -49,7 +49,7 @@ void fill_error(dew_error_t **out, const dew_error_t &src)
 }
 } // namespace
 
-struct dew_dataset_t *dew_dataset_open(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, const struct dew_dataset_options_t *options, struct dew_error_t **error)
+struct dew_dataset_t *dew_dataset_create(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, const struct dew_dataset_options_t *options, struct dew_error_t **error)
 {
   if (!url || url_len == 0)
   {

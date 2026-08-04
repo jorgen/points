@@ -110,27 +110,34 @@ if (DEW_PYTHON_REQUIRE_STABLE_ABI)
                             "${SKBUILD_SABI_VERSION}")
     endif ()
     nanobind_add_module(dew_python NB_STATIC STABLE_ABI ${_generated} dew_py_support.cpp
-        dew_py_support.h custom/file_convert_callbacks.h)
+        dew_py_support.h custom/file_convert_callbacks.h custom/query.h)
 else ()
     nanobind_add_module(dew_python NB_STATIC ${_generated} dew_py_support.cpp
-        dew_py_support.h custom/file_convert_callbacks.h)
+        dew_py_support.h custom/file_convert_callbacks.h custom/query.h)
 endif ()
 
 set_target_properties(dew_python PROPERTIES OUTPUT_NAME "_dew")
 target_include_directories(dew_python PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(dew_python PRIVATE dew_converter dew_render dew_core)
+target_link_libraries(dew_python PRIVATE dew_converter dew_render dew_access dew_core)
 
 # Build the extension into a `dew/` directory next to a copy of the package's
 # __init__.py, so the build tree imports exactly the way the wheel does
 # (`import dew` -> package -> ._dew) and the tests exercise that path.
 set_target_properties(dew_python PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/dew")
-add_custom_command(TARGET dew_python POST_BUILD
+# Tracked as a real dependency rather than a POST_BUILD step: POST_BUILD only fires when the
+# extension itself relinks, so editing only __init__.py used to leave a stale copy in the build tree
+# and the tests would import the old package.
+add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/dew/__init__.py"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/dew"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/dew/__init__.py"
             "${CMAKE_CURRENT_BINARY_DIR}/dew/__init__.py"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/dew/__init__.py"
     VERBATIM
     COMMENT "staging dew/__init__.py next to the extension")
+add_custom_target(dew_python_package ALL DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/dew/__init__.py")
+add_dependencies(dew_python_package dew_python)
 
 if (DEW_PYTHON_REQUIRE_STABLE_ABI)
     # Ground truth after the fact: nanobind links the -abi3 variant of its
@@ -182,7 +189,7 @@ if (SKBUILD)
     # where delvewheel expects to find them when it repairs the wheel. The
     # import libraries stay in lib/ for linking. Elsewhere the rpath set above
     # points at lib/, so the shared libraries live there.
-    install(TARGETS dew_core dew_render dew_converter
+    install(TARGETS dew_core dew_access dew_render dew_converter
             LIBRARY DESTINATION "${_dew_pkg}/lib" COMPONENT dew_runtime
             RUNTIME DESTINATION "${_dew_pkg}" COMPONENT dew_runtime
             ARCHIVE DESTINATION "${_dew_pkg}/lib" COMPONENT dew_devel)
@@ -195,6 +202,7 @@ if (SKBUILD)
 
     install(DIRECTORY
                 "${CMAKE_SOURCE_DIR}/src/core/dew"
+                "${CMAKE_SOURCE_DIR}/src/access/dew"
                 "${CMAKE_SOURCE_DIR}/src/render/dew"
                 "${CMAKE_SOURCE_DIR}/src/converter/dew"
             DESTINATION "${_dew_pkg}/include" COMPONENT dew_devel
