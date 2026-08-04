@@ -17,6 +17,8 @@
 ************************************************************************/
 #include "tree_handler.hpp"
 
+#include "tree_build.hpp"
+
 #include "tree_lod_generator.hpp"
 
 #include "morton_tree_coordinate_transform.hpp"

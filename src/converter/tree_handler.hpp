@@ -33,6 +33,7 @@
 
 namespace dew::converter
 {
+class storage_handler_t;
 
 struct waiting_for_root_t
 {

@@ -126,6 +126,10 @@ add_executable(dew_render_wasm
     ${_conv}/tree_collapse.cpp
     ${_conv}/tree_lod_generator.cpp
     ${_conv}/tree.cpp
+    # Tree CONSTRUCTION, needed only because this target compiles tree_handler.cpp (the write
+    # pipeline) to reach read access through processor_t. The data + decode-worker modules link
+    # tree.cpp alone. Drops out once the streaming data source stops embedding a processor_t.
+    ${_conv}/tree_build.cpp
     ${_conv}/sorter.cpp
     ${_conv}/reader.cpp
     ${_conv}/input_header.cpp
@@ -214,7 +218,7 @@ add_executable(dew_decode_worker
     ${_conv}/compressor_ans.cpp
     ${_conv}/byte_shuffle.cpp
     ${_conv}/compression_preprocess.cpp
-    ${_conv}/tree.cpp                   # storage_header / deserialize_points deps (TODO: extract to trim)
+    ${_conv}/tree.cpp                   # tree/registry (de)serialize -- format only, no storage deps
     ${_conv}/input_storage_map.cpp
     ${_conv}/attributes_configs.cpp
 )

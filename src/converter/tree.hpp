@@ -26,8 +26,6 @@
 
 namespace dew::converter
 {
-class storage_handler_t;
-
 struct serialized_tree_t
 {
   std::shared_ptr<uint8_t[]> data;
@@ -193,9 +191,9 @@ struct tree_registry_t
   }
 };
 
-tree_id_t tree_initialize(tree_registry_t &tree_registry, storage_handler_t &cache, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
-
-tree_id_t tree_add_points(tree_registry_t &tree_registry, storage_handler_t &cache, const tree_id_t &tree_id, const storage_header_t &header, attributes_id_t attributes_id, std::vector<storage_location_t> &&locations);
+// Tree CONSTRUCTION (tree_initialize / tree_add_points) lives in tree_build.hpp: it is the only
+// part of the tree that needs a storage_handler_t, so keeping it out of this header leaves the
+// format code free of any storage dependency.
 
 serialized_tree_t tree_serialize(const tree_t &tree);
 

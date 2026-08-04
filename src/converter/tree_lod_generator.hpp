@@ -30,6 +30,7 @@
 
 namespace dew::converter
 {
+class storage_handler_t;
 
 struct lod_child_storage_info_t
 {

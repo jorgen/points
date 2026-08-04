@@ -29,6 +29,7 @@
 
 namespace dew::converter
 {
+class storage_handler_t;
 
 struct native_load_request_t
 {

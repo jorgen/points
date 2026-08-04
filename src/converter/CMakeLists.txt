@@ -19,6 +19,7 @@ set(private_headers
         sorter.hpp
         memcpy_array.hpp
         tree.hpp
+        tree_build.hpp
         point_buffer_splitter.hpp
         pre_init_file_retriever.hpp
         storage_handler.hpp
@@ -55,6 +56,7 @@ set(sources
         laszip_file_convert_callbacks.cpp
         sorter.cpp
         tree.cpp
+        tree_build.cpp
         pre_init_file_retriever.cpp
         storage_handler.cpp
         tree_handler.cpp

@@ -43,6 +43,7 @@
 #include "input_header.hpp"
 #include "storage_handler.hpp"
 #include "tree.hpp"
+#include "tree_build.hpp"
 
 #include <dew/core/format.h>
 #include <dew/converter/converter.h>
