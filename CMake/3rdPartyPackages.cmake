@@ -2,13 +2,12 @@
 # Included by CmDepFetch and CmDepFetchDependencies.
 # Caller must define CmDepFetchPackage(name version url url_hash) before including this file.
 
-# fmt 10.x does not compile under Emscripten's (very new) clang -- a consteval error in format-inl.h.
-# The wasm build uses fmt 11.2.0; the native build keeps the established 10.1.1 pin untouched.
-if(EMSCRIPTEN)
-    CmDepFetchPackage(fmt 11.2.0 https://github.com/fmtlib/fmt/archive/11.2.0.tar.gz SHA256=bc23066d87ab3168f27cef3e97d545fa63314f5c79df5ea444d41d56f962c6af)
-else()
-    CmDepFetchPackage(fmt 10.1.1 https://github.com/fmtlib/fmt/archive/10.1.1.tar.gz SHA256=78b8c0a72b1c35e4443a7e308df52498252d1cefc2b08c9a97bc9ee6cfe61f8b)
-endif()
+# One fmt for every target. This used to be split -- 10.1.1 natively, 11.2.0 under Emscripten,
+# because fmt 10.x hits a consteval error in format-inl.h with emscripten's clang. 11.2.0 fixed that
+# but still failed to build the fmt LIBRARY target for wasm: fmt/format.h's malloc/free allocator
+# had no <stdlib.h>, which only surfaces where the standard headers do not transitively pull it in
+# (emscripten's libc++). 12.2.0 includes it unconditionally, so a single pin now compiles both.
+CmDepFetchPackage(fmt 12.2.0 https://github.com/fmtlib/fmt/archive/12.2.0.tar.gz SHA256=8b852bb5aa6e7d8564f9e81394055395dd1d1936d38dfd3a17792a02bebd7af0)
 CmDepFetchPackage(sdl 3.1.6 https://github.com/libsdl-org/SDL/archive/refs/tags/preview-3.1.6.tar.gz SHA256=5da5e265c150b954d007bf1465b155d9df1d0d52f10115a49bb918dc8fe2826a)
 CmDepFetchPackage(glm 1.0.1 https://github.com/g-truc/glm/archive/1.0.1.tar.gz SHA256=9f3174561fd26904b23f0db5e560971cbf9b3cbda0b280f04d5c379d03bf234c)
 CmDepFetchPackage(doctest 2.4.12 https://github.com/doctest/doctest/archive/v2.4.12.tar.gz SHA256=73381c7aa4dee704bd935609668cf41880ea7f19fa0504a200e13b74999c2d70)

@@ -17,7 +17,7 @@
 ************************************************************************/
 #include "error.hpp"
 #include <ankerl/unordered_dense.h>
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <vector>
 
 struct serialized_free_blob_manager_t

@@ -24,7 +24,7 @@
 #include <condition_variable>
 #include <cstring>
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h> // emscripten_sleep (Asyncify)

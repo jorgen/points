@@ -22,7 +22,7 @@
 #include "error.hpp"
 #include "morton.hpp"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <cstring>
 #include <memory>
 #include <vector>
