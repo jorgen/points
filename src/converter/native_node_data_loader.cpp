@@ -25,6 +25,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 native_node_data_loader_t::native_node_data_loader_t(storage_handler_t &storage_handler)
   : _storage_handler(storage_handler)

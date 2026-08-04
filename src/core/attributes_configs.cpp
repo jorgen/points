@@ -25,7 +25,7 @@
 #include <algorithm>
 #include <mutex>
 
-namespace dew::converter
+namespace dew::core
 {
 
 static bool compare_attribute(const dew_converter_attribute_t &a, const dew_converter_attribute_t &b)
@@ -422,4 +422,4 @@ uint32_t attributes_configs_t::attrib_name_registry_get(uint32_t index, char *na
   return size - 1;
 }
 
-} // namespace dew::converter
+} // namespace dew::core

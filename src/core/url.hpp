@@ -19,7 +19,7 @@
 
 #include <string>
 
-namespace dew::converter
+namespace dew::core
 {
 
 struct parsed_url_t
@@ -47,4 +47,4 @@ inline parsed_url_t parse_url(const std::string &url)
   return out;
 }
 
-} // namespace dew::converter
+} // namespace dew::core

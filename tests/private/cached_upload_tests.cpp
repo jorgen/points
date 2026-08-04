@@ -145,7 +145,7 @@ static auto loop_op(vio::event_loop_t &loop, F &&f)
 }
 
 // Read one blob through a storage backend from the test thread.
-static dew_error_t backend_read(vio::event_loop_t &loop, dew::converter::storage_backend_t *backend, dew::converter::storage_location_t loc, std::vector<uint8_t> &out)
+static dew_error_t backend_read(vio::event_loop_t &loop, dew::core::storage_backend_t *backend, dew::core::storage_location_t loc, std::vector<uint8_t> &out)
 {
   out.resize(loc.size);
   uint32_t bytes_read = 0;
@@ -158,10 +158,10 @@ static dew_error_t backend_read(vio::event_loop_t &loop, dew::converter::storage
 // storage-map key: one storage unit per (input id, sub).
 using unit_key_t = std::pair<uint32_t, uint32_t>;
 
-static std::map<unit_key_t, std::vector<dew::converter::storage_location_t>> unit_map(dew::converter::tree_t &tree)
+static std::map<unit_key_t, std::vector<dew::core::storage_location_t>> unit_map(dew::core::tree_t &tree)
 {
-  std::map<unit_key_t, std::vector<dew::converter::storage_location_t>> units;
-  tree.storage_map.for_each([&](dew::converter::input_data_id_t id, dew::converter::attributes_id_t, const std::vector<dew::converter::storage_location_t> &storage) { units[{id.data, id.sub}] = storage; });
+  std::map<unit_key_t, std::vector<dew::core::storage_location_t>> units;
+  tree.storage_map.for_each([&](dew::core::input_data_id_t id, dew::core::attributes_id_t, const std::vector<dew::core::storage_location_t> &storage) { units[{id.data, id.sub}] = storage; });
   return units;
 }
 
@@ -213,15 +213,15 @@ TEST_CASE("destination mode end-to-end via public API: convert, upload, resume, 
   // The bucket's root manifest is a complete DEW2 dataset (dir:// = one file per object).
   uint32_t bands_after_first = 0;
   {
-    auto manifest_path = std::filesystem::path(bucket_dir) / dew::converter::bucket_root_manifest_name();
+    auto manifest_path = std::filesystem::path(bucket_dir) / dew::core::bucket_root_manifest_name();
     REQUIRE(std::filesystem::exists(manifest_path));
     FILE *f = fopen(manifest_path.string().c_str(), "rb");
     REQUIRE(f);
-    std::vector<uint8_t> bytes(dew::converter::k_root_manifest_size);
+    std::vector<uint8_t> bytes(dew::core::k_root_manifest_size);
     REQUIRE(fread(bytes.data(), 1, bytes.size(), f) == bytes.size());
     fclose(f);
-    dew::converter::root_manifest_t root;
-    REQUIRE(dew::converter::deserialize_root_manifest(bytes.data(), uint32_t(bytes.size()), root).code == 0);
+    dew::core::root_manifest_t root;
+    REQUIRE(dew::core::deserialize_root_manifest(bytes.data(), uint32_t(bytes.size()), root).code == 0);
     REQUIRE(root.complete == 1);
     REQUIRE(root.tree_registry.size > 0);
     REQUIRE(root.tree_registry.offset == 0); // per-blob layout: the blob IS the object
@@ -238,19 +238,19 @@ TEST_CASE("destination mode end-to-end via public API: convert, upload, resume, 
     REQUIRE(data_objects == root.next_object_id);
     for (uint32_t band = 0; band < root.band_count; band++)
     {
-      auto band_path = std::filesystem::path(bucket_dir) / dew::converter::bucket_band_name(band);
+      auto band_path = std::filesystem::path(bucket_dir) / dew::core::bucket_band_name(band);
       REQUIRE(std::filesystem::exists(band_path));
       std::vector<uint8_t> band_bytes(std::filesystem::file_size(band_path));
       FILE *bf = fopen(band_path.string().c_str(), "rb");
       REQUIRE(bf);
       REQUIRE(fread(band_bytes.data(), 1, band_bytes.size(), bf) == band_bytes.size());
       fclose(bf);
-      dew::converter::band_manifest_t band_manifest;
-      REQUIRE(dew::converter::deserialize_band_manifest(band_bytes.data(), uint32_t(band_bytes.size()), band_manifest).code == 0);
+      dew::core::band_manifest_t band_manifest;
+      REQUIRE(dew::core::deserialize_band_manifest(band_bytes.data(), uint32_t(band_bytes.size()), band_manifest).code == 0);
       for (auto &blob : band_manifest.blobs)
       {
         REQUIRE(blob.location.offset == 0);
-        auto object_path = std::filesystem::path(bucket_dir) / dew::converter::bucket_data_object_name(blob.location.file_id);
+        auto object_path = std::filesystem::path(bucket_dir) / dew::core::bucket_data_object_name(blob.location.file_id);
         REQUIRE(std::filesystem::exists(object_path));
         REQUIRE(std::filesystem::file_size(object_path) == blob.location.size);
       }
@@ -292,7 +292,7 @@ TEST_CASE("destination mode end-to-end via public API: convert, upload, resume, 
 
 TEST_CASE("DEW2 bucket reads back through the object backend (renderer/tool read path)")
 {
-  namespace pc = dew::converter;
+  namespace pc = dew::core;
   const char *cache_path = "test_dew2_read_cache.dew";
   const char *bucket_dir = "test_dew2_read_bucket";
   std::remove(cache_path);
@@ -445,7 +445,7 @@ TEST_CASE("DEW2 bucket reads back through the object backend (renderer/tool read
 
 TEST_CASE("exact-chunk leaves skip the collapse rewrite (no collapsed units in the bucket)")
 {
-  namespace pc = dew::converter;
+  namespace pc = dew::core;
   const char *cache_path = "test_skip_rewrite_cache.dew";
   const char *bucket_dir = "test_skip_rewrite_bucket";
   std::remove(cache_path);
@@ -507,7 +507,7 @@ TEST_CASE("exact-chunk leaves skip the collapse rewrite (no collapsed units in t
 
 TEST_CASE("chunks larger than the node limit subdivide and collapse to per-node units")
 {
-  namespace pc = dew::converter;
+  namespace pc = dew::core;
   const char *cache_path = "test_bigchunk_cache.dew";
   const char *bucket_dir = "test_bigchunk_bucket";
   std::remove(cache_path);

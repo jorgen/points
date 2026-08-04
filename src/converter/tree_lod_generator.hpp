@@ -28,8 +28,14 @@
 #include <ankerl/unordered_dense.h>
 #include <deque>
 
+namespace dew::core
+{
+class attributes_configs_t;
+}
+
 namespace dew::converter
 {
+using namespace dew::core;
 class storage_handler_t;
 
 struct lod_child_storage_info_t
@@ -69,7 +75,6 @@ struct lod_tree_worker_data_t
 };
 
 class tree_lod_generator_t;
-class attributes_configs_t;
 struct lod_worker_batch_t;
 class lod_worker_t
 {

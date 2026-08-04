@@ -38,6 +38,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 #ifdef __EMSCRIPTEN__
 // Mark a read complete on the single-thread cooperative build: resume the awaiting coroutine (if any)

@@ -24,7 +24,7 @@
 #include <cassert>
 #include <cstring>
 
-namespace dew::converter
+namespace dew::core
 {
 
 std::string bucket_data_object_name(uint32_t object_id)
@@ -145,4 +145,4 @@ dew_error_t deserialize_band_manifest(const uint8_t *data, uint32_t size, band_m
   return {};
 }
 
-} // namespace dew::converter
+} // namespace dew::core

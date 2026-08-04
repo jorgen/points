@@ -25,6 +25,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_config_t &tree_config, std::shared_ptr<dyn_points_data_handler_t> salvage_handler)
 {

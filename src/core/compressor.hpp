@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 enum class compression_method_t : uint8_t
@@ -120,4 +120,4 @@ std::unique_ptr<compressor_t> create_compressor(compression_method_t method);
 compression_result_t try_compress_constant(const void *data, uint32_t size, const point_format_t &format);
 compression_result_t decompress_any(const void *data, uint32_t size);
 
-} // namespace dew::converter
+} // namespace dew::core

@@ -29,7 +29,7 @@
 #include <string_view>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // The five metadata regions read from the dataset index on open. free_blobs/attribute_configs/
@@ -142,4 +142,4 @@ struct storage_backend_t
 std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, std::string_view connection, vio::event_loop_t &event_loop, dew_error_t &error);
 std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, dew_error_t &error);
 
-} // namespace dew::converter
+} // namespace dew::core

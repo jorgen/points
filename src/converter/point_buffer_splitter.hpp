@@ -28,6 +28,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 template <typename T, size_t C>
 void verify_points_range(const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &min, const morton::morton192_t &max)
 {

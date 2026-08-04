@@ -29,7 +29,7 @@ extern "C" {
 #include <cstring>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 struct fse_compress_result_t
@@ -640,4 +640,4 @@ compression_result_t compressor_ans_t::decompress(const void *data, uint32_t siz
   return result;
 }
 
-} // namespace dew::converter
+} // namespace dew::core

@@ -44,7 +44,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 enum class blob_residency_state_t : uint8_t
@@ -173,4 +173,4 @@ private:
   uint32_t _generation = 1; // bumped per checkpoint serialize; entries record the gen of their remote fact
 };
 
-} // namespace dew::converter
+} // namespace dew::core

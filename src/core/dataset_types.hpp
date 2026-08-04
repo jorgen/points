@@ -28,7 +28,7 @@
 #include <memory>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 struct input_data_id_t
 {
@@ -92,7 +92,7 @@ struct input_name_ref_t
   uint32_t name_length;
 };
 
-} // namespace dew::converter (temporarily close for public type)
+} // namespace dew::core (temporarily close for public type)
 
 struct dew_converter_attributes_t
 {
@@ -100,7 +100,7 @@ struct dew_converter_attributes_t
   std::vector<std::unique_ptr<char[]>> attribute_names;
 };
 
-namespace dew::converter
+namespace dew::core
 {
 struct attribute_buffers_t
 {
@@ -315,11 +315,11 @@ struct points_subset_t
   offset_in_subset_t offset;
   point_count_t count;
 };
-} // namespace dew::converter
+} // namespace dew::core
 
 
 template <>
-struct fmt::formatter<dew::converter::storage_location_t>
+struct fmt::formatter<dew::core::storage_location_t>
 {
   template <typename ParseContext>
   constexpr auto parse(ParseContext &ctx)
@@ -328,7 +328,7 @@ struct fmt::formatter<dew::converter::storage_location_t>
   }
 
   template <typename FormatContext>
-  auto format(dew::converter::storage_location_t const &location, FormatContext &ctx)
+  auto format(dew::core::storage_location_t const &location, FormatContext &ctx)
   {
     return fmt::format_to(ctx.out(), "storage_location_t(file_id={}, size={}, offset={})", location.file_id, location.size, location.offset);
   }

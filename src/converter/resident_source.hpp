@@ -29,6 +29,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // A downloaded leaf kept resident in CPU memory so the renderer can grow a virtual octree from it without
 // re-reading from storage. Holds the PRE-reorder morton-sorted code array (the octant split needs morton

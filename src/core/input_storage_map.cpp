@@ -23,7 +23,7 @@
 
 #include "memory_writer.hpp"
 
-namespace dew::converter
+namespace dew::core
 {
 void input_storage_map_t::add_storage(input_data_id_t id, attributes_id_t attributes_id, std::vector<storage_location_t> &&storage)
 {
@@ -160,4 +160,4 @@ std::pair<bool, const uint8_t *> input_storage_map_t::deserialize(const uint8_t 
   return {true, ptr};
 }
 
-} // namespace dew::converter
+} // namespace dew::core

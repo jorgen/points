@@ -40,6 +40,7 @@
 
 using namespace dew;
 using namespace dew::converter;
+using namespace dew::core;
 
 // Estimate a leaf's resident_source_t CPU footprint from its data_handler (matches build_resident_source's
 // cpu_bytes), so in-flight async builds count against the CPU-resident budget before they finalize (bug #2).

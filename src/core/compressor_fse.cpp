@@ -27,7 +27,7 @@ extern "C" {
 #include <cstring>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 static constexpr uint32_t huf_max_block_size = HUF_BLOCKSIZE_MAX; // 128 KB
@@ -505,4 +505,4 @@ compression_result_t compressor_huff0_t::decompress(const void *data, uint32_t s
   return result;
 }
 
-} // namespace dew::converter
+} // namespace dew::core

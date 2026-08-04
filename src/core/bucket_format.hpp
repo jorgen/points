@@ -46,7 +46,7 @@
 #include <string>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // ---- object names -------------------------------------------------------------------------------
@@ -113,4 +113,4 @@ struct band_manifest_t
 std::vector<uint8_t> serialize_band_manifest(const band_manifest_t &manifest);
 [[nodiscard]] dew_error_t deserialize_band_manifest(const uint8_t *data, uint32_t size, band_manifest_t &out);
 
-} // namespace dew::converter
+} // namespace dew::core

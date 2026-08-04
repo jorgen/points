@@ -32,6 +32,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // maskWidth = max(0, lod - lod_quantize_full_detail_level). At/below this octree level a node's morton cell is
 // a single point (every point is its own representative -> the finest LOD draws all points). 3 morton bits per

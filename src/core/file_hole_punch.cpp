@@ -33,7 +33,7 @@
 #include <winioctl.h>
 #endif
 
-namespace dew::converter
+namespace dew::core
 {
 
 // Alignment the platform requires for a punch to take effect. Linux fallocate handles arbitrary
@@ -130,4 +130,4 @@ hole_punch_result_t file_hole_punch(int fd, uint64_t offset, uint64_t length)
 
 #endif
 
-} // namespace dew::converter
+} // namespace dew::core

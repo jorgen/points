@@ -20,7 +20,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // Delta encoding for morton codes (in-place).
@@ -98,4 +98,4 @@ inline uint32_t popcount32(uint32_t x)
 #endif
 }
 
-} // namespace dew::converter
+} // namespace dew::core

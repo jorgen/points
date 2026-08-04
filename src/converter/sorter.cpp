@@ -35,6 +35,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 template <typename T>
 struct vec_t
 {

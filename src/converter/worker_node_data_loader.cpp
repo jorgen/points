@@ -26,6 +26,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 namespace
 {

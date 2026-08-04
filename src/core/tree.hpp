@@ -24,7 +24,7 @@
 #include "morton.hpp"
 
 
-namespace dew::converter
+namespace dew::core
 {
 struct serialized_tree_t
 {
@@ -205,5 +205,5 @@ void tree_compute_leaves_collapsed(tree_t &tree, const tree_registry_t &tree_reg
 serialized_tree_registry_t tree_registry_serialize(const tree_registry_t &tree_registry);
 
 [[nodiscard]] dew_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, uint32_t data_size, tree_registry_t &tree_registry);
-} // namespace dew::converter
+} // namespace dew::core
 

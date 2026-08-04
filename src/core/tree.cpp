@@ -21,7 +21,7 @@
 
 #include <cassert>
 
-namespace dew::converter
+namespace dew::core
 {
 static uint32_t points_collection_serialize_size(const points_collection_t &points)
 {
@@ -549,4 +549,4 @@ dew_error_t tree_registry_deserialize(const std::unique_ptr<uint8_t[]> &data, ui
   tree_registry.tree_id_initialized.resize(tree_registry_count);
   return {};
 }
-} // namespace dew::converter
+} // namespace dew::core

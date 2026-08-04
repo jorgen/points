@@ -21,7 +21,7 @@
 #include <cstring>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // Shared hasher for input_data_id_t keyed maps (storage maps, LOD child maps, registry chunk refs).
@@ -138,5 +138,5 @@ private:
   std::vector<input_data_id_t> _ids;
 };
 
-} // namespace dew::converter
+} // namespace dew::core
 

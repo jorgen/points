@@ -22,7 +22,7 @@
 #include <cassert>
 #include <cstring>
 
-namespace dew::converter
+namespace dew::core
 {
 
 static constexpr uint32_t k_residency_magic = 0x31534252u; // 'RBS1' little-endian
@@ -325,4 +325,4 @@ dew_error_t blob_residency_t::deserialize(const uint8_t *data, uint32_t size)
   return {};
 }
 
-} // namespace dew::converter
+} // namespace dew::core

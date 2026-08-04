@@ -24,7 +24,7 @@
 #include <cstring>
 #include <memory>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // The dataset index / superblock. A fixed 128-byte block:
@@ -130,4 +130,4 @@ inline std::shared_ptr<uint8_t[]> serialize_index(const uint32_t index_size, con
   return {};
 }
 
-} // namespace dew::converter
+} // namespace dew::core

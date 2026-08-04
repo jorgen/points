@@ -41,6 +41,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // True iff the web app installed a decode-worker pool as globalThis.__dewDecodePool. The data source only
 // routes decode through a worker when this is true; otherwise it keeps the inline (main-thread) decode path.

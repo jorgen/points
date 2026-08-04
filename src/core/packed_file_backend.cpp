@@ -26,7 +26,7 @@
 #include <cstring>
 #include <fcntl.h>
 
-namespace dew::converter
+namespace dew::core
 {
 
 static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, dew_error_t &error)
@@ -815,4 +815,4 @@ vio::task_t<dew_error_t> packed_file_backend_t::write_index(checkpoint_t checkpo
   co_return dew_error_t{};
 }
 
-} // namespace dew::converter
+} // namespace dew::core

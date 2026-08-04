@@ -31,6 +31,7 @@ void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *a
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count)
 {

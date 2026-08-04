@@ -49,7 +49,7 @@ struct dew_converter_t
       processor.set_pre_init_tree_config({0.00025, {-10000, -10000, -10000}});
   }
   dew_error_t error;
-  dew::converter::tree_config_t tree_config;
+  dew::core::tree_config_t tree_config;
   dew_converter_conversion_status_t status;
   dew::converter::processor_t processor;
 };

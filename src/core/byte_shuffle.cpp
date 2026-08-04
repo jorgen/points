@@ -19,7 +19,7 @@
 
 #include <cstring>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // Layout: for each component c, for each byte b within the type,
@@ -82,4 +82,4 @@ void byte_unshuffle(const uint8_t *src, uint8_t *dst, uint32_t total_size, uint3
   }
 }
 
-} // namespace dew::converter
+} // namespace dew::core

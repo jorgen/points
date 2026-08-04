@@ -31,6 +31,7 @@
 #include <vector>
 
 using namespace dew::converter;
+using namespace dew::core;
 
 struct dew_converter_t *dew_converter_create(const char *url, uint64_t url_size, enum dew_converter_open_file_semantics_t semantics, dew_error_t **error)
 {

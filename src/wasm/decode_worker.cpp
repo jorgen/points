@@ -50,6 +50,7 @@
 #include <vector>
 
 using namespace dew::converter;
+using namespace dew::core;
 using namespace dew::render;
 
 namespace

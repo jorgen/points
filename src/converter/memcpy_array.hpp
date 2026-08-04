@@ -19,6 +19,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 template<typename T, int SIZE>
 void memcpy_array(T (&dest)[SIZE], const T (&source)[SIZE])
 {

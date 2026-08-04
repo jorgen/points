@@ -30,6 +30,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 struct resident_source_t;         // full type in resident_source.hpp (shared_ptr member only needs a forward decl)
 struct dyn_points_data_handler_t; // full type in point_buffer_render_helper.hpp

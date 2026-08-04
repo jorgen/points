@@ -19,7 +19,7 @@
 
 #include "compressor.hpp"
 
-namespace dew::converter
+namespace dew::core
 {
 
 class compressor_ans_t : public compressor_t
@@ -30,4 +30,4 @@ public:
   compression_result_t decompress(const void *data, uint32_t size) override;
 };
 
-} // namespace dew::converter
+} // namespace dew::core

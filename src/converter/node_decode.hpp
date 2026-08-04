@@ -32,6 +32,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // Backing store kept alive by loaded_node_data_t::_impl_data: it owns the decoded buffers the result's raw
 // pointers point into, plus (optionally) the source data_handler so a promoted spanning leaf can recover its

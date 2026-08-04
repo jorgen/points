@@ -19,10 +19,10 @@
 
 #include <cstdint>
 
-namespace dew::converter
+namespace dew::core
 {
 
 void byte_shuffle(const uint8_t *src, uint8_t *dst, uint32_t total_size, uint32_t typesize, uint32_t component_count);
 void byte_unshuffle(const uint8_t *src, uint8_t *dst, uint32_t total_size, uint32_t typesize, uint32_t component_count);
 
-} // namespace dew::converter
+} // namespace dew::core

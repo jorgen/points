@@ -114,7 +114,7 @@ inline void set_python_error(dew_error_t **error, const std::string &what)
   dew_error_set_info(*error, -1, what.data(), what.size());
 }
 
-/* Mirrors dew::converter::size_for_format (src/converter/input_header.hpp).
+/* Mirrors dew::core::size_for_format (src/converter/input_header.hpp).
  * The library's per-point stride is size_for_format(type) * (int)components,
  * with `components` the RAW enum value -- so dew_components_4x4 (== 5) is a
  * stride of five elements, not sixteen. */

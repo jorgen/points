@@ -48,6 +48,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 class storage_handler_t;
 

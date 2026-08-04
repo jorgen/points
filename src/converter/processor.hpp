@@ -45,6 +45,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 enum class processor_open_file_semantics_t
 {
   read,

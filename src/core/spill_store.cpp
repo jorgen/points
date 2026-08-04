@@ -27,7 +27,7 @@
 #include <cassert>
 #include <cstring>
 
-namespace dew::converter
+namespace dew::core
 {
 
 static constexpr uint32_t k_journal_magic = 0x314c4a53u; // 'SJL1'
@@ -253,4 +253,4 @@ vio::task_t<dew_error_t> spill_store_t::gc_orphans()
   co_return first_error;
 }
 
-} // namespace dew::converter
+} // namespace dew::core

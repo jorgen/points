@@ -35,6 +35,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // Rescale an attribute buffer to normalized r32 in [0,1] over [global_min, global_max]. Shared by the stored
 // upload path and the virtual-node upload so intensity/scalar attributes get the same contrast stretch (else a

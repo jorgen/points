@@ -27,6 +27,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 struct get_file_pre_init_t
 {
   input_data_id_t id;

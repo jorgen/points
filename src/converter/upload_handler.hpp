@@ -64,6 +64,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 struct band_job_t
 {

@@ -30,6 +30,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 processor_t::processor_t(std::string url, file_existence_requirement_t existence_requirement, dew_error_t &error, const destination_config_t &destination)
   : _url(std::move(url))
   , _thread_pool(int(std::thread::hardware_concurrency()))

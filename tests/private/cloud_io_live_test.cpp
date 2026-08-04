@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-using namespace dew::converter;
+using namespace dew::core;
 
 namespace
 {
@@ -94,9 +94,9 @@ void live_backend_round_trip(const std::string &url, vio::event_loop_t &loop)
     REQUIRE(err.code == 0);
     REQUIRE(backend);
     REQUIRE(backend->open_for_write(true).code == 0);
-    backend->allocate_blob(uint32_t(blob.size()), dew::converter::storage_backend_t::blob_kind_t::data, loc);
+    backend->allocate_blob(uint32_t(blob.size()), dew::core::storage_backend_t::blob_kind_t::data, loc);
     REQUIRE(run_task(loop, [&]() { return backend->write_allocated(loc, make_bytes(blob)); }).code == 0);
-    backend->allocate_blob(uint32_t(registry.size()), dew::converter::storage_backend_t::blob_kind_t::metadata, reg_loc);
+    backend->allocate_blob(uint32_t(registry.size()), dew::core::storage_backend_t::blob_kind_t::metadata, reg_loc);
     REQUIRE(run_task(loop, [&]() { return backend->write_allocated(reg_loc, make_bytes(registry)); }).code == 0);
     checkpoint_t cp;
     cp.tree_registry = reg_loc;

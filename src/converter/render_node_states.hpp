@@ -24,6 +24,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 enum class render_node_io_state : uint8_t
 {

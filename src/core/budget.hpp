@@ -31,7 +31,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace dew::converter
+namespace dew::core
 {
 
 struct derived_budgets_t
@@ -85,4 +85,4 @@ inline brake_level_t compute_brake_level(uint64_t heap_bytes, uint64_t heap_max)
   return brake_level_t::none;
 }
 
-} // namespace dew::converter
+} // namespace dew::core

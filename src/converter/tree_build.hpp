@@ -30,6 +30,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 class storage_handler_t;
 
 // Create a root tree sized to `header`'s morton span and insert its points.

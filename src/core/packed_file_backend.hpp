@@ -32,7 +32,7 @@
 #include <optional>
 #include <string>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // The single-file (packed) storage backend: all blobs packed into one file's linear byte space by
@@ -162,4 +162,4 @@ private:
   std::mutex _mutex; // guards _blob_manager during allocate_blob (and _divert_on_write)
 };
 
-} // namespace dew::converter
+} // namespace dew::core

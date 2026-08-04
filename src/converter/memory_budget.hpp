@@ -35,6 +35,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // Decode-input bytes for one node (morton codes + attribute blob, decompressed). These stay alive via
 // _impl_data's data_handler from load start until the post-upload reap. Known before any IO from walker data.

@@ -26,7 +26,7 @@
 #include <mutex>
 #include <string>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // Object storage over an io_manager_t (directory / in-memory / S3). Two on-bucket layouts share the
@@ -84,4 +84,4 @@ private:
   std::mutex _mutex; // guards _next_id
 };
 
-} // namespace dew::converter
+} // namespace dew::core

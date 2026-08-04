@@ -24,6 +24,7 @@
 #include <vector>
 
 using namespace dew::converter;
+using namespace dew::core;
 
 namespace
 {

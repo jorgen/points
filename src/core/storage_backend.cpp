@@ -31,7 +31,7 @@
 
 #include <cstdlib>
 
-namespace dew::converter
+namespace dew::core
 {
 
 std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, std::string_view connection, vio::event_loop_t &event_loop, dew_error_t &error)
@@ -78,4 +78,4 @@ std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url
   return create_storage_backend(url, std::string_view{}, event_loop, error);
 }
 
-} // namespace dew::converter
+} // namespace dew::core

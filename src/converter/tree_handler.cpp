@@ -32,6 +32,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // Awaitable wrapper for callback-based storage_handler operations.
 // The callback is called on the storage handler's event loop, and posts

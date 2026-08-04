@@ -5,7 +5,8 @@
 #include <cstring>
 #include <vector>
 
-using namespace dew::converter;
+using namespace dew::core;
+using namespace dew::core;
 
 TEST_CASE("popcount32 known values")
 {

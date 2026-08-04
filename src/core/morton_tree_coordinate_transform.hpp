@@ -22,7 +22,7 @@
 
 namespace dew
 {
-namespace converter
+namespace core
 {
 
 template <typename T, size_t C>
@@ -69,5 +69,5 @@ inline dew_type_t morton_type_from_lod(int lod)
   return dew_type_m192;
 }
 
-} // namespace converter
+} // namespace core
 } // namespace dew

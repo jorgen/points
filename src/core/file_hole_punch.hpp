@@ -34,7 +34,7 @@
 
 #include <cstdint>
 
-namespace dew::converter
+namespace dew::core
 {
 
 enum class hole_punch_status_t
@@ -63,4 +63,4 @@ inline hole_punch_result_t file_hole_punch_probe(int fd, uint64_t offset, uint64
   return file_hole_punch(fd, offset, length);
 }
 
-} // namespace dew::converter
+} // namespace dew::core

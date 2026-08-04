@@ -24,6 +24,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 void sort_points(const tree_config_t &tree_config, attributes_configs_t &attributes_configs, const dew_converter_header_t &public_header, points_t &points, dew_error_t &error, bool store_original_order = false);
 }
 

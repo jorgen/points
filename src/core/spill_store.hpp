@@ -45,7 +45,7 @@
 #include <string>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // FIFO gate serializing whole spill operations on the (single-threaded) storage loop. Coroutines
@@ -188,4 +188,4 @@ private:
   uint64_t _bytes_spilled = 0;
 };
 
-} // namespace dew::converter
+} // namespace dew::core

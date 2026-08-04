@@ -39,6 +39,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 class storage_handler_t;
 struct get_points_file_t
 {

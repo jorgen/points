@@ -26,6 +26,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 struct input_data_source_t
 {
   input_data_id_t input_id;

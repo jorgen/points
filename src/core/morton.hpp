@@ -25,7 +25,7 @@
 #include <array>
 
 
-namespace dew::converter::morton
+namespace dew::core::morton
 {
 
 template <typename T, size_t C>
@@ -796,17 +796,17 @@ inline morton_t<T, S> create_max(int lod, const morton_t<T, S> &min)
   return morton_or(morton_mask_create<T, S>(lod), min);
 }
 
-} // namespace dew::converter::morton
+} // namespace dew::core::morton
 
 
 
 namespace std
 {
 template <typename T, size_t C>
-void swap(dew::converter::morton::morton_t<T, C> &a, dew::converter::morton::morton_t<T, C> &b) noexcept
+void swap(dew::core::morton::morton_t<T, C> &a, dew::core::morton::morton_t<T, C> &b) noexcept
 
 {
-  dew::converter::morton::morton_t<T, C> tmp = a;
+  dew::core::morton::morton_t<T, C> tmp = a;
   a = b;
   b = tmp;
 }

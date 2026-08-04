@@ -21,7 +21,7 @@
 #include <cstring>
 #include <numeric>
 
-namespace dew::converter
+namespace dew::core
 {
 
 // Multi-word comparison: returns true if a < b (MSW-first, matching morton.hpp operator<).
@@ -651,4 +651,4 @@ void delta_decode_single(uint8_t *data, uint32_t size, int element_size)
   }
 }
 
-} // namespace dew::converter
+} // namespace dew::core

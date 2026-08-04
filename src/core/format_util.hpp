@@ -26,7 +26,7 @@
 
 #include <utility>
 
-namespace dew::converter
+namespace dew::core
 {
 inline int size_for_format(dew_type_t format)
 {
@@ -68,4 +68,4 @@ inline int size_for_format(std::pair<dew_type_t, dew_components_t> format)
 {
   return size_for_format(format.first) * (int)format.second;
 }
-} // namespace dew::converter
+} // namespace dew::core

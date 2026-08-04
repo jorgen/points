@@ -23,7 +23,7 @@
 
 #include <cstring>
 
-namespace dew::converter
+namespace dew::core
 {
 
 std::unique_ptr<compressor_t> create_compressor(compression_method_t method)
@@ -380,4 +380,4 @@ compression_stats_t compression_stats_t::deserialize(const uint8_t *data, uint32
   return stats;
 }
 
-} // namespace dew::converter
+} // namespace dew::core

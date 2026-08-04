@@ -34,6 +34,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 static uint32_t morton_type_size(dew_type_t t)
 {

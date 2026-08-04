@@ -24,7 +24,7 @@
 #include <mutex>
 #include <optional>
 
-namespace dew::converter
+namespace dew::core
 {
 
 template <typename Key, typename Value, typename Hash, typename KeyEqual = std::equal_to<Key>>
@@ -144,4 +144,4 @@ private:
   mutable std::mutex _mutex;
 };
 
-} // namespace dew::converter
+} // namespace dew::core

@@ -25,7 +25,7 @@
 
 #include <dataset_types.hpp>
 
-namespace dew::converter
+namespace dew::core
 {
 
 struct attribute_source_lod_into_t
@@ -102,6 +102,6 @@ private:
   std::vector<std::string> _attribute_name_registry;
 };
 
-} // namespace dew::converter
+} // namespace dew::core
 
 #endif // ATTRIBUTES_CONFIGS_HPP

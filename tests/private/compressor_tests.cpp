@@ -17,6 +17,7 @@
 #include <vector>
 
 using namespace dew::converter;
+using namespace dew::core;
 
 static std::vector<uint8_t> make_random_buffer(uint32_t size, uint32_t seed = 42)
 {

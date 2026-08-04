@@ -25,6 +25,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 static tree_t &tree_cache_create_root_tree(tree_registry_t &tree_cache)
 {
   tree_cache.data.emplace_back(new tree_t());

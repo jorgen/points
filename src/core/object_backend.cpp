@@ -30,7 +30,7 @@
 #include <emscripten/emscripten.h> // emscripten_sleep (Asyncify)
 #endif
 
-namespace dew::converter
+namespace dew::core
 {
 
 using vio::objstore::io_range_t;
@@ -390,4 +390,4 @@ vio::task_t<dew_error_t> object_backend_t::write_index(checkpoint_t checkpoint)
   co_return dew_error_t{};
 }
 
-} // namespace dew::converter
+} // namespace dew::core

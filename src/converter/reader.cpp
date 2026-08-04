@@ -32,6 +32,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 get_data_worker_t::get_data_worker_t(point_reader_file_t &a_point_reader_file, attributes_configs_t &a_attribute_configs, perf_stats_t &a_perf_stats, const get_points_file_t &a_file,
                                      vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, dew_converter_header_t>> &a_input_init_pipe, vio::event_pipe_t<input_data_id_t> &a_sub_added,
                                      vio::event_pipe_t<unsorted_points_event_t> &a_unsorted_points_queue)

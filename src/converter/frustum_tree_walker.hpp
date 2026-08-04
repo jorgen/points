@@ -27,6 +27,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 struct node_id_t
 {

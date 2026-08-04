@@ -33,6 +33,7 @@ struct dew_to_render_t;
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // Everything the per-frame virtual passes need, bundled to keep signatures small.
 struct virtual_frame_t

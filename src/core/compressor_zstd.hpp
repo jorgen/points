@@ -19,7 +19,7 @@
 
 #include "compressor.hpp"
 
-namespace dew::converter
+namespace dew::core
 {
 
 class compressor_zstd_t : public compressor_t
@@ -39,4 +39,4 @@ private:
   int _compression_level = 9;
 };
 
-} // namespace dew::converter
+} // namespace dew::core

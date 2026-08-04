@@ -31,6 +31,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 struct children_subset_t
 {

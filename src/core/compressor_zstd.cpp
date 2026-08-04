@@ -25,7 +25,7 @@
 #include <cstring>
 #include <vector>
 
-namespace dew::converter
+namespace dew::core
 {
 
 compression_method_t compressor_zstd_t::method() const
@@ -539,4 +539,4 @@ compression_result_t compressor_zstd_t::decompress(const void *data, uint32_t si
   return result;
 }
 
-} // namespace dew::converter
+} // namespace dew::core

@@ -24,7 +24,7 @@
 #include <limits>
 #include <memory>
 
-namespace dew::converter
+namespace dew::core
 {
 
 struct io_counter_t
@@ -257,4 +257,4 @@ struct perf_stats_t
   }
 };
 
-} // namespace dew::converter
+} // namespace dew::core
