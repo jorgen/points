@@ -25,3 +25,4 @@ int cmd_copy(int argc, char **argv);
 int cmd_extract(int argc, char **argv);
 int cmd_info(int argc, char **argv);
 int cmd_laz(int argc, char **argv);
+int cmd_query(int argc, char **argv);
