@@ -341,7 +341,7 @@ void processor_t::about_to_block()
   }
 }
 
-const dew_converter_attributes_t &processor_t::get_attributes(attributes_id_t id)
+const dew_attributes_t &processor_t::get_attributes(attributes_id_t id)
 {
   return _attributes_configs.get(id);
 }

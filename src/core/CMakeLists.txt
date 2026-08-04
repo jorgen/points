@@ -40,6 +40,7 @@ set(private_headers
 )
 set(sources
         error.cpp
+        attributes_api.cpp
         compressor.cpp
         compressor_zstd.cpp
         compressor_fse.cpp

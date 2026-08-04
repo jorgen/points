@@ -171,7 +171,7 @@ static void materialize_typed(virtual_node_t &node, const resident_source_t &src
   else
   {
     const uint32_t code_size = morton_type_size(src.morton_type);
-    dew_converter_buffer_t source_buf(static_cast<uint8_t *>(src.data_handler->data_info[0].data) + size_t(node.first_index) * code_size, node.src_count * code_size);
+    dew_blob_t source_buf(static_cast<uint8_t *>(src.data_handler->data_info[0].data) + size_t(node.first_index) * code_size, node.src_count * code_size);
     using M192 = morton::morton192_t;
     std::vector<morton_to_lod_t<M192::component_type, M192::component_count::value>> reps;
     input_data_id_t dummy_id{0, 0};

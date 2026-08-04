@@ -73,7 +73,7 @@ inline std::vector<float> make_lod_random_offsets()
 // representative is picked at range_start + random_offsets[...]*range_size (the final cell uses the median).
 // The emitted morton is cast into node_min's local frame; index is the global index into the source.
 template <typename S_M, typename T, size_t N>
-inline void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, const dew_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+inline void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, const dew_blob_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
                                      const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   auto *source_it = reinterpret_cast<const S_M *>(source.data);
@@ -112,7 +112,7 @@ inline void find_indices_to_quantize(input_data_id_t input_id, const morton::mor
 }
 
 template <typename T, size_t N>
-inline void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, dew_type_t source_type, const dew_converter_buffer_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
+inline void find_indices_to_quantize(input_data_id_t input_id, const morton::morton192_t &node_min, dew_type_t source_type, const dew_blob_t &source, offset_in_subset_t offset, point_count_t point_count, int maskWidth,
                                      const std::vector<float> &random_offsets, std::vector<morton_to_lod_t<T, N>> &morton_to_lod)
 {
   assert(source_type == dew_type_m32 || source_type == dew_type_m64 || source_type == dew_type_m128 || source_type == dew_type_m192);

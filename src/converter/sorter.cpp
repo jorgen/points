@@ -419,7 +419,7 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   points.buffers.buffers[0].size = buffer_size;
 
   auto &orig_attributes = attributes_config.get(points.attributes_id);
-  dew_converter_attributes_t attributes;
+  dew_attributes_t attributes;
   attributes_copy(orig_attributes, attributes);
   attributes.attributes[0].type = type;
   if (store_original_order)

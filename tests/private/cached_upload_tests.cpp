@@ -58,7 +58,7 @@ dew_converter_file_pre_init_info_t synthetic_pre_init(const char *filename, size
   return info;
 }
 
-void synthetic_init(const char *filename, size_t filename_size, struct dew_converter_header_t *header, struct dew_converter_attributes_t *attributes, void **user_ptr, struct dew_error_t **)
+void synthetic_init(const char *filename, size_t filename_size, struct dew_converter_header_t *header, struct dew_attributes_t *attributes, void **user_ptr, struct dew_error_t **)
 {
   auto *state = new synthetic_state_t();
   state->base = base_from_name(filename, filename_size);
@@ -72,11 +72,11 @@ void synthetic_init(const char *filename, size_t filename_size, struct dew_conve
   header->max[0] = double(state->base + state->total) * 0.001;
   header->max[1] = 0.001;
   header->max[2] = 0.001;
-  dew_converter_attributes_add_attribute(attributes, DEW_ATTRIBUTE_XYZ, uint32_t(strlen(DEW_ATTRIBUTE_XYZ)), dew_type_i32, dew_components_3);
+  dew_attributes_add_attribute(attributes, DEW_ATTRIBUTE_XYZ, uint32_t(strlen(DEW_ATTRIBUTE_XYZ)), dew_type_i32, dew_components_3);
   *user_ptr = state;
 }
 
-void synthetic_convert_data(void *user_ptr, const struct dew_converter_header_t *, const struct dew_converter_attribute_t *, uint32_t, uint32_t max_points_to_convert, struct dew_converter_buffer_t *buffers, uint32_t buffers_size,
+void synthetic_convert_data(void *user_ptr, const struct dew_converter_header_t *, const struct dew_attribute_t *, uint32_t, uint32_t max_points_to_convert, struct dew_blob_t *buffers, uint32_t buffers_size,
                             uint32_t *points_read, uint8_t *done, struct dew_error_t **)
 {
   auto *state = static_cast<synthetic_state_t *>(user_ptr);

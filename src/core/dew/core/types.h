@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 
+#include <dew/core/export.h>
 #include <dew/core/format.h>
 
 #ifdef __cplusplus
@@ -34,16 +35,15 @@ extern "C" {
 #endif
 
 // Opaque, append-only attribute set. Built by the file-convert `init` callback and consumed by the
-// attribute registry; the C++ definition lives with the internal dataset types. The builder
-// (dew_converter_attributes_add_attribute) stays in <dew/converter/converter.h>, so that this
-// header carries no exported function and therefore no module export macro.
-struct dew_converter_attributes_t;
+// attribute registry; the C++ definition lives with the internal dataset types.
+struct dew_attributes_t;
+DEW_CORE_EXPORT void dew_attributes_add_attribute(struct dew_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components);
 
 //= py.skip
-struct dew_converter_attribute_t
+struct dew_attribute_t
 {
 #ifdef __cplusplus
-  dew_converter_attribute_t(const char *a_name, uint32_t a_name_size, enum dew_type_t format, enum dew_components_t a_components)
+  dew_attribute_t(const char *a_name, uint32_t a_name_size, enum dew_type_t format, enum dew_components_t a_components)
     : name(a_name)
     , name_size(a_name_size)
     , type(format)
@@ -59,16 +59,16 @@ struct dew_converter_attribute_t
 };
 
 //= py.skip
-struct dew_converter_buffer_t
+struct dew_blob_t
 {
 #ifdef __cplusplus
-  dew_converter_buffer_t()
+  dew_blob_t()
     : data(nullptr)
     , size(0)
   {
   }
 
-  dew_converter_buffer_t(void *a_data, uint32_t a_size)
+  dew_blob_t(void *a_data, uint32_t a_size)
     : data(a_data)
     , size(a_size)
   {

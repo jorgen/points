@@ -94,9 +94,9 @@ struct input_name_ref_t
 
 } // namespace dew::core (temporarily close for public type)
 
-struct dew_converter_attributes_t
+struct dew_attributes_t
 {
-  std::vector<dew_converter_attribute_t> attributes;
+  std::vector<dew_attribute_t> attributes;
   std::vector<std::unique_ptr<char[]>> attribute_names;
 };
 
@@ -104,7 +104,7 @@ namespace dew::core
 {
 struct attribute_buffers_t
 {
-  std::vector<dew_converter_buffer_t> buffers;
+  std::vector<dew_blob_t> buffers;
   std::vector<std::unique_ptr<uint8_t[]>> data;
 };
 
@@ -175,7 +175,7 @@ inline void storage_header_initialize(storage_header_t &header)
 // Split a serialized points blob (a storage_header_t followed by the point bytes) into the header + a view of
 // the point data. Storage-free -- it only reads the buffer -- so the decode path and a decode Web Worker can
 // call it without pulling in the storage handler. (Moved here from storage_handler.hpp.)
-inline bool deserialize_points(const dew_converter_buffer_t &data, storage_header_t &header, dew_converter_buffer_t &point_data, dew_error_t &error)
+inline bool deserialize_points(const dew_blob_t &data, storage_header_t &header, dew_blob_t &point_data, dew_error_t &error)
 {
   if (data.size < sizeof(header))
   {
@@ -194,7 +194,7 @@ inline bool deserialize_points(const dew_converter_buffer_t &data, storage_heade
 // copy (the source's names are owned by its attribute_names vector and outlive nothing). Lives here
 // beside the type rather than with the write pipeline's buffer helpers: it is pure data manipulation
 // on a core type, and the attribute registry needs it.
-inline void attributes_copy(const dew_converter_attributes_t &source, dew_converter_attributes_t &target)
+inline void attributes_copy(const dew_attributes_t &source, dew_attributes_t &target)
 {
   assert(target.attributes.empty());
   assert(target.attribute_names.empty());

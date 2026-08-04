@@ -214,7 +214,7 @@ struct read_only_points_t
   storage_location_t location;
   std::shared_ptr<read_request_t> read_request;
   storage_header_t header;
-  dew_converter_buffer_t data;
+  dew_blob_t data;
   dew_error_t error;
 };
 
@@ -236,7 +236,7 @@ struct read_attribute_t
   storage_handler_t &storage_handler;
   storage_location_t location;
   std::shared_ptr<read_request_t> read_request;
-  dew_converter_buffer_t data;
+  dew_blob_t data;
   dew_error_t error;
 };
 

@@ -39,11 +39,9 @@ struct dew_converter_header_t
   double max[3];
 };
 
-/* dew_converter_attributes_t, dew_converter_attribute_t and dew_converter_buffer_t live in
- * <dew/core/types.h> (included above) -- they describe data, not conversion, and the dataset read
- * path is expressed in terms of them. The builder below stays here because it is exported from
- * dew_converter, which keeps the core header free of any module export macro. */
-DEW_CONVERTER_EXPORT void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components);
+/* dew_attributes_t, dew_attribute_t and dew_blob_t -- and the dew_attributes_add_attribute builder
+ * that fills the first -- live in <dew/core/types.h> (included above). They describe data, not
+ * conversion, and the dataset read path is expressed in terms of them. */
 
 struct dew_converter_file_pre_init_info_t
 {
@@ -63,9 +61,9 @@ struct dew_converter_file_pre_init_info_t
 
 typedef struct dew_converter_file_pre_init_info_t (*dew_converter_file_pre_init_callback_t)(const char *filename, size_t filename_size, struct dew_error_t **error);
 
-typedef void (*dew_converter_file_init_callback_t)(const char *filename, size_t filename_size, struct dew_converter_header_t *header, struct dew_converter_attributes_t *attributes, void **user_ptr, struct dew_error_t **error);
+typedef void (*dew_converter_file_init_callback_t)(const char *filename, size_t filename_size, struct dew_converter_header_t *header, struct dew_attributes_t *attributes, void **user_ptr, struct dew_error_t **error);
 
-typedef void (*dew_converter_file_convert_data_callback_t)(void *user_ptr, const struct dew_converter_header_t *header, const struct dew_converter_attribute_t *attributes, uint32_t attributes_size, uint32_t max_points_to_convert, struct dew_converter_buffer_t *buffers,
+typedef void (*dew_converter_file_convert_data_callback_t)(void *user_ptr, const struct dew_converter_header_t *header, const struct dew_attribute_t *attributes, uint32_t attributes_size, uint32_t max_points_to_convert, struct dew_blob_t *buffers,
                                                        uint32_t buffers_size, uint32_t *points_read, uint8_t *done, struct dew_error_t **error);
 
 typedef void (*dew_converter_file_destroy_user_ptr_t)(void *user_ptr);

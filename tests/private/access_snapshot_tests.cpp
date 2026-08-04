@@ -115,9 +115,9 @@ struct snapshot_fixture_t : vio::about_to_block_t
   // the storage handler reports its blob locations.
   write_result_t write_points(uint64_t morton_min, uint64_t morton_max, uint32_t point_count)
   {
-    dew_converter_attributes_t attrs;
-    dew_converter_attributes_add_attribute(&attrs, DEW_ATTRIBUTE_XYZ, uint32_t(strlen(DEW_ATTRIBUTE_XYZ)), dew_type_m64, dew_components_1);
-    dew_converter_attributes_add_attribute(&attrs, DEW_ATTRIBUTE_INTENSITY, uint32_t(strlen(DEW_ATTRIBUTE_INTENSITY)), dew_type_u8, dew_components_1);
+    dew_attributes_t attrs;
+    dew_attributes_add_attribute(&attrs, DEW_ATTRIBUTE_XYZ, uint32_t(strlen(DEW_ATTRIBUTE_XYZ)), dew_type_m64, dew_components_1);
+    dew_attributes_add_attribute(&attrs, DEW_ATTRIBUTE_INTENSITY, uint32_t(strlen(DEW_ATTRIBUTE_INTENSITY)), dew_type_u8, dew_components_1);
     auto attribute_id = attributes_configs.get_attribute_config_index(std::move(attrs));
     auto formats = attributes_configs.get_format_components(attribute_id);
 

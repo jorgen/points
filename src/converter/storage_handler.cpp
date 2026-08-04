@@ -165,7 +165,7 @@ static void compute_attribute_min_max(const uint8_t *data, uint32_t size, const 
   }
 }
 
-static bool serialize_points(const storage_header_t &header, const dew_converter_buffer_t &points, dew_converter_buffer_t &serialize_data, std::shared_ptr<uint8_t[]> &data_owner)
+static bool serialize_points(const storage_header_t &header, const dew_blob_t &points, dew_blob_t &serialize_data, std::shared_ptr<uint8_t[]> &data_owner)
 {
   serialize_data.size = sizeof(header) + points.size;
   data_owner = std::make_shared<uint8_t[]>(serialize_data.size);
@@ -228,7 +228,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
     auto &info = buffer_infos[i];
     if (i == 0)
     {
-      dew_converter_buffer_t buffer_data;
+      dew_blob_t buffer_data;
       serialize_points(header, attribute_buffers.buffers[i], buffer_data, info.data_owner);
       info.raw = static_cast<uint8_t *>(buffer_data.data);
       info.size = buffer_data.size;

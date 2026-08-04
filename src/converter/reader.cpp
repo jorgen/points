@@ -77,7 +77,7 @@ void get_data_worker_t::work()
   // made any init-stage error (a failing user callback, or the xyz-first
   // check) abort the process on a garbage registry lookup.
   storage_header.input_id = file.id;
-  dew_converter_attributes_t tmp_attributes;
+  dew_attributes_t tmp_attributes;
   dew_error_t *local_error = nullptr;
   // The init callback is expected to fill this, but it may fail before doing
   // so and callback_closer hands it to destroy_user_ptr regardless.

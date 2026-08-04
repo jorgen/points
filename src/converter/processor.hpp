@@ -131,7 +131,7 @@ public:
     return _perf_stats;
   }
 
-  const dew_converter_attributes_t &get_attributes(attributes_id_t id);
+  const dew_attributes_t &get_attributes(attributes_id_t id);
 
 private:
   std::string _url;

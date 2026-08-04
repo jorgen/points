@@ -19,16 +19,6 @@
 
 #include <assert.h>
 
-using namespace dew::converter;
-
-void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components)
-{
-  attributes->attribute_names.emplace_back(new char[name_size + 1]);
-  memcpy(attributes->attribute_names.back().get(), name, name_size);
-  attributes->attribute_names.back().get()[name_size] = 0;
-  attributes->attributes.push_back({attributes->attribute_names.back().get(), name_size, format, components});
-}
-
 namespace dew::converter
 {
 using namespace dew::core;

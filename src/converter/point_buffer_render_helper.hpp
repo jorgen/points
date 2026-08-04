@@ -128,7 +128,7 @@ struct decode_input_t
   storage_header_t header{};
   point_format_t point_format[4]{};
   std::shared_ptr<uint8_t[]> buffers[4];
-  dew_converter_buffer_t data_info[4]{};
+  dew_blob_t data_info[4]{};
 };
 
 struct dyn_points_data_handler_t
@@ -232,7 +232,7 @@ struct dyn_points_data_handler_t
 
   storage_header_t header{};
   point_format_t point_format[4];
-  dew_converter_buffer_t data_info[4];
+  dew_blob_t data_info[4];
 };
 
 struct dyn_points_draw_buffer_t
@@ -243,7 +243,7 @@ struct dyn_points_draw_buffer_t
   dew_buffer_t render_buffers[3];
   point_format_t format[3];
   std::shared_ptr<uint8_t[]> data[2];
-  dew_converter_buffer_t data_info[2];
+  dew_blob_t data_info[2];
   uint32_t point_count;
   std::array<double, 3> offset;
   std::array<double, 3> scale;
@@ -254,7 +254,7 @@ struct dyn_points_draw_buffer_t
 };
 
 template <typename MORTON_TYPE, typename DECODED_T>
-void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const decode_input_t &in, dew_converter_buffer_t &vertex_data_info, std::array<double, 3> &output_offset,
+void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, const decode_input_t &in, dew_blob_t &vertex_data_info, std::array<double, 3> &output_offset,
                                           std::shared_ptr<uint8_t[]> &vertex_data)
 {
   assert(in.data_info[0].data);
@@ -268,7 +268,7 @@ void convert_points_to_vertex_data_morton(const tree_config_t &tree_config, cons
   (void)sizeof(DECODED_T);
   auto buffer_size = uint32_t(point_count * sizeof(std::array<float, 3>));
   vertex_data = std::make_shared<uint8_t[]>(buffer_size);
-  vertex_data_info = dew_converter_buffer_t(vertex_data.get(), buffer_size);
+  vertex_data_info = dew_blob_t(vertex_data.get(), buffer_size);
   auto vertex_data_ptr = vertex_data.get();
   auto *decoded_array = reinterpret_cast<std::array<float, 3> *>(vertex_data_ptr);
 
@@ -318,7 +318,7 @@ inline void convert_points_to_vertex_data(const tree_config_t &tree_config, cons
   case dew_type_i64:
   case dew_type_r64: {
     draw_buffer.data[0].reset(new uint8_t[in.data_info[0].size]);
-    draw_buffer.data_info[0] = dew_converter_buffer_t(draw_buffer.data[0].get(), in.data_info[0].size);
+    draw_buffer.data_info[0] = dew_blob_t(draw_buffer.data[0].get(), in.data_info[0].size);
     draw_buffer.format[0] = pformat;
     memcpy(draw_buffer.data[0].get(), in.data_info[0].data, in.data_info[0].size);
     break;

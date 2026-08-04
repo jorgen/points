@@ -68,8 +68,8 @@ struct reader_fixture_t : vio::about_to_block_t
   // Write one attribute blob and return where it landed.
   storage_location_t write_blob(uint32_t point_count)
   {
-    dew_converter_attributes_t attrs;
-    dew_converter_attributes_add_attribute(&attrs, "xyz", 3, dew_type_m64, dew_components_1);
+    dew_attributes_t attrs;
+    dew_attributes_add_attribute(&attrs, "xyz", 3, dew_type_m64, dew_components_1);
     auto attribute_id = attributes.get_attribute_config_index(std::move(attrs));
     auto formats = attributes.get_format_components(attribute_id);
 

@@ -90,7 +90,7 @@ struct read_request_t
   bool is_cancelled() const { return _cancelled.load(std::memory_order_relaxed); }
 
   std::shared_ptr<uint8_t[]> buffer;
-  dew_converter_buffer_t buffer_info;
+  dew_blob_t buffer_info;
   dew_error_t error;
 
   bool raw = false; // when set, read() returns the COMPRESSED bytes as-is (no decompress) -- used by the

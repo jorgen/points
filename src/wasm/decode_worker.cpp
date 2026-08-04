@@ -128,7 +128,7 @@ emscripten::val decode_node_js(emscripten::val msg)
     auto raw = copy_in(buffers[i], raw_size);
     uint32_t dsize = 0;
     in.buffers[i] = decompress_slot(raw, raw_size, dsize, error);
-    in.data_info[i] = dew_converter_buffer_t(in.buffers[i] ? in.buffers[i].get() : nullptr, dsize);
+    in.data_info[i] = dew_blob_t(in.buffers[i] ? in.buffers[i].get() : nullptr, dsize);
   }
 
   // A leaf that may be promoted to virtual subnodes needs its raw (decompressed, pre-reorder) points + attr

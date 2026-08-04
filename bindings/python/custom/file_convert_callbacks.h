@@ -85,7 +85,7 @@ struct py_file_ctx
  * a stale `h` would corrupt the reader's frame. */
 struct attrs_proxy
 {
-  dew_converter_attributes_t *h = nullptr;
+  dew_attributes_t *h = nullptr;
   uint32_t count = 0;
   std::string first_name;
   enum dew_type_t first_type = dew_type_u8;
@@ -143,7 +143,7 @@ inline uint32_t element_size_for(enum dew_type_t type)
 /* A writable numpy VIEW over one library-provided convert buffer.
  * Morton types wider than 64 bits are exposed as uint64 lanes, so the
  * column count stays element-exact against the library's stride. */
-inline nb::object ndarray_for_buffer(const dew_converter_attribute_t &attr, const dew_converter_buffer_t &buffer,
+inline nb::object ndarray_for_buffer(const dew_attribute_t &attr, const dew_blob_t &buffer,
                                      uint32_t max_points)
 {
   nb::dlpack::dtype dtype;
@@ -179,8 +179,8 @@ inline nb::object ndarray_for_buffer(const dew_converter_attribute_t &attr, cons
 }
 
 /* How many rows Python was allowed to fill, given the buffers it saw. */
-inline uint32_t writable_points(const dew_converter_attribute_t *attributes, uint32_t attributes_size,
-                                const dew_converter_buffer_t *buffers, uint32_t buffers_size, uint32_t max_points)
+inline uint32_t writable_points(const dew_attribute_t *attributes, uint32_t attributes_size,
+                                const dew_blob_t *buffers, uint32_t buffers_size, uint32_t max_points)
 {
   uint32_t limit = max_points;
   const uint32_t n = attributes_size < buffers_size ? attributes_size : buffers_size;
@@ -223,7 +223,7 @@ inline dew_converter_file_pre_init_info_t file_pre_init_tramp(const char *filena
 }
 
 inline void file_init_tramp(const char *filename, size_t filename_size, dew_converter_header_t *header,
-                            dew_converter_attributes_t *attributes, void **user_ptr, dew_error_t **error)
+                            dew_attributes_t *attributes, void **user_ptr, dew_error_t **error)
 {
   nb::gil_scoped_acquire gil;
   /* The reader declares both of these as uninitialized locals and expects the
@@ -291,8 +291,8 @@ inline void file_init_tramp(const char *filename, size_t filename_size, dew_conv
 }
 
 inline void file_convert_data_tramp(void *user_ptr, const dew_converter_header_t *header,
-                                    const dew_converter_attribute_t *attributes, uint32_t attributes_size,
-                                    uint32_t max_points_to_convert, dew_converter_buffer_t *buffers,
+                                    const dew_attribute_t *attributes, uint32_t attributes_size,
+                                    uint32_t max_points_to_convert, dew_blob_t *buffers,
                                     uint32_t buffers_size, uint32_t *points_read, uint8_t *done,
                                     dew_error_t **error)
 {
@@ -305,7 +305,7 @@ inline void file_convert_data_tramp(void *user_ptr, const dew_converter_header_t
     nb::list attr_list;
     for (uint32_t i = 0; i < buffers_size; ++i)
     {
-      const dew_converter_attribute_t &attr = attributes[i < attributes_size ? i : attributes_size - 1];
+      const dew_attribute_t &attr = attributes[i < attributes_size ? i : attributes_size - 1];
       buffer_views.append(ndarray_for_buffer(attr, buffers[i], max_points_to_convert));
     }
     for (uint32_t i = 0; i < attributes_size; ++i)
@@ -378,7 +378,7 @@ inline void register_file_attributes(nb::module_ &m)
         if (!self.h)
           throw nb::value_error("attributes.add_attribute() is only valid while the init callback runs "
                                 "(this registrar belongs to a file whose init already returned)");
-        dew_converter_attributes_add_attribute(self.h, name.data(), uint32_t(name.size()), type, components);
+        dew_attributes_add_attribute(self.h, name.data(), uint32_t(name.size()), type, components);
         if (self.count == 0)
         {
           self.first_name.assign(name);

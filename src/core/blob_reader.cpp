@@ -187,7 +187,7 @@ std::shared_ptr<read_request_t> blob_reader_t::read(storage_location_t location,
     {
       // Hand back the COMPRESSED bytes unchanged; the caller (the wasm decode worker) decompresses off-thread.
       ret->buffer = cv.compressed_data;
-      ret->buffer_info = dew_converter_buffer_t(ret->buffer.get(), cv.compressed_size);
+      ret->buffer_info = dew_blob_t(ret->buffer.get(), cv.compressed_size);
       complete_read_request(*ret);
       return ret;
     }

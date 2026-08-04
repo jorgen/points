@@ -28,7 +28,7 @@
 namespace dew::core
 {
 
-static bool compare_attribute(const dew_converter_attribute_t &a, const dew_converter_attribute_t &b)
+static bool compare_attribute(const dew_attribute_t &a, const dew_attribute_t &b)
 {
   if (a.name_size != b.name_size)
     return false;
@@ -38,7 +38,7 @@ static bool compare_attribute(const dew_converter_attribute_t &a, const dew_conv
     return false;
   return memcmp(a.name, b.name, a.name_size) == 0;
 }
-static bool compare_attributes(const dew_converter_attributes_t &a, const dew_converter_attributes_t &b)
+static bool compare_attributes(const dew_attributes_t &a, const dew_attributes_t &b)
 {
   if (a.attributes.size() != b.attributes.size())
     return false;
@@ -50,7 +50,7 @@ static bool compare_attributes(const dew_converter_attributes_t &a, const dew_co
   return true;
 }
 
-bool attributes_name_in_registry(const dew_converter_attribute_t &attribute, const std::vector<std::string> &registry)
+bool attributes_name_in_registry(const dew_attribute_t &attribute, const std::vector<std::string> &registry)
 {
   for (auto &name : registry)
   {
@@ -62,7 +62,7 @@ bool attributes_name_in_registry(const dew_converter_attribute_t &attribute, con
   return false;
 }
 
-static void insert_new_names(const dew_converter_attributes_t &source, std::vector<std::string> &target)
+static void insert_new_names(const dew_attributes_t &source, std::vector<std::string> &target)
 {
   for (auto &attrib : source.attributes)
   {
@@ -73,7 +73,7 @@ static void insert_new_names(const dew_converter_attributes_t &source, std::vect
   }
 }
 
-attributes_id_t attributes_configs_t::get_attribute_config_index(dew_converter_attributes_t &&attr)
+attributes_id_t attributes_configs_t::get_attribute_config_index(dew_attributes_t &&attr)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   for (int i = 0; i < int(_attributes_configs.size()); i++)
@@ -91,7 +91,7 @@ attributes_id_t attributes_configs_t::get_attribute_config_index(dew_converter_a
   return {uint32_t(ret)};
 }
 
-static bool contains_attribute(const dew_converter_attributes_t &attributes, const dew_converter_attribute_t &attribute)
+static bool contains_attribute(const dew_attributes_t &attributes, const dew_attribute_t &attribute)
 {
   for (auto &to_check_attrib : attributes.attributes)
   {
@@ -103,7 +103,7 @@ static bool contains_attribute(const dew_converter_attributes_t &attributes, con
   return false;
 }
 
-static void add_missing_attributes(const dew_converter_attributes_t &source, dew_converter_attributes_t &target)
+static void add_missing_attributes(const dew_attributes_t &source, dew_attributes_t &target)
 {
   for (auto &source_attrib : source.attributes)
   {
@@ -130,7 +130,7 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
   attrib_end = std::unique(attrib_begin, attrib_end, [](const attributes_id_t &a, const attributes_id_t &b) { return a.data == b.data; });
 
   auto lod_type = morton_type_from_lod(lod);
-  dew_converter_attributes_t target;
+  dew_attributes_t target;
   {
     std::unique_lock<std::mutex> lock(_mutex);
     attributes_copy(_attributes_configs[attrib_begin->data].attributes, target);
@@ -160,7 +160,7 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
     // doubles as "collapse path" (source data, never slimmed); lod_all_attributes opts out.
     if (!keep_original_order && !lod_all_attributes)
     {
-      auto keep = [](const dew_converter_attribute_t &a) {
+      auto keep = [](const dew_attribute_t &a) {
         auto is = [&](const char *name) { return a.name_size == strlen(name) && memcmp(a.name, name, a.name_size) == 0; };
         return is(DEW_ATTRIBUTE_RGB) || is(DEW_ATTRIBUTE_INTENSITY) || is(DEW_ATTRIBUTE_CLASSIFICATION);
       };
@@ -181,7 +181,7 @@ attribute_lod_mapping_t attributes_configs_t::get_lod_attribute_mapping(int lod,
   return get_lod_attribute_mapping(lod_type, id, attrib_begin, attrib_end);
 }
 
-const dew_converter_attributes_t &attributes_configs_t::get(attributes_id_t id)
+const dew_attributes_t &attributes_configs_t::get(attributes_id_t id)
 {
   std::unique_lock<std::mutex> lock(_mutex);
   return _attributes_configs[id.data].attributes;
@@ -206,14 +206,14 @@ static bool attributes_ids_increase(const attributes_id_t *begin, const attribut
 }
 #endif
 
-static bool is_attribute_names_equal(const dew_converter_attribute_t &a, const dew_converter_attribute_t &b)
+static bool is_attribute_names_equal(const dew_attribute_t &a, const dew_attribute_t &b)
 {
   if (a.name_size != b.name_size)
     return false;
   return memcmp(a.name, b.name, a.name_size) == 0;
 }
 
-attribute_source_lod_into_t create_attribute_source_lod_into(const dew_converter_attribute_t &attr, const dew_converter_attributes_t &attributes)
+attribute_source_lod_into_t create_attribute_source_lod_into(const dew_attribute_t &attr, const dew_attributes_t &attributes)
 {
   for (int i = 0; i < int(attributes.attributes.size()); i++)
   {
@@ -369,7 +369,7 @@ dew_error_t attributes_configs_t::deserialize(const std::unique_ptr<uint8_t[]> &
     memcpy(&attrib_count, input_bytes, sizeof(attrib_count));
     input_bytes += sizeof(uint32_t);
 
-    dew_converter_attributes_t attributes;
+    dew_attributes_t attributes;
     for (uint32_t j = 0; j < attrib_count; j++)
     {
       if (input_bytes + sizeof(dew_type_t) + sizeof(dew_components_t) + sizeof(uint32_t) > end)
