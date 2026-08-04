@@ -155,5 +155,8 @@ environment = { CMAKE_GENERATOR = "Ninja" }
 # the repair step runs in a different environment from before-build -- so
 # install it here, in the same command that uses it. `python -m` avoids
 # depending on the Scripts directory being on PATH.
-# --no-mangle-all keeps dew_*.dll linkable by name for the shipped headers.
-repair-wheel-command = "python -m pip install delvewheel && python -m delvewheel repair --no-mangle-all -w {dest_dir} {wheel}"
+# --exclude: the dew_*.dll are already in the wheel beside the extension, which
+# is where Windows resolves them from; delvewheel would otherwise try to vendor
+# them and fail to find them on PATH. Mirrors the auditwheel/delocate excludes.
+# --no-mangle-all keeps them linkable by name for the shipped headers.
+repair-wheel-command = "python -m pip install delvewheel && python -m delvewheel repair --no-mangle-all --exclude dew_common.dll,dew_render.dll,dew_converter.dll -w {dest_dir} {wheel}"
