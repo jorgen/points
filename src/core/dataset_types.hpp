@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include <dew/converter/converter.h>
+#include <dew/core/types.h>
 
 #include "error.hpp"
 #include "morton.hpp"

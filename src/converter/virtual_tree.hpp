@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include "conversion_types.hpp" // tree_config_t
+#include "dataset_types.hpp" // tree_config_t
 #include "frustum_tree_walker.hpp" // lod_params_t
 #include "render_pipeline.hpp"     // render_list_t, render::callback_manager_t
 #include "resident_source.hpp"

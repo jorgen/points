@@ -24,7 +24,7 @@
 // per-cell pick driven by the same random offsets (mt19937(4244)).
 
 #include "morton.hpp"
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include <dew/converter/converter.h>
 
 #include <random>

@@ -24,7 +24,7 @@
 #include <dew/core/error.h>
 #include <dew/core/format.h>
 #include <dew/converter/export.h>
-#include <dew/converter/types.h>
+#include <dew/core/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,9 +39,11 @@ struct dew_converter_header_t
   double max[3];
 };
 
-/* dew_converter_attributes_t, dew_converter_attribute_t and dew_converter_buffer_t moved to
- * <dew/converter/types.h> (included above) -- they describe data, not conversion, and are shared
- * with the dataset read path. */
+/* dew_converter_attributes_t, dew_converter_attribute_t and dew_converter_buffer_t live in
+ * <dew/core/types.h> (included above) -- they describe data, not conversion, and the dataset read
+ * path is expressed in terms of them. The builder below stays here because it is exported from
+ * dew_converter, which keeps the core header free of any module export macro. */
+DEW_CONVERTER_EXPORT void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components);
 
 struct dew_converter_file_pre_init_info_t
 {

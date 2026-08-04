@@ -28,16 +28,16 @@
 #include <stdint.h>
 
 #include <dew/core/format.h>
-#include <dew/converter/export.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Opaque, append-only attribute set. Built by the file-convert `init` callback and consumed by the
-// attribute registry; the C++ definition lives with the internal dataset types.
+// attribute registry; the C++ definition lives with the internal dataset types. The builder
+// (dew_converter_attributes_add_attribute) stays in <dew/converter/converter.h>, so that this
+// header carries no exported function and therefore no module export macro.
 struct dew_converter_attributes_t;
-DEW_CONVERTER_EXPORT void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components);
 
 //= py.skip
 struct dew_converter_attribute_t

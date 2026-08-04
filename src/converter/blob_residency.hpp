@@ -36,7 +36,7 @@
 // committed checkpoint. Entries carry a generation; serialize() snapshots the current generation
 // and commit_durable(gen) flips exactly the entries whose remote fact that checkpoint contains.
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "error.hpp"
 
 #include <ankerl/unordered_dense.h>

@@ -21,7 +21,7 @@
 #include <vio/event_pipe.h>
 #include <vio/thread_pool.h>
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "error.hpp"
 #include "input_header.hpp"
 

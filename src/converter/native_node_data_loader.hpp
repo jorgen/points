@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "frustum_tree_walker.hpp"
 #include "node_data_loader.hpp"
 #include "node_decode.hpp" // decode_node + loaded_node_impl_data_t

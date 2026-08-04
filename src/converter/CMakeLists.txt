@@ -1,7 +1,6 @@
 
 set(public_headers
         dew/converter/export.h
-        dew/converter/types.h
         dew/converter/converter.h
         dew/converter/connection_cli.h
         dew/converter/default_attribute_names.h
@@ -11,11 +10,9 @@ set(public_headers
 set(private_headers
         processor.hpp
         reader.hpp
-        conversion_types.hpp
         processor.hpp
         converter.hpp
         input_header.hpp
-        morton.hpp
         sorter.hpp
         memcpy_array.hpp
         tree.hpp
@@ -34,15 +31,6 @@ set(private_headers
         input_data_source_registry.hpp
         input_storage_map.hpp
         native_node_data_loader.hpp
-        compressor.hpp
-        perf_stats.hpp
-        byte_shuffle.hpp
-        compressor_zstd.hpp
-        compressor_fse.hpp
-        compressor_ans.hpp
-        compression_preprocess.hpp
-        url.hpp
-        index_format.hpp
         storage_backend.hpp
         packed_file_backend.hpp
         object_backend.hpp
@@ -78,12 +66,6 @@ set(sources
         file_hole_punch.cpp
         input_data_source_registry.cpp
         input_storage_map.cpp
-        compressor.cpp
-        byte_shuffle.cpp
-        compressor_zstd.cpp
-        compressor_fse.cpp
-        compressor_ans.cpp
-        compression_preprocess.cpp
         storage_backend.cpp
         packed_file_backend.cpp
         object_backend.cpp
@@ -118,7 +100,12 @@ if (BUILD_SHARED_LIBS)
     #    target_link_libraries(dew_converter_objects PRIVATE -fsanitize=address)
 endif ()
 
-add_library(dew_converter empty_dylib_function.cpp $<TARGET_OBJECTS:dew_converter_objects>)
+# dew_core's objects are spliced in rather than linked as a library. Its cross-module API is
+# internal C++ (decompress_any, the dataset format, the codecs) and the project builds with
+# CMAKE_CXX_VISIBILITY_PRESET=hidden, so those symbols are not visible in libdew_core.dylib -- only
+# the public dew_* C entry points are. Splicing objects is how tools/dew and tests already consume
+# these modules; the shared libraries exist for the public C API.
+add_library(dew_converter empty_dylib_function.cpp $<TARGET_OBJECTS:dew_converter_objects> $<TARGET_OBJECTS:dew_core_objects>)
 #target_compile_options(dew_converter PRIVATE -fsanitize=address)
 #target_link_options(dew_converter PRIVATE -fsanitize=address)
 target_link_libraries(dew_converter PUBLIC dew_converter_objects)

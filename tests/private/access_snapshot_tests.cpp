@@ -39,7 +39,7 @@
 #include <vio/thread_pool.h>
 
 #include "attributes_configs.hpp"
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "input_header.hpp"
 #include "storage_handler.hpp"
 #include "tree.hpp"

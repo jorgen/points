@@ -24,48 +24,13 @@
 
 #include <dew/converter/converter.h>
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
+
+#include <format_util.hpp>  // size_for_format (moved to the core)
 
 
 namespace dew::converter
 {
-inline int size_for_format(dew_type_t format)
-{
-  switch (format)
-  {
-  case dew_type_u8:
-  case dew_type_i8:
-    return 1;
-  case dew_type_u16:
-  case dew_type_i16:
-    return 2;
-  case dew_type_u32:
-  case dew_type_i32:
-  case dew_type_r32:
-  case dew_type_m32:
-    return 4;
-  case dew_type_u64:
-  case dew_type_i64:
-  case dew_type_r64:
-  case dew_type_m64:
-    return 8;
-  case dew_type_m128:
-    return 16;
-  case dew_type_m192:
-    return 24;
-  }
-  return 0;
-}
-
-inline int size_for_format(dew_type_t format, dew_components_t components)
-{
-  return size_for_format(format) * (int)components;
-}
-inline int size_for_format(std::pair<dew_type_t, dew_components_t> format)
-{
-  return size_for_format(format.first) * (int)format.second;
-}
-
 void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count);
 void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count, std::unique_ptr<uint8_t[]> && morton_attribute_buffer);
 void attribute_buffers_adjust_buffers_to_size(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count);

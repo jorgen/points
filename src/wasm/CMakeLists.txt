@@ -12,12 +12,12 @@ add_executable(dew_data_wasm
     # The portable read + decompress subset (no libuv / laszip):
     ${_conv}/object_backend.cpp
     ${_conv}/bucket_format.cpp
-    ${_conv}/compressor.cpp
-    ${_conv}/compressor_zstd.cpp
-    ${_conv}/compressor_fse.cpp
-    ${_conv}/compressor_ans.cpp
-    ${_conv}/byte_shuffle.cpp
-    ${_conv}/compression_preprocess.cpp
+    ${_core}/compressor.cpp
+    ${_core}/compressor_zstd.cpp
+    ${_core}/compressor_fse.cpp
+    ${_core}/compressor_ans.cpp
+    ${_core}/byte_shuffle.cpp
+    ${_core}/compression_preprocess.cpp
     # Tree (de)serialize + node storage map + attribute configs, for the frustum-walk / readNode path:
     ${_conv}/tree.cpp
     ${_conv}/input_storage_map.cpp
@@ -148,12 +148,12 @@ add_executable(dew_render_wasm
     ${_conv}/storage_backend.cpp
     ${_conv}/object_backend.cpp
     ${_conv}/bucket_format.cpp
-    ${_conv}/compressor.cpp
-    ${_conv}/compressor_zstd.cpp
-    ${_conv}/compressor_fse.cpp
-    ${_conv}/compressor_ans.cpp
-    ${_conv}/byte_shuffle.cpp
-    ${_conv}/compression_preprocess.cpp
+    ${_core}/compressor.cpp
+    ${_core}/compressor_zstd.cpp
+    ${_core}/compressor_fse.cpp
+    ${_core}/compressor_ans.cpp
+    ${_core}/byte_shuffle.cpp
+    ${_core}/compression_preprocess.cpp
     ${_core}/error.cpp
 )
 
@@ -212,12 +212,12 @@ add_executable(dew_decode_worker
     decode_worker.cpp
     ${_core}/error.cpp
     ${_conv}/node_decode.cpp            # the extracted decode seam
-    ${_conv}/compressor.cpp
-    ${_conv}/compressor_zstd.cpp
-    ${_conv}/compressor_fse.cpp
-    ${_conv}/compressor_ans.cpp
-    ${_conv}/byte_shuffle.cpp
-    ${_conv}/compression_preprocess.cpp
+    ${_core}/compressor.cpp
+    ${_core}/compressor_zstd.cpp
+    ${_core}/compressor_fse.cpp
+    ${_core}/compressor_ans.cpp
+    ${_core}/byte_shuffle.cpp
+    ${_core}/compression_preprocess.cpp
     ${_conv}/tree.cpp                   # tree/registry (de)serialize -- format only, no storage deps
     ${_conv}/input_storage_map.cpp
     ${_conv}/attributes_configs.cpp

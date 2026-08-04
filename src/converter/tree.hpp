@@ -19,7 +19,7 @@
 
 #include <vector>
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "input_storage_map.hpp"
 #include "morton.hpp"
 

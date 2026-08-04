@@ -17,7 +17,9 @@
 ************************************************************************/
 #pragma once
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
+
+#include <dew/converter/converter.h>
 
 #include <ankerl/unordered_dense.h>
 #include <optional>

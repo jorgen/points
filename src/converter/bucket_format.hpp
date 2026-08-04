@@ -38,7 +38,7 @@
 // Consistency: data objects < band manifest < root manifest, bands commit strictly in order, and
 // the dataset uuid ties the bucket to the cache generation that produced it (mismatch = refuse).
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "error.hpp"
 
 #include <cstdint>

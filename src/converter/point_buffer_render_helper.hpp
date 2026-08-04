@@ -19,7 +19,7 @@
 #define POINT_BUFFER_RENDER_HELPER_H
 
 #include "buffer.hpp"
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "storage_handler.hpp"
 #include <glm_include.hpp>
 #include <dew/core/format.h>

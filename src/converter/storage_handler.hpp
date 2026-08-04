@@ -28,7 +28,7 @@
 
 #include "attributes_configs.hpp"
 #include "compressor.hpp"
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "error.hpp"
 #include "lru_cache.hpp"
 #include "perf_stats.hpp"
@@ -268,7 +268,7 @@ private:
   std::mutex _mutex;
 };
 
-// deserialize_points moved to conversion_types.hpp (storage-free) so the decode path / a decode worker can
+// deserialize_points moved to dataset_types.hpp (storage-free) so the decode path / a decode worker can
 // use it without pulling this header.
 
 struct read_only_points_t

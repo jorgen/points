@@ -4,7 +4,7 @@
 #include <packed_file_backend.hpp>
 #include <storage_backend.hpp>
 #include <index_format.hpp>
-#include <conversion_types.hpp>
+#include <dataset_types.hpp>
 
 #include <vio/objstore/memory_object_store.h>
 

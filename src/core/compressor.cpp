@@ -19,7 +19,7 @@
 #include "compressor_zstd.hpp"
 #include "compressor_fse.hpp"
 #include "compressor_ans.hpp"
-#include "input_header.hpp"
+#include "format_util.hpp"
 
 #include <cstring>
 

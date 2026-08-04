@@ -37,7 +37,7 @@
 // lifetime), and the JS worker transfers them to the main thread. Node-smoke-tested; browser E2E still wants
 // a look. See examples/renderer/web/src/decodeWorker.ts (worker side) and the integration notes at the bottom.
 
-#include "../converter/compressor.hpp"                 // decompress_any, has_compression_magic
+#include "../core/compressor.hpp"                 // decompress_any, has_compression_magic
 #include "../converter/node_decode.hpp"                // decode_node, decode_input_t
 #include "../converter/point_buffer_render_helper.hpp" // decode_input_t
 #include "../converter/storage_handler.hpp"            // deserialize_points  (TODO: extract to trim deps)
@@ -208,7 +208,7 @@ EMSCRIPTEN_BINDINGS(dew_decode_worker)
 //    the reply's transferred ArrayBuffers (_impl_data owns the copies). data_source_converter picks it over
 //    the inline native loader when globalThis.__dewDecodePool exists. [DONE]
 // 3. A pool of these workers (decodeWorkerPool.ts, ~hardwareConcurrency) parallelises decode. [DONE]
-// 4. deserialize_points now lives in conversion_types.hpp (storage-free), so this worker links a lean source
+// 4. deserialize_points now lives in dataset_types.hpp (storage-free), so this worker links a lean source
 //    set (node_decode + compressor + tree + morton) instead of the whole converter. [DONE]
 //
 // REMAINING: browser end-to-end verification (render a live S3 dataset with the pool installed) -- everything

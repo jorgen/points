@@ -18,7 +18,7 @@
 #include "compressor_zstd.hpp"
 #include "byte_shuffle.hpp"
 #include "compression_preprocess.hpp"
-#include "input_header.hpp"
+#include "format_util.hpp"
 
 #include <zstd.h>
 

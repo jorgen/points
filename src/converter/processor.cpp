@@ -17,7 +17,7 @@
 ************************************************************************/
 #include "processor.hpp"
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "converter.hpp"
 #include "frustum_tree_walker.hpp"
 

@@ -23,7 +23,7 @@
 // run on convert_pool (native), inline (single-threaded wasm today), or inside a decode Web Worker fed raw
 // bytes over postMessage. This header is the clean seam to extract for that worker.
 
-#include "conversion_types.hpp"           // tree_config_t
+#include "dataset_types.hpp"           // tree_config_t
 #include "frustum_tree_walker.hpp"        // tree_walker_data_t (referenced by dyn_points_draw_buffer_t)
 #include "node_data_loader.hpp"           // render::loaded_node_data_t
 #include "point_buffer_render_helper.hpp" // decode_input_t, dyn_points_data_handler_t, convert_* helpers

@@ -7,7 +7,7 @@
 #include <vio/thread_pool.h>
 
 #include "bucket_format.hpp"
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "input_data_source_registry.hpp"
 #include "storage_handler.hpp"
 #include "tree_handler.hpp"

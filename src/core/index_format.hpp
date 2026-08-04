@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "error.hpp"
 
 #include <cstdint>

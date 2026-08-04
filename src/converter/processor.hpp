@@ -34,7 +34,7 @@
 #include <vio/thread_pool.h>
 
 #include "attributes_configs.hpp"
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "frustum_tree_walker.hpp"
 #include "input_data_source_registry.hpp"
 #include "perf_stats.hpp"
