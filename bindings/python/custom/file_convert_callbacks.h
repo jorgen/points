@@ -41,7 +41,7 @@
 #include <dew/core/error.h>
 #include <dew/converter/converter.h>
 #include <dew/converter/laszip_file_convert_callbacks.h>
-#include <dew/converter/default_attribute_names.h>
+#include <dew/core/default_attribute_names.h>
 
 #include <cstdint>
 #include <string>

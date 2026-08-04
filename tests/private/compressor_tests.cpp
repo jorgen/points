@@ -6,7 +6,7 @@
 #include <compressor_ans.hpp>
 #include <compression_preprocess.hpp>
 #include <input_header.hpp>
-#include <dew/converter/default_attribute_names.h>
+#include <dew/core/default_attribute_names.h>
 
 #include <algorithm>
 #include <cmath>

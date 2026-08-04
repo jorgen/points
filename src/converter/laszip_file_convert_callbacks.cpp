@@ -16,7 +16,7 @@
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
 #include <dew/converter/converter.h>
-#include <dew/converter/default_attribute_names.h>
+#include <dew/core/default_attribute_names.h>
 #include <dew/converter/laszip_file_convert_callbacks.h>
 
 #include "error.hpp"

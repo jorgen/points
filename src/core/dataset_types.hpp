@@ -23,6 +23,7 @@
 #include "morton.hpp"
 
 #include <fmt/format.h>
+#include <cassert>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -187,6 +188,24 @@ inline bool deserialize_points(const dew_converter_buffer_t &data, storage_heade
   point_data.size = data.size - sizeof(header);
   point_data.data = input_bytes + sizeof(header);
   return true;
+}
+
+// Deep-copy an attribute set, re-pointing each attribute's `name` at the target's own NUL-terminated
+// copy (the source's names are owned by its attribute_names vector and outlive nothing). Lives here
+// beside the type rather than with the write pipeline's buffer helpers: it is pure data manipulation
+// on a core type, and the attribute registry needs it.
+inline void attributes_copy(const dew_converter_attributes_t &source, dew_converter_attributes_t &target)
+{
+  assert(target.attributes.empty());
+  assert(target.attribute_names.empty());
+  target.attributes = source.attributes;
+  for (int i = 0; i < int(source.attributes.size()); i++)
+  {
+    auto &target_attrib_name = target.attribute_names.emplace_back(new char[source.attributes[i].name_size + 1]);
+    memcpy(target_attrib_name.get(), source.attribute_names[i].get(), source.attributes[i].name_size);
+    target.attribute_names[i].get()[source.attributes[i].name_size] = 0;
+    target.attributes[i].name = target.attribute_names[i].get();
+  }
 }
 
 struct points_t

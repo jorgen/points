@@ -4,6 +4,7 @@ set(public_headers
         dew/core/export.h
         dew/core/format.h
         dew/core/types.h
+        dew/core/default_attribute_names.h
 )
 set(private_headers
         format_util.hpp
@@ -21,6 +22,18 @@ set(private_headers
         compressor_ans.hpp
         compression_preprocess.hpp
         byte_shuffle.hpp
+        budget.hpp
+        tree.hpp
+        input_storage_map.hpp
+        attributes_configs.hpp
+        storage_backend.hpp
+        object_backend.hpp
+        packed_file_backend.hpp
+        bucket_format.hpp
+        blob_manager.hpp
+        blob_residency.hpp
+        spill_store.hpp
+        file_hole_punch.hpp
         error.hpp
         fixed_size_vector.hpp
 )
@@ -32,6 +45,17 @@ set(sources
         compressor_ans.cpp
         compression_preprocess.cpp
         byte_shuffle.cpp
+        tree.cpp
+        input_storage_map.cpp
+        attributes_configs.cpp
+        storage_backend.cpp
+        object_backend.cpp
+        packed_file_backend.cpp
+        bucket_format.cpp
+        blob_manager.cpp
+        blob_residency.cpp
+        spill_store.cpp
+        file_hole_punch.cpp
 )
 
 add_library(dew_core_objects OBJECT ${public_headers} ${private_headers} ${sources})

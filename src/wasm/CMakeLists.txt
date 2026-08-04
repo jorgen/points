@@ -10,8 +10,8 @@ add_executable(dew_data_wasm
     dew_wasm_api.cpp
     ${_core}/error.cpp
     # The portable read + decompress subset (no libuv / laszip):
-    ${_conv}/object_backend.cpp
-    ${_conv}/bucket_format.cpp
+    ${_core}/object_backend.cpp
+    ${_core}/bucket_format.cpp
     ${_core}/compressor.cpp
     ${_core}/compressor_zstd.cpp
     ${_core}/compressor_fse.cpp
@@ -19,9 +19,9 @@ add_executable(dew_data_wasm
     ${_core}/byte_shuffle.cpp
     ${_core}/compression_preprocess.cpp
     # Tree (de)serialize + node storage map + attribute configs, for the frustum-walk / readNode path:
-    ${_conv}/tree.cpp
-    ${_conv}/input_storage_map.cpp
-    ${_conv}/attributes_configs.cpp
+    ${_core}/tree.cpp
+    ${_core}/input_storage_map.cpp
+    ${_core}/attributes_configs.cpp
 )
 
 target_include_directories(dew_data_wasm PRIVATE
@@ -125,7 +125,7 @@ add_executable(dew_render_wasm
     ${_conv}/tree_handler.cpp
     ${_conv}/tree_collapse.cpp
     ${_conv}/tree_lod_generator.cpp
-    ${_conv}/tree.cpp
+    ${_core}/tree.cpp
     # Tree CONSTRUCTION, needed only because this target compiles tree_handler.cpp (the write
     # pipeline) to reach read access through processor_t. The data + decode-worker modules link
     # tree.cpp alone. Drops out once the streaming data source stops embedding a processor_t.
@@ -133,7 +133,7 @@ add_executable(dew_render_wasm
     ${_conv}/sorter.cpp
     ${_conv}/reader.cpp
     ${_conv}/input_header.cpp
-    ${_conv}/attributes_configs.cpp
+    ${_core}/attributes_configs.cpp
     ${_conv}/data_source_converter.cpp
     ${_conv}/data_source_node_bbox.cpp
     ${_conv}/render_pipeline.cpp
@@ -142,12 +142,12 @@ add_executable(dew_render_wasm
     ${_conv}/native_node_data_loader.cpp
     ${_conv}/worker_node_data_loader.cpp
     ${_conv}/node_decode.cpp
-    ${_conv}/blob_manager.cpp
+    ${_core}/blob_manager.cpp
     ${_conv}/input_data_source_registry.cpp
-    ${_conv}/input_storage_map.cpp
-    ${_conv}/storage_backend.cpp
-    ${_conv}/object_backend.cpp
-    ${_conv}/bucket_format.cpp
+    ${_core}/input_storage_map.cpp
+    ${_core}/storage_backend.cpp
+    ${_core}/object_backend.cpp
+    ${_core}/bucket_format.cpp
     ${_core}/compressor.cpp
     ${_core}/compressor_zstd.cpp
     ${_core}/compressor_fse.cpp
@@ -218,9 +218,9 @@ add_executable(dew_decode_worker
     ${_core}/compressor_ans.cpp
     ${_core}/byte_shuffle.cpp
     ${_core}/compression_preprocess.cpp
-    ${_conv}/tree.cpp                   # tree/registry (de)serialize -- format only, no storage deps
-    ${_conv}/input_storage_map.cpp
-    ${_conv}/attributes_configs.cpp
+    ${_core}/tree.cpp                   # tree/registry (de)serialize -- format only, no storage deps
+    ${_core}/input_storage_map.cpp
+    ${_core}/attributes_configs.cpp
 )
 target_include_directories(dew_decode_worker PRIVATE
     ${_conv} ${_core} ${_render}

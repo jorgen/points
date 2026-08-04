@@ -21,7 +21,7 @@
 #include <morton_tree_coordinate_transform.hpp>
 #include <dew/core/format.h>
 #include <dew/converter/converter.h>
-#include <dew/converter/default_attribute_names.h>
+#include <dew/core/default_attribute_names.h>
 #include <tree.hpp>
 #include <tree_build.hpp>
 

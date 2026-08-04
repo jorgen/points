@@ -32,20 +32,6 @@ void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *a
 namespace dew::converter
 {
 
-void attributes_copy(const dew_converter_attributes_t &source, dew_converter_attributes_t &target)
-{
-  assert(target.attributes.empty());
-  assert(target.attribute_names.empty());
-  target.attributes = source.attributes;
-  for (int i = 0; i < int(source.attributes.size()); i++)
-  {
-    auto &target_attrib_name = target.attribute_names.emplace_back(new char[source.attributes[i].name_size + 1]);
-    memcpy(target_attrib_name.get(), source.attribute_names[i].get(), source.attributes[i].name_size);
-    target.attribute_names[i].get()[source.attributes[i].name_size] = 0;
-    target.attributes[i].name = target.attribute_names[i].get();
-  }
-}
-
 void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count)
 {
   buffers.data.reserve(attributes_def.size());

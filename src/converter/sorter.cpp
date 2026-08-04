@@ -22,7 +22,7 @@
 #include "morton.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 
-#include <dew/converter/default_attribute_names.h>
+#include <dew/core/default_attribute_names.h>
 
 #include "type_from_type.hpp"
 #include <limits>

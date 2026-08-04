@@ -22,6 +22,7 @@
 core/dew/core/error.h
 core/dew/core/format.h
 core/dew/core/types.h
+core/dew/core/default_attribute_names.h
 render/dew/render/aabb.h
 render/dew/render/buffer.h
 render/dew/render/draw_group.h
@@ -37,4 +38,3 @@ render/dew/render/skybox_data_source.h
 converter/dew/converter/converter.h
 converter/dew/converter/converter_data_source.h
 converter/dew/converter/laszip_file_convert_callbacks.h
-converter/dew/converter/default_attribute_names.h

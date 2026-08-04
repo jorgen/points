@@ -17,8 +17,8 @@
 ************************************************************************/
 #include "attributes_configs.hpp"
 
-#include "input_header.hpp"
-#include "dew/converter/default_attribute_names.h"
+#include "format_util.hpp"
+#include "dew/core/default_attribute_names.h"
 
 #include "fixed_size_vector.hpp"
 #include "morton_tree_coordinate_transform.hpp"
