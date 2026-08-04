@@ -122,6 +122,7 @@ add_executable(dew_render_wasm
     # converter read/stream path (the write/laszip/packed-file TUs are excluded)
     ${_conv}/processor.cpp
     ${_conv}/storage_handler.cpp
+    ${_core}/blob_reader.cpp
     ${_conv}/tree_handler.cpp
     ${_conv}/tree_collapse.cpp
     ${_conv}/tree_lod_generator.cpp

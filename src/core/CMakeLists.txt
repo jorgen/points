@@ -31,6 +31,7 @@ set(private_headers
         packed_file_backend.hpp
         bucket_format.hpp
         blob_manager.hpp
+        blob_reader.hpp
         blob_residency.hpp
         spill_store.hpp
         file_hole_punch.hpp
@@ -53,6 +54,7 @@ set(sources
         packed_file_backend.cpp
         bucket_format.cpp
         blob_manager.cpp
+        blob_reader.cpp
         blob_residency.cpp
         spill_store.cpp
         file_hole_punch.cpp

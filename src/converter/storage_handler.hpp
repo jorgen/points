@@ -30,7 +30,7 @@
 #include "compressor.hpp"
 #include "dataset_types.hpp"
 #include "error.hpp"
-#include "lru_cache.hpp"
+#include "blob_reader.hpp"
 #include "perf_stats.hpp"
 #include "storage_backend.hpp"
 #include "tree.hpp"
@@ -50,40 +50,6 @@ namespace dew::converter
 {
 using namespace dew::core;
 
-class storage_handler_t;
-
-struct cache_key_t
-{
-  uint32_t file_id;
-  uint64_t offset;
-
-  bool operator==(const cache_key_t &other) const
-  {
-    return file_id == other.file_id && offset == other.offset;
-  }
-};
-
-struct cache_key_hash_t
-{
-  uint64_t operator()(const cache_key_t &k) const
-  {
-    uint64_t h = uint64_t(k.file_id) ^ (k.offset * 0x9e3779b97f4a7c15ULL);
-    return h;
-  }
-};
-
-struct cache_value_t
-{
-  std::shared_ptr<uint8_t[]> compressed_data;
-  uint32_t compressed_size;
-};
-
-struct decompressed_cache_value_t
-{
-  std::shared_ptr<uint8_t[]> data;
-  uint32_t size;
-};
-
 struct compressed_write_data_t
 {
   int buffer_index;
@@ -97,45 +63,7 @@ struct compressed_write_data_t
   bool is_lod = false;
 };
 
-struct read_request_t
-{
-  void wait_for_read();
-  void set_cancelled() { _cancelled.store(true, std::memory_order_relaxed); }
-  bool is_cancelled() const { return _cancelled.load(std::memory_order_relaxed); }
-
-  std::shared_ptr<uint8_t[]> buffer;
-  dew_converter_buffer_t buffer_info;
-  dew_error_t error;
-
-  bool raw = false; // when set, read() returns the COMPRESSED bytes as-is (no decompress) -- used by the
-                    // wasm decode-worker path, which decompresses off the main thread.
-  bool _done = false;
-  std::atomic_bool _cancelled{false};
-  std::mutex _mutex;
-  std::condition_variable _block_for_read;
-
-#ifdef __EMSCRIPTEN__
-  // Single-thread cooperative build: rather than parking a thread on wait_for_read, a coroutine can
-  // co_await the read completing. do_read_request resumes this continuation on its owning loop when the
-  // read finishes, so nothing blocks. (read() runs on the storage loop; the awaiting coroutine may live
-  // on another cooperative loop, hence the explicit continuation loop for a cross-loop resume.)
-  std::coroutine_handle<> _continuation{};
-  vio::event_loop_t *_continuation_loop = nullptr;
-  struct awaiter_t
-  {
-    read_request_t *req;
-    vio::event_loop_t *loop;
-    bool await_ready() const noexcept { return req->_done; }
-    void await_suspend(std::coroutine_handle<> h) noexcept
-    {
-      req->_continuation = h;
-      req->_continuation_loop = loop;
-    }
-    void await_resume() const noexcept {}
-  };
-  awaiter_t await_on(vio::event_loop_t &loop) noexcept { return awaiter_t{this, &loop}; }
-#endif
-};
+class storage_handler_t;
 
 class storage_handler_t
 {
@@ -145,14 +73,8 @@ public:
   // Join the storage loop thread. Idempotent. Called by the processor's ordered teardown (and the destructor)
   // before _backend / _read_cache / the event pipes an in-flight read touches are destroyed.
   void stop_loop();
-  [[nodiscard]] bool file_exists() const
-  {
-    return _backend && _backend->exists();
-  }
-  [[nodiscard]] std::string file_exists_error() const
-  {
-    return _backend ? _backend->exists_error() : std::string();
-  }
+  [[nodiscard]] bool file_exists() const { return _reader.file_exists(); }
+  [[nodiscard]] std::string file_exists_error() const { return _reader.file_exists_error(); }
   [[nodiscard]] dew_error_t read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
                                    std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size);
   [[nodiscard]] dew_error_t deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size);
@@ -168,14 +90,23 @@ public:
   // shared thread pool (a render-thread latency fix). Callers that ALREADY run on a pool worker and
   // synchronously wait_for_read (LOD + collapse readers) MUST pass true: with every pool thread
   // parked in such a wait, the hopped decompress queues behind the waiters and the pool deadlocks.
-  std::shared_ptr<read_request_t> read(storage_location_t location, bool raw = false, bool decompress_inline = false);
+  std::shared_ptr<read_request_t> read(storage_location_t location, bool raw = false, bool decompress_inline = false)
+  {
+    return _reader.read(location, read_options_t{raw, decompress_inline, {}});
+  }
+  // Pass-through to the reader for callers that want the completion hook (see read_options_t).
+  std::shared_ptr<read_request_t> read(storage_location_t location, read_options_t options)
+  {
+    return _reader.read(location, std::move(options));
+  }
+  [[nodiscard]] blob_reader_t &reader() { return _reader; }
 
   void register_input_file_size(uint32_t file_id, uint64_t size_bytes);
   void set_compressor(compression_method_t method);
   void set_compression_level(int level);
-  void set_read_cache_size(uint64_t max_bytes);
-  void set_decompressed_cache_size(uint64_t max_bytes);
-  uint64_t read_cache_current_bytes();
+  void set_read_cache_size(uint64_t max_bytes) { _reader.set_read_cache_size(max_bytes); }
+  void set_decompressed_cache_size(uint64_t max_bytes) { _reader.set_decompressed_cache_size(max_bytes); }
+  uint64_t read_cache_current_bytes() { return _reader.read_cache_current_bytes(); }
   void set_on_write_progress(std::function<void()> cb) { _on_write_progress = std::move(cb); }
   // Cache-tier pressure: invoked (from the storage loop) at most once per arm when the backend
   // reports that only a checkpoint can relieve pressure. rearm after the checkpoint completes.
@@ -223,7 +154,6 @@ private:
   void handle_write_trees(std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, dew_error_t &&)>> &&event);
   void handle_write_tree_registry(serialized_tree_registry_t &&serialized_trr, std::function<void(storage_location_t, dew_error_t &&error)> &&done);
   void handle_write_blob_locations_and_update_header(storage_location_t &&new_tree_registry_location, std::vector<storage_location_t> &&old_locations, std::function<void(dew_error_t &&error)> &&done);
-  void handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location);
 
   vio::task_t<void> do_write(const std::shared_ptr<uint8_t[]> &data, const storage_location_t &location);
   vio::task_t<void> do_write_events(storage_header_t header, attributes_id_t attributes_id, attribute_buffers_t attribute_buffers,
@@ -232,14 +162,12 @@ private:
                                    std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, dew_error_t &&)> done);
   vio::task_t<void> do_write_tree_registry(serialized_tree_registry_t serialized_tree_registry, std::function<void(storage_location_t, dew_error_t &&error)> done);
   vio::task_t<void> do_write_blob_locations_and_update_header(storage_location_t new_tree_registry_location, std::vector<storage_location_t> old_locations, std::function<void(dew_error_t &&error)> done);
-  vio::task_t<void> do_read_request(std::shared_ptr<read_request_t> read_request, storage_location_t location);
 
   vio::thread_pool_t &_thread_pool;
-  std::unique_ptr<compressor_t> _compressor;
-  vio::thread_with_event_loop_t _event_loop_thread;
+  // Declared before every write pipe below so it outlives them: the pipes are bound to ITS event loop.
+  blob_reader_t _reader;
   vio::event_loop_t &_event_loop;
-  std::unique_ptr<storage_backend_t> _backend;
-  std::atomic<int> _reads_in_flight{0}; // do_read_request coroutines currently holding the backend/a connection
+  std::unique_ptr<compressor_t> _compressor;
 
   attributes_configs_t &_attributes_configs;
 
@@ -258,13 +186,7 @@ private:
   vio::event_pipe_t<std::tuple<std::vector<tree_id_t>, std::vector<serialized_tree_t>, std::function<void(std::vector<tree_id_t> &&, std::vector<storage_location_t> &&, dew_error_t &&error)>>> _write_trees_pipe;
   vio::event_pipe_t<serialized_tree_registry_t, std::function<void(storage_location_t, dew_error_t &&error)>> _write_tree_registry_pipe;
   vio::event_pipe_t<storage_location_t, std::vector<storage_location_t>, std::function<void(dew_error_t &&error)>> _write_blob_locations_and_update_header_pipe;
-  vio::event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;
 
-  lru_cache_t<cache_key_t, cache_value_t, cache_key_hash_t> _read_cache;
-  // Decompressed-side cache for the pool readers (LOD sampling, leaf splits, collapse merges):
-  // they re-read the same big ingest chunks many times, and re-inflating a 64MB chunk per read
-  // dominates conversion time. Populated only on the decompress_inline path.
-  lru_cache_t<cache_key_t, decompressed_cache_value_t, cache_key_hash_t> _decompressed_cache;
 
   std::mutex _mutex;
 };
