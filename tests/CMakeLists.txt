@@ -30,9 +30,11 @@ add_executable(private_interface_unit_tests
         private/memory_budget_tests.cpp
         private/access_snapshot_tests.cpp
         private/blob_reader_tests.cpp
+        private/access_query_tests.cpp
+        $<TARGET_OBJECTS:dew_access_objects>
 )
 target_link_libraries(private_interface_unit_tests PRIVATE vio_objstore libzstd_static)
 target_link_libraries(private_interface_unit_tests PRIVATE doctest_main doctest fmt glm unordered_dense laszip)
-target_include_directories(private_interface_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/core ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${libmorton_SOURCE_DIR}/include)
+target_include_directories(private_interface_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src/render ${libmorton_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src/core ${PROJECT_SOURCE_DIR}/src/render ${PROJECT_SOURCE_DIR}/src/converter ${PROJECT_SOURCE_DIR}/src/access ${libmorton_SOURCE_DIR}/include)
 copy_dll_for_target(public_interface_unit_tests dew_render dew_converter)
 copy_dll_for_target(private_interface_unit_tests dew_render dew_converter)
