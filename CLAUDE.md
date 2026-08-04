@@ -18,12 +18,17 @@ cmake --build build --target <target>
 Key targets:
 - `dew_converter` — converter library
 - `dew_render` — rendering library
-- `dew_common` — shared types library
+- `dew_core` — the shared read/write core: dataset format (morton, tree, attributes, storage map),
+  storage backends, compression codecs, the blob reader and its caches, budgets. Everything else
+  builds on it. (Was `dew_common`, which held only error + format.)
+- `dew_access` — request-based, asynchronous data access: open a dataset, query a world-space box,
+  get contiguous per-attribute buffers back. Depends on `dew_core` only — no renderer.
 - `private_interface_unit_tests` — internal unit tests
 - `public_interface_unit_tests` — public API unit tests
 - `dew` — the dewfall CLI: `dew convert` (full LAS/LAZ converter), `dew info` (dataset stats),
   `dew extract` (octree inspection + attribute extraction), `dew copy` (dataset copy/migration,
-  also migrates pre-rename magics), `dew laz` (LAS/LAZ header/VLR/point introspection)
+  also migrates pre-rename magics), `dew laz` (LAS/LAZ header/VLR/point introspection),
+  `dew query` (points inside a world-space box, as CSV or raw buffers)
 - `renderer_example` — OpenGL renderer example
 - `dew_render_wasm` / `dew_data_wasm` / `dew_decode_worker` — Emscripten modules (src/wasm)
 - `dew_python` — the `dew` Python extension (only with `-DDEW_BUILD_PYTHON=ON`, off by default;
@@ -70,12 +75,15 @@ Exit code 127 from bash means a DLL is missing — check with `ldd <exe> | grep 
 
 ```
 src/
+  core/                Shared read/write core: dataset types, morton, tree format, attributes,
+    dew/core/            storage backends, compression, blob_reader, budgets
+                         Public C headers (error.h, format.h, types.h, default_attribute_names.h)
+  access/              Request-based query API over a converted dataset
+    dew/access/          Public C headers (query.h)
   converter/           Converter pipeline (reader → sorter → tree → LOD → storage)
     dew/converter/       Public C headers (converter.h, converter_data_source.h, ...)
   render/              Graphics-agnostic renderer (callbacks, data sources, frustum)
     dew/render/          Public C headers (renderer.h, camera.h, draw_group.h, ...)
-  common/              Shared types (error, format, containers)
-    dew/common/          Public C headers (error.h, format.h)
   wasm/                Emscripten modules (renderer, data reader, decode worker)
 examples/
   renderer/            OpenGL renderer example (gl_renderer.cpp, renderer_example.cpp)
@@ -156,6 +164,50 @@ File conversion callbacks (`dew_converter_file_convert_callbacks_t`):
 - `init` — open file, return header with offset/scale/min/max and attribute definitions
 - `convert_data` — stream point chunks into provided buffers
 - `destroy_user_ptr` — cleanup
+
+## Architecture: Data Access (`dew_access`)
+
+Request-based reads over a converted dataset. Public header
+`src/access/dew/access/query.h`; modelled on OpenVDS's `VolumeDataAccessManager`, but with
+idempotent request status, a wait that returns the status (so timeout is distinguishable from
+cancellation), a completion callback, and failure distinct from cancellation.
+
+```c
+dew_dataset_t *ds = dew_dataset_create(url, len, NULL, 0, NULL, &error);
+dew_region_request_t spec = { .aabb_min = {...}, .aabb_max = {...}, .lod_mode = dew_lod_full,
+                              .clip_mode = dew_clip_point, .position_format = dew_position_r64_absolute };
+dew_request_t *r = dew_dataset_request_region(ds, &spec, &error);
+dew_request_wait(r, -1);
+dew_request_result_t result; dew_request_get_result(r, &result);   /* borrowed until release */
+dew_request_release(r);
+```
+
+| File | Role |
+|------|------|
+| `region_walk.hpp/cpp` | AABB octree descent. Reports sub-trees that still need loading; the caller loads and re-walks (`dataset_impl_t::walk_to_convergence`). |
+| `decode.hpp/cpp` | morton → r64 absolute / r32 or i32 node-relative, attributes copied verbatim. Plus `clip_to_box`, the per-point filter. |
+| `dataset.cpp` / `request.cpp` | Bootstrap, lazy tree loading, request execution. |
+
+**The trap this API is built around: LOD nodes are subsampled COPIES of their descendants**, not a
+partition, and the renderer's `frustum_tree_walker` emits every level it descends through because it
+crossfades between them. A query that unioned that output would return 2-3x the points and still
+look entirely plausible. `region_walk` therefore emits exactly ONE frontier, and
+`tests/private/access_query_tests.cpp` asserts a full-resolution query returns exactly the converted
+point count against a deliberately subdivided fixture.
+
+Two more things worth knowing:
+
+- `dew_dataset_get_info`'s aabb is the root octree CELL, not the data's extent. It is tempting to
+  report `points_collection_t::min/max` instead, but those are MORTON CODES — the smallest morton
+  code in a set is not the per-axis minimum, so decoding them gives two points on the Z-order curve
+  and need not even satisfy `min <= max`. To find the real extent, run a coarse query and take the
+  bounds of the result.
+- Access decodes separately from the renderer (`node_decode.cpp`), which produces float32
+  node-relative positions reordered coarse→fine with a per-point `rep_level`. All three are wrong
+  for analysis, and keeping them apart is what keeps `dew_access` free of `dew_render`.
+
+Python gets one ergonomic call instead of the C lifecycle — `Dataset.query_box()` returns NumPy
+arrays it owns (`bindings/python/custom/query.h`). See `examples/python/query_box.py`.
 
 ## Architecture: Rendering System
 
@@ -261,7 +313,7 @@ Managed via cmake-dep (CMake/3rdPartyPackages.cmake):
 | SDL | 3.1.6 | Window/input for examples |
 | glm | 1.0.1 | Math library |
 | imgui | 1.91.6 | UI for examples |
-| fmt | 10.1.1 | String formatting |
+| fmt | 12.2.0 | String formatting (one pin for native and wasm; 11.x could not build the library target under emscripten) |
 | doctest | 2.4.12 | Unit testing |
 | argh | 431bf32 | Argument parsing |
 | unordered_dense | 4.1.2 | Fast hash map/set (ankerl) |
