@@ -474,14 +474,26 @@ def test_dropping_a_busy_converter_is_safe(tmp_path):
 
 
 def test_python_producer_error_propagates(tmp_path):
+    """An exception raised in pre_init reaches the runtime error callback."""
     converter = dew.Converter(str(tmp_path / "err.dew"), dew.ConverterOpenFileSemantics.truncate)
 
     def bad_pre_init(filename):
         raise RuntimeError("boom from python")
 
+    # init must be well-formed: a second failing callback would report a second
+    # error, and the two arrive from different converter threads in no fixed
+    # order, so the assertion below could see either one.
+    def init(filename, header, attributes):
+        header.point_count = TOTAL
+        header.scale = [0.001, 0.001, 0.001]
+        header.min = [0.0, 0.0, 0.0]
+        header.max = [1.0, 1.0, 1.0]
+        attributes.add_attribute(dew.ATTRIBUTE_XYZ, dew.Type.i32, dew.Components.components_3)
+        return None
+
     converter.set_file_converter_callbacks(
         pre_init=bad_pre_init,
-        init=lambda *a: None,
+        init=init,
         convert_data=lambda *a: (0, True),
     )
     errors = []
@@ -489,7 +501,8 @@ def test_python_producer_error_propagates(tmp_path):
     converter.add_data_file(["synth_0"])
     converter.wait_idle()
     assert errors, "python exception should surface through the error callback"
-    assert "boom from python" in errors[0].message
+    messages = [e.message for e in errors]
+    assert any("boom from python" in m for m in messages), messages
 
 
 def test_python_producer_init_failure(tmp_path):
