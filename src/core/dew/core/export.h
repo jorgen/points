@@ -15,64 +15,64 @@
 ** You should have received a copy of the GNU Affero General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef DEW_COMMON_EXPORT_H
-#define DEW_COMMON_EXPORT_H
+#ifndef DEW_CORE_EXPORT_H
+#define DEW_CORE_EXPORT_H
 
-#ifdef DEW_COMMON_STATIC_DEFINE
-#  define DEW_COMMON_EXPORT
-#  define DEW_COMMON_NO_EXPORT
+#ifdef DEW_CORE_STATIC_DEFINE
+#  define DEW_CORE_EXPORT
+#  define DEW_CORE_NO_EXPORT
 #elif defined(_MSC_VER)
-#  ifndef DEW_COMMON_EXPORT
-#    ifdef DEW_COMMON_EXPORTS
+#  ifndef DEW_CORE_EXPORT
+#    ifdef DEW_CORE_EXPORTS
         /* We are building this library */
-#      define DEW_COMMON_EXPORT __declspec(dllexport)
+#      define DEW_CORE_EXPORT __declspec(dllexport)
 #    else
         /* We are using this library */
-#      define DEW_COMMON_EXPORT __declspec(dllimport)
+#      define DEW_CORE_EXPORT __declspec(dllimport)
 #    endif
 #  endif
 
-#  ifndef DEW_COMMON_NO_EXPORT
-#    define DEW_COMMON_NO_EXPORT
+#  ifndef DEW_CORE_NO_EXPORT
+#    define DEW_CORE_NO_EXPORT
 #  endif
 #else
-#  ifndef DEW_COMMON_EXPORT
-#    ifdef DEW_COMMON_EXPORTS
+#  ifndef DEW_CORE_EXPORT
+#    ifdef DEW_CORE_EXPORTS
         /* We are building this library */
-#      define DEW_COMMON_EXPORT __attribute__((visibility("default")))
+#      define DEW_CORE_EXPORT __attribute__((visibility("default")))
 #    else
         /* We are using this library */
-#      define DEW_COMMON_EXPORT __attribute__((visibility("default")))
+#      define DEW_CORE_EXPORT __attribute__((visibility("default")))
 #    endif
 #  endif
 
-#  ifndef DEW_COMMON_NO_EXPORT
-#    define DEW_COMMON_NO_EXPORT __attribute__((visibility("hidden")))
+#  ifndef DEW_CORE_NO_EXPORT
+#    define DEW_CORE_NO_EXPORT __attribute__((visibility("hidden")))
 #  endif
 #endif
 
 #if defined(_MSC_VER)
-#  ifndef DEW_COMMON_DEPRECATED
-#    define DEW_COMMON_DEPRECATED __declspec(deprecated)
+#  ifndef DEW_CORE_DEPRECATED
+#    define DEW_CORE_DEPRECATED __declspec(deprecated)
 #  endif
 #else
-#  ifndef DEW_COMMON_DEPRECATED
-#    define DEW_COMMON_DEPRECATED __attribute__ ((__deprecated__))
+#  ifndef DEW_CORE_DEPRECATED
+#    define DEW_CORE_DEPRECATED __attribute__ ((__deprecated__))
 #  endif
 #endif
 
-#ifndef DEW_COMMON_DEPRECATED_EXPORT
-#  define DEW_COMMON_DEPRECATED_EXPORT DEW_COMMON_EXPORT DEW_COMMON_DEPRECATED
+#ifndef DEW_CORE_DEPRECATED_EXPORT
+#  define DEW_CORE_DEPRECATED_EXPORT DEW_CORE_EXPORT DEW_CORE_DEPRECATED
 #endif
 
-#ifndef DEW_COMMON_DEPRECATED_NO_EXPORT
-#  define DEW_COMMON_DEPRECATED_NO_EXPORT DEW_COMMON_NO_EXPORT DEW_COMMON_DEPRECATED
+#ifndef DEW_CORE_DEPRECATED_NO_EXPORT
+#  define DEW_CORE_DEPRECATED_NO_EXPORT DEW_CORE_NO_EXPORT DEW_CORE_DEPRECATED
 #endif
 
 #if 0 /* DEFINE_NO_DEPRECATED */
-#  ifndef DEW_COMMON_NO_DEPRECATED
-#    define DEW_COMMON_NO_DEPRECATED
+#  ifndef DEW_CORE_NO_DEPRECATED
+#    define DEW_CORE_NO_DEPRECATED
 #  endif
 #endif
 
-#endif /* DEW_COMMON_EXPORT_H */
+#endif /* DEW_CORE_EXPORT_H */

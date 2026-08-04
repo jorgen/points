@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include <dew/common/format.h>
+#include <dew/core/format.h>
 
 namespace dew
 {

@@ -21,8 +21,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <dew/common/error.h>
-#include <dew/common/format.h>
+#include <dew/core/error.h>
+#include <dew/core/format.h>
 #include <dew/converter/export.h>
 
 #ifdef __cplusplus

@@ -40,7 +40,7 @@ set(sources
 )
 add_library(dew_render_objects OBJECT ${public_headers} ${private_headers} ${sources})
 target_link_libraries(dew_render_objects PRIVATE fmt glm)
-target_link_libraries(dew_render_objects PUBLIC dew_common)
+target_link_libraries(dew_render_objects PUBLIC dew_core)
 target_link_libraries(dew_render_objects PRIVATE laszip)
 target_include_directories(dew_render_objects
         PUBLIC

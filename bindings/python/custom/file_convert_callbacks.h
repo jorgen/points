@@ -38,7 +38,7 @@
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/string_view.h>
 
-#include <dew/common/error.h>
+#include <dew/core/error.h>
 #include <dew/converter/converter.h>
 #include <dew/converter/laszip_file_convert_callbacks.h>
 #include <dew/converter/default_attribute_names.h>

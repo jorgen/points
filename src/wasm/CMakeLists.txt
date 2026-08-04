@@ -3,12 +3,12 @@
 # Emits dew_data.mjs + dew_data.wasm (an ES6 module). Only built under Emscripten.
 
 set(_conv ${CMAKE_CURRENT_SOURCE_DIR}/../converter)
-set(_common ${CMAKE_CURRENT_SOURCE_DIR}/../common)
+set(_core ${CMAKE_CURRENT_SOURCE_DIR}/../core)
 set(_render ${CMAKE_CURRENT_SOURCE_DIR}/../render)
 
 add_executable(dew_data_wasm
     dew_wasm_api.cpp
-    ${_common}/error.cpp
+    ${_core}/error.cpp
     # The portable read + decompress subset (no libuv / laszip):
     ${_conv}/object_backend.cpp
     ${_conv}/bucket_format.cpp
@@ -26,7 +26,7 @@ add_executable(dew_data_wasm
 
 target_include_directories(dew_data_wasm PRIVATE
     ${_conv}
-    ${_common}
+    ${_core}
     ${_render}
     ${fmt_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
@@ -150,13 +150,13 @@ add_executable(dew_render_wasm
     ${_conv}/compressor_ans.cpp
     ${_conv}/byte_shuffle.cpp
     ${_conv}/compression_preprocess.cpp
-    ${_common}/error.cpp
+    ${_core}/error.cpp
 )
 
 target_include_directories(dew_render_wasm PRIVATE
     ${_examples}
     ${_conv}
-    ${_common}
+    ${_core}
     ${_render}
     ${fmt_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
@@ -206,7 +206,7 @@ set_target_properties(dew_render_wasm PROPERTIES OUTPUT_NAME "dew_render" SUFFIX
 # EMSDK; the worker_node_data_loader (src/converter) drives it.
 add_executable(dew_decode_worker
     decode_worker.cpp
-    ${_common}/error.cpp
+    ${_core}/error.cpp
     ${_conv}/node_decode.cpp            # the extracted decode seam
     ${_conv}/compressor.cpp
     ${_conv}/compressor_zstd.cpp
@@ -219,7 +219,7 @@ add_executable(dew_decode_worker
     ${_conv}/attributes_configs.cpp
 )
 target_include_directories(dew_decode_worker PRIVATE
-    ${_conv} ${_common} ${_render}
+    ${_conv} ${_core} ${_render}
     ${fmt_SOURCE_DIR}/include ${glm_SOURCE_DIR} ${libmorton_SOURCE_DIR}/include
     ${unordered_dense_SOURCE_DIR}/include ${zstd_SOURCE_DIR}/lib
 )

@@ -18,7 +18,7 @@
 #ifndef DEW_RENDERER_H
 #define DEW_RENDERER_H
 
-#include <dew/common/format.h>
+#include <dew/core/format.h>
 #include <dew/render/export.h>
 #include <dew/render/buffer.h>
 #include <dew/render/draw_group.h>

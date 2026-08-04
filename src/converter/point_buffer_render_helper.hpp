@@ -22,7 +22,7 @@
 #include "conversion_types.hpp"
 #include "storage_handler.hpp"
 #include <glm_include.hpp>
-#include <dew/common/format.h>
+#include <dew/core/format.h>
 #include <dew/converter/converter_data_source.h>
 #include <dew/render/buffer.h>
 

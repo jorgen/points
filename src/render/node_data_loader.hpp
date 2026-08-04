@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include <dew/common/format.h>
+#include <dew/core/format.h>
 #include <dew/render/draw_group.h>
 
 #include <array>

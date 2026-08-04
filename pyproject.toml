@@ -130,7 +130,7 @@ manylinux-aarch64-image = "manylinux_2_28"
 # against the shipped headers).
 repair-wheel-command = """
 auditwheel repair -w {dest_dir} {wheel} \
-  --exclude libdew_common.so --exclude libdew_render.so --exclude libdew_converter.so
+  --exclude libdew_core.so --exclude libdew_render.so --exclude libdew_converter.so
 """
 
 [tool.cibuildwheel.macos]

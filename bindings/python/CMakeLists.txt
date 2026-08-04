@@ -118,7 +118,7 @@ endif ()
 
 set_target_properties(dew_python PROPERTIES OUTPUT_NAME "_dew")
 target_include_directories(dew_python PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(dew_python PRIVATE dew_converter dew_render dew_common)
+target_link_libraries(dew_python PRIVATE dew_converter dew_render dew_core)
 
 # Build the extension into a `dew/` directory next to a copy of the package's
 # __init__.py, so the build tree imports exactly the way the wheel does
@@ -152,7 +152,7 @@ if (APPLE)
     set_target_properties(dew_python PROPERTIES BUILD_RPATH "@loader_path")
 endif ()
 if (WIN32)
-    copy_dll_for_target(dew_python dew_render dew_converter dew_common)
+    copy_dll_for_target(dew_python dew_render dew_converter dew_core)
 endif ()
 
 # ---------------------------------------------------------------------------
@@ -182,7 +182,7 @@ if (SKBUILD)
     # where delvewheel expects to find them when it repairs the wheel. The
     # import libraries stay in lib/ for linking. Elsewhere the rpath set above
     # points at lib/, so the shared libraries live there.
-    install(TARGETS dew_common dew_render dew_converter
+    install(TARGETS dew_core dew_render dew_converter
             LIBRARY DESTINATION "${_dew_pkg}/lib" COMPONENT dew_runtime
             RUNTIME DESTINATION "${_dew_pkg}" COMPONENT dew_runtime
             ARCHIVE DESTINATION "${_dew_pkg}/lib" COMPONENT dew_devel)
@@ -194,13 +194,13 @@ if (SKBUILD)
     endif ()
 
     install(DIRECTORY
-                "${CMAKE_SOURCE_DIR}/src/common/dew"
+                "${CMAKE_SOURCE_DIR}/src/core/dew"
                 "${CMAKE_SOURCE_DIR}/src/render/dew"
                 "${CMAKE_SOURCE_DIR}/src/converter/dew"
             DESTINATION "${_dew_pkg}/include" COMPONENT dew_devel
             FILES_MATCHING
                 PATTERN "*.h"
-                # legacy duplicate of dew/common/error.h (same include guard);
+                # legacy duplicate of dew/core/error.h (same include guard);
                 # excluded from the bindgen manifest, keep it out of the wheel too
                 PATTERN "dew/error.h" EXCLUDE)
 

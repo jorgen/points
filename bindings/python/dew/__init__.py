@@ -58,7 +58,7 @@ def get_include() -> str:
 
 
 def get_lib_dir() -> str:
-    """Directory holding the shared ``dew_common`` / ``dew_render`` / ``dew_converter``."""
+    """Directory holding the shared ``dew_core`` / ``dew_render`` / ``dew_converter``."""
     return str(_PACKAGE_DIR / "lib")
 
 

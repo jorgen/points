@@ -17,7 +17,7 @@
 ************************************************************************/
 #ifndef DEW_ERROR_H
 #define DEW_ERROR_H
-#include <dew/common/export.h>
+#include <dew/core/export.h>
 #include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
@@ -28,13 +28,13 @@ extern "C" {
 //= py.skip
 struct dew_error_t;
 //= py.skip
-DEW_COMMON_EXPORT struct dew_error_t *dew_error_create(void);
+DEW_CORE_EXPORT struct dew_error_t *dew_error_create(void);
 //= py.skip
-DEW_COMMON_EXPORT void dew_error_destroy(struct dew_error_t *error);
+DEW_CORE_EXPORT void dew_error_destroy(struct dew_error_t *error);
 //= py.skip
-DEW_COMMON_EXPORT void dew_error_set_info(struct dew_error_t *error, int code, const char *str, size_t str_len);
+DEW_CORE_EXPORT void dew_error_set_info(struct dew_error_t *error, int code, const char *str, size_t str_len);
 //= py.skip
-DEW_COMMON_EXPORT void dew_error_get_info(const struct dew_error_t *error, int *code, const char **str, size_t *str_len);
+DEW_CORE_EXPORT void dew_error_get_info(const struct dew_error_t *error, int *code, const char **str, size_t *str_len);
 
 #ifdef __cplusplus
 }

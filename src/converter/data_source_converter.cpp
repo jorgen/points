@@ -25,7 +25,7 @@
 #include "worker_node_data_loader.hpp" // decode-worker loader (used when the web app installs a worker pool)
 #include <emscripten/heap.h>           // emscripten_get_heap_size/_max (heap-pressure brake probe)
 #endif
-#include <dew/common/format.h>
+#include <dew/core/format.h>
 #include <dew/converter/converter_data_source.h>
 
 #include <vio/objstore/create_object_store.h> // apply_connection_override, clear_*_config_override

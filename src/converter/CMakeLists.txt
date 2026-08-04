@@ -87,7 +87,7 @@ set(sources
 )
 
 add_library(dew_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(dew_converter_objects PRIVATE fmt glm unordered_dense dew_render dew_common vio_objstore libzstd_static)
+target_link_libraries(dew_converter_objects PRIVATE fmt glm unordered_dense dew_render dew_core vio_objstore libzstd_static)
 target_link_libraries(dew_converter_objects PRIVATE laszip)
 target_include_directories(dew_converter_objects
         PUBLIC

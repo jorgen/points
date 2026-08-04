@@ -21,7 +21,7 @@
 #include "morton.hpp"                     // morton192_t
 #include "point_buffer_render_helper.hpp" // dyn_points_data_handler_t
 
-#include <dew/common/format.h> // dew_type_t
+#include <dew/core/format.h> // dew_type_t
 
 #include <array>
 #include <cstdint>

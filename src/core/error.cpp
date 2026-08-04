@@ -15,22 +15,32 @@
 ** You should have received a copy of the GNU Affero General Public License
 ** along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************/
-#ifndef DEW_ERROR_H
-#define DEW_ERROR_H
-#include <dew/common/export.h>
-#include <stddef.h>
-#ifdef __cplusplus
-extern "C" {
-#endif
 
-struct dew_error_t;
-DEW_COMMON_EXPORT struct dew_error_t *dew_error_create(void);
-DEW_COMMON_EXPORT void dew_error_destroy(struct dew_error_t *error);
-DEW_COMMON_EXPORT void dew_error_set_info(struct dew_error_t *error, int code, const char *str, size_t str_len);
-DEW_COMMON_EXPORT void dew_error_get_info(const struct dew_error_t *error, int *code, const char **str, size_t *str_len);
+#include "error.hpp"
 
-#ifdef __cplusplus
+#include "dew/core/error.h"
+
+struct dew_error_t *dew_error_create()
+{
+  return new dew_error_t();
 }
-#endif
 
-#endif
+void dew_error_destroy(dew_error_t *error)
+{
+  delete error;
+}
+void dew_error_set_info(dew_error_t *error, int code, const char *str, size_t str_len)
+{
+  error->code = code;
+  error->msg = std::string(str, str_len);
+}
+void dew_error_get_info(const dew_error_t *error, int *code, const char **str, size_t *str_len)
+{
+  // Every out-pointer is optional: callers routinely pass null for the fields they don't need.
+  if (code)
+    *code = error->code;
+  if (str)
+    *str = error->msg.c_str();
+  if (str_len)
+    *str_len = error->msg.size();
+}
