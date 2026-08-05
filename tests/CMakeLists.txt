@@ -30,6 +30,7 @@ add_executable(private_interface_unit_tests
         private/memory_budget_tests.cpp
         private/access_snapshot_tests.cpp
         private/blob_reader_tests.cpp
+        private/pump_tests.cpp
         private/access_query_tests.cpp
         $<TARGET_OBJECTS:dew_access_objects>
 )

@@ -4,10 +4,12 @@ set(public_headers
         dew/core/export.h
         dew/core/format.h
         dew/core/types.h
+        dew/core/pump.h
         dew/core/default_attribute_names.h
 )
 set(private_headers
         format_util.hpp
+        pump.hpp
         dataset_types.hpp
         morton.hpp
         morton_tree_coordinate_transform.hpp
@@ -41,6 +43,7 @@ set(private_headers
 set(sources
         error.cpp
         attributes_api.cpp
+        pump.cpp
         compressor.cpp
         compressor_zstd.cpp
         compressor_fse.cpp

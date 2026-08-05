@@ -10,6 +10,7 @@ add_executable(dew_data_wasm
     dew_wasm_api.cpp
     ${_core}/error.cpp
     ${_core}/attributes_api.cpp
+    ${_core}/pump.cpp
     # The portable read + decompress subset (no libuv / laszip):
     ${_core}/object_backend.cpp
     ${_core}/bucket_format.cpp
@@ -158,6 +159,7 @@ add_executable(dew_render_wasm
     ${_core}/compression_preprocess.cpp
     ${_core}/error.cpp
     ${_core}/attributes_api.cpp
+    ${_core}/pump.cpp
 )
 
 target_include_directories(dew_render_wasm PRIVATE
@@ -215,6 +217,7 @@ add_executable(dew_decode_worker
     decode_worker.cpp
     ${_core}/error.cpp
     ${_core}/attributes_api.cpp
+    ${_core}/pump.cpp
     ${_conv}/node_decode.cpp            # the extracted decode seam
     ${_core}/compressor.cpp
     ${_core}/compressor_zstd.cpp

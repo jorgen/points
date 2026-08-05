@@ -23,6 +23,7 @@
 core/dew/core/error.h
 core/dew/core/format.h
 core/dew/core/types.h
+core/dew/core/pump.h
 core/dew/core/default_attribute_names.h
 render/dew/render/aabb.h
 render/dew/render/buffer.h
