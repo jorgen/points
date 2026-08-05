@@ -183,6 +183,13 @@ public:
   // stale entry for the same (file_id, offset).
   void invalidate(storage_location_t location);
 
+  // High-water mark of concurrently in-flight backend reads since the last reset. The only way to
+  // tell a genuinely overlapped read schedule from a serial one that merely uses coroutines --
+  // wall-clock cannot, and sampling the live counter races the reads it is trying to observe.
+  // Counts cache MISSES only: a cache hit never becomes an in-flight read.
+  [[nodiscard]] int peak_reads_in_flight() const { return _peak_reads_in_flight.load(std::memory_order_acquire); }
+  void reset_peak_reads_in_flight() { _peak_reads_in_flight.store(0, std::memory_order_release); }
+
   void set_read_cache_size(uint64_t max_bytes);
   void set_decompressed_cache_size(uint64_t max_bytes);
   uint64_t read_cache_current_bytes();
@@ -203,6 +210,7 @@ private:
   vio::event_loop_t &_event_loop;
   std::unique_ptr<storage_backend_t> _backend;
   std::atomic<int> _reads_in_flight{0}; // do_read_request coroutines currently holding the backend/a connection
+  std::atomic<int> _peak_reads_in_flight{0};
   perf_stats_t &_perf_stats;
   vio::event_pipe_t<dew_error_t> &_storage_error;
   vio::event_pipe_t<std::shared_ptr<read_request_t>, storage_location_t> _read_request_pipe;

@@ -27,6 +27,8 @@
 #include <doctest/doctest.h>
 
 #include <dew/access/query.h>
+
+#include "dataset_impl.hpp"
 #include <dew/converter/converter.h>
 #include <dew/core/default_attribute_names.h>
 
@@ -37,6 +39,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace
@@ -175,6 +178,26 @@ struct dataset_handle_t
 };
 
 const char *k_path = "access_query_test.dew";
+
+// Element width for a dew_type_t, so a test can check a buffer holds exactly point_count entries.
+uint32_t size_for_format_bytes(dew_type_t type)
+{
+  switch (type)
+  {
+  case dew_type_u8:
+  case dew_type_i8:
+    return 1;
+  case dew_type_u16:
+  case dew_type_i16:
+    return 2;
+  case dew_type_u32:
+  case dew_type_i32:
+  case dew_type_r32:
+    return 4;
+  default:
+    return 8;
+  }
+}
 
 } // namespace
 
@@ -563,6 +586,162 @@ TEST_CASE("access: a wait that times out reports pending, not failure")
 
   REQUIRE(dew_request_wait(request, -1) == dew_request_completed);
   dew_request_release(request);
+}
+
+TEST_CASE("access: results are byte-identical however many decode threads run")
+{
+  // Decode happens on the pool, so several nodes are decoded at once. If a node wrote straight into
+  // the shared concatenated buffers, the output order would depend on thread scheduling and this
+  // would differ run to run. Staging per node and appending in walk order is what prevents it -- and
+  // a reordering bug would still produce a plausible-looking point cloud, so only a byte comparison
+  // catches it.
+  auto run = [](uint32_t threads) {
+    dew_dataset_options_t options{};
+    options.decode_threads = threads;
+    dew_error_t *error = nullptr;
+    auto *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, &options, nullptr, &error);
+    REQUIRE(dataset != nullptr);
+    REQUIRE(dew_dataset_state(dataset) == dew_dataset_ready);
+
+    const char *attributes[] = {DEW_ATTRIBUTE_INTENSITY};
+    dew_region_request_t spec{};
+    for (int i = 0; i < 3; i++)
+    {
+      spec.aabb_min[i] = -1.0;
+      spec.aabb_max[i] = double(k_grid) + 1.0;
+    }
+    spec.lod_mode = dew_lod_full;
+    spec.attribute_names = attributes;
+    spec.attribute_count = 1;
+    spec.position_format = dew_position_r64_absolute;
+    spec.clip_mode = dew_clip_node;
+
+    auto *request = dew_dataset_request_region(dataset, &spec, nullptr);
+    REQUIRE(request != nullptr);
+    REQUIRE(dew_request_wait(request, -1) == dew_request_completed);
+    dew_request_result_t result{};
+    REQUIRE(dew_request_get_result(request, &result) == 1);
+
+    std::vector<uint8_t> xyz(static_cast<const uint8_t *>(result.buffers[0].data), static_cast<const uint8_t *>(result.buffers[0].data) + result.buffers[0].size_bytes);
+    std::vector<uint8_t> intensity(static_cast<const uint8_t *>(result.buffers[1].data), static_cast<const uint8_t *>(result.buffers[1].data) + result.buffers[1].size_bytes);
+    const uint64_t count = result.point_count;
+    dew_request_release(request);
+    dew_dataset_close(dataset);
+    return std::tuple{count, xyz, intensity};
+  };
+
+  const auto inline_decode = run(1);
+  const auto parallel_decode = run(8);
+  REQUIRE(std::get<0>(inline_decode) == k_point_count);
+  REQUIRE(std::get<0>(parallel_decode) == std::get<0>(inline_decode));
+  REQUIRE(std::get<1>(parallel_decode) == std::get<1>(inline_decode));
+  REQUIRE(std::get<2>(parallel_decode) == std::get<2>(inline_decode));
+}
+
+TEST_CASE("access: attribute buffers stay aligned with the positions across mixed nodes")
+{
+  // Every buffer must hold exactly point_count elements. Resolving an attribute's stride lazily from
+  // the first node that happens to carry it leaves any earlier node contributing nothing, which
+  // silently shortens the attribute array and shifts it against xyz -- values that still look
+  // entirely valid, just attached to the wrong points.
+  dataset_handle_t dataset(k_path);
+  REQUIRE(dataset.handle != nullptr);
+
+  const char *attributes[] = {DEW_ATTRIBUTE_INTENSITY};
+  dew_region_request_t spec{};
+  for (int i = 0; i < 3; i++)
+  {
+    spec.aabb_min[i] = -1.0;
+    spec.aabb_max[i] = double(k_grid) + 1.0;
+  }
+  spec.lod_mode = dew_lod_full;
+  spec.attribute_names = attributes;
+  spec.attribute_count = 1;
+  spec.position_format = dew_position_r64_absolute;
+  spec.clip_mode = dew_clip_node;
+
+  auto *request = dew_dataset_request_region(dataset.handle, &spec, nullptr);
+  REQUIRE(request != nullptr);
+  REQUIRE(dew_request_wait(request, -1) == dew_request_completed);
+
+  dew_request_result_t result{};
+  REQUIRE(dew_request_get_result(request, &result) == 1);
+  REQUIRE(result.node_count > 1); // pointless unless the walk really produced several nodes
+  for (uint32_t i = 0; i < result.buffer_count; i++)
+  {
+    const auto &buffer = result.buffers[i];
+    const uint64_t stride = uint64_t(size_for_format_bytes(buffer.type)) * uint32_t(buffer.components);
+    REQUIRE(buffer.size_bytes == result.point_count * stride);
+  }
+
+  // The per-node segmentation must tile the whole result exactly, with no gaps or overlaps.
+  uint64_t expected_first = 0;
+  for (uint32_t i = 0; i < result.node_count; i++)
+  {
+    REQUIRE(result.nodes[i].first_point == expected_first);
+    expected_first += result.nodes[i].point_count;
+  }
+  REQUIRE(expected_first == result.point_count);
+
+  dew_request_release(request);
+}
+
+TEST_CASE("access: reads are genuinely overlapped, not merely coroutine-shaped")
+{
+  // The whole point of batching. Every other test here passes just as happily against a serial
+  // engine -- they assert results, and the results are identical either way. This one measures the
+  // read schedule: max_reads_in_flight controls how many blob reads are outstanding at once, so a
+  // query issued with a budget of 1 must never exceed one in flight, and the same query with a
+  // budget of 16 must exceed it. Wall-clock would be far too noisy to show this on a local file.
+  //
+  // The counter tracks cache MISSES, so each run needs its own dataset with a cold cache.
+  auto peak_for_budget = [](uint32_t budget) {
+    dew_dataset_options_t options{};
+    options.max_reads_in_flight = budget;
+    options.decode_threads = 4;
+    dew_error_t *error = nullptr;
+    auto *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, &options, nullptr, &error);
+    REQUIRE(dataset != nullptr);
+    REQUIRE(dew_dataset_state(dataset) == dew_dataset_ready);
+
+    const char *attributes[] = {DEW_ATTRIBUTE_INTENSITY};
+    dew_region_request_t spec{};
+    for (int i = 0; i < 3; i++)
+    {
+      spec.aabb_min[i] = -1.0;
+      spec.aabb_max[i] = double(k_grid) + 1.0;
+    }
+    spec.lod_mode = dew_lod_full;
+    spec.attribute_names = attributes;
+    spec.attribute_count = 1;
+    spec.position_format = dew_position_r64_absolute;
+    spec.clip_mode = dew_clip_node;
+
+    auto *request = dew_dataset_request_region(dataset, &spec, nullptr);
+    REQUIRE(request != nullptr);
+    REQUIRE(dew_request_wait(request, -1) == dew_request_completed);
+    dew_request_result_t result{};
+    REQUIRE(dew_request_get_result(request, &result) == 1);
+    REQUIRE(result.point_count == k_point_count);
+    const int peak = static_cast<dew::access::dataset_impl_t *>(dataset)->reader->peak_reads_in_flight();
+    dew_request_release(request);
+    dew_dataset_close(dataset);
+    return peak;
+  };
+
+  const int serial_peak = peak_for_budget(1);
+  const int batched_peak = peak_for_budget(16);
+  MESSAGE("peak reads in flight: budget 1 -> " << serial_peak << ", budget 16 -> " << batched_peak);
+
+  // The budget is a target, not a cap: a node's position blob and its one attribute blob are always
+  // issued together, so even a budget of 1 reaches 2. What must NOT happen is more than one node's
+  // worth being outstanding.
+  REQUIRE(serial_peak <= 2);
+  // ...and with room for several nodes, several nodes' reads really are in flight together. This is
+  // the assertion that fails against a serial engine, where the peak would stay at one node's worth
+  // no matter how large the budget.
+  REQUIRE(batched_peak > serial_peak);
+  REQUIRE(batched_peak >= 8);
 }
 
 TEST_CASE("access: request status is idempotent and survives release-after-cancel")

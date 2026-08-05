@@ -102,7 +102,10 @@ struct dew_dataset_options_t
 {
   uint64_t memory_budget_bytes; /* 0 = derived default */
   uint32_t decode_threads;      /* 0 = decode inline on the polling thread */
-  uint32_t max_reads_in_flight; /* 0 = derived from the memory budget */
+  /* Target number of blob reads outstanding at once -- what turns a query over a high-latency store
+   * from N round trips into roughly N/this. A target rather than a cap: one node's blobs are always
+   * issued together, so the floor is 1 + the number of attributes requested. 0 = derived. */
+  uint32_t max_reads_in_flight;
 };
 
 /* Returns immediately with the dataset in `opening`; `error` is only set for arguments that cannot

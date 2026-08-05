@@ -21,7 +21,9 @@
 #include "compressor.hpp"
 #include "format_util.hpp"
 
+#include <algorithm>
 #include <cstring>
+#include <future>
 
 namespace dew::access
 {
@@ -61,33 +63,6 @@ position_format_t to_internal(dew_position_format_t f)
   }
 }
 
-// Read one blob and hand back its decompressed bytes.
-struct blob_bytes_t
-{
-  std::shared_ptr<read_request_t> request;
-  dew_blob_t view{};
-  dew_error_t error;
-};
-
-// Suspends instead of blocking: the read completes on the storage loop and resumes this coroutine
-// back on `resume_loop` (the dataset's own loop).
-//
-// decompress_inline is still set, because the decompress then happens on whichever thread completed
-// the read rather than being hopped to a pool -- which under wasm has no workers at all, so a hopped
-// decompress would simply never run.
-vio::task_t<blob_bytes_t> co_read_blob(blob_reader_t &reader, storage_location_t location, vio::event_loop_t &resume_loop)
-{
-  blob_bytes_t out;
-  if (location.size == 0)
-    co_return out; // absent slot; note offset == 0 is a VALID location, so never test that
-  std::shared_ptr<read_request_t> request;
-  co_await co_read(reader, location, read_options_t{false, true, {}}, resume_loop, request);
-  out.request = request;
-  out.error = request->error;
-  out.view = request->buffer_info;
-  co_return out;
-}
-
 } // namespace
 
 // Execute a region request end to end: walk to a converged node set, then for each node read the
@@ -122,7 +97,8 @@ vio::task_t<bool> run_region_request(dataset_impl_t &dataset, const region_job_t
     break;
   }
 
-  const uint32_t attribute_count = uint32_t(spec.attribute_names.size());
+  const auto &names = spec.attribute_names;
+  const uint32_t attribute_count = uint32_t(names.size());
 
   region_result_t walked;
   if (!dataset.walk_to_convergence(query, walked))
@@ -154,126 +130,222 @@ vio::task_t<bool> run_region_request(dataset_impl_t &dataset, const region_job_t
   }
   positions.components = dew_components_3;
 
-  const auto &names = spec.attribute_names;
+  // Resolve each attribute's format ACROSS ALL selected nodes before appending anything.
+  //
+  // Nodes do not all carry the same attribute set -- slimmed LOD nodes drop the non-visual ones --
+  // so a node that lacks an attribute has to contribute zeros to keep every buffer index-aligned
+  // with the positions. Discovering the stride lazily from the first node that happens to have the
+  // attribute breaks that: any earlier node contributes nothing at all, and the attribute array ends
+  // up shorter than xyz and silently misaligned against it.
+  for (uint32_t a = 0; a < attribute_count; a++)
+  {
+    auto &out = request.buffers[a + 1];
+    out.name = names[a];
+    for (const auto &node : walked.nodes)
+    {
+      const auto index = dataset.attributes.get_attribute_index(node.attributes_id, names[a]);
+      if (index.index < 0)
+        continue;
+      out.type = index.format.type;
+      out.components = index.format.components;
+      out.stride = uint32_t(size_for_format(index.format.type, index.format.components));
+      break;
+    }
+  }
 
-  for (const auto &node : walked.nodes)
+  // What one node contributes, decoded off the dataset loop and appended in walk order afterwards.
+  // Staging is not an optimisation: decoding straight into the shared concatenated buffers from
+  // several pool threads would make the output order depend on thread scheduling.
+  struct node_stage_t
+  {
+    bool valid = false;
+    uint32_t kept = 0;
+    double origin[3] = {0, 0, 0};
+    std::vector<uint8_t> positions;
+    std::vector<std::vector<uint8_t>> attributes;
+    const region_node_t *node = nullptr;
+    dew_error_t error;
+  };
+
+  // One node's reads, issued but not yet awaited.
+  struct pending_node_t
+  {
+    const region_node_t *node = nullptr;
+    std::shared_ptr<read_request_t> position;
+    std::vector<std::shared_ptr<read_request_t>> attributes; // null where the node lacks it
+  };
+
+  auto &loop = dataset.loop_thread.event_loop();
+  // max_reads_in_flight is a TARGET, not a hard cap: a node's position blob and its attribute blobs
+  // are issued as a unit, so the floor is one node's worth (1 + attribute_count) even when the
+  // budget is smaller. Splitting a node across batches would buy nothing -- it cannot be decoded
+  // until all of its blobs have landed anyway.
+  const uint32_t reads_per_node = 1 + attribute_count;
+  const uint32_t batch_nodes = std::max<uint32_t>(1, dataset.max_reads_in_flight / std::max<uint32_t>(1, reads_per_node));
+
+  for (size_t begin = 0; begin < walked.nodes.size(); begin += batch_nodes)
   {
     if (request.status.load(std::memory_order_acquire) == dew_request_canceled)
       co_return false;
-    if (node.point_count.data == 0)
-      continue;
+    const size_t end = std::min(begin + batch_nodes, walked.nodes.size());
 
-    const tree_t *tree = dataset.registry.get(node.tree_id);
-    if (!tree)
-      continue;
-
-    // Slot 0 of a storage unit is a storage_header_t followed by the morton codes.
-    const auto position_location = tree->storage_map.location(node.input_id, 0);
-    auto position_blob = co_await co_read_blob(*dataset.reader, position_location, dataset.loop_thread.event_loop());
-    if (position_blob.error.code != 0)
+    // ---- issue: every read in the batch goes out before any of them is awaited, which is what
+    // turns per-blob latency into one batch's worth instead of the sum. read() only queues.
+    std::vector<pending_node_t> pending;
+    pending.reserve(end - begin);
+    for (size_t i = begin; i < end; i++)
     {
-      request.error = position_blob.error;
-      co_return false;
-    }
-    if (!position_blob.request)
-      continue;
-
-    storage_header_t header;
-    dew_blob_t point_data;
-    dew_error_t split_error;
-    if (!deserialize_points(position_blob.view, header, point_data, split_error))
-    {
-      request.error = split_error;
-      co_return false;
-    }
-
-    const uint32_t offset = node.offset_in_subset.data;
-    const uint32_t count = node.point_count.data;
-    if (uint64_t(offset) + count > header.point_count)
-      continue; // subset does not fit the stored unit; skip rather than read out of bounds
-
-    const uint32_t src_stride = uint32_t(size_for_format(header.point_format.type, header.point_format.components));
-    const auto *src = static_cast<const uint8_t *>(point_data.data) + uint64_t(offset) * src_stride;
-
-    const size_t base = positions.data.size();
-    positions.data.resize(base + size_t(count) * position_stride_bytes);
-    double origin[3] = {0, 0, 0};
-    if (!decode_positions(src, count * src_stride, count, header.point_format, header.morton_min, header.lod_span, dataset.registry.tree_config, position_format,
-                          positions.data.data() + base, uint64_t(count) * position_stride_bytes, origin))
-    {
-      request.error = {1, "failed to decode node positions"};
-      co_return false;
-    }
-
-    // Each requested attribute, in the same order, from this node's own attribute set. A node whose
-    // set lacks the attribute (slimmed LOD nodes drop the non-visual ones) contributes zeros, so all
-    // buffers stay index-aligned with the positions.
-    std::vector<attribute_span_t> spans;
-    spans.reserve(attribute_count);
-    std::vector<size_t> attribute_bases;
-    attribute_bases.reserve(attribute_count);
-    for (uint32_t a = 0; a < attribute_count; a++)
-    {
-      auto &out = request.buffers[a + 1];
-      const auto index = dataset.attributes.get_attribute_index(node.attributes_id, names[a]);
-      if (out.stride == 0 && index.index >= 0)
-      {
-        out.name = names[a];
-        out.type = index.format.type;
-        out.components = index.format.components;
-        out.stride = uint32_t(size_for_format(index.format.type, index.format.components));
-      }
-      const size_t attribute_base = out.data.size();
-      attribute_bases.push_back(attribute_base);
-      if (out.stride == 0)
-      {
-        spans.push_back({nullptr, 0});
+      const auto &node = walked.nodes[i];
+      if (node.point_count.data == 0)
         continue;
-      }
-      out.data.resize(attribute_base + size_t(count) * out.stride);
+      const tree_t *tree = dataset.registry.get(node.tree_id);
+      if (!tree)
+        continue;
 
-      if (index.index >= 0)
+      pending_node_t entry;
+      entry.node = &node;
+      // Slot 0 of a storage unit is a storage_header_t followed by the morton codes.
+      const auto position_location = tree->storage_map.location(node.input_id, 0);
+      if (position_location.size == 0)
+        continue; // absent slot; offset == 0 is a VALID location, so never test that
+      entry.position = dataset.reader->read(position_location, read_options_t{false, true, {}});
+
+      entry.attributes.resize(attribute_count);
+      for (uint32_t a = 0; a < attribute_count; a++)
       {
+        if (request.buffers[a + 1].stride == 0)
+          continue; // no node has it at all
+        const auto index = dataset.attributes.get_attribute_index(node.attributes_id, names[a]);
+        if (index.index < 0)
+          continue; // this node lacks it: contributes zeros
         const auto location = tree->storage_map.location(node.input_id, index.index);
-        auto blob = co_await co_read_blob(*dataset.reader, location, dataset.loop_thread.event_loop());
-        if (blob.error.code == 0 && blob.request)
-        {
-          const auto *attribute_src = static_cast<const uint8_t *>(blob.view.data) + uint64_t(offset) * out.stride;
-          if (uint64_t(offset + count) * out.stride <= blob.view.size)
-            memcpy(out.data.data() + attribute_base, attribute_src, size_t(count) * out.stride);
-        }
+        if (location.size == 0)
+          continue;
+        entry.attributes[a] = dataset.reader->read(location, read_options_t{false, true, {}});
       }
-      spans.push_back({out.data.data() + attribute_base, out.stride});
+      pending.push_back(std::move(entry));
     }
 
-    uint32_t kept = count;
-    if (spec.clip_mode == dew_clip_point && !query.whole_dataset && !node.fully_inside)
+    // ---- await: they were all issued together, so the later ones are usually already done.
+    for (auto &entry : pending)
     {
-      kept = clip_to_box(positions.data.data() + base, position_format, origin, dataset.registry.tree_config.scale, count, spec.box_min, spec.box_max, spans.data(), uint32_t(spans.size()));
-      positions.data.resize(base + size_t(kept) * position_stride_bytes);
+      co_await entry.position->await_on(loop);
+      for (auto &attribute : entry.attributes)
+      {
+        if (attribute)
+          co_await attribute->await_on(loop);
+      }
+    }
+
+    // ---- decode: pure CPU, so hop it to the pool. Under wasm the pool has no workers and runs the
+    // job inline, which must be equally correct.
+    std::vector<node_stage_t> stages(pending.size());
+    std::vector<std::future<void>> jobs;
+    jobs.reserve(pending.size());
+    for (size_t i = 0; i < pending.size(); i++)
+    {
+      auto *entry = &pending[i];
+      auto *stage = &stages[i];
+      jobs.push_back(dataset.pool.enqueue([entry, stage, &dataset, &request, &spec, position_format, position_stride_bytes, attribute_count, &query]() {
+        stage->node = entry->node;
+        if (entry->position->error.code != 0)
+        {
+          stage->error = entry->position->error;
+          return;
+        }
+        storage_header_t header;
+        dew_blob_t point_data;
+        dew_error_t split_error;
+        if (!deserialize_points(entry->position->buffer_info, header, point_data, split_error))
+        {
+          stage->error = split_error;
+          return;
+        }
+        const uint32_t offset = entry->node->offset_in_subset.data;
+        const uint32_t count = entry->node->point_count.data;
+        if (uint64_t(offset) + count > header.point_count)
+          return; // subset does not fit the stored unit; skip rather than read out of bounds
+
+        const uint32_t src_stride = uint32_t(size_for_format(header.point_format.type, header.point_format.components));
+        const auto *src = static_cast<const uint8_t *>(point_data.data) + uint64_t(offset) * src_stride;
+
+        stage->positions.resize(size_t(count) * position_stride_bytes);
+        if (!decode_positions(src, count * src_stride, count, header.point_format, header.morton_min, header.lod_span, dataset.registry.tree_config, position_format, stage->positions.data(),
+                              uint64_t(count) * position_stride_bytes, stage->origin))
+        {
+          stage->error = {1, "failed to decode node positions"};
+          return;
+        }
+
+        stage->attributes.resize(attribute_count);
+        std::vector<attribute_span_t> spans(attribute_count, attribute_span_t{nullptr, 0});
+        for (uint32_t a = 0; a < attribute_count; a++)
+        {
+          const uint32_t stride = request.buffers[a + 1].stride;
+          if (stride == 0)
+            continue;
+          // Zero-filled by default, so a node lacking the attribute still contributes its full share
+          // and every buffer stays aligned with the positions.
+          stage->attributes[a].assign(size_t(count) * stride, uint8_t(0));
+          auto &source = entry->attributes[a];
+          if (source && source->error.code == 0 && uint64_t(offset + count) * stride <= source->buffer_info.size)
+            memcpy(stage->attributes[a].data(), static_cast<const uint8_t *>(source->buffer_info.data) + uint64_t(offset) * stride, size_t(count) * stride);
+          spans[a] = attribute_span_t{stage->attributes[a].data(), stride};
+        }
+
+        uint32_t kept = count;
+        if (spec.clip_mode == dew_clip_point && !query.whole_dataset && !entry->node->fully_inside)
+        {
+          kept = clip_to_box(stage->positions.data(), position_format, stage->origin, dataset.registry.tree_config.scale, count, spec.box_min, spec.box_max, spans.data(), attribute_count);
+          stage->positions.resize(size_t(kept) * position_stride_bytes);
+          for (uint32_t a = 0; a < attribute_count; a++)
+          {
+            const uint32_t stride = request.buffers[a + 1].stride;
+            if (stride)
+              stage->attributes[a].resize(size_t(kept) * stride);
+          }
+        }
+        stage->kept = kept;
+        stage->valid = true;
+      }));
+    }
+    for (auto &job : jobs)
+      job.get();
+
+    // ---- append in WALK ORDER, on this loop. Output is therefore identical no matter how many
+    // decode threads ran, which is what makes the result reproducible.
+    for (auto &stage : stages)
+    {
+      if (stage.error.code != 0)
+      {
+        request.error = stage.error;
+        co_return false;
+      }
+      if (!stage.valid || stage.kept == 0)
+        continue;
+
+      positions.data.insert(positions.data.end(), stage.positions.begin(), stage.positions.end());
       for (uint32_t a = 0; a < attribute_count; a++)
       {
         auto &out = request.buffers[a + 1];
         if (out.stride)
-          out.data.resize(attribute_bases[a] + size_t(kept) * out.stride);
+          out.data.insert(out.data.end(), stage.attributes[a].begin(), stage.attributes[a].end());
       }
-    }
-    if (kept == 0)
-      continue;
 
-    dew_result_node_t result_node{};
-    result_node.tree_id = node.tree_id.data;
-    result_node.level = node.level;
-    result_node.index = node.index;
-    result_node.lod = node.lod;
-    result_node.first_point = request.point_count;
-    result_node.point_count = kept;
-    for (int i = 0; i < 3; i++)
-      result_node.position_offset[i] = origin[i];
-    result_node.is_leaf = node.is_leaf ? 1 : 0;
-    result_node.is_lod = node.is_lod ? 1 : 0;
-    request.nodes.push_back(result_node);
-    request.point_count += kept;
+      dew_result_node_t result_node{};
+      result_node.tree_id = stage.node->tree_id.data;
+      result_node.level = stage.node->level;
+      result_node.index = stage.node->index;
+      result_node.lod = stage.node->lod;
+      result_node.first_point = request.point_count;
+      result_node.point_count = stage.kept;
+      for (int i = 0; i < 3; i++)
+        result_node.position_offset[i] = stage.origin[i];
+      result_node.is_leaf = stage.node->is_leaf ? 1 : 0;
+      result_node.is_lod = stage.node->is_lod ? 1 : 0;
+      request.nodes.push_back(result_node);
+      request.point_count += stage.kept;
+    }
   }
 
   co_return true;

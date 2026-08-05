@@ -44,6 +44,9 @@ dataset_impl_t::dataset_impl_t(std::string a_url, std::string a_connection, cons
 
   const uint64_t budget = options.memory_budget_bytes ? options.memory_budget_bytes : (uint64_t(512) << 20);
   budgets = derive_budgets(budget);
+  // How many blob reads may be in flight at once. This is what turns a query over a high-latency
+  // store from N round trips into roughly N/max_reads_in_flight.
+  max_reads_in_flight = options.max_reads_in_flight ? options.max_reads_in_flight : uint32_t(std::max(1, budgets.io_clamp));
 
   reader = std::make_unique<blob_reader_t>(url, pool, perf, storage_error, error);
   if (error.code != 0)

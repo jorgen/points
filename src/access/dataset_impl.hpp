@@ -88,6 +88,7 @@ struct dataset_impl_t
   vio::event_pipe_t<dew_error_t> storage_error;
   perf_stats_t perf;
   derived_budgets_t budgets;
+  uint32_t max_reads_in_flight = 16;
   std::unique_ptr<blob_reader_t> reader;
   attributes_configs_t attributes;
   tree_registry_t registry;

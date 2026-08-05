@@ -279,7 +279,12 @@ vio::task_t<void> blob_reader_t::do_read_request(std::shared_ptr<read_request_t>
 {
   // Track in-flight reads so stop_loop() can wait them out before tearing down the backend (each read holds
   // the backend and a pooled connection across its co_await). The guard decrements on every co_return path.
-  _reads_in_flight.fetch_add(1, std::memory_order_acq_rel);
+  const int in_flight = _reads_in_flight.fetch_add(1, std::memory_order_acq_rel) + 1;
+  // Raise the high-water mark. A plain max: contention here is harmless, the value is diagnostic.
+  int peak = _peak_reads_in_flight.load(std::memory_order_acquire);
+  while (in_flight > peak && !_peak_reads_in_flight.compare_exchange_weak(peak, in_flight, std::memory_order_acq_rel))
+  {
+  }
   struct in_flight_guard_t
   {
     std::atomic<int> *counter;
