@@ -18,6 +18,10 @@
 
 #include "pump.hpp"
 
+#ifdef __EMSCRIPTEN__
+#include <vio/platform/wasm/event_loop_impl.h> // vio::wasm::pump
+#endif
+
 struct dew_pump_t
 {
   dew::core::waker_t waker;
@@ -103,6 +107,21 @@ uint32_t dew_pump_poll(struct dew_pump_t *pump)
   // Rearm FIRST. See the contract in pump.h: rearming after the dispatch would swallow any
   // completion that lands while we are dispatching.
   pump->waker.rearm();
+
+#ifdef __EMSCRIPTEN__
+  // Advance the IO itself before draining what it produced.
+  //
+  // Natively every event loop owns a thread and runs on its own. Under wasm there are no threads:
+  // thread_with_event_loop_t registers a COOPERATIVE loop that only makes progress when something
+  // ticks it. Since dew_pump_poll is the one entry point a host is required to call, it has to be the
+  // thing that ticks -- otherwise a dataset opened in the browser would sit in `opening` forever while
+  // the host dutifully polled a queue that nothing could ever fill.
+  //
+  // Ordering: pump before draining, so completions that land here are dispatched in THIS poll rather
+  // than waiting for the next one. Any wake they raise arrives after the rearm above, so the host is
+  // correctly told there may be more.
+  vio::wasm::pump();
+#endif
 
   // Drain a snapshot, not the live vector: a drain callback may close its subsystem and unregister
   // itself, which would invalidate the iterator underneath us.

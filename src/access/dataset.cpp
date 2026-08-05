@@ -48,7 +48,7 @@ dataset_impl_t::dataset_impl_t(std::string a_url, std::string a_connection, cons
   // store from N round trips into roughly N/max_reads_in_flight.
   max_reads_in_flight = options.max_reads_in_flight ? options.max_reads_in_flight : uint32_t(std::max(1, budgets.io_clamp));
 
-  reader = std::make_unique<blob_reader_t>(url, pool, perf, storage_error, error);
+  reader = std::make_unique<blob_reader_t>(url, connection, pool, perf, storage_error, error);
   if (error.code != 0)
   {
     // set_state, never a bare store: it notifies state_cond. A plain store leaves anyone in
@@ -60,10 +60,9 @@ dataset_impl_t::dataset_impl_t(std::string a_url, std::string a_connection, cons
   reader->set_decompressed_cache_size(budgets.decompressed_cache_bytes);
 
   // Everything past this point is deferred. dew_dataset_create returns with the dataset `opening`;
-  // the index read, the registry and the root tree all happen on the dataset's own loop.
-  //
-  // (Constructing the backend is still synchronous -- create_storage_backend probes the store in its
-  // constructor. That is the last blocking step on the open path.)
+  // the existence probe, the index read, the registry and the root tree all happen on the dataset's
+  // own loop. Constructing the backend does no IO -- object_backend_t's probe is lazy precisely so
+  // that this constructor cannot block. src/wasm/access_noasyncify_probe.cpp is what holds that.
   loop_thread.event_loop().run_in_loop([this]() {
     [](dataset_impl_t *self) -> vio::detached_task_t { co_await self->co_open(); }(this);
   });
@@ -82,6 +81,15 @@ void dataset_impl_t::set_state(dew_dataset_state_t next)
 
 vio::task_t<void> dataset_impl_t::co_open()
 {
+  // Await the existence probe before asking for its answer. file_exists() is a plain getter, but on an
+  // object store the answer costs a HEAD, and reaching it through the blocking path would stall the
+  // dataset loop -- under wasm, fatally: the loop is cooperative and there is no ASYNCIFY to unwind.
+  error = co_await reader->probe_exists_async();
+  if (error.code != 0)
+  {
+    set_state(dew_dataset_error);
+    co_return;
+  }
   if (!reader->file_exists())
   {
     error = {1, "dataset does not exist: " + reader->file_exists_error()};

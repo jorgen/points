@@ -165,13 +165,17 @@ struct read_options_t
 class blob_reader_t
 {
 public:
-  blob_reader_t(const std::string &url, vio::thread_pool_t &thread_pool, perf_stats_t &perf_stats, vio::event_pipe_t<dew_error_t> &storage_error_pipe, dew_error_t &error);
+  // `connection` is a vio connection string (credentials / endpoint / region) for object-store URLs;
+  // empty means environment + defaults. Ignored for local packed files, which carry no credentials.
+  blob_reader_t(const std::string &url, std::string_view connection, vio::thread_pool_t &thread_pool, perf_stats_t &perf_stats, vio::event_pipe_t<dew_error_t> &storage_error_pipe, dew_error_t &error);
   ~blob_reader_t();
 
   // Join the loop thread. Idempotent, and required before the caches / backend / any event pipe an
   // in-flight read touches is destroyed.
   void stop_loop();
 
+  // Await this before file_exists() on any path that must not block; see storage_backend_t.
+  vio::task_t<dew_error_t> probe_exists_async() { co_return _backend ? co_await _backend->probe_exists_async() : dew_error_t{1, "no storage backend"}; }
   [[nodiscard]] bool file_exists() const { return _backend && _backend->exists(); }
   [[nodiscard]] std::string file_exists_error() const { return _backend ? _backend->exists_error() : std::string(); }
   [[nodiscard]] dew_error_t read_index(index_load_t &out);

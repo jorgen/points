@@ -117,7 +117,7 @@ storage_location_t object_backend_t::next_location(uint32_t size)
   return loc;
 }
 
-vio::task_t<dew_error_t> object_backend_t::probe_exists(bool &out)
+vio::task_t<dew_error_t> object_backend_t::probe_exists(bool &out) const
 {
   auto r = co_await _io->object_info(k_manifest_name);
   out = r.has_value() && r->exists;
@@ -131,9 +131,19 @@ object_backend_t::object_backend_t(std::unique_ptr<vio::objstore::io_manager_t> 
   : _io(std::move(io))
   , _event_loop(event_loop)
 {
+  // No probe here on purpose -- see the _probed comment in the header. Constructing a backend must not
+  // cost a network round trip, because dew_dataset_create constructs one and must return immediately.
+}
+
+vio::task_t<dew_error_t> object_backend_t::probe_exists_async()
+{
+  if (_probed)
+    co_return dew_error_t{};
   bool exists = false;
-  (void)run_on_loop_blocking(_event_loop, [this, &exists]() { return probe_exists(exists); });
+  dew_error_t error = co_await probe_exists(exists);
   _exists = exists;
+  _probed = true;
+  co_return error;
 }
 
 object_backend_t::~object_backend_t()
@@ -142,6 +152,16 @@ object_backend_t::~object_backend_t()
 
 bool object_backend_t::exists() const
 {
+  // The blocking half of the lazy probe, for callers that never awaited probe_exists_async(). Under
+  // wasm this needs ASYNCIFY, which is why the query engine awaits the async form first and only ever
+  // reaches the cached branch below.
+  if (!_probed)
+  {
+    bool exists = false;
+    (void)run_on_loop_blocking(_event_loop, [this, &exists]() { return probe_exists(exists); });
+    _exists = exists;
+    _probed = true;
+  }
   return _exists;
 }
 

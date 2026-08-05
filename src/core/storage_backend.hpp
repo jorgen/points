@@ -82,6 +82,21 @@ struct storage_backend_t
   }
 
   // ---- bootstrap (constructed on / called from the processor thread) ----
+  // Run the existence probe without blocking, so a later exists() is a pure getter.
+  //
+  // exists() is a plain bool, which means the answer has to be known before it is called -- and for an
+  // object store, knowing it costs a HEAD. Somebody has to wait for that. A caller that cannot block
+  // (the query engine's open path; anything on a cooperative wasm loop) awaits this FIRST, and exists()
+  // is then free. A caller that can block just calls exists() and pays for the probe there.
+  //
+  // Default no-op: the packed local file answers exists() from its constructor with a synchronous stat
+  // and has nothing to defer.
+  //
+  // The blocking half runs the probe on the backend's own event loop and waits, so exists() must NOT be
+  // called FROM that loop -- it would wait on work it is itself blocking. Every caller today is on a
+  // constructing or main thread (processor open, dew copy, the CLI); loop-side code awaits the async
+  // form instead.
+  virtual vio::task_t<dew_error_t> probe_exists_async() { co_return dew_error_t{}; }
   [[nodiscard]] virtual bool exists() const = 0;
   // Why exists() is false when the answer is not a clean "absent": a remote existence probe can FAIL
   // (wrong region, missing credentials, network) rather than return 404. Empty when absent-or-unknown.

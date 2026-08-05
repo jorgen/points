@@ -46,6 +46,7 @@ public:
   object_backend_t(std::unique_ptr<vio::objstore::io_manager_t> io, vio::event_loop_t &event_loop);
   ~object_backend_t() override;
 
+  vio::task_t<dew_error_t> probe_exists_async() override;
   [[nodiscard]] bool exists() const override;
   [[nodiscard]] std::string exists_error() const override;
   [[nodiscard]] dew_error_t open_for_write(bool truncate) override;
@@ -65,15 +66,22 @@ public:
 private:
   vio::task_t<dew_error_t> do_read_index(index_load_t &out);
   vio::task_t<dew_error_t> read_location(storage_location_t loc, std::unique_ptr<uint8_t[]> &buf, uint32_t &size);
-  vio::task_t<dew_error_t> probe_exists(bool &out); // HEAD the manifest to set _exists on open
+  vio::task_t<dew_error_t> probe_exists(bool &out) const; // HEAD the manifest to set _exists on open
   storage_location_t next_location(uint32_t size); // allocate a fresh 64-bit id split into file_id/offset
 
   std::unique_ptr<vio::objstore::io_manager_t> _io;
   vio::event_loop_t &_event_loop;
-  bool _exists = false;
-  std::string _exists_error; // why the probe failed, when it FAILED rather than cleanly found nothing
-  bool _dew2 = false;          // layout sniffed from the manifest content in do_read_index
-  uint64_t _manifest_size = 0; // from the open-time HEAD; discriminates 128 (legacy) vs 256 (DEW2)
+  // The probe is LAZY, and mutable because exists() is const but may have to run it.
+  //
+  // It used to run in the constructor, which made merely creating the backend a blocking network
+  // round trip -- fatal under wasm without ASYNCIFY, where it aborts on the emscripten_sleep stub, and
+  // exactly what dew_dataset_create must not do. Now whoever needs the answer decides how to wait:
+  // probe_exists_async() co_awaits it, exists() blocks on it. Either way it runs at most once.
+  mutable bool _probed = false;
+  mutable bool _exists = false;
+  mutable std::string _exists_error; // why the probe failed, when it FAILED rather than cleanly found nothing
+  bool _dew2 = false;                // layout sniffed from the manifest content in do_read_index
+  mutable uint64_t _manifest_size = 0; // from the open-time HEAD; discriminates 128 (legacy) vs 256 (DEW2)
   uint64_t _next_id = 0;
 
   // Locations of the previous committed metadata objects, reclaimed after the next manifest commit.

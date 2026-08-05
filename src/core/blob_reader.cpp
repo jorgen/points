@@ -84,7 +84,7 @@ void read_request_t::wait_for_read()
 #endif
 }
 
-blob_reader_t::blob_reader_t(const std::string &url, vio::thread_pool_t &thread_pool, perf_stats_t &perf_stats, vio::event_pipe_t<dew_error_t> &storage_error_pipe, dew_error_t &error)
+blob_reader_t::blob_reader_t(const std::string &url, std::string_view connection, vio::thread_pool_t &thread_pool, perf_stats_t &perf_stats, vio::event_pipe_t<dew_error_t> &storage_error_pipe, dew_error_t &error)
   : _thread_pool(thread_pool)
   , _event_loop_thread()
   , _event_loop(_event_loop_thread.event_loop())
@@ -94,7 +94,11 @@ blob_reader_t::blob_reader_t(const std::string &url, vio::thread_pool_t &thread_
   , _read_cache(256 * 1024 * 1024)
   , _decompressed_cache(256 * 1024 * 1024)
 {
-  _backend = create_storage_backend(url, _event_loop, error);
+  // Per-reader credentials rather than vio's process-global override: two datasets on two endpoints
+  // must be openable from one process, which is exactly the case vio's own docs say to pass the
+  // connection through for. An empty view means "environment + defaults", which is what the converter
+  // relies on -- it installs the override up front in dew_converter_set_destination.
+  _backend = create_storage_backend(url, connection, _event_loop, error);
 }
 
 blob_reader_t::~blob_reader_t()
@@ -110,19 +114,39 @@ void blob_reader_t::stop_loop()
   // makes ~event_loop_t's uv_loop_close abort. So drain and close everything on the loop thread first.
   if (_backend)
   {
+    // Run something on the loop and wait for it. The two platforms wait in opposite ways, and getting
+    // that backwards deadlocks: natively the loop has its own thread, so we park on a future and let it
+    // run. Under wasm the loop is COOPERATIVE -- run_in_loop only queues, and nothing will ever dequeue
+    // it while we sit on a future -- so we have to drive the loop ourselves. Bounded, because teardown
+    // must terminate even if a read is wedged; an abandoned read is survivable, a hung close is not.
     auto run_on_loop_sync = [this](std::function<void()> fn) {
+#ifdef __EMSCRIPTEN__
+      bool finished = false;
+      _event_loop.run_in_loop([&fn, &finished]() { fn(); finished = true; });
+      for (int i = 0; i < 1024 && !finished; ++i)
+        vio::wasm::pump();
+#else
       std::promise<void> done;
       auto fut = done.get_future();
       _event_loop.run_in_loop([&fn, &done]() { fn(); done.set_value(); });
       fut.wait();
+#endif
     };
     // (1) Dispatch any queued read requests into in-flight coroutines, then wait for every in-flight read to
     //     finish -- each holds the backend and a pooled connection across its network co_await. No new reads
     //     are posted during teardown (the render loader is gone, tree loads are quiesced), so this converges;
     //     the loop advances the reads on its own thread.
     run_on_loop_sync([]() {});
+#ifdef __EMSCRIPTEN__
+    // Same reason as above: yielding hands off to nobody when there is no other thread. Pump instead,
+    // and give up rather than spin forever -- a read still outstanding here can only be one whose fetch
+    // will never land (the page is going away), and the browser reclaims it either way.
+    for (int i = 0; i < 1024 && _reads_in_flight.load(std::memory_order_acquire) > 0; ++i)
+      vio::wasm::pump();
+#else
     while (_reads_in_flight.load(std::memory_order_acquire) > 0)
       std::this_thread::yield();
+#endif
     // (2) Nothing holds the backend now. Destroy it on the loop thread (dropping the io_manager + pool ->
     //     uv_close on every idle connection), then pump the loop so those close callbacks -- deferred for TLS
     //     while close_notify flushes -- run to completion before the loop is closed.

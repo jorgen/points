@@ -5,6 +5,7 @@
 set(_conv ${CMAKE_CURRENT_SOURCE_DIR}/../converter)
 set(_core ${CMAKE_CURRENT_SOURCE_DIR}/../core)
 set(_render ${CMAKE_CURRENT_SOURCE_DIR}/../render)
+set(_access ${CMAKE_CURRENT_SOURCE_DIR}/../access)
 
 add_executable(dew_data_wasm
     dew_wasm_api.cpp
@@ -255,3 +256,85 @@ target_link_options(dew_decode_worker PRIVATE
     "-sSTACK_SIZE=5MB"
 )
 set_target_properties(dew_decode_worker PROPERTIES OUTPUT_NAME "dew_decode_worker" SUFFIX ".mjs")
+
+# ---------------------------------------------------------------------------------------------------------
+# Proof that the query engine never blocks: dew_access built and RUN with no ASYNCIFY.
+#
+# dew_access is meant to be embeddable in a module that has none -- a decode worker, a service worker,
+# anything driven from inside a JS callback that cannot tolerate a stack unwind. ASYNCIFY is a
+# whole-program transform (~40-50% code size, viral, un-re-enterable from a callback), so "does not
+# require it" is worth holding rather than assuming.
+#
+# This is NOT a link test, though it started as one. "A blocking read calls emscripten_sleep, which
+# without -sASYNCIFY is a link error" is false: emscripten resolves it to an aborting stub. And the
+# module imports emscripten_sleep regardless, because storage_backend_t's synchronous exists() /
+# read_index() are virtual and object_backend_t's overrides route through run_on_loop_blocking -- a
+# retained vtable keeps them reachable even though access only calls the _async forms.
+#
+# So the gate is the node smoke test: it opens a dataset and drives it to a terminal state through an
+# ordinary poll loop, against a stubbed XHR that fails on a later turn. The aborting stub makes any
+# blocking call fail loudly at run time. See access_noasyncify_probe.cpp for the full reasoning.
+add_executable(dew_access_noasyncify
+    access_noasyncify_probe.cpp
+    ${_core}/error.cpp
+    ${_core}/attributes_api.cpp
+    ${_core}/pump.cpp
+    ${_core}/blob_reader.cpp
+    ${_core}/storage_backend.cpp
+    ${_core}/object_backend.cpp
+    ${_core}/bucket_format.cpp
+    ${_core}/blob_manager.cpp
+    ${_core}/compressor.cpp
+    ${_core}/compressor_zstd.cpp
+    ${_core}/compressor_fse.cpp
+    ${_core}/compressor_ans.cpp
+    ${_core}/byte_shuffle.cpp
+    ${_core}/compression_preprocess.cpp
+    ${_core}/tree.cpp
+    ${_core}/input_storage_map.cpp
+    ${_core}/attributes_configs.cpp
+    ${_access}/region_walk.cpp
+    ${_access}/decode.cpp
+    ${_access}/dataset.cpp
+    ${_access}/request.cpp
+    ${_access}/query_api.cpp
+)
+target_include_directories(dew_access_noasyncify PRIVATE
+    ${_access} ${_core} ${_render}
+    ${fmt_SOURCE_DIR}/include ${glm_SOURCE_DIR} ${libmorton_SOURCE_DIR}/include
+    ${unordered_dense_SOURCE_DIR}/include ${zstd_SOURCE_DIR}/lib
+)
+target_compile_definitions(dew_access_noasyncify PRIVATE FMT_HEADER_ONLY=1 ZSTD_DISABLE_ASM=1)
+target_compile_options(dew_access_noasyncify PRIVATE -include cstdlib)
+# The probe's own EMSCRIPTEN_KEEPALIVE entry points retain everything they CALL; this list retains the
+# rest of the public surface so the build covers the request path too, not only open. Without some
+# form of forced retention the linker strips the lot -- an earlier version referenced the functions
+# through a volatile address array, which the compiler folded away, leaving a 60-byte module that
+# "passed" while containing no engine at all.
+set(_access_probe_exports
+    _dew_dataset_create,_dew_dataset_close,_dew_dataset_state,_dew_dataset_wait_ready
+    ,_dew_dataset_poll,_dew_dataset_pending_count,_dew_dataset_get_info
+    ,_dew_dataset_attribute_count,_dew_dataset_get_attribute_name
+    ,_dew_dataset_request_region,_dew_request_status,_dew_request_wait,_dew_request_cancel
+    ,_dew_request_get_result,_dew_request_attribute_size,_dew_request_copy_attribute
+    ,_dew_request_release,_dew_pump_create,_dew_pump_destroy,_dew_pump_poll
+    ,_dew_pump_set_wake_callback,_main)
+string(REPLACE ";" "" _access_probe_exports "${_access_probe_exports}")
+target_link_libraries(dew_access_noasyncify PRIVATE vio libzstd_static)
+target_link_options(dew_access_noasyncify PRIVATE
+    "-sDISABLE_EXCEPTION_THROWING=0"
+    # FETCH yes, ASYNCIFY deliberately NOT. They are different things and only the second is the
+    # problem: -sFETCH is an ordinary library (the object backend's HTTP transport, used purely in its
+    # callback-driven async mode), while ASYNCIFY rewrites the whole program. Reaching an object store
+    # over https is the point of this module; unwinding the stack to wait for it is what is banned.
+    "-sFETCH=1"
+    "-sALLOW_MEMORY_GROWTH=1"
+    "-sEXIT_RUNTIME=0"
+    "-sMODULARIZE=1"
+    "-sEXPORT_ES6=1"
+    "-sEXPORT_NAME=DewAccessProbe"
+    "-sENVIRONMENT=web,worker,node"
+    "-sEXPORTED_FUNCTIONS=${_access_probe_exports}"
+    "-sEXPORTED_RUNTIME_METHODS=UTF8ToString"   # the smoke harness reads the dataset's error text
+)
+set_target_properties(dew_access_noasyncify PROPERTIES OUTPUT_NAME "dew_access_probe" SUFFIX ".mjs")

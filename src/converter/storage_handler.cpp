@@ -43,7 +43,9 @@ using namespace dew::core;
 storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written,
                                      vio::event_pipe_t<dew_error_t> &storage_error_pipe, dew_error_t &error)
   : _thread_pool(thread_pool)
-  , _reader(url, thread_pool, perf_stats, storage_error_pipe, error)
+  // No connection string here: the converter installs its credentials as vio's process-global
+  // override in dew_converter_set_destination, before any backend is built.
+  , _reader(url, std::string_view{}, thread_pool, perf_stats, storage_error_pipe, error)
   , _event_loop(_reader.event_loop())
   , _attributes_configs(attributes_configs)
   , _perf_stats(perf_stats)
