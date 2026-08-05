@@ -212,11 +212,20 @@ All of them live in [`examples/python/`](https://github.com/jorgen/dewfall/tree/
 |---|---|
 | [`numpy_to_dew.py`](https://github.com/jorgen/dewfall/blob/master/examples/python/numpy_to_dew.py) | Converting from numpy arrays: xyz + rgb + intensity + classification, chunked feeding, progress, read-back |
 | [`query_box.py`](https://github.com/jorgen/dewfall/blob/master/examples/python/query_box.py) | Querying a sub-box out of a dataset and rendering the points with matplotlib |
+| [`query_asyncio.py`](https://github.com/jorgen/dewfall/blob/master/examples/python/query_asyncio.py) | Awaiting queries from asyncio: `Pump.set_wake_callback` + `Pump.poll` + `Dataset.query_box_submit`, several in flight, event loop never blocked |
 
 ```bash
 python examples/python/numpy_to_dew.py out.dew --points 2000000
 python examples/python/query_box.py out.dew --box 0,0,0,50,50,20 --color intensity -o box.png
+python examples/python/query_asyncio.py out.dew
 ```
+
+`query_box()` blocks the calling thread, which is what a script wants. On an event loop it is the
+wrong shape, so `query_box_submit()` returns a `Request` instead: dewfall signals through the pump's
+wake callback, the host calls `Pump.poll()` on its own thread, and the completion surfaces there.
+`query_asyncio.py` wraps that handshake into ordinary `await` in about forty lines. The C++ side of
+the same idea is [`examples/query_async/`](https://github.com/jorgen/dewfall/tree/master/examples/query_async),
+which `co_await`s requests on a vio event loop.
 
 Because the wheel also ships the libraries, headers and a CMake config, a C or C++ project can
 build against the installed package without a source checkout:

@@ -110,10 +110,10 @@ if (DEW_PYTHON_REQUIRE_STABLE_ABI)
                             "${SKBUILD_SABI_VERSION}")
     endif ()
     nanobind_add_module(dew_python NB_STATIC STABLE_ABI ${_generated} dew_py_support.cpp
-        dew_py_support.h custom/file_convert_callbacks.h custom/query.h)
+        dew_py_support.h custom/file_convert_callbacks.h custom/query.h custom/query_async.h)
 else ()
     nanobind_add_module(dew_python NB_STATIC ${_generated} dew_py_support.cpp
-        dew_py_support.h custom/file_convert_callbacks.h custom/query.h)
+        dew_py_support.h custom/file_convert_callbacks.h custom/query.h custom/query_async.h)
 endif ()
 
 set_target_properties(dew_python PROPERTIES OUTPUT_NAME "_dew")
