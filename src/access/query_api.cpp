@@ -24,11 +24,6 @@
 #include <chrono>
 #include <cstring>
 
-namespace dew::access
-{
-bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spec, request_impl_t &request);
-}
-
 using namespace dew::access;
 
 namespace
@@ -142,13 +137,27 @@ struct dew_request_t *dew_dataset_request_region(struct dew_dataset_t *dataset, 
   request->done = spec->done;
   request->done_user_ptr = spec->done_user_ptr;
 
-  const bool ok = run_region_request(*dataset, *spec, *request);
-  request->finish(ok ? dew_request_completed : dew_request_failed);
+  // Copy everything out of the caller's struct before returning: the request outlives this call, and
+  // attribute_names points at memory the caller may free the moment we return.
+  region_job_t job;
+  for (int i = 0; i < 3; i++)
+  {
+    job.box_min[i] = spec->aabb_min[i];
+    job.box_max[i] = spec->aabb_max[i];
+  }
+  job.lod_mode = spec->lod_mode;
+  job.lod = spec->lod;
+  job.max_points = spec->max_points;
+  job.position_format = spec->position_format;
+  job.clip_mode = spec->clip_mode;
+  job.attribute_names.reserve(spec->attribute_count);
+  for (uint32_t a = 0; a < spec->attribute_count; a++)
+    job.attribute_names.emplace_back(spec->attribute_names && spec->attribute_names[a] ? spec->attribute_names[a] : "");
 
   dataset->requests.push_back(request);
-  // Delivery goes through the pump, so the callback runs on the host's thread from a poll -- never
-  // here, on whichever thread finished the work.
-  dataset->publish(request);
+  // Runs on the dataset's loop; the caller's thread is not blocked and the request is genuinely
+  // pending when this returns.
+  dataset->spawn_region_request(std::move(job), request);
   return request.get();
 }
 

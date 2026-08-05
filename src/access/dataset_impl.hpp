@@ -41,6 +41,24 @@ using namespace dew::core;
 
 struct request_impl_t;
 
+// A region request's parameters, COPIED out of the caller's dew_region_request_t.
+//
+// Not a pointer to the caller's struct: the request now outlives dew_dataset_request_region, and the
+// attribute_names array it points at belongs to the caller, who is free to destroy it the moment the
+// call returns.
+struct region_job_t
+{
+  double box_min[3] = {0, 0, 0};
+  double box_max[3] = {0, 0, 0};
+  dew_lod_mode_t lod_mode = dew_lod_full;
+  int32_t lod = 0;
+  uint64_t max_points = 0;
+  std::vector<std::string> attribute_names;
+  dew_position_format_t position_format = dew_position_r64_absolute;
+  dew_clip_mode_t clip_mode = dew_clip_point;
+};
+
+
 struct dataset_impl_t
 {
   dataset_impl_t(std::string url, std::string connection, const dew_dataset_options_t &options, dew_pump_t *shared_pump);
@@ -51,6 +69,9 @@ struct dataset_impl_t
   // fetches it; installing only ever fills a slot the registry already sized at open.
   bool load_tree(tree_id_t id);
   bool walk_to_convergence(const region_query_t &query, region_result_t &out);
+  // Spawn a region request on the dataset's own loop. Returns immediately; the request reaches a
+  // terminal status later and is published through the pump.
+  void spawn_region_request(region_job_t job, std::shared_ptr<struct dew_request_t> request);
   void info(dew_dataset_info_t &out) const;
 
   // Queue a finished request for delivery and raise the pump. Called from whichever thread completed

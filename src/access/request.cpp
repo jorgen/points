@@ -69,18 +69,23 @@ struct blob_bytes_t
   dew_error_t error;
 };
 
-blob_bytes_t read_blob(blob_reader_t &reader, storage_location_t location)
+// Suspends instead of blocking: the read completes on the storage loop and resumes this coroutine
+// back on `resume_loop` (the dataset's own loop).
+//
+// decompress_inline is still set, because the decompress then happens on whichever thread completed
+// the read rather than being hopped to a pool -- which under wasm has no workers at all, so a hopped
+// decompress would simply never run.
+vio::task_t<blob_bytes_t> co_read_blob(blob_reader_t &reader, storage_location_t location, vio::event_loop_t &resume_loop)
 {
   blob_bytes_t out;
   if (location.size == 0)
-    return out; // absent slot; note offset == 0 is a VALID location, so never test that
-  // decompress_inline: this runs on the caller's thread, and under wasm the pool has no workers at
-  // all, so a hopped decompress would never run.
-  out.request = reader.read(location, read_options_t{false, true, {}});
-  out.request->wait_for_read();
-  out.error = out.request->error;
-  out.view = out.request->buffer_info;
-  return out;
+    co_return out; // absent slot; note offset == 0 is a VALID location, so never test that
+  std::shared_ptr<read_request_t> request;
+  co_await co_read(reader, location, read_options_t{false, true, {}}, resume_loop, request);
+  out.request = request;
+  out.error = request->error;
+  out.view = request->buffer_info;
+  co_return out;
 }
 
 } // namespace
@@ -88,15 +93,19 @@ blob_bytes_t read_blob(blob_reader_t &reader, storage_location_t location)
 // Execute a region request end to end: walk to a converged node set, then for each node read the
 // position blob plus each requested attribute, decode, optionally clip, and append to the
 // concatenated output buffers.
-bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spec, request_impl_t &request)
+//
+// Runs as a coroutine on the dataset's own loop, so the caller's thread is never blocked. Reads are
+// still issued one at a time -- overlapping them is the next step, and this one only has to prove
+// the suspend/resume path against results that must not change.
+vio::task_t<bool> run_region_request(dataset_impl_t &dataset, const region_job_t &spec, request_impl_t &request)
 {
   region_query_t query;
   for (int i = 0; i < 3; i++)
   {
-    query.box.min[i] = spec.aabb_min[i];
-    query.box.max[i] = spec.aabb_max[i];
+    query.box.min[i] = spec.box_min[i];
+    query.box.max[i] = spec.box_max[i];
   }
-  query.whole_dataset = (spec.aabb_min[0] >= spec.aabb_max[0] && spec.aabb_min[1] >= spec.aabb_max[1] && spec.aabb_min[2] >= spec.aabb_max[2]);
+  query.whole_dataset = (spec.box_min[0] >= spec.box_max[0] && spec.box_min[1] >= spec.box_max[1] && spec.box_min[2] >= spec.box_max[2]);
   switch (spec.lod_mode)
   {
   case dew_lod_level:
@@ -113,11 +122,13 @@ bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spe
     break;
   }
 
+  const uint32_t attribute_count = uint32_t(spec.attribute_names.size());
+
   region_result_t walked;
   if (!dataset.walk_to_convergence(query, walked))
   {
     request.error = dataset.error.code ? dataset.error : dew_error_t{1, "region walk failed"};
-    return false;
+    co_return false;
   }
 
   const auto position_format = to_internal(spec.position_format);
@@ -125,7 +136,7 @@ bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spe
 
   // Buffer 0 is always the positions; requested attributes follow in the order given.
   request.buffers.clear();
-  request.buffers.resize(size_t(spec.attribute_count) + 1);
+  request.buffers.resize(size_t(attribute_count) + 1);
   auto &positions = request.buffers[0];
   positions.name = "xyz";
   positions.stride = position_stride_bytes;
@@ -143,15 +154,12 @@ bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spe
   }
   positions.components = dew_components_3;
 
-  std::vector<std::string> names;
-  names.reserve(spec.attribute_count);
-  for (uint32_t a = 0; a < spec.attribute_count; a++)
-    names.emplace_back(spec.attribute_names[a] ? spec.attribute_names[a] : "");
+  const auto &names = spec.attribute_names;
 
   for (const auto &node : walked.nodes)
   {
     if (request.status.load(std::memory_order_acquire) == dew_request_canceled)
-      return false;
+      co_return false;
     if (node.point_count.data == 0)
       continue;
 
@@ -161,11 +169,11 @@ bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spe
 
     // Slot 0 of a storage unit is a storage_header_t followed by the morton codes.
     const auto position_location = tree->storage_map.location(node.input_id, 0);
-    auto position_blob = read_blob(*dataset.reader, position_location);
+    auto position_blob = co_await co_read_blob(*dataset.reader, position_location, dataset.loop_thread.event_loop());
     if (position_blob.error.code != 0)
     {
       request.error = position_blob.error;
-      return false;
+      co_return false;
     }
     if (!position_blob.request)
       continue;
@@ -176,7 +184,7 @@ bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spe
     if (!deserialize_points(position_blob.view, header, point_data, split_error))
     {
       request.error = split_error;
-      return false;
+      co_return false;
     }
 
     const uint32_t offset = node.offset_in_subset.data;
@@ -194,17 +202,17 @@ bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spe
                           positions.data.data() + base, uint64_t(count) * position_stride_bytes, origin))
     {
       request.error = {1, "failed to decode node positions"};
-      return false;
+      co_return false;
     }
 
     // Each requested attribute, in the same order, from this node's own attribute set. A node whose
     // set lacks the attribute (slimmed LOD nodes drop the non-visual ones) contributes zeros, so all
     // buffers stay index-aligned with the positions.
     std::vector<attribute_span_t> spans;
-    spans.reserve(spec.attribute_count);
+    spans.reserve(attribute_count);
     std::vector<size_t> attribute_bases;
-    attribute_bases.reserve(spec.attribute_count);
-    for (uint32_t a = 0; a < spec.attribute_count; a++)
+    attribute_bases.reserve(attribute_count);
+    for (uint32_t a = 0; a < attribute_count; a++)
     {
       auto &out = request.buffers[a + 1];
       const auto index = dataset.attributes.get_attribute_index(node.attributes_id, names[a]);
@@ -227,7 +235,7 @@ bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spe
       if (index.index >= 0)
       {
         const auto location = tree->storage_map.location(node.input_id, index.index);
-        auto blob = read_blob(*dataset.reader, location);
+        auto blob = co_await co_read_blob(*dataset.reader, location, dataset.loop_thread.event_loop());
         if (blob.error.code == 0 && blob.request)
         {
           const auto *attribute_src = static_cast<const uint8_t *>(blob.view.data) + uint64_t(offset) * out.stride;
@@ -241,9 +249,9 @@ bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spe
     uint32_t kept = count;
     if (spec.clip_mode == dew_clip_point && !query.whole_dataset && !node.fully_inside)
     {
-      kept = clip_to_box(positions.data.data() + base, position_format, origin, dataset.registry.tree_config.scale, count, spec.aabb_min, spec.aabb_max, spans.data(), uint32_t(spans.size()));
+      kept = clip_to_box(positions.data.data() + base, position_format, origin, dataset.registry.tree_config.scale, count, spec.box_min, spec.box_max, spans.data(), uint32_t(spans.size()));
       positions.data.resize(base + size_t(kept) * position_stride_bytes);
-      for (uint32_t a = 0; a < spec.attribute_count; a++)
+      for (uint32_t a = 0; a < attribute_count; a++)
       {
         auto &out = request.buffers[a + 1];
         if (out.stride)
@@ -268,7 +276,26 @@ bool run_region_request(dataset_impl_t &dataset, const dew_region_request_t &spe
     request.point_count += kept;
   }
 
-  return true;
+  co_return true;
+}
+
+// Spawn the request on the dataset's own loop and return at once.
+//
+// The job and the request shared_ptr are passed BY VALUE into the coroutine, never captured by a
+// coroutine lambda: a lambda's captures live in its closure, which is destroyed after the first
+// suspension, so anything captured would dangle on resume. object_backend.cpp and dew_wasm_api.cpp
+// both carry the same note.
+void dataset_impl_t::spawn_region_request(region_job_t job, std::shared_ptr<dew_request_t> request)
+{
+  auto *dataset = this;
+  loop_thread.event_loop().run_in_loop([dataset, job = std::move(job), request]() mutable {
+    [](dataset_impl_t *ds, region_job_t j, std::shared_ptr<dew_request_t> r) -> vio::detached_task_t {
+      const bool ok = co_await run_region_request(*ds, j, *r);
+      r->finish(ok ? dew_request_completed : dew_request_failed);
+      // Queue for delivery and raise the wake. The callback itself runs later, on the host thread.
+      ds->publish(r);
+    }(dataset, std::move(job), request);
+  });
 }
 
 } // namespace dew::access

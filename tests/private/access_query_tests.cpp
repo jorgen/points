@@ -33,7 +33,9 @@
 #include <cmath>
 #include <cstdio>
 #include <atomic>
+#include <condition_variable>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -382,9 +384,24 @@ TEST_CASE("access: completions are delivered through a shared pump, on the polli
   struct wake_state_t
   {
     std::atomic<int> wakes{0};
+    std::mutex mutex;
+    std::condition_variable cond;
+    void fire()
+    {
+      {
+        std::unique_lock<std::mutex> lock(mutex);
+        wakes.fetch_add(1, std::memory_order_acq_rel);
+      }
+      cond.notify_all();
+    }
+    void wait_for_wake()
+    {
+      std::unique_lock<std::mutex> lock(mutex);
+      cond.wait(lock, [this] { return wakes.load(std::memory_order_acquire) > 0; });
+    }
   } wake;
   dew_pump_set_wake_callback(
-    pump, [](void *ctx) { static_cast<wake_state_t *>(ctx)->wakes.fetch_add(1, std::memory_order_acq_rel); }, &wake);
+    pump, [](void *ctx) { static_cast<wake_state_t *>(ctx)->fire(); }, &wake);
 
   dew_error_t *error = nullptr;
   auto *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, nullptr, pump, &error);
@@ -416,8 +433,13 @@ TEST_CASE("access: completions are delivered through a shared pump, on the polli
   auto *request = dew_dataset_request_region(dataset, &spec, nullptr);
   REQUIRE(request != nullptr);
 
-  // The wake told the host there is something to collect, and it has NOT been delivered yet.
+  // Submit returns without doing the work: the request is genuinely pending, and the wake arrives
+  // later, from the dataset's own thread.
+  wake.wait_for_wake();
   REQUIRE(wake.wakes.load() >= 1);
+
+  // The wake only SIGNALS. Nothing has been delivered, because delivery happens on the host thread
+  // from a poll -- never on whichever internal thread finished the work.
   REQUIRE(done.calls.load() == 0);
   REQUIRE(dew_pump_pending_count(pump) == 1);
 
@@ -470,6 +492,79 @@ TEST_CASE("access: dew_request_wait delivers the callback when nothing polls")
   dew_request_release(request);
 }
 
+TEST_CASE("access: a submitted request is genuinely pending")
+{
+  // The property the whole coroutine change exists for. When submit ran the work inline this was
+  // unobservable -- every request was already terminal by the time the caller held it, and every
+  // dew_request_pending branch in the API was dead code.
+  //
+  // Submit many requests without waiting: at least one must still be running. A single request could
+  // in principle finish before we look (small dataset, warm cache), so assert over a batch rather
+  // than making the test a race.
+  dataset_handle_t dataset(k_path);
+  REQUIRE(dataset.handle != nullptr);
+
+  constexpr int count = 32;
+  std::vector<dew_request_t *> requests;
+  int seen_pending = 0;
+  for (int i = 0; i < count; i++)
+  {
+    dew_region_request_t spec{};
+    for (int c = 0; c < 3; c++)
+    {
+      spec.aabb_min[c] = -1.0;
+      spec.aabb_max[c] = double(k_grid) + 1.0;
+    }
+    spec.lod_mode = dew_lod_full;
+    spec.position_format = dew_position_r64_absolute;
+    spec.clip_mode = dew_clip_point;
+    auto *request = dew_dataset_request_region(dataset.handle, &spec, nullptr);
+    REQUIRE(request != nullptr);
+    if (dew_request_status(request) == dew_request_pending)
+      seen_pending++;
+    requests.push_back(request);
+  }
+  MESSAGE("still pending immediately after submit: " << seen_pending << "/" << count);
+  REQUIRE(seen_pending > 0);
+
+  // And they all still finish correctly.
+  for (auto *request : requests)
+  {
+    REQUIRE(dew_request_wait(request, -1) == dew_request_completed);
+    dew_request_result_t result{};
+    REQUIRE(dew_request_get_result(request, &result) == 1);
+    REQUIRE(result.point_count == k_point_count);
+    dew_request_release(request);
+  }
+}
+
+TEST_CASE("access: a wait that times out reports pending, not failure")
+{
+  // OpenVDS returns a bool here, so false means either "timed out" or "was cancelled" and the caller
+  // cannot tell. Returning the status makes it unambiguous.
+  dataset_handle_t dataset(k_path);
+  REQUIRE(dataset.handle != nullptr);
+
+  dew_region_request_t spec{};
+  for (int c = 0; c < 3; c++)
+  {
+    spec.aabb_min[c] = -1.0;
+    spec.aabb_max[c] = double(k_grid) + 1.0;
+  }
+  spec.lod_mode = dew_lod_full;
+  spec.position_format = dew_position_r64_absolute;
+  spec.clip_mode = dew_clip_point;
+
+  auto *request = dew_dataset_request_region(dataset.handle, &spec, nullptr);
+  REQUIRE(request != nullptr);
+  // Zero timeout: either it has already finished, or we get pending back -- never a bogus failure.
+  const auto immediate = dew_request_wait(request, 0);
+  REQUIRE((immediate == dew_request_pending || immediate == dew_request_completed));
+
+  REQUIRE(dew_request_wait(request, -1) == dew_request_completed);
+  dew_request_release(request);
+}
+
 TEST_CASE("access: request status is idempotent and survives release-after-cancel")
 {
   dataset_handle_t dataset(k_path);
@@ -488,11 +583,17 @@ TEST_CASE("access: request status is idempotent and survives release-after-cance
   auto *request = dew_dataset_request_region(dataset.handle, &spec, nullptr);
   REQUIRE(request != nullptr);
 
-  // Unlike OpenVDS, observing a terminal status does not consume the request.
-  const auto first = dew_request_status(request);
+  // Submit no longer runs the work, so wait for a terminal status first -- reading it straight after
+  // submit would be racing the engine.
+  const auto terminal = dew_request_wait(request, -1);
+  REQUIRE(terminal != dew_request_pending);
+
+  // Unlike OpenVDS, observing a terminal status does not consume the request: it stays readable, and
+  // readable from more than one thread, until dew_request_release.
   for (int i = 0; i < 100; i++)
-    REQUIRE(dew_request_status(request) == first);
+    REQUIRE(dew_request_status(request) == terminal);
 
   dew_request_cancel(request);
+  REQUIRE(dew_request_status(request) == terminal); // cancelling a finished request changes nothing
   dew_request_release(request);
 }
