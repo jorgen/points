@@ -84,11 +84,16 @@ uint32_t dew_dataset_pending_count(struct dew_dataset_t *dataset)
 
 enum dew_dataset_state_t dew_dataset_wait_ready(struct dew_dataset_t *dataset, int32_t timeout_ms)
 {
-  (void)timeout_ms;
-  // The bootstrap completes in the constructor, so by the time a caller can name the handle the
-  // state is already terminal. The signature keeps the async contract that query.h documents, so
-  // the wasm shim can make opening genuinely deferred without changing any caller.
-  return dew_dataset_state(dataset);
+  if (!dataset)
+    return dew_dataset_error;
+  auto settled = [dataset] { return dataset->state.load(std::memory_order_acquire) != dew_dataset_opening; };
+  std::unique_lock<std::mutex> lock(dataset->state_mutex);
+  if (timeout_ms < 0)
+    dataset->state_cond.wait(lock, settled);
+  else
+    dataset->state_cond.wait_for(lock, std::chrono::milliseconds(timeout_ms), settled);
+  // Still `opening` means the wait timed out, which is distinct from having failed to open.
+  return dataset->state.load(std::memory_order_acquire);
 }
 
 uint8_t dew_access_can_block(void)

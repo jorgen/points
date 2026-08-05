@@ -67,8 +67,12 @@ struct dataset_impl_t
   void on_storage_error(const dew_error_t &&e);
   // Read and install one tree blob. Trees load lazily, so a walk reports what it needs and this
   // fetches it; installing only ever fills a slot the registry already sized at open.
-  bool load_tree(tree_id_t id);
-  bool walk_to_convergence(const region_query_t &query, region_result_t &out);
+  // Coroutine forms. Nothing on the query path may block: under wasm a blocking read stalls the
+  // whole program, and natively it would tie up the dataset loop that other requests run on.
+  vio::task_t<bool> co_load_tree(tree_id_t id);
+  vio::task_t<bool> co_walk_to_convergence(const region_query_t &query, region_result_t &out);
+  // The deferred open: index, attribute configs, tree registry, root tree. Ends in ready or error.
+  vio::task_t<void> co_open();
   // Spawn a region request on the dataset's own loop. Returns immediately; the request reaches a
   // terminal status later and is published through the pump.
   void spawn_region_request(region_job_t job, std::shared_ptr<struct dew_request_t> request);
@@ -96,6 +100,9 @@ struct dataset_impl_t
 
   dew_error_t error;
   std::atomic<dew_dataset_state_t> state{dew_dataset_opening};
+  std::mutex state_mutex;
+  std::condition_variable state_cond;
+  void set_state(dew_dataset_state_t next);
   std::mutex mutex;
   // shared_ptr so an in-flight request survives dew_request_release: the caller is done with the
   // handle, but the work may still be running and must not be destroyed under itself.

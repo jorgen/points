@@ -106,6 +106,7 @@ def open_dataset(url, connection: str = "", *, pump=None, memory_budget_bytes: i
     # The generated binding takes a Pump by reference, so make one when the caller did not. nanobind's
     # keep_alive ties it to the dataset, so it outlives every query made through it.
     dataset = Dataset(str(url), connection, options, pump if pump is not None else Pump())  # noqa: F405
-    if dataset.state() != DatasetState.ready:  # noqa: F405
+    # Opening is deferred -- the handle comes back `opening` and settles on the dataset's own loop.
+    if dataset.wait_ready(-1) != DatasetState.ready:  # noqa: F405
         raise RuntimeError(f"could not open dataset {url!r}")
     return dataset

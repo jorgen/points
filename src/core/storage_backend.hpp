@@ -91,6 +91,14 @@ struct storage_backend_t
   }
   [[nodiscard]] virtual dew_error_t open_for_write(bool truncate) = 0;
   [[nodiscard]] virtual dew_error_t read_index(index_load_t &out) = 0;
+  // Coroutine form, for callers that must not block -- the query engine's open path, and anything
+  // running on a cooperative loop where blocking would stall the whole program.
+  //
+  // The default simply forwards to the synchronous version, which is right for the packed local file
+  // (its index read is a handful of synchronous libuv fs calls, and it does not exist under wasm at
+  // all). The object store overrides it, because that is where a blocking index read costs a network
+  // round trip and, under wasm, would need ASYNCIFY.
+  virtual vio::task_t<dew_error_t> read_index_async(index_load_t &out) { co_return read_index(out); }
   // Rebuild the packed allocator from its serialized blob; a no-op for object backends.
   [[nodiscard]] virtual dew_error_t restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size) = 0;
 

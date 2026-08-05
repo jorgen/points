@@ -101,7 +101,7 @@ vio::task_t<bool> run_region_request(dataset_impl_t &dataset, const region_job_t
   const uint32_t attribute_count = uint32_t(names.size());
 
   region_result_t walked;
-  if (!dataset.walk_to_convergence(query, walked))
+  if (!co_await dataset.co_walk_to_convergence(query, walked))
   {
     request.error = dataset.error.code ? dataset.error : dew_error_t{1, "region walk failed"};
     co_return false;

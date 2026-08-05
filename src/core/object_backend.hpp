@@ -50,6 +50,7 @@ public:
   [[nodiscard]] std::string exists_error() const override;
   [[nodiscard]] dew_error_t open_for_write(bool truncate) override;
   [[nodiscard]] dew_error_t read_index(index_load_t &out) override;
+  vio::task_t<dew_error_t> read_index_async(index_load_t &out) override;
   [[nodiscard]] dew_error_t restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size) override;
   void allocate_blob(uint32_t size, blob_kind_t kind, storage_location_t &out) override;
   vio::task_t<dew_error_t> write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data) override;

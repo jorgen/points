@@ -288,6 +288,12 @@ dew_error_t object_backend_t::read_index(index_load_t &out)
   return run_on_loop_blocking(_event_loop, [this, &out]() { return do_read_index(out); });
 }
 
+vio::task_t<dew_error_t> object_backend_t::read_index_async(index_load_t &out)
+{
+  // The same coroutine the blocking form drives; here it is simply awaited instead.
+  co_return co_await do_read_index(out);
+}
+
 dew_error_t object_backend_t::restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
   (void)data;

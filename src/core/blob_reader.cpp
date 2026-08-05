@@ -139,6 +139,11 @@ dew_error_t blob_reader_t::read_index(index_load_t &out)
   return _backend->read_index(out);
 }
 
+vio::task_t<dew_error_t> blob_reader_t::read_index_async(index_load_t &out)
+{
+  co_return co_await _backend->read_index_async(out);
+}
+
 read_request_t::awaiter_t co_read(blob_reader_t &reader, storage_location_t location, read_options_t options, vio::event_loop_t &resume_loop, std::shared_ptr<read_request_t> &out)
 {
   // Issue first, then hand back an awaiter over the resulting request. Issuing inside the awaiter is

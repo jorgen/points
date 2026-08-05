@@ -248,7 +248,8 @@ int cmd_query(int argc, char **argv)
 
   dew_error_t *error = nullptr;
   auto *dataset = dew_dataset_create(args.url.c_str(), uint32_t(args.url.size()), connection.c_str(), uint32_t(connection.size()), nullptr, nullptr, &error);
-  if (!dataset || dew_dataset_state(dataset) != dew_dataset_ready)
+  // Opening is deferred; wait for it to settle before asking anything of it.
+  if (!dataset || dew_dataset_wait_ready(dataset, -1) != dew_dataset_ready)
   {
     if (dataset)
       dew_dataset_get_error(dataset, &error);

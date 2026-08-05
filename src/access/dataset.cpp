@@ -51,61 +51,82 @@ dataset_impl_t::dataset_impl_t(std::string a_url, std::string a_connection, cons
   reader = std::make_unique<blob_reader_t>(url, pool, perf, storage_error, error);
   if (error.code != 0)
   {
-    state.store(dew_dataset_error, std::memory_order_release);
+    // set_state, never a bare store: it notifies state_cond. A plain store leaves anyone in
+    // dew_dataset_wait_ready blocked forever on a dataset that has already failed.
+    set_state(dew_dataset_error);
     return;
   }
   reader->set_read_cache_size(budgets.read_cache_bytes);
   reader->set_decompressed_cache_size(budgets.decompressed_cache_bytes);
 
+  // Everything past this point is deferred. dew_dataset_create returns with the dataset `opening`;
+  // the index read, the registry and the root tree all happen on the dataset's own loop.
+  //
+  // (Constructing the backend is still synchronous -- create_storage_backend probes the store in its
+  // constructor. That is the last blocking step on the open path.)
+  loop_thread.event_loop().run_in_loop([this]() {
+    [](dataset_impl_t *self) -> vio::detached_task_t { co_await self->co_open(); }(this);
+  });
+}
+
+void dataset_impl_t::set_state(dew_dataset_state_t next)
+{
+  {
+    std::unique_lock<std::mutex> lock(state_mutex);
+    state.store(next, std::memory_order_release);
+  }
+  state_cond.notify_all();
+  // A state change is something the host may be waiting to hear about, so it wakes the pump too.
+  pump_fire(pump);
+}
+
+vio::task_t<void> dataset_impl_t::co_open()
+{
   if (!reader->file_exists())
   {
     error = {1, "dataset does not exist: " + reader->file_exists_error()};
-    state.store(dew_dataset_error, std::memory_order_release);
-    return;
+    set_state(dew_dataset_error);
+    co_return;
   }
 
-  // Index + registry bootstrap. read_index is synchronous on the storage loop; the async open the
-  // design calls for needs storage_backend_t to expose its already-existing coroutine form, which is
-  // a change to the backend interface rather than to this file. Native callers see no difference
-  // (they would wait_ready anyway); the wasm shim is what will need it.
   index_load_t load;
-  error = reader->read_index(load);
+  error = co_await reader->read_index_async(load);
   if (error.code != 0)
   {
-    state.store(dew_dataset_error, std::memory_order_release);
-    return;
+    set_state(dew_dataset_error);
+    co_return;
   }
   if (load.attribute_configs && load.attribute_configs_size > 0)
   {
     error = attributes.deserialize(load.attribute_configs, load.attribute_configs_size);
     if (error.code != 0)
     {
-      state.store(dew_dataset_error, std::memory_order_release);
-      return;
+      set_state(dew_dataset_error);
+      co_return;
     }
   }
   if (!load.tree_registry || load.tree_registry_size == 0)
   {
     error = {1, "dataset has no tree registry"};
-    state.store(dew_dataset_error, std::memory_order_release);
-    return;
+    set_state(dew_dataset_error);
+    co_return;
   }
   error = tree_registry_deserialize(load.tree_registry, load.tree_registry_size, registry);
   if (error.code != 0)
   {
-    state.store(dew_dataset_error, std::memory_order_release);
-    return;
+    set_state(dew_dataset_error);
+    co_return;
   }
-  // The registry is fully sized here and the read path never grows it. Every lock-free reader below
-  // -- and the synchronous node accessors -- depend on that invariant holding.
+  // The registry is fully sized here and the read path never grows it. Every lock-free reader --
+  // and the synchronous node accessors -- depend on that invariant holding.
   registry_size_at_open = registry.data.size();
 
-  if (!load_tree(registry.root))
+  if (!co_await co_load_tree(registry.root))
   {
-    state.store(dew_dataset_error, std::memory_order_release);
-    return;
+    set_state(dew_dataset_error);
+    co_return;
   }
-  state.store(dew_dataset_ready, std::memory_order_release);
+  set_state(dew_dataset_ready);
 }
 
 dataset_impl_t::~dataset_impl_t()
@@ -171,22 +192,22 @@ void dataset_impl_t::on_storage_error(const dew_error_t &&e)
     error = e;
 }
 
-bool dataset_impl_t::load_tree(tree_id_t id)
+vio::task_t<bool> dataset_impl_t::co_load_tree(tree_id_t id)
 {
   if (id.data >= registry.locations.size())
-    return false;
+    co_return false;
   if (id.data < registry.tree_id_initialized.size() && registry.tree_id_initialized[id.data])
-    return true;
+    co_return true;
   const auto location = registry.locations[id.data];
   if (location.size == 0)
-    return false;
+    co_return false;
 
-  auto request = reader->read(location, read_options_t{false, true, {}});
-  request->wait_for_read();
+  std::shared_ptr<read_request_t> request;
+  co_await co_read(*reader, location, read_options_t{false, true, {}}, loop_thread.event_loop(), request);
   if (request->error.code != 0)
   {
     error = request->error;
-    return false;
+    co_return false;
   }
   serialized_tree_t serialized;
   serialized.size = int(request->buffer_info.size);
@@ -197,32 +218,32 @@ bool dataset_impl_t::load_tree(tree_id_t id)
   if (!tree_deserialize(serialized, *tree, tree_error))
   {
     error = tree_error;
-    return false;
+    co_return false;
   }
   tree_compute_leaves_collapsed(*tree, registry);
   registry.data[id.data] = std::move(tree);
   registry.tree_id_initialized[id.data] = 1;
-  return true;
+  co_return true;
 }
 
 // Walk, load whatever sub-trees the walk asked for, walk again. The walk itself never reads storage,
 // so this loop is the only place a region query blocks.
-bool dataset_impl_t::walk_to_convergence(const region_query_t &query, region_result_t &out)
+vio::task_t<bool> dataset_impl_t::co_walk_to_convergence(const region_query_t &query, region_result_t &out)
 {
   constexpr int max_rounds = 64;
   for (int round = 0; round < max_rounds; round++)
   {
     region_walk(registry, query, out);
     if (out.trees_to_load.empty())
-      return true;
+      co_return true;
     for (auto id : out.trees_to_load)
     {
-      if (!load_tree(id))
-        return false;
+      if (!co_await co_load_tree(id))
+        co_return false;
     }
   }
   error = {1, "region walk did not converge"};
-  return false;
+  co_return false;
 }
 
 void dataset_impl_t::info(dew_dataset_info_t &out) const

@@ -175,6 +175,8 @@ public:
   [[nodiscard]] bool file_exists() const { return _backend && _backend->exists(); }
   [[nodiscard]] std::string file_exists_error() const { return _backend ? _backend->exists_error() : std::string(); }
   [[nodiscard]] dew_error_t read_index(index_load_t &out);
+  // Non-blocking index read; resumes on whichever loop the awaiting coroutine runs on.
+  vio::task_t<dew_error_t> read_index_async(index_load_t &out);
 
   std::shared_ptr<read_request_t> read(storage_location_t location, read_options_t options = {});
 

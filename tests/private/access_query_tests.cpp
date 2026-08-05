@@ -168,6 +168,9 @@ struct dataset_handle_t
     handle = dew_dataset_create(path, uint32_t(strlen(path)), nullptr, 0, nullptr, nullptr, &error);
     if (error)
       dew_error_destroy(error);
+    // Opening is deferred now: the handle comes back `opening` and settles on its own loop.
+    if (handle)
+      dew_dataset_wait_ready(handle, -1);
   }
   ~dataset_handle_t()
   {
@@ -417,10 +420,10 @@ TEST_CASE("access: completions are delivered through a shared pump, on the polli
       }
       cond.notify_all();
     }
-    void wait_for_wake()
+    void wait_for_wake_beyond(int baseline)
     {
       std::unique_lock<std::mutex> lock(mutex);
-      cond.wait(lock, [this] { return wakes.load(std::memory_order_acquire) > 0; });
+      cond.wait(lock, [this, baseline] { return wakes.load(std::memory_order_acquire) > baseline; });
     }
   } wake;
   dew_pump_set_wake_callback(
@@ -429,7 +432,7 @@ TEST_CASE("access: completions are delivered through a shared pump, on the polli
   dew_error_t *error = nullptr;
   auto *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, nullptr, pump, &error);
   REQUIRE(dataset != nullptr);
-  REQUIRE(dew_dataset_state(dataset) == dew_dataset_ready);
+  REQUIRE(dew_dataset_wait_ready(dataset, -1) == dew_dataset_ready);
 
   struct done_state_t
   {
@@ -453,13 +456,19 @@ TEST_CASE("access: completions are delivered through a shared pump, on the polli
   };
   spec.done_user_ptr = &done;
 
+  // Opening is itself a pump event now -- reaching `ready` is something a host waits for -- so drain
+  // it before submitting. This is not tidying: the wake is ARMED ONCE, so until a poll rearms it
+  // every later fire is coalesced away. A host that never polls after a wake simply stops being
+  // woken, which is the contract, and skipping this poll makes the test wait forever.
+  dew_pump_poll(pump);
+  const int wakes_after_open = wake.wakes.load();
+
   auto *request = dew_dataset_request_region(dataset, &spec, nullptr);
   REQUIRE(request != nullptr);
 
   // Submit returns without doing the work: the request is genuinely pending, and the wake arrives
   // later, from the dataset's own thread.
-  wake.wait_for_wake();
-  REQUIRE(wake.wakes.load() >= 1);
+  wake.wait_for_wake_beyond(wakes_after_open);
 
   // The wake only SIGNALS. Nothing has been delivered, because delivery happens on the host thread
   // from a poll -- never on whichever internal thread finished the work.
@@ -601,7 +610,7 @@ TEST_CASE("access: results are byte-identical however many decode threads run")
     dew_error_t *error = nullptr;
     auto *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, &options, nullptr, &error);
     REQUIRE(dataset != nullptr);
-    REQUIRE(dew_dataset_state(dataset) == dew_dataset_ready);
+    REQUIRE(dew_dataset_wait_ready(dataset, -1) == dew_dataset_ready);
 
     const char *attributes[] = {DEW_ATTRIBUTE_INTENSITY};
     dew_region_request_t spec{};
@@ -702,7 +711,7 @@ TEST_CASE("access: reads are genuinely overlapped, not merely coroutine-shaped")
     dew_error_t *error = nullptr;
     auto *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, &options, nullptr, &error);
     REQUIRE(dataset != nullptr);
-    REQUIRE(dew_dataset_state(dataset) == dew_dataset_ready);
+    REQUIRE(dew_dataset_wait_ready(dataset, -1) == dew_dataset_ready);
 
     const char *attributes[] = {DEW_ATTRIBUTE_INTENSITY};
     dew_region_request_t spec{};
