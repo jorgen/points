@@ -106,27 +106,45 @@ struct read_request_t
   // installed after read() returns, because three of the cache-hit paths complete before it does.
   std::function<void(read_request_t &)> _on_complete;
 
-#ifdef __EMSCRIPTEN__
-  // Single-thread cooperative build: rather than parking a thread on wait_for_read, a coroutine can
-  // co_await the read completing. do_read_request resumes this continuation on its owning loop when the
-  // read finishes, so nothing blocks. (read() runs on the storage loop; the awaiting coroutine may live
-  // on another cooperative loop, hence the explicit continuation loop for a cross-loop resume.)
+  // Rather than parking a thread in wait_for_read, a coroutine can co_await the read completing.
+  // complete_read_request resumes this continuation on its owning loop, so nothing blocks. (The read
+  // completes on the storage loop; the awaiting coroutine usually lives on another loop, hence the
+  // explicit resume loop for a cross-loop hand-off.)
   std::coroutine_handle<> _continuation{};
   vio::event_loop_t *_continuation_loop = nullptr;
+
+  // The hand-off has to be race-free, because a read can finish at ANY point relative to the
+  // coroutine suspending -- including entirely inside read(), on the caller's own thread, when the
+  // cache satisfies it. So await_ready and await_suspend both consult _done under the request's
+  // mutex, and await_suspend returns bool so it can decline to suspend on a read that landed between
+  // the two. Checking unlocked and always suspending would lose the resume outright: the
+  // continuation would be stored after complete_read_request had already looked for it, and the
+  // coroutine would hang forever. (Single-threaded wasm hides this, since completions only ever
+  // arrive from the same cooperative loop.)
   struct awaiter_t
   {
     read_request_t *req;
     vio::event_loop_t *loop;
-    bool await_ready() const noexcept { return req->_done; }
-    void await_suspend(std::coroutine_handle<> h) noexcept
+
+    bool await_ready() const noexcept
     {
+      std::unique_lock<std::mutex> lock(req->_mutex);
+      return req->_done;
+    }
+    bool await_suspend(std::coroutine_handle<> h) noexcept
+    {
+      std::unique_lock<std::mutex> lock(req->_mutex);
+      if (req->_done)
+        return false; // finished while we were getting here: carry on without suspending
       req->_continuation = h;
       req->_continuation_loop = loop;
+      return true;
     }
     void await_resume() const noexcept {}
   };
+  // Await a read that has ALREADY been issued. Prefer co_read(), which issues and awaits in one
+  // step and therefore cannot be used incorrectly.
   awaiter_t await_on(vio::event_loop_t &loop) noexcept { return awaiter_t{this, &loop}; }
-#endif
 };
 
 struct read_options_t
@@ -195,6 +213,14 @@ private:
   // dominates conversion time. Populated only on the decompress_inline path.
   lru_cache_t<cache_key_t, decompressed_cache_value_t, cache_key_hash_t> _decompressed_cache;
 };
+
+// Issue a read and hand back an awaiter for it, resuming the coroutine on `resume_loop`. The request
+// is written to `out` so the caller can read its buffer/error after the co_await.
+//
+//     std::shared_ptr<read_request_t> request;
+//     co_await co_read(reader, location, {}, my_loop, request);
+//     if (request->error.code == 0) use(request->buffer_info);
+read_request_t::awaiter_t co_read(blob_reader_t &reader, storage_location_t location, read_options_t options, vio::event_loop_t &resume_loop, std::shared_ptr<read_request_t> &out);
 
 // Mark a read complete and release everyone waiting on it: the condition variable (a thread parked in
 // wait_for_read), the coroutine continuation (cooperative wasm builds), and the completion hook.

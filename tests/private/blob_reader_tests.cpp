@@ -39,7 +39,12 @@
 
 #include <dew/converter/converter.h>
 
+#include <vio/event_loop.h>
+
+#include <coroutine>
+
 #include <atomic>
+#include <condition_variable>
 #include <string>
 
 using namespace dew::core;
@@ -202,4 +207,134 @@ TEST_CASE("blob_reader: a write invalidates the cached bytes for a reused offset
   second->wait_for_read();
   REQUIRE(second->error.code == 0);
   REQUIRE(second->buffer_info.size == location.size);
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// The coroutine hand-off.
+//
+// A read can finish at any point relative to the coroutine suspending -- including entirely inside
+// read(), on the caller's own thread, when the cache satisfies it. Both orders must resume the
+// coroutine exactly once. The awaiter used to check _done unlocked and always suspend, which loses
+// the resume when completion lands between the check and the store: the continuation is written
+// after complete_read_request has already looked for it, and the coroutine hangs forever. Only
+// single-threaded wasm hid that.
+// ---------------------------------------------------------------------------------------------
+
+namespace
+{
+struct coro_probe_t
+{
+  std::atomic<int> resumed{0};
+  std::mutex mutex;
+  std::condition_variable cond;
+  bool finished = false;
+  dew_error_t error;
+
+  void signal()
+  {
+    {
+      std::unique_lock<std::mutex> lock(mutex);
+      finished = true;
+    }
+    cond.notify_all();
+  }
+  void wait()
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    cond.wait(lock, [this] { return finished; });
+  }
+};
+
+// Run one co_read on `loop` and report back through the probe.
+void spawn_read(blob_reader_t &reader, storage_location_t location, vio::event_loop_t &loop, coro_probe_t &probe)
+{
+  loop.run_in_loop([&reader, location, &loop, &probe]() {
+    [](blob_reader_t *r, storage_location_t loc, vio::event_loop_t *l, coro_probe_t *p) -> vio::detached_task_t {
+      std::shared_ptr<read_request_t> request;
+      co_await co_read(*r, loc, read_options_t{false, true, {}}, *l, request);
+      p->resumed.fetch_add(1, std::memory_order_acq_rel);
+      p->error = request->error;
+      p->signal();
+    }(&reader, location, &loop, &probe);
+  });
+}
+} // namespace
+
+TEST_CASE("blob_reader: co_read resumes exactly once on a cold read")
+{
+  reader_fixture_t fixture;
+  auto location = fixture.write_blob(1024);
+
+  vio::thread_with_event_loop_t consumer;
+  coro_probe_t probe;
+  spawn_read(fixture.storage.reader(), location, consumer.event_loop(), probe);
+  probe.wait();
+
+  REQUIRE(probe.error.code == 0);
+  REQUIRE(probe.resumed.load() == 1);
+}
+
+TEST_CASE("blob_reader: co_read resumes on a cache hit, where the read finishes before suspending")
+{
+  reader_fixture_t fixture;
+  auto location = fixture.write_blob(1024);
+
+  // Prime the cache so the next read completes INSIDE read(), before the coroutine can suspend.
+  fixture.storage.read(location, read_options_t{false, true, {}})->wait_for_read();
+
+  vio::thread_with_event_loop_t consumer;
+  coro_probe_t probe;
+  spawn_read(fixture.storage.reader(), location, consumer.event_loop(), probe);
+  probe.wait();
+
+  // await_ready sees _done and the coroutine never suspends -- but it must still run on, exactly
+  // once. An awaiter that suspended unconditionally here would hang instead.
+  REQUIRE(probe.error.code == 0);
+  REQUIRE(probe.resumed.load() == 1);
+}
+
+TEST_CASE("blob_reader: many concurrent co_reads all resume")
+{
+  reader_fixture_t fixture;
+  std::vector<storage_location_t> locations;
+  for (int i = 0; i < 16; i++)
+    locations.push_back(fixture.write_blob(256 + uint32_t(i) * 16));
+
+  vio::thread_with_event_loop_t consumer;
+  std::vector<std::unique_ptr<coro_probe_t>> probes;
+  for (auto location : locations)
+  {
+    probes.push_back(std::make_unique<coro_probe_t>());
+    spawn_read(fixture.storage.reader(), location, consumer.event_loop(), *probes.back());
+  }
+  for (auto &probe : probes)
+  {
+    probe->wait();
+    REQUIRE(probe->error.code == 0);
+    REQUIRE(probe->resumed.load() == 1);
+  }
+}
+
+TEST_CASE("blob_reader: an awaiter declines to suspend on a read that landed after await_ready")
+{
+  // The race the awaiter exists for: await_ready sees the read unfinished, the read completes, and
+  // only THEN does await_suspend run. If it suspended anyway, the continuation would be stored after
+  // complete_read_request had already looked for one, and the coroutine would hang forever.
+  //
+  // That window cannot be forced through a real co_await -- await_ready catches the already-done
+  // case first, so the end-to-end cache-hit test above never reaches this branch. Drive await_suspend
+  // directly instead, on a request that is already complete.
+  reader_fixture_t fixture;
+  auto location = fixture.write_blob(256);
+
+  auto request = fixture.storage.read(location, read_options_t{false, true, {}});
+  request->wait_for_read();
+  REQUIRE(request->_done);
+
+  vio::thread_with_event_loop_t consumer;
+  auto awaiter = request->await_on(consumer.event_loop());
+  REQUIRE(awaiter.await_ready());
+  // The load-bearing assertion: it must REFUSE to suspend.
+  REQUIRE(awaiter.await_suspend(std::noop_coroutine()) == false);
 }

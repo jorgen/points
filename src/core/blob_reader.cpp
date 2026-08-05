@@ -38,24 +38,33 @@ namespace dew::core
 // enqueue work.
 void complete_read_request(read_request_t &r)
 {
+  // Take the continuation under the same lock that publishes _done, so an awaiter racing us either
+  // stores its handle before we look (and we resume it) or sees _done and declines to suspend.
+  // Neither order can lose the resume.
+  std::coroutine_handle<> continuation{};
+  vio::event_loop_t *resume_loop = nullptr;
   {
     std::unique_lock<std::mutex> lock(r._mutex);
     r._done = true;
+    continuation = r._continuation;
+    resume_loop = r._continuation_loop;
+    r._continuation = {};
   }
   r._block_for_read.notify_all();
-#ifdef __EMSCRIPTEN__
-  // Cooperative build: resume the awaiting coroutine on its owning loop rather than notifying a
-  // condition variable no thread is parked on.
-  if (r._continuation)
-  {
-    auto c = r._continuation;
-    auto *loop = r._continuation_loop;
-    r._continuation = nullptr;
-    loop->run_in_loop([c]() { c.resume(); });
-  }
-#endif
+
+  // Order matters: the hook first, the coroutine resume LAST. Resuming can run arbitrary
+  // continuation code -- including code that drops the last reference to this request -- so touching
+  // r afterwards would be a use-after-free.
   if (r._on_complete)
     r._on_complete(r);
+
+  if (continuation)
+  {
+    if (resume_loop)
+      resume_loop->run_in_loop([continuation]() { continuation.resume(); });
+    else
+      continuation.resume();
+  }
 }
 
 void read_request_t::wait_for_read()
@@ -128,6 +137,15 @@ void blob_reader_t::stop_loop()
 dew_error_t blob_reader_t::read_index(index_load_t &out)
 {
   return _backend->read_index(out);
+}
+
+read_request_t::awaiter_t co_read(blob_reader_t &reader, storage_location_t location, read_options_t options, vio::event_loop_t &resume_loop, std::shared_ptr<read_request_t> &out)
+{
+  // Issue first, then hand back an awaiter over the resulting request. Issuing inside the awaiter is
+  // what makes this safe to use: the completion hook is installed as part of read(), which is the
+  // only point at which it can be, since a cache hit completes before read() returns.
+  out = reader.read(location, std::move(options));
+  return out->await_on(resume_loop);
 }
 
 void blob_reader_t::invalidate(storage_location_t location)
