@@ -17,6 +17,8 @@
 ************************************************************************/
 #include "packed_file_backend.hpp"
 
+#include "loop_blocking.hpp"
+
 #include "bucket_format.hpp"
 #include "file_hole_punch.hpp"
 
@@ -29,21 +31,25 @@
 namespace dew::core
 {
 
-static std::unique_ptr<uint8_t[]> read_into_buffer(vio::event_loop_t &event_loop, uv_file file_handle, uv_fs_t &request, const storage_location_t &location, dew_error_t &error)
+// Read one blob into a fresh buffer, off the loop.
+//
+// The blocking uv_fs_read this replaces was fine when the only caller was the converter opening from
+// its own thread, but these blobs are not small -- a tree registry runs to megabytes -- and the query
+// engine reads them from a loop that must stay responsive. co_await hands the wait back to the loop
+// instead of owning the thread for the duration.
+static vio::task_t<dew_error_t> co_read_into_buffer(vio::event_loop_t &event_loop, vio::file_t &file, storage_location_t location, std::unique_ptr<uint8_t[]> &out)
 {
-  assert(error.code == 0);
+  out.reset();
+  if (location.size == 0)
+    co_return dew_error_t{1, "cannot read a zero-sized blob"};
   auto buffer = std::make_unique<uint8_t[]>(location.size);
-  uv_buf_t uv_buffer;
-  uv_buffer.base = (char *)buffer.get();
-  uv_buffer.len = location.size;
-  auto result = uv_fs_read(event_loop.loop(), &request, file_handle, &uv_buffer, 1, int64_t(location.offset), NULL);
-  if (result < 0 || request.result != location.size)
-  {
-    error.code = 1;
-    error.msg = "Could not read the entire buffer";
-    return nullptr;
-  }
-  return buffer;
+  auto result = co_await vio::read_file(event_loop, file, buffer.get(), location.size, int64_t(location.offset));
+  if (!result.has_value())
+    co_return dew_error_t{result.error().code != 0 ? result.error().code : 1, result.error().msg};
+  if (result.value() != location.size)
+    co_return dew_error_t{1, "Could not read the entire buffer"};
+  out = std::move(buffer);
+  co_return dew_error_t{};
 }
 
 packed_file_backend_t::packed_file_backend_t(std::string file_name, vio::event_loop_t &event_loop, dew_error_t &error)
@@ -245,8 +251,24 @@ dew_error_t packed_file_backend_t::open_for_write(bool truncate)
 
 dew_error_t packed_file_backend_t::read_index(index_load_t &out)
 {
+  // The synchronous entry point is now just a wait around the coroutine below -- one implementation,
+  // two ways in. Callers are the converter opening from its constructing thread and the CLI tools;
+  // loop-side code (the query engine) calls read_index_async and never blocks here.
+  return run_on_loop_blocking(_event_loop, [this, &out]() { return do_read_index(out); });
+}
+
+vio::task_t<dew_error_t> packed_file_backend_t::read_index_async(index_load_t &out)
+{
+  co_return co_await do_read_index(out);
+}
+
+vio::task_t<dew_error_t> packed_file_backend_t::do_read_index(index_load_t &out)
+{
   dew_error_t error;
-  uv_fs_t request = {};
+  // Closing the file on failure is what tells everything downstream the backend is unusable; it has to
+  // happen on every early exit, and there are a dozen. A scope guard is the only way to keep that true
+  // as the function grows -- but note it now runs at CO_RETURN, i.e. when the coroutine frame unwinds,
+  // not at the end of a stack frame. Same guarantee, different mechanism.
   struct close_on_error_t
   {
     std::optional<vio::auto_close_file_t> &file;
@@ -260,24 +282,28 @@ dew_error_t packed_file_backend_t::read_index(index_load_t &out)
     }
   } closer{_file, error};
 
+  if (!_file)
+  {
+    error = {1, "packed file is not open"};
+    co_return error;
+  }
   auto &file = **_file;
+
   auto index_buffer = std::make_unique<uint8_t[]>(_serialized_index_size);
-  uv_buf_t index_uv_buf;
-  index_uv_buf.base = (char *)index_buffer.get();
-  index_uv_buf.len = _serialized_index_size;
-  auto read = uv_fs_read(_event_loop.loop(), &request, file.handle, &index_uv_buf, 1, 0, NULL);
-  if (read < 0)
   {
-    error.code = 1;
-    error.msg = uv_strerror(read);
-    return error;
+    auto read = co_await vio::read_file(_event_loop, file, index_buffer.get(), _serialized_index_size, 0);
+    if (!read.has_value())
+    {
+      error = {read.error().code != 0 ? read.error().code : 1, read.error().msg};
+      co_return error;
+    }
+    if (uint32_t(read.value()) != _serialized_index_size)
+    {
+      error = {1, "could not read index"};
+      co_return error;
+    }
   }
-  if (uint32_t(read) != _serialized_index_size)
-  {
-    error.code = 1;
-    error.msg = "could not read index";
-    return error;
-  }
+
   storage_location_t free_blobs;
   storage_location_t attribute_configs;
   storage_location_t tree_registry;
@@ -287,7 +313,7 @@ dew_error_t packed_file_backend_t::read_index(index_load_t &out)
   error = deserialize_index(index_buffer.get(), _serialized_index_size, free_blobs, attribute_configs, tree_registry, compression_stats, perf_stats, &extras);
   if (error.code != 0)
   {
-    return error;
+    co_return error;
   }
   memcpy(_dataset_uuid, extras.dataset_uuid, sizeof(_dataset_uuid));
   _residency_location = extras.residency_table;
@@ -296,67 +322,67 @@ dew_error_t packed_file_backend_t::read_index(index_load_t &out)
     // A residency table on disk means this cache was written with the tier enabled: restore it so
     // remote-only blobs stay reachable and resident accounting continues. (deserialize applies the
     // unclean-shutdown demotion recorded in the table itself.)
-    auto residency_buffer = read_into_buffer(_event_loop, file.handle, request, extras.residency_table, error);
-    if (!residency_buffer)
+    std::unique_ptr<uint8_t[]> residency_buffer;
+    error = co_await co_read_into_buffer(_event_loop, file, extras.residency_table, residency_buffer);
+    if (error.code != 0)
     {
-      error.code = 1;
-      error.msg = "Failed to read blob residency table: " + error.msg;
-      return error;
+      error = {1, "Failed to read blob residency table: " + error.msg};
+      co_return error;
     }
     if (!_residency)
       _residency = std::make_unique<blob_residency_t>();
     uint64_t cap_before = _residency->cap();
     error = _residency->deserialize(residency_buffer.get(), extras.residency_table.size);
     if (error.code != 0)
-      return error;
+      co_return error;
     if (cap_before) // an explicitly configured cap overrides the persisted one
       _residency->set_cap(cap_before);
   }
 
-  out.free_blobs = read_into_buffer(_event_loop, file.handle, request, free_blobs, error);
+  error = co_await co_read_into_buffer(_event_loop, file, free_blobs, out.free_blobs);
   out.free_blobs_size = free_blobs.size;
-  if (!out.free_blobs)
+  if (error.code != 0)
   {
-    error.code = 1;
-    error.msg = "Failed to read free blobs: " + error.msg;
-    return error;
+    error = {1, "Failed to read free blobs: " + error.msg};
+    co_return error;
   }
 
-  out.attribute_configs = read_into_buffer(_event_loop, file.handle, request, attribute_configs, error);
+  error = co_await co_read_into_buffer(_event_loop, file, attribute_configs, out.attribute_configs);
   out.attribute_configs_size = attribute_configs.size;
-  if (!out.attribute_configs)
+  if (error.code != 0)
   {
-    error.code = 1;
-    error.msg = "Failed to read attribute_configs: " + error.msg;
-    return error;
+    error = {1, "Failed to read attribute_configs: " + error.msg};
+    co_return error;
   }
 
-  out.tree_registry = read_into_buffer(_event_loop, file.handle, request, tree_registry, error);
+  error = co_await co_read_into_buffer(_event_loop, file, tree_registry, out.tree_registry);
   out.tree_registry_size = tree_registry.size;
-  if (!out.tree_registry)
+  if (error.code != 0)
   {
-    error.code = 1;
-    error.msg = "Failed to read tree_registry: " + error.msg;
-    return error;
+    error = {1, "Failed to read tree_registry: " + error.msg};
+    co_return error;
   }
 
   _stats_location = compression_stats;
   _perf_stats_location = perf_stats;
   _tree_registry_location = tree_registry;
 
+  // Stats and perf are optional: a dataset written without them is not broken, so a failure here is
+  // dropped rather than propagated -- matching the pre-coroutine behavior, which ignored the error out
+  // parameter for exactly these two.
   if (compression_stats.size > 0)
   {
-    out.stats = read_into_buffer(_event_loop, file.handle, request, compression_stats, error);
-    out.stats_size = compression_stats.size;
+    dew_error_t ignored = co_await co_read_into_buffer(_event_loop, file, compression_stats, out.stats);
+    out.stats_size = ignored.code == 0 ? compression_stats.size : 0;
   }
 
   if (perf_stats.size > 0)
   {
-    out.perf = read_into_buffer(_event_loop, file.handle, request, perf_stats, error);
-    out.perf_size = perf_stats.size;
+    dew_error_t ignored = co_await co_read_into_buffer(_event_loop, file, perf_stats, out.perf);
+    out.perf_size = ignored.code == 0 ? perf_stats.size : 0;
   }
 
-  return error;
+  co_return error;
 }
 
 dew_error_t packed_file_backend_t::restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size)

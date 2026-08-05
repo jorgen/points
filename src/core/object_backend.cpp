@@ -18,6 +18,7 @@
 #include "object_backend.hpp"
 
 #include "bucket_format.hpp"
+#include "loop_blocking.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -44,61 +45,8 @@ static dew_error_t to_points_error(const vio::error_t &e)
   return p;
 }
 
-namespace
-{
-struct sync_wait_state_t
-{
-  std::mutex m;
-  std::condition_variable cv;
-  bool done = false;
-  dew_error_t result;
-};
-
-// The coroutine that actually drives the io. state and factory are BY-VALUE parameters so they are
-// copied into the coroutine frame (a lambda's captures instead live in the closure temporary, which
-// is destroyed after the first suspension -> use-after-free on resume). Matches the handle_* pattern.
-template <typename Factory>
-vio::task_t<void> sync_wait_coro(std::shared_ptr<sync_wait_state_t> state, Factory factory)
-{
-  auto err = co_await factory();
-  {
-    std::unique_lock<std::mutex> lk(state->m);
-    state->result = std::move(err);
-    state->done = true;
-  }
-  state->cv.notify_one();
-  co_return;
-}
-
-// Run a coroutine (returning dew_error_t) on `loop` and block the calling thread until it
-// completes. Used only for the one-time bootstrap calls (exists/read_index) which are invoked from
-// the processor's constructor thread, not the loop thread. The shared state keeps the sync objects
-// alive until both the caller and the loop coroutine are done, so teardown is race-free.
-template <typename Factory>
-dew_error_t run_on_loop_blocking(vio::event_loop_t &loop, Factory factory)
-{
-  auto state = std::make_shared<sync_wait_state_t>();
-  // The lambda handed to run_in_loop is NOT a coroutine: it just forwards into sync_wait_coro, whose
-  // by-value parameters own copies of state/factory for the lifetime of the actual io.
-  loop.run_in_loop([state, factory = std::move(factory)]() mutable -> vio::task_t<void> { return sync_wait_coro(state, std::move(factory)); });
-#ifdef __EMSCRIPTEN__
-  // Single-threaded wasm: no other thread can ever satisfy a condition_variable, so a cv.wait here
-  // would deadlock. Instead pump `loop` ourselves (there is no separate loop thread to make progress)
-  // and yield to the browser between passes so the pending emscripten_fetch/XHR callbacks can run and
-  // post their coroutine resumes back onto the loop. Requires -sASYNCIFY. This is a one-time bootstrap
-  // path (exists / read_index on open), never the hot per-node read loop.
-  while (!state->done)
-  {
-    loop.poll();
-    emscripten_sleep(0);
-  }
-#else
-  std::unique_lock<std::mutex> lk(state->m);
-  state->cv.wait(lk, [&] { return state->done; });
-#endif
-  return state->result;
-}
-} // namespace
+// run_on_loop_blocking lives in loop_blocking.hpp -- packed_file_backend_t needs the identical wait
+// for its own synchronous read_index, and one copy is how the two stay in step.
 
 std::string object_backend_t::object_name(uint32_t file_id, uint64_t offset)
 {

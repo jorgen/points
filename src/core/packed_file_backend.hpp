@@ -115,6 +115,10 @@ public:
   [[nodiscard]] bool exists() const override;
   [[nodiscard]] dew_error_t open_for_write(bool truncate) override;
   [[nodiscard]] dew_error_t read_index(index_load_t &out) override;
+  // The real implementation; read_index() is a blocking wait around this one. The index blobs are not
+  // small (a tree registry runs to megabytes), so a caller on an event loop reads them without owning
+  // the thread for the duration.
+  vio::task_t<dew_error_t> read_index_async(index_load_t &out) override;
   [[nodiscard]] dew_error_t restore_allocator(const std::unique_ptr<uint8_t[]> &data, uint32_t size) override;
   void allocate_blob(uint32_t size, blob_kind_t kind, storage_location_t &out) override;
   vio::task_t<dew_error_t> write_allocated(storage_location_t location, std::shared_ptr<uint8_t[]> data) override;
@@ -122,6 +126,8 @@ public:
   vio::task_t<dew_error_t> write_index(checkpoint_t checkpoint) override;
 
 private:
+  vio::task_t<dew_error_t> do_read_index(index_load_t &out);
+
   std::string _file_name;
   vio::event_loop_t &_event_loop;
   std::optional<vio::auto_close_file_t> _file;
