@@ -44,6 +44,7 @@
 
 #include <dew/access/export.h>
 #include <dew/core/error.h>
+#include <dew/core/pump.h>
 #include <dew/core/format.h>
 
 #ifdef __cplusplus
@@ -106,17 +107,25 @@ struct dew_dataset_options_t
 
 /* Returns immediately with the dataset in `opening`; `error` is only set for arguments that cannot
  * be used at all. A missing or corrupt dataset surfaces as state == dew_dataset_error, so that the
- * failure path is the same on native and under wasm, where opening cannot block. */
-//= nullable: options
-DEW_ACCESS_EXPORT struct dew_dataset_t *dew_dataset_create(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, const struct dew_dataset_options_t *options, struct dew_error_t **error);
+ * failure path is the same on native and under wasm, where opening cannot block.
+ *
+ * `pump` is where completions are delivered. Pass one to drive several subsystems from a single
+ * wake, or NULL to have the dataset own a private pump -- in which case dew_dataset_poll drives it
+ * and you need not know the pump exists. */
+//= nullable: options, pump
+DEW_ACCESS_EXPORT struct dew_dataset_t *dew_dataset_create(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, const struct dew_dataset_options_t *options, struct dew_pump_t *pump,
+                                                           struct dew_error_t **error);
 //= py.drain_on_destroy: dew_dataset_close
 DEW_ACCESS_EXPORT void dew_dataset_close(struct dew_dataset_t *dataset);
 
 DEW_ACCESS_EXPORT enum dew_dataset_state_t dew_dataset_state(struct dew_dataset_t *dataset);
 DEW_ACCESS_EXPORT void dew_dataset_get_error(struct dew_dataset_t *dataset, struct dew_error_t **error);
 
-/* Dispatch completions on the calling thread; returns how many requests reached a terminal state.
- * Required under wasm, where nothing else drives progress. */
+/* Dispatch this dataset's completions on the calling thread; returns how many were dispatched.
+ *
+ * Only valid on a dataset with a PRIVATE pump (created with pump == NULL). On a dataset sharing a
+ * pump it returns 0 -- draining one subsystem of a shared pump is exactly the partial drain that
+ * loses wakeups, so call dew_pump_poll instead. */
 //= py.skip
 DEW_ACCESS_EXPORT uint32_t dew_dataset_poll(struct dew_dataset_t *dataset);
 //= py.skip

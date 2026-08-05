@@ -29,7 +29,19 @@ namespace dew::access
 void request_impl_t::cancel()
 {
   auto expected = dew_request_pending;
-  status.compare_exchange_strong(expected, dew_request_canceled);
+  if (status.compare_exchange_strong(expected, dew_request_canceled))
+    wait_cond.notify_all();
+}
+
+void request_impl_t::finish(dew_request_status_t terminal)
+{
+  auto expected = dew_request_pending;
+  // A cancel that got in first wins: it is already terminal and must stay that way.
+  status.compare_exchange_strong(expected, terminal);
+  {
+    std::unique_lock<std::mutex> lock(wait_mutex);
+  }
+  wait_cond.notify_all();
 }
 
 namespace

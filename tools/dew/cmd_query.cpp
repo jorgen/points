@@ -247,7 +247,7 @@ int cmd_query(int argc, char **argv)
   }
 
   dew_error_t *error = nullptr;
-  auto *dataset = dew_dataset_create(args.url.c_str(), uint32_t(args.url.size()), connection.c_str(), uint32_t(connection.size()), nullptr, &error);
+  auto *dataset = dew_dataset_create(args.url.c_str(), uint32_t(args.url.size()), connection.c_str(), uint32_t(connection.size()), nullptr, nullptr, &error);
   if (!dataset || dew_dataset_state(dataset) != dew_dataset_ready)
   {
     if (dataset)

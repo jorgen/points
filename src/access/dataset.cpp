@@ -28,12 +28,20 @@
 namespace dew::access
 {
 
-dataset_impl_t::dataset_impl_t(std::string a_url, std::string a_connection, const dew_dataset_options_t &options)
+dataset_impl_t::dataset_impl_t(std::string a_url, std::string a_connection, const dew_dataset_options_t &options, dew_pump_t *shared_pump)
   : url(std::move(a_url))
   , connection(std::move(a_connection))
   , pool(options.decode_threads ? options.decode_threads : std::max(2u, std::thread::hardware_concurrency() / 2))
   , storage_error(loop_thread.event_loop(), vio::event_bind_t::bind(*this, &dataset_impl_t::on_storage_error))
 {
+  // A shared pump lets one wake drive several subsystems; without one the dataset keeps a private
+  // pump so dew_dataset_poll works with no ceremony.
+  pump = shared_pump;
+  owns_pump = pump == nullptr;
+  if (owns_pump)
+    pump = dew_pump_create();
+  pump_register(pump, pump_source_t{this, &dataset_impl_t::drain_fn, &dataset_impl_t::pending_fn});
+
   const uint64_t budget = options.memory_budget_bytes ? options.memory_budget_bytes : (uint64_t(512) << 20);
   budgets = derive_budgets(budget);
 
@@ -99,14 +107,58 @@ dataset_impl_t::dataset_impl_t(std::string a_url, std::string a_connection, cons
 
 dataset_impl_t::~dataset_impl_t()
 {
-  // Cancel and drop every outstanding request before the reader (and its loop) goes away: a pending
-  // request holds read_request_t objects that the loop is still completing.
+  // Ordered teardown, same discipline as processor.cpp: stop being drained, cancel outstanding work,
+  // then join the pool and the loop -- the reader's loop is still needed while in-flight reads
+  // unwind, so it goes last.
+  pump_unregister(pump, this);
   for (auto &request : requests)
     request->cancel();
   requests.clear();
+  {
+    std::unique_lock<std::mutex> lock(dispatch_mutex);
+    awaiting_dispatch.clear();
+  }
   pool.join();
   if (reader)
     reader->stop_loop();
+  if (owns_pump)
+    dew_pump_destroy(pump);
+}
+
+void dataset_impl_t::publish(const std::shared_ptr<dew_request_t> &request)
+{
+  {
+    std::unique_lock<std::mutex> lock(dispatch_mutex);
+    awaiting_dispatch.push_back(request);
+  }
+  pump_fire(pump);
+}
+
+uint32_t dataset_impl_t::drain_fn(void *ctx)
+{
+  auto *self = static_cast<dataset_impl_t *>(ctx);
+  std::vector<std::shared_ptr<dew_request_t>> batch;
+  {
+    std::unique_lock<std::mutex> lock(self->dispatch_mutex);
+    batch.swap(self->awaiting_dispatch);
+  }
+  uint32_t dispatched = 0;
+  for (auto &request : batch)
+  {
+    dispatched++;
+    // claim_callback is the exactly-once guard: dew_request_wait may already have delivered this one
+    // from the waiting thread.
+    if (request->claim_callback() && request->done)
+      request->done(request.get(), request->status.load(std::memory_order_acquire), request->done_user_ptr);
+  }
+  return dispatched;
+}
+
+uint32_t dataset_impl_t::pending_fn(void *ctx)
+{
+  auto *self = static_cast<dataset_impl_t *>(ctx);
+  std::unique_lock<std::mutex> lock(self->dispatch_mutex);
+  return uint32_t(self->awaiting_dispatch.size());
 }
 
 void dataset_impl_t::on_storage_error(const dew_error_t &&e)

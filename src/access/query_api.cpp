@@ -21,16 +21,8 @@
 
 #include "dataset_impl.hpp"
 
+#include <chrono>
 #include <cstring>
-
-struct dew_dataset_t : dew::access::dataset_impl_t
-{
-  using dew::access::dataset_impl_t::dataset_impl_t;
-};
-
-struct dew_request_t : dew::access::request_impl_t
-{
-};
 
 namespace dew::access
 {
@@ -49,7 +41,7 @@ void fill_error(dew_error_t **out, const dew_error_t &src)
 }
 } // namespace
 
-struct dew_dataset_t *dew_dataset_create(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, const struct dew_dataset_options_t *options, struct dew_error_t **error)
+struct dew_dataset_t *dew_dataset_create(const char *url, uint32_t url_len, const char *connection, uint32_t connection_len, const struct dew_dataset_options_t *options, struct dew_pump_t *pump, struct dew_error_t **error)
 {
   if (!url || url_len == 0)
   {
@@ -57,7 +49,7 @@ struct dew_dataset_t *dew_dataset_create(const char *url, uint32_t url_len, cons
     return nullptr;
   }
   dew_dataset_options_t defaults{};
-  auto *dataset = new dew_dataset_t(std::string(url, url_len), connection && connection_len ? std::string(connection, connection_len) : std::string(), options ? *options : defaults);
+  auto *dataset = new dew_dataset_t(std::string(url, url_len), connection && connection_len ? std::string(connection, connection_len) : std::string(), options ? *options : defaults, pump);
   return dataset;
 }
 
@@ -81,36 +73,18 @@ uint32_t dew_dataset_poll(struct dew_dataset_t *dataset)
 {
   if (!dataset)
     return 0;
-  // Requests run to completion inside submit today, so polling only has to deliver the callbacks
-  // that have not been delivered yet. Keeping delivery here -- rather than firing inline at
-  // completion -- is what guarantees callbacks never run on an internal thread.
-  uint32_t dispatched = 0;
-  for (auto &request : dataset->requests)
-  {
-    if (request->callback_fired)
-      continue;
-    const auto status = request->status.load(std::memory_order_acquire);
-    if (status == dew_request_pending)
-      continue;
-    request->callback_fired = true;
-    dispatched++;
-    if (request->done)
-      request->done(static_cast<dew_request_t *>(request.get()), status, request->done_user_ptr);
-  }
-  return dispatched;
+  // Only meaningful for a private pump. Draining one subsystem of a SHARED pump is precisely the
+  // partial drain that loses wakeups, so refuse rather than half-work.
+  if (!dataset->owns_pump)
+    return 0;
+  return dew_pump_poll(dataset->pump);
 }
 
 uint32_t dew_dataset_pending_count(struct dew_dataset_t *dataset)
 {
   if (!dataset)
     return 0;
-  uint32_t pending = 0;
-  for (auto &request : dataset->requests)
-  {
-    if (request->status.load(std::memory_order_acquire) == dew_request_pending)
-      pending++;
-  }
-  return pending;
+  return dew_pump_pending_count(dataset->pump);
 }
 
 enum dew_dataset_state_t dew_dataset_wait_ready(struct dew_dataset_t *dataset, int32_t timeout_ms)
@@ -163,18 +137,19 @@ struct dew_request_t *dew_dataset_request_region(struct dew_dataset_t *dataset, 
     return nullptr;
   }
 
-  auto owned = std::make_unique<dew_request_t>();
-  owned->dataset = dataset;
-  owned->done = spec->done;
-  owned->done_user_ptr = spec->done_user_ptr;
+  auto request = std::make_shared<dew_request_t>();
+  request->dataset = dataset;
+  request->done = spec->done;
+  request->done_user_ptr = spec->done_user_ptr;
 
-  const bool ok = run_region_request(*dataset, *spec, *owned);
-  if (owned->status.load(std::memory_order_acquire) != dew_request_canceled)
-    owned->status.store(ok ? dew_request_completed : dew_request_failed, std::memory_order_release);
+  const bool ok = run_region_request(*dataset, *spec, *request);
+  request->finish(ok ? dew_request_completed : dew_request_failed);
 
-  auto *raw = owned.get();
-  dataset->requests.emplace_back(std::move(owned));
-  return raw;
+  dataset->requests.push_back(request);
+  // Delivery goes through the pump, so the callback runs on the host's thread from a poll -- never
+  // here, on whichever thread finished the work.
+  dataset->publish(request);
+  return request.get();
 }
 
 enum dew_request_status_t dew_request_status(struct dew_request_t *request)
@@ -184,17 +159,27 @@ enum dew_request_status_t dew_request_status(struct dew_request_t *request)
 
 enum dew_request_status_t dew_request_wait(struct dew_request_t *request, int32_t timeout_ms)
 {
-  (void)timeout_ms;
   if (!request)
     return dew_request_failed;
-  // Deliver this request's callback on the caller's thread, matching dew_dataset_poll's contract.
-  const auto status = request->status.load(std::memory_order_acquire);
-  if (status != dew_request_pending && !request->callback_fired)
+
+  auto terminal = [request] { return request->status.load(std::memory_order_acquire) != dew_request_pending; };
   {
-    request->callback_fired = true;
-    if (request->done)
-      request->done(request, status, request->done_user_ptr);
+    std::unique_lock<std::mutex> lock(request->wait_mutex);
+    if (timeout_ms < 0)
+      request->wait_cond.wait(lock, terminal);
+    else
+      request->wait_cond.wait_for(lock, std::chrono::milliseconds(timeout_ms), terminal);
   }
+
+  const auto status = request->status.load(std::memory_order_acquire);
+  // Still pending means the wait timed out -- unambiguously, unlike OpenVDS's bool.
+  if (status == dew_request_pending)
+    return status;
+
+  // Deliver here rather than making the caller poll as well; claim_callback keeps it exactly once
+  // even though the pump drain is also holding this request.
+  if (request->claim_callback() && request->done)
+    request->done(request, status, request->done_user_ptr);
   return status;
 }
 
@@ -225,9 +210,25 @@ void dew_request_release(struct dew_request_t *request)
   auto *dataset = request->dataset;
   if (!dataset)
     return;
+  // Drop BOTH references the dataset holds. Anything still running keeps its own shared_ptr, so
+  // releasing an unfinished request is safe -- it just means the caller is done with the handle.
+  //
+  // The dispatch queue matters as much as the request list: a release means no callback is wanted,
+  // and a queued entry that nobody ever polls for would pin the request until the dataset died.
+  {
+    std::unique_lock<std::mutex> lock(dataset->dispatch_mutex);
+    for (auto it = dataset->awaiting_dispatch.begin(); it != dataset->awaiting_dispatch.end(); ++it)
+    {
+      if (it->get() == request)
+      {
+        dataset->awaiting_dispatch.erase(it);
+        break;
+      }
+    }
+  }
   for (auto it = dataset->requests.begin(); it != dataset->requests.end(); ++it)
   {
-    if (it->get() == static_cast<request_impl_t *>(request))
+    if (it->get() == request)
     {
       dataset->requests.erase(it);
       return;

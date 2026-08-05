@@ -82,7 +82,7 @@ def get_cmake_dir() -> str:
     return str(_PACKAGE_DIR / "cmake")
 
 
-def open_dataset(url, connection: str = "", *, memory_budget_bytes: int = 0, decode_threads: int = 0, max_reads_in_flight: int = 0):
+def open_dataset(url, connection: str = "", *, pump=None, memory_budget_bytes: int = 0, decode_threads: int = 0, max_reads_in_flight: int = 0):
     """Open a converted ``.dew`` dataset for reading.
 
     A thin wrapper over :class:`Dataset` that fills in the options struct, so the common case is
@@ -93,6 +93,9 @@ def open_dataset(url, connection: str = "", *, memory_budget_bytes: int = 0, dec
     ``connection`` carries cloud credentials for ``s3://`` / ``az://`` URLs (same grammar as the
     converter's); leave it empty for local paths or when credentials come from the environment.
 
+    ``pump`` is where completions are delivered. Leave it None and the dataset keeps a private one,
+    which is what you want unless you are driving several datasets from a single wake.
+
     Raises ``RuntimeError`` if the dataset cannot be opened -- a missing or corrupt dataset is
     reported through the handle's state rather than by the constructor, so this checks it for you.
     """
@@ -100,7 +103,9 @@ def open_dataset(url, connection: str = "", *, memory_budget_bytes: int = 0, dec
     options.memory_budget_bytes = memory_budget_bytes
     options.decode_threads = decode_threads
     options.max_reads_in_flight = max_reads_in_flight
-    dataset = Dataset(str(url), connection, options)  # noqa: F405
+    # The generated binding takes a Pump by reference, so make one when the caller did not. nanobind's
+    # keep_alive ties it to the dataset, so it outlives every query made through it.
+    dataset = Dataset(str(url), connection, options, pump if pump is not None else Pump())  # noqa: F405
     if dataset.state() != DatasetState.ready:  # noqa: F405
         raise RuntimeError(f"could not open dataset {url!r}")
     return dataset

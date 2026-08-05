@@ -32,6 +32,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <atomic>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -159,7 +160,7 @@ struct dataset_handle_t
   explicit dataset_handle_t(const char *path)
   {
     dew_error_t *error = nullptr;
-    handle = dew_dataset_create(path, uint32_t(strlen(path)), nullptr, 0, nullptr, &error);
+    handle = dew_dataset_create(path, uint32_t(strlen(path)), nullptr, 0, nullptr, nullptr, &error);
     if (error)
       dew_error_destroy(error);
   }
@@ -368,6 +369,103 @@ TEST_CASE("access: copy-out matches the borrowed buffer, and refuses a short des
   REQUIRE(dew_request_copy_attribute(request, 1, tiny.data(), tiny.size(), &error) == 0);
   REQUIRE(error != nullptr);
   dew_error_destroy(error);
+
+  dew_request_release(request);
+}
+
+TEST_CASE("access: completions are delivered through a shared pump, on the polling thread")
+{
+  // Delivery goes through the pump so a callback never runs on whichever internal thread finished
+  // the work. With a SHARED pump, dew_dataset_poll must refuse (draining one subsystem of a shared
+  // pump is the partial drain that loses wakeups) -- dew_pump_poll is the way in.
+  dew_pump_t *pump = dew_pump_create();
+  struct wake_state_t
+  {
+    std::atomic<int> wakes{0};
+  } wake;
+  dew_pump_set_wake_callback(
+    pump, [](void *ctx) { static_cast<wake_state_t *>(ctx)->wakes.fetch_add(1, std::memory_order_acq_rel); }, &wake);
+
+  dew_error_t *error = nullptr;
+  auto *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, nullptr, pump, &error);
+  REQUIRE(dataset != nullptr);
+  REQUIRE(dew_dataset_state(dataset) == dew_dataset_ready);
+
+  struct done_state_t
+  {
+    std::atomic<int> calls{0};
+    dew_request_status_t status = dew_request_pending;
+  } done;
+
+  dew_region_request_t spec{};
+  for (int i = 0; i < 3; i++)
+  {
+    spec.aabb_min[i] = 0.0;
+    spec.aabb_max[i] = 4.0;
+  }
+  spec.lod_mode = dew_lod_full;
+  spec.position_format = dew_position_r64_absolute;
+  spec.clip_mode = dew_clip_node;
+  spec.done = [](dew_request_t *, dew_request_status_t status, void *ctx) {
+    auto *state = static_cast<done_state_t *>(ctx);
+    state->status = status;
+    state->calls.fetch_add(1, std::memory_order_acq_rel);
+  };
+  spec.done_user_ptr = &done;
+
+  auto *request = dew_dataset_request_region(dataset, &spec, nullptr);
+  REQUIRE(request != nullptr);
+
+  // The wake told the host there is something to collect, and it has NOT been delivered yet.
+  REQUIRE(wake.wakes.load() >= 1);
+  REQUIRE(done.calls.load() == 0);
+  REQUIRE(dew_pump_pending_count(pump) == 1);
+
+  // A shared pump means the per-dataset poll is off limits.
+  REQUIRE(dew_dataset_poll(dataset) == 0);
+  REQUIRE(done.calls.load() == 0);
+
+  REQUIRE(dew_pump_poll(pump) == 1);
+  REQUIRE(done.calls.load() == 1);
+  REQUIRE(done.status == dew_request_completed);
+
+  // Exactly once: waiting afterwards must not deliver it a second time.
+  REQUIRE(dew_request_wait(request, -1) == dew_request_completed);
+  REQUIRE(done.calls.load() == 1);
+
+  dew_request_release(request);
+  dew_dataset_close(dataset);
+  dew_pump_destroy(pump);
+}
+
+TEST_CASE("access: dew_request_wait delivers the callback when nothing polls")
+{
+  // The other delivery route: a caller that just waits should not have to poll as well. Exactly-once
+  // still holds -- the pump drain and the wait both hold the request, and only one may call back.
+  dataset_handle_t dataset(k_path);
+  REQUIRE(dataset.handle != nullptr);
+
+  std::atomic<int> calls{0};
+  dew_region_request_t spec{};
+  for (int i = 0; i < 3; i++)
+  {
+    spec.aabb_min[i] = 0.0;
+    spec.aabb_max[i] = 4.0;
+  }
+  spec.lod_mode = dew_lod_full;
+  spec.position_format = dew_position_r64_absolute;
+  spec.clip_mode = dew_clip_node;
+  spec.done = [](dew_request_t *, dew_request_status_t, void *ctx) { static_cast<std::atomic<int> *>(ctx)->fetch_add(1, std::memory_order_acq_rel); };
+  spec.done_user_ptr = &calls;
+
+  auto *request = dew_dataset_request_region(dataset.handle, &spec, nullptr);
+  REQUIRE(request != nullptr);
+  REQUIRE(dew_request_wait(request, -1) == dew_request_completed);
+  REQUIRE(calls.load() == 1);
+
+  // A private pump: polling now finds the request already delivered and must not repeat it.
+  dew_dataset_poll(dataset.handle);
+  REQUIRE(calls.load() == 1);
 
   dew_request_release(request);
 }
