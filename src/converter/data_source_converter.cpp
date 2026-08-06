@@ -126,7 +126,12 @@ dew_converter_data_source_t::dew_converter_data_source_t(const std::string &a_ur
   // Read compression stats for attribute normalization
   attribute_stats = processor.storage_handler().get_compression_stats();
 
-  if (processor.attrib_name_registry_count() > 2)
+  // Index 0 is the positions, so index 1 is the first attribute worth colouring by -- which exists as
+  // soon as there are TWO entries, not three. The old `> 2` skipped selection entirely on a dataset
+  // with exactly one non-position attribute, leaving current_attribute_name empty; the walker then
+  // asked for the attribute "" on every node and the render path fell over on the null buffer that
+  // produced. render_callback_tests covers the two-attribute case for that reason.
+  if (processor.attrib_name_registry_count() > 1)
   {
     char buffer[256];
     auto str_size = processor.attrib_name_registry_get(1, buffer, sizeof(buffer));
