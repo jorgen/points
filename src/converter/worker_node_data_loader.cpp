@@ -64,8 +64,8 @@ bool decode_worker_pool_available()
   return !pool.isNull() && !pool.isUndefined();
 }
 
-worker_node_data_loader_t::worker_node_data_loader_t(storage_handler_t &storage_handler)
-  : _storage_handler(storage_handler)
+worker_node_data_loader_t::worker_node_data_loader_t(blob_reader_t &reader)
+  : _reader(reader)
   , _pool(emscripten::val::global("__dewDecodePool"))
 {
 }
@@ -83,7 +83,7 @@ render::load_handle_t worker_node_data_loader_t::request_load(const void *reques
   {
     p.format[i] = req.format[i];
     if (req.locations[i].size > 0)
-      p.reads[i] = _storage_handler.read(req.locations[i], /*raw=*/true);
+      p.reads[i] = _reader.read(req.locations[i], read_options_t{/*raw=*/true, false, {}});
   }
   _pending.emplace(handle, std::move(p));
   return handle;

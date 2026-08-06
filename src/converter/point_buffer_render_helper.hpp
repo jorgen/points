@@ -20,7 +20,7 @@
 
 #include "buffer.hpp"
 #include "dataset_types.hpp"
-#include "storage_handler.hpp"
+#include "blob_reader.hpp"
 #include <glm_include.hpp>
 #include <dew/core/format.h>
 #include <dew/converter/converter_data_source.h>
@@ -163,7 +163,7 @@ struct dyn_points_data_handler_t
     }
   }
 
-  void start_requests(const std::shared_ptr<dyn_points_data_handler_t> &self, storage_handler_t &storage_handler, const storage_location_t (&locations)[4])
+  void start_requests(const std::shared_ptr<dyn_points_data_handler_t> &self, blob_reader_t &reader, const storage_location_t (&locations)[4])
   {
     (void)self;
     read_request.reserve(4);
@@ -176,7 +176,7 @@ struct dyn_points_data_handler_t
         break;
       }
       target_count++;
-      read_request.emplace_back(storage_handler.read(locations[i]));
+      read_request.emplace_back(reader.read(locations[i], read_options_t{}));
     }
   }
 

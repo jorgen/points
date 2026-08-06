@@ -33,10 +33,11 @@
 // and the install are identical, and are the fiddly part. Both shapes live here over one
 // implementation, so a fix to the install path cannot land on only one of them.
 //
-// THREADING. Everything happens on the event loop handed to the constructor. install() mutates the
-// registry, so it must not run concurrently with a walk; keeping loads on the loop that walks is what
-// makes the residency checks lock-free. tree_id_initialized is published with a release store because
-// the renderer's walker reads it from its own thread.
+// THREADING. All the bookkeeping happens on the event loop handed to the constructor: install()
+// mutates the registry, and the dedupe state goes with it. request() is callable from any thread
+// because it POSTS to that loop; load() is a coroutine and must already be running on it.
+// resident() is safe anywhere -- tree_id_initialized is published with a release store, since a
+// renderer walks the registry from its own thread while loads land on the loop.
 
 #include "blob_reader.hpp"
 #include "tree.hpp"
@@ -46,6 +47,7 @@
 #include <vio/event_loop.h>
 #include <vio/task.h>
 
+#include <atomic>
 #include <cstdint>
 #include <vector>
 
@@ -83,14 +85,24 @@ public:
   // result up later -- a renderer, which re-walks next frame. Deduplicated: a tree already resident
   // or already in flight is skipped, so calling this every frame with the same walk output costs
   // nothing after the first.
-  void request(const std::vector<tree_id_t> &ids);
+  //
+  // Safe from ANY thread, and that is the reason it posts to the loop rather than acting inline: a
+  // renderer walks on its own thread, so doing the dedupe bookkeeping in the caller would race the
+  // loop that finishes the loads. The work is therefore queued, not done -- in_flight() does not
+  // change until the loop picks it up. (tree_handler_t::request_trees_async posts for the same
+  // reason.)
+  void request(std::vector<tree_id_t> ids);
 
   // Stop starting new loads. Call before tearing down the loop; in-flight loads still complete.
   void begin_shutdown() { _shutting_down = true; }
 
   // How many requested loads have not finished. A frame-driven consumer can use this to decide
   // whether another frame is worth scheduling.
-  [[nodiscard]] uint32_t in_flight() const { return _in_flight; }
+  [[nodiscard]] uint32_t in_flight() const { return _in_flight.load(std::memory_order_acquire); }
+  // Loads ever STARTED. Monotonic, so it says how many reads the dedupe let through regardless of
+  // when they finished -- which is the only timing-independent way to observe that repeats were
+  // dropped rather than merely completed before the repeat arrived.
+  [[nodiscard]] uint32_t loads_started() const { return _loads_started.load(std::memory_order_acquire); }
 
   // The bounds of the DATA, scanned from the root tree's point collections.
   //
@@ -101,6 +113,8 @@ public:
   void data_aabb(double min[3], double max[3]) const;
 
 private:
+  // The loop-side half of request(): dedupe and spawn. Never called directly from another thread.
+  void start_requested(const std::vector<tree_id_t> &ids);
   // Read the blob for `id`. Shared by both wait shapes.
   vio::task_t<bool> do_load(tree_id_t id, dew_error_t &error);
   // Deserialize and install into the registry slot. The part that must not be written twice.
@@ -112,7 +126,9 @@ private:
   // Per-tree "a load has been started", so request() can be called every frame without piling up
   // duplicate reads. Distinct from tree_id_initialized, which means "the data is here".
   std::vector<uint8_t> _requested;
-  uint32_t _in_flight = 0;
+  // Atomic because both are public observations and a renderer reads them off its own thread.
+  std::atomic<uint32_t> _in_flight{0};
+  std::atomic<uint32_t> _loads_started{0};
   bool _shutting_down = false;
 };
 

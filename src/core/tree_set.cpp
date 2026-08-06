@@ -121,13 +121,23 @@ vio::task_t<bool> tree_set_t::load(tree_id_t id, dew_error_t &error)
   }
   if (id.data < _requested.size())
     _requested[id.data] = 1;
-  _in_flight++;
+  _in_flight.fetch_add(1, std::memory_order_acq_rel);
+  _loads_started.fetch_add(1, std::memory_order_acq_rel);
   bool ok = co_await do_load(id, error);
-  _in_flight--;
+  _in_flight.fetch_sub(1, std::memory_order_acq_rel);
   co_return ok;
 }
 
-void tree_set_t::request(const std::vector<tree_id_t> &ids)
+void tree_set_t::request(std::vector<tree_id_t> ids)
+{
+  if (ids.empty() || _shutting_down)
+    return;
+  // Hop to the loop before touching _requested / _in_flight: the caller may be a render thread, and
+  // the loop is where loads complete. By value so the vector outlives the post.
+  _loop.run_in_loop([this, ids = std::move(ids)]() { start_requested(ids); });
+}
+
+void tree_set_t::start_requested(const std::vector<tree_id_t> &ids)
 {
   if (_shutting_down)
     return;
@@ -136,14 +146,15 @@ void tree_set_t::request(const std::vector<tree_id_t> &ids)
     if (id.data >= _requested.size() || _requested[id.data] || resident(id))
       continue;
     _requested[id.data] = 1;
-    _in_flight++;
+    _in_flight.fetch_add(1, std::memory_order_acq_rel);
+    _loads_started.fetch_add(1, std::memory_order_acq_rel);
     // Detached: the caller gets no completion and does not want one -- it re-walks on a later frame
     // and finds the tree resident. Errors are swallowed for the same reason a missing tree is simply
     // not drawn; there is nobody to report to, and the walk stays correct without it.
     [](tree_set_t *self, tree_id_t tree_id) -> vio::detached_task_t {
       dew_error_t error;
       co_await self->do_load(tree_id, error);
-      self->_in_flight--;
+      self->_in_flight.fetch_sub(1, std::memory_order_acq_rel);
     }(this, id);
   }
 }

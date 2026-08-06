@@ -110,11 +110,11 @@ dew_converter_data_source_t::dew_converter_data_source_t(const std::string &a_ur
   // On the web, route decode through a pool of Web Workers when the app installed one (globalThis
   // .__dewDecodePool); otherwise fall back to decoding inline on the main thread.
   if (decode_worker_pool_available())
-    node_loader = std::make_unique<worker_node_data_loader_t>(processor.storage_handler());
+    node_loader = std::make_unique<worker_node_data_loader_t>(processor.storage_handler().reader());
   else
-    node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler());
+    node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler().reader());
 #else
-  node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler());
+  node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler().reader());
 #endif
 
   // Apply the default memory budget's derived cache sizes (the storage_handler ctor defaults predate the

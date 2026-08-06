@@ -27,8 +27,8 @@ namespace dew::converter
 {
 using namespace dew::core;
 
-native_node_data_loader_t::native_node_data_loader_t(storage_handler_t &storage_handler)
-  : _storage_handler(storage_handler)
+native_node_data_loader_t::native_node_data_loader_t(blob_reader_t &reader)
+  : _reader(reader)
 {
 }
 
@@ -41,7 +41,7 @@ render::load_handle_t native_node_data_loader_t::request_load(const void *reques
   std::memcpy(&req, request_data, sizeof(req));
 
   auto data_handler = std::make_shared<dyn_points_data_handler_t>(req.format);
-  data_handler->start_requests(data_handler, _storage_handler, req.locations);
+  data_handler->start_requests(data_handler, _reader, req.locations);
 
   auto handle = _next_handle.fetch_add(1);
 

@@ -186,7 +186,7 @@ TEST_CASE("tree_set: request() loads a tree with nobody awaiting it")
   REQUIRE(trees.initialize(registry_blob, registry_size).code == 0);
   REQUIRE(!trees.resident(tree_id_t{0}));
 
-  on_loop(fixture.loop_thread.event_loop(), [&] { trees.request({tree_id_t{0}, tree_id_t{2}}); });
+  trees.request({tree_id_t{0}, tree_id_t{2}});
 
   REQUIRE(wait_resident(trees, tree_id_t{0}));
   REQUIRE(wait_resident(trees, tree_id_t{2}));
@@ -198,11 +198,16 @@ TEST_CASE("tree_set: request() loads a tree with nobody awaiting it")
   trees.begin_shutdown();
 }
 
-TEST_CASE("tree_set: request() for a tree already in flight does not start a second load")
+TEST_CASE("tree_set: repeated requests for the same tree start only one load")
 {
   // A renderer calls request() every frame with the walk's output, which repeats the same ids until
-  // they land. Without the dedupe that is a new read per frame for the same blob -- invisible in
-  // results, ruinous in IO.
+  // they land. Without the dedupe that is a fresh read per frame for the same blob -- invisible in
+  // the rendered result, ruinous in IO.
+  //
+  // Asserted on loads_started rather than in_flight ON PURPOSE. in_flight is a race to observe: the
+  // first load usually finishes before a later duplicate is even considered, at which point the
+  // residency check masks a missing dedupe and the test passes while testing nothing. (It did,
+  // briefly.) loads_started is monotonic, so it counts what the dedupe actually let through.
   tree_set_fixture_t fixture;
   uint32_t registry_size = 0;
   auto registry_blob = fixture.build_registry(registry_size);
@@ -210,29 +215,17 @@ TEST_CASE("tree_set: request() for a tree already in flight does not start a sec
   tree_set_t trees(fixture.storage.reader(), fixture.loop_thread.event_loop());
   REQUIRE(trees.initialize(registry_blob, registry_size).code == 0);
 
-  // Both observations happen ON the loop, in one task, so in_flight is read exactly where it is
-  // written -- no cross-thread guessing about a plain counter.
-  uint32_t after_first = 0;
-  uint32_t after_repeat = 0;
-  on_loop(fixture.loop_thread.event_loop(), [&] {
-    trees.request({tree_id_t{1}});
-    after_first = trees.in_flight();
-    trees.request({tree_id_t{1}, tree_id_t{1}});
-    after_repeat = trees.in_flight();
-  });
-
-  REQUIRE(after_first == 1);
-  REQUIRE(after_repeat == 1); // still one: the repeats were dropped
-
+  // Repeats inside ONE batch: the first spawns and suspends at its read, so the tree is not resident
+  // yet and only _requested can stop the other two.
+  trees.request({tree_id_t{1}, tree_id_t{1}, tree_id_t{1}});
   REQUIRE(wait_resident(trees, tree_id_t{1}));
+  REQUIRE(trees.loads_started() == 1);
 
-  // And once it is resident, asking again is free rather than a re-read.
-  uint32_t after_resident = 1;
-  on_loop(fixture.loop_thread.event_loop(), [&] {
-    trees.request({tree_id_t{1}});
-    after_resident = trees.in_flight();
-  });
-  REQUIRE(after_resident == 0);
+  // And across batches, once it is resident, asking again is free rather than a re-read.
+  trees.request({tree_id_t{1}});
+  on_loop(fixture.loop_thread.event_loop(), [&] {});
+  REQUIRE(trees.loads_started() == 1);
+  REQUIRE(trees.in_flight() == 0);
 
   trees.begin_shutdown();
 }
@@ -250,10 +243,8 @@ TEST_CASE("tree_set: begin_shutdown stops new loads")
   trees.begin_shutdown();
 
   uint32_t in_flight = 99;
-  on_loop(fixture.loop_thread.event_loop(), [&] {
-    trees.request({tree_id_t{0}});
-    in_flight = trees.in_flight();
-  });
+  trees.request({tree_id_t{0}});
+  on_loop(fixture.loop_thread.event_loop(), [&] { in_flight = trees.in_flight(); });
   REQUIRE(in_flight == 0);
   REQUIRE(!trees.resident(tree_id_t{0}));
 }
@@ -269,7 +260,7 @@ TEST_CASE("tree_set: both wait shapes install the same tree")
 
   tree_set_t via_request(fixture.storage.reader(), fixture.loop_thread.event_loop());
   REQUIRE(via_request.initialize(registry_blob, registry_size).code == 0);
-  on_loop(fixture.loop_thread.event_loop(), [&] { via_request.request({tree_id_t{3}}); });
+  via_request.request({tree_id_t{3}});
   REQUIRE(wait_resident(via_request, tree_id_t{3}));
 
   tree_set_t via_load(fixture.storage.reader(), fixture.loop_thread.event_loop());
