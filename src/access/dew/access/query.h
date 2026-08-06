@@ -51,7 +51,18 @@
 extern "C" {
 #endif
 
+/* Awaiting these two.
+ *
+ * The whole protocol is one line each: keep looking until poll(handle) != pending. dew_dataset_t is
+ * `opening` until the index read lands; dew_request_t is `pending` until the query finishes. The pump
+ * guarantees a wake when either changes, so a poll after that wake is a pure read -- no completion
+ * callback has to outlive the handle, and nothing has to be retracted when a caller loses interest.
+ *
+ * tools/bindgen turns these into await wrappers: dew/await/dew_await.hpp for C++ coroutines and
+ * dew.aio for Python. Adding an awaitable handle is this annotation and nothing else. */
+//= awaitable: poll=dew_dataset_state pending=dew_dataset_opening
 struct dew_dataset_t;
+//= awaitable: poll=dew_request_status pending=dew_request_pending release=dew_request_release
 struct dew_request_t;
 
 enum dew_dataset_state_t

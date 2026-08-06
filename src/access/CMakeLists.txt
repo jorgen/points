@@ -2,6 +2,10 @@
 set(public_headers
         dew/access/export.h
         dew/access/query.h
+        # GENERATED from the //= awaitable: annotations by tools/bindgen/generate_cpp_await.py and
+        # CHECKED IN, because generating it needs libclang and a C++ build must not. A bindgen test
+        # fails if it goes stale. Header-only: nothing here is compiled into the library.
+        dew/access/await.hpp
 )
 set(private_headers
         region_walk.hpp

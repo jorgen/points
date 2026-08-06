@@ -61,4 +61,5 @@ KNOWN_ANNOTATIONS = {
     "nullable",    # nullable: a, b
     "returns",     # returns: new|borrowed
     "blocking",    # blocking
+    "awaitable",   # awaitable: poll=<fn> pending=<enum constant> [release=<fn>]
 }

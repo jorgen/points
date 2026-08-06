@@ -12,10 +12,10 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 # consumer is what makes it a real test of the surface rather than a demo with privileged access.
 #
 # vio is the exception, and legitimately so: the whole exercise is integrating the query API into a
-# host that already owns an event loop, so the host brings its own vio.
+# host that already owns an event loop, so the host brings its own vio. dew/access/await.hpp is
+# header-only and generated from the //= awaitable: annotations -- there is nothing extra to link.
 add_executable(query_async
         query_async.cpp
-        dew_vio_await.h
 )
 
 target_link_libraries(query_async PRIVATE dew_access dew_core)

@@ -377,6 +377,37 @@ def _classify_function(fn, class_handle, is_constructor, ctx):
     return args, results, error_convention, error_param, self_param, problems
 
 
+def _parse_awaitable(opaque):
+    """Parse `//= awaitable: poll=<fn> pending=<constant> [release=<fn>]` on an opaque handle.
+
+    The whole protocol in one line: "keep looking until poll(handle) != pending". That is deliberately
+    the weakest thing that works, and it is what makes ONE mechanism serve both a request (status
+    pending -> completed) and a dataset (state opening -> ready/error).
+
+    A completion CALLBACK would be the obvious alternative and is worse: it has to outlive the handle,
+    it cannot be retracted once queued, and it forces every consumer to own that lifetime. Polling
+    after a wake is a pure read -- the pump already guarantees the wake, so nothing is missed.
+    """
+    raw = opaque["annotations"].get("awaitable")
+    if raw is None:
+        return None
+    if raw is True:
+        raise ValueError(f"{opaque['name']}: awaitable needs poll= and pending=")
+    fields = {}
+    for token in raw.replace(",", " ").split():
+        if "=" not in token:
+            raise ValueError(f"{opaque['name']}: malformed awaitable token {token!r} (want key=value)")
+        key, value = token.split("=", 1)
+        fields[key.strip()] = value.strip()
+    missing = [k for k in ("poll", "pending") if k not in fields]
+    if missing:
+        raise ValueError(f"{opaque['name']}: awaitable is missing {', '.join(missing)}")
+    unknown = set(fields) - {"poll", "pending", "release"}
+    if unknown:
+        raise ValueError(f"{opaque['name']}: unknown awaitable keys {', '.join(sorted(unknown))}")
+    return {"poll": fields["poll"], "pending": fields["pending"], "release": fields.get("release")}
+
+
 def _is_blocking(fn, is_destructor):
     if is_destructor:
         return True
@@ -499,6 +530,7 @@ def enrich(raw):
             "header": opaque["header"],
             "doc": opaque["doc"],
             "annotations": opaque["annotations"],
+            "awaitable": _parse_awaitable(opaque),
             "constructors": [],
             "destructor": None,
             "methods": [],
@@ -622,6 +654,23 @@ def enrich(raw):
         check_unique(
             [(v["bound_name"], v["c_name"]) for v in semantic_enum["values"]], f"enum {semantic_enum['bound_name']}"
         )
+
+    # An awaitable's poll function and pending constant are just NAMES in a comment until something
+    # checks them. A typo would otherwise sail through here and surface as a C++ compile error in
+    # generated code, which is a poor place to learn about it.
+    _known_functions = {fn["name"] for fn in raw["functions"]}
+    _known_enum_values = {v["name"] for e in raw["enums"] for v in e["values"]}
+    for cls in classes.values():
+        spec = cls.get("awaitable")
+        if not spec:
+            continue
+        where = f"{cls['handle_type']} awaitable"
+        if spec["poll"] not in _known_functions:
+            raise ValueError(f"{where}: poll={spec['poll']} is not a function in the public headers")
+        if spec["pending"] not in _known_enum_values:
+            raise ValueError(f"{where}: pending={spec['pending']} is not an enum constant in the public headers")
+        if spec.get("release") and spec["release"] not in _known_functions:
+            raise ValueError(f"{where}: release={spec['release']} is not a function in the public headers")
 
     semantic = {
         "classes": list(classes.values()),

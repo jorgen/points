@@ -237,8 +237,24 @@ everything else. Use a `Session` directly to drive several datasets from one pum
 `Dataset.query_box_submit()` → `Request` API is still there for hosts with their own loop. If a
 thread per query is acceptable, `await asyncio.to_thread(ds.query_box, ...)` needs none of this.
 
-The C++ side of the same idea is [`examples/query_async/`](https://github.com/jorgen/dewfall/tree/master/examples/query_async),
-which `co_await`s requests on a vio event loop.
+The C++ side is [`dew/access/await.hpp`](https://github.com/jorgen/dewfall/blob/master/src/access/dew/access/await.hpp),
+a header-only wrapper **generated** from the `//= awaitable:` annotations on the C handles:
+
+```cpp
+VIO_MAIN(loop, argc, argv)
+{
+  dew::await::driver_t driver(loop);
+  auto *ds = dew_dataset_create(url, len, nullptr, 0, nullptr, driver.pump(), &error);
+  if (co_await dew::await::ready(driver, ds) != dew_dataset_ready)
+    co_return 1;
+  dew::await::request_guard_t req(dew_dataset_request_region(ds, &spec, &error));
+  if (co_await dew::await::ready(driver, req) == dew_request_completed) { /* ... */ }
+}
+```
+
+The host brings its own vio loop; nothing extra is linked. Making a handle awaitable is one
+annotation — `//= awaitable: poll=<fn> pending=<constant>` — and the generator does the rest. See
+[`examples/query_async/`](https://github.com/jorgen/dewfall/tree/master/examples/query_async).
 
 Because the wheel also ships the libraries, headers and a CMake config, a C or C++ project can
 build against the installed package without a source checkout:

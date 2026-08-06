@@ -7,6 +7,7 @@ loudly instead of silently mistranslating the API.
 """
 
 import os
+import pathlib
 import sys
 
 import pytest
@@ -207,6 +208,41 @@ def test_data_source_get_returns_token_struct(semantic):
     get = _method(cds, "get")
     assert get["results"][0]["role"] == "struct_value"
     assert get["results"][0]["type"]["name"] == "dew_data_source_t"
+
+
+def test_awaitable_annotations(semantic):
+    # The `//= awaitable:` annotation is the whole protocol: keep looking until poll() stops
+    # reporting `pending`. Both generated wrappers (C++ dew/access/await.hpp, and dew.aio) rest on
+    # it, so a drift here is a drift in both at once.
+    request = _class(semantic, "Request")
+    assert request["awaitable"] == {
+        "poll": "dew_request_status",
+        "pending": "dew_request_pending",
+        "release": "dew_request_release",
+    }
+    dataset = _class(semantic, "Dataset")
+    assert dataset["awaitable"]["poll"] == "dew_dataset_state"
+    assert dataset["awaitable"]["pending"] == "dew_dataset_opening"
+    # A dataset is closed, not released: `release` is optional and absent here.
+    assert dataset["awaitable"]["release"] is None
+    # Nothing else claims to be awaitable; a stray annotation would silently grow the generated API.
+    awaitables = sorted(c["bound_name"] for c in semantic["classes"] if c.get("awaitable"))
+    assert awaitables == ["Dataset", "Request"]
+
+
+def test_generated_cpp_await_header_is_up_to_date(semantic):
+    # dew/access/await.hpp is CHECKED IN, because generating it needs libclang and an ordinary C++
+    # build must not. That means it can go stale against the annotations, and this is what notices --
+    # otherwise the first symptom would be a consumer awaiting a handle the header does not know.
+    import generate_cpp_await
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    checked_in = root / "src" / "access" / "dew" / "access" / "await.hpp"
+    assert checked_in.exists(), f"{checked_in} is missing"
+    expected = generate_cpp_await.generate(semantic)
+    assert checked_in.read_text() == expected, (
+        "src/access/dew/access/await.hpp is stale -- rerun tools/bindgen/generate_cpp_await.py"
+    )
 
 
 if __name__ == "__main__":

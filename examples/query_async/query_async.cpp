@@ -35,15 +35,17 @@
 // spawned twice here, deliberately, and their reads interleave), and it is what makes the API usable
 // from a program that already has a loop it must not block -- a server, a renderer, a browser.
 //
-// dew_vio_await.h holds the entire adapter. Read that first; this file is just a consumer of it.
+// The adapter is GENERATED: dew/access/await.hpp comes from the `//= awaitable:` annotations on
+// dew_dataset_t and dew_request_t, so adding an awaitable handle to the C API is one annotation and
+// no new code here. It is header-only and inline -- this example links the public C library and
+// brings its own vio loop, nothing else.
 
-#include "dew_vio_await.h"
-
+#include <dew/access/await.hpp>
 #include <dew/access/query.h>
 #include <dew/core/error.h>
-#include <dew/core/pump.h>
 
 #include <vio/event_loop.h>
+#include <vio/run.h>
 #include <vio/task.h>
 
 #include <fmt/format.h>
@@ -105,13 +107,10 @@ void print_error(const char *prefix, dew_error_t *error)
 // One query, start to finish, without ever blocking the loop. Note what is NOT a parameter: the
 // awaiter needs no reference to the driver, because a request already has a completion callback. Only
 // dataset OPEN needs the driver, since readiness is a polled state rather than a callback.
-vio::task_t<void> run_query(dew_dataset_t *dataset, const char *label, const double (&aabb_min)[3], const double (&aabb_max)[3], dew_lod_mode_t lod_mode, uint64_t max_points)
+vio::task_t<void> run_query(dew::await::driver_t &driver, dew_dataset_t *dataset, const char *label, const double (&aabb_min)[3], const double (&aabb_max)[3], dew_lod_mode_t lod_mode,
+                            uint64_t max_points)
 {
   static const char *const attribute_names[] = {"intensity"};
-
-  // The awaiter is a NAMED local, not a temporary: the done callback writes into it, so it has to
-  // outlive the request. See the note in dew_vio_await.h.
-  dew_await::request_awaiter_t awaiter;
 
   dew_region_request_t spec = {};
   memcpy(spec.aabb_min, aabb_min, sizeof(spec.aabb_min));
@@ -122,28 +121,28 @@ vio::task_t<void> run_query(dew_dataset_t *dataset, const char *label, const dou
   spec.attribute_count = 1;
   spec.position_format = dew_position_r64_absolute;
   spec.clip_mode = dew_clip_point;
-  spec.done = dew_await::request_awaiter_t::done();
-  spec.done_user_ptr = awaiter.user_ptr();
 
   dew_error_t *error = nullptr;
-  dew_request_t *request = dew_dataset_request_region(dataset, &spec, &error);
-  if (!request)
+  dew_request_t *raw_request = dew_dataset_request_region(dataset, &spec, &error);
+  if (!raw_request)
   {
     print_error(fmt::format("[{}] could not start the request", label).c_str(), error);
     co_return;
   }
+  // The generated RAII guard: releasing is what frees the request and its decoded points, and it has
+  // to happen on every exit below.
+  dew::await::request_guard_t request(raw_request);
 
   fmt::print("[{}] issued, status={} -- returning to the loop\n", label, int(dew_request_status(request)));
 
   // The line this example exists for. The thread goes back to the loop; the other query proceeds.
-  dew_request_status_t status = co_await awaiter;
+  dew_request_status_t status = co_await dew::await::ready(driver, request);
 
   if (status != dew_request_completed)
   {
     dew_error_t *request_error = nullptr;
     dew_request_get_error(request, &request_error);
     print_error(fmt::format("[{}] request failed (status {})", label, int(status)).c_str(), request_error);
-    dew_request_release(request);
     co_return;
   }
 
@@ -151,7 +150,6 @@ vio::task_t<void> run_query(dew_dataset_t *dataset, const char *label, const dou
   if (!dew_request_get_result(request, &result))
   {
     fmt::print(stderr, "[{}] no result\n", label);
-    dew_request_release(request);
     co_return;
   }
 
@@ -168,36 +166,31 @@ vio::task_t<void> run_query(dew_dataset_t *dataset, const char *label, const dou
     fmt::print("[{}]   first point: [{:.3f}, {:.3f}, {:.3f}]\n", label, xyz[0], xyz[1], xyz[2]);
   }
 
-  // Releasing invalidates every pointer in `result`, so it goes last.
-  dew_request_release(request);
+  // request_guard_t releases here, which invalidates every pointer in `result`.
 }
 
 // Open the dataset, then run two overlapping queries on it.
-vio::task_t<void> run(dew_await::loop_t &driver, const args_t &args, int &exit_code)
+vio::task_t<int> run(dew::await::driver_t &driver, const args_t &args)
 {
   dew_error_t *error = nullptr;
   dew_dataset_t *dataset = dew_dataset_create(args.url.c_str(), uint32_t(args.url.size()), args.connection.c_str(), uint32_t(args.connection.size()), nullptr, driver.pump(), &error);
   if (!dataset)
   {
     print_error("could not create the dataset", error);
-    exit_code = 1;
-    driver.event_loop().stop();
-    co_return;
+    co_return 1;
   }
 
   // dew_dataset_create returns immediately, always. Even a local file is still `opening` here: the
   // index read happens on the dataset's own loop.
   fmt::print("opening (state={}) -- nothing has blocked\n", int(dew_dataset_state(dataset)));
 
-  if (co_await dew_await::dataset_ready(driver, dataset) != dew_dataset_ready)
+  if (co_await dew::await::ready(driver, dataset) != dew_dataset_ready)
   {
     dew_error_t *open_error = nullptr;
     dew_dataset_get_error(dataset, &open_error);
     print_error("could not open the dataset", open_error);
     dew_dataset_close(dataset);
-    exit_code = 1;
-    driver.event_loop().stop();
-    co_return;
+    co_return 1;
   }
 
   dew_dataset_info_t info = {};
@@ -220,19 +213,21 @@ vio::task_t<void> run(dew_await::loop_t &driver, const args_t &args, int &exit_c
   //
   // Spawn both, THEN await both. Awaiting the first before starting the second would serialize them
   // and make the whole exercise pointless.
-  auto preview = run_query(dataset, "preview", whole_min, whole_max, dew_lod_point_budget, 20000);
-  auto full = run_query(dataset, "full", whole_min, whole_max, dew_lod_full, 0);
+  auto preview = run_query(driver, dataset, "preview", whole_min, whole_max, dew_lod_point_budget, 20000);
+  auto full = run_query(driver, dataset, "full", whole_min, whole_max, dew_lod_full, 0);
   co_await std::move(preview);
   co_await std::move(full);
 
   dew_dataset_close(dataset);
-  driver.event_loop().stop();
-  co_return;
+  co_return 0;
 }
 
 } // namespace
 
-int main(int argc, char **argv)
+// VIO_MAIN gives us main() plus a coroutine body with `loop` in scope, running on a fresh event
+// loop. The point being made: dewfall is driven from the HOST's loop, not one of its own -- a program
+// that already has a vio loop adds a driver_t to it and nothing more.
+VIO_MAIN(loop, argc, argv)
 {
   args_t args;
   for (int i = 1; i < argc; i++)
@@ -245,7 +240,7 @@ int main(int argc, char **argv)
     else if (argument == "--help" || argument == "-h")
     {
       fmt::print("usage: query_async <dataset-url> [minx,miny,minz,maxx,maxy,maxz] [--connection SPEC]\n");
-      return 0;
+      co_return 0;
     }
     else if (args.url.empty())
     {
@@ -256,7 +251,7 @@ int main(int argc, char **argv)
       if (!parse_aabb(argument.c_str(), args.aabb_min, args.aabb_max))
       {
         fmt::print(stderr, "could not parse the box: {}\n", argument);
-        return 2;
+        co_return 2;
       }
       args.has_aabb = true;
     }
@@ -264,17 +259,9 @@ int main(int argc, char **argv)
   if (args.url.empty())
   {
     fmt::print(stderr, "usage: query_async <dataset-url> [minx,miny,minz,maxx,maxy,maxz] [--connection SPEC]\n");
-    return 2;
+    co_return 2;
   }
 
-  vio::event_loop_t loop;
-  dew_await::loop_t driver(loop);
-  int exit_code = 0;
-
-  // Kick the work off ON the loop, then run it. run() suspends at its first co_await and control
-  // returns here, into loop.run(), which is where everything actually happens.
-  loop.run_in_loop([&driver, &args, &exit_code]() -> vio::task_t<void> { return run(driver, args, exit_code); });
-  loop.run();
-
-  return exit_code;
+  dew::await::driver_t driver(loop);
+  co_return co_await run(driver, args);
 }
