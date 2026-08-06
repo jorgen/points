@@ -21,6 +21,7 @@
 #include "morton_tree_coordinate_transform.hpp"
 
 #include <atomic>
+#include <utility>
 #include <cstring>
 
 namespace dew::core
@@ -125,7 +126,9 @@ vio::task_t<bool> tree_set_t::load(tree_id_t id, dew_error_t &error)
   _loads_started.fetch_add(1, std::memory_order_acq_rel);
   bool ok = co_await do_load(id, error);
   _in_flight.fetch_sub(1, std::memory_order_acq_rel);
-  co_return ok;
+  // std::move, not `co_return ok`: vio's promise takes return_value(T &&), and MSVC will not bind an
+  // lvalue to it (clang and gcc happen to accept the same code).
+  co_return std::move(ok);
 }
 
 void tree_set_t::request(std::vector<tree_id_t> ids)

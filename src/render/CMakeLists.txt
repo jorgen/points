@@ -40,7 +40,12 @@ set(sources
 )
 add_library(dew_render_objects OBJECT ${public_headers} ${private_headers} ${sources})
 target_link_libraries(dew_render_objects PRIVATE fmt glm)
-target_link_libraries(dew_render_objects PUBLIC dew_core)
+# dew_core for its HEADERS ONLY (format.h, types.h) -- dew_render references none of its symbols, as
+# `nm -u` on the objects confirms. Linking it instead made every consumer inherit a dew_core link
+# edge, and dew_converter both splices dew_core's objects AND links dew_render, so its DLL ended up
+# with dew_core's exported C entry points twice (MSVC: LNK2005 dew_attributes_add_attribute).
+target_include_directories(dew_render_objects PUBLIC $<TARGET_PROPERTY:dew_core,INTERFACE_INCLUDE_DIRECTORIES>)
+target_compile_definitions(dew_render_objects PUBLIC $<TARGET_PROPERTY:dew_core,INTERFACE_COMPILE_DEFINITIONS>)
 target_link_libraries(dew_render_objects PRIVATE laszip)
 target_include_directories(dew_render_objects
         PUBLIC
