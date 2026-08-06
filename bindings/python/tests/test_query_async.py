@@ -17,6 +17,7 @@ examples/python/query_asyncio.py is the same machinery wrapped into `await`.
 """
 
 import threading
+import time
 
 import numpy as np
 import pytest
@@ -41,13 +42,26 @@ def dataset_path(tmp_path):
     return path
 
 
+def _poll_until(pump, predicate, timeout_s=60.0):
+    """Drive the pump until `predicate` holds, or give up.
+
+    A DEADLINE, not a fixed iteration count. The open and the query run on the dataset's own thread,
+    so a spin of N polls is a race against that thread rather than a wait -- 20000 tight iterations
+    take milliseconds and lose it on any machine whose IO is slower than the one it was written on.
+    (Windows CI, as it turned out.) The sleep also drops the GIL, which is what lets a wake callback
+    run at all.
+    """
+    deadline = time.monotonic() + timeout_s
+    while not predicate() and time.monotonic() < deadline:
+        pump.poll()
+        time.sleep(0.001)
+    return predicate()
+
+
 def _open(pump, path):
     """Open through the pump, driving it by hand -- no blocking wait anywhere."""
     dataset = dew.Dataset(path, "", dew.DatasetOptions(), pump)
-    for _ in range(20000):
-        if dataset.state() != dew.DatasetState.opening:
-            break
-        pump.poll()
+    assert _poll_until(pump, lambda: dataset.state() != dew.DatasetState.opening)
     assert dataset.state() == dew.DatasetState.ready
     return dataset
 
@@ -64,10 +78,7 @@ def test_create_returns_before_the_dataset_is_open(dataset_path):
     pump = dew.Pump()
     dataset = dew.Dataset(dataset_path, "", dew.DatasetOptions(), pump)
     assert dataset.state() == dew.DatasetState.opening
-    for _ in range(20000):
-        if dataset.state() != dew.DatasetState.opening:
-            break
-        pump.poll()
+    assert _poll_until(pump, lambda: dataset.state() != dew.DatasetState.opening)
     assert dataset.state() == dew.DatasetState.ready
     dataset.close()
 
@@ -83,10 +94,7 @@ def test_submit_does_not_block_and_needs_a_poll(dataset_path):
     assert request.status == dew.RequestStatus.pending
     assert not request.done
 
-    for _ in range(20000):
-        if request.done:
-            break
-        pump.poll()
+    assert _poll_until(pump, lambda: request.done)
 
     assert request.status == dew.RequestStatus.completed
     result = request.result()
@@ -104,10 +112,7 @@ def test_result_before_completion_raises(dataset_path):
     with pytest.raises(RuntimeError, match="pending"):
         request.result()
 
-    for _ in range(20000):
-        if request.done:
-            break
-        pump.poll()
+    assert _poll_until(pump, lambda: request.done)
     request.release()
     # Released is distinguishable from pending, and neither silently returns empty arrays.
     with pytest.raises(RuntimeError, match="released"):
@@ -130,10 +135,7 @@ def test_wake_fires_from_a_library_thread(dataset_path):
     pump.set_wake_callback(on_wake)
     dataset = dew.Dataset(dataset_path, "", dew.DatasetOptions(), pump)
 
-    for _ in range(20000):
-        if dataset.state() != dew.DatasetState.opening:
-            break
-        pump.poll()
+    assert _poll_until(pump, lambda: dataset.state() != dew.DatasetState.opening)
     assert dataset.state() == dew.DatasetState.ready
 
     # WAIT rather than check. The state is published just BEFORE the wake is raised, so the loop above
@@ -154,10 +156,7 @@ def test_async_and_blocking_paths_agree(dataset_path):
     lo, hi = _whole_box(dataset)
 
     request = dataset.query_box_submit(lo, hi, lod="full", attributes=["intensity"], clip_points=False)
-    for _ in range(20000):
-        if request.done:
-            break
-        pump.poll()
+    assert _poll_until(pump, lambda: request.done)
     from_async = request.result()
     request.release()
     dataset.close()
@@ -180,10 +179,7 @@ def test_arrays_outlive_the_request(dataset_path):
     lo, hi = _whole_box(dataset)
 
     request = dataset.query_box_submit(lo, hi, lod="full", clip_points=False)
-    for _ in range(20000):
-        if request.done:
-            break
-        pump.poll()
+    assert _poll_until(pump, lambda: request.done)
     xyz = request.result()["xyz"]
     expected = np.array(xyz, copy=True)
     request.release()
@@ -201,10 +197,7 @@ def test_request_is_a_context_manager(dataset_path):
     lo, hi = _whole_box(dataset)
 
     with dataset.query_box_submit(lo, hi, lod="full", clip_points=False) as request:
-        for _ in range(20000):
-            if request.done:
-                break
-            pump.poll()
+        assert _poll_until(pump, lambda: request.done)
         assert request.result()["point_count"] == TOTAL
 
     # __exit__ released it, so the handle is spent.
