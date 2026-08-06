@@ -61,41 +61,85 @@ namespace
 {
 
 // ---------------------------------------------------------------------------------------------
-// A synthetic cloud: a filled cube of points, dense enough to force real subdivision.
-constexpr uint32_t k_side = 40;
-constexpr uint32_t k_point_count = k_side * k_side * k_side; // 64000
-constexpr double k_scale = 0.01;
+// Synthetic clouds. Two shapes, because they exercise different halves of the renderer:
+//
+//   uniform   -- a filled cube. Every leaf is compact, so the octree is balanced and the streaming
+//                path is all that runs.
+//   unbalanced -- a sparse cloud over a huge volume PLUS one dense blob. The sparse points make
+//                leaves that cover an enormous morton range while staying under the point limit, and
+//                the blob forces deep subdivision on one branch. That combination is what promotes a
+//                leaf to a VIRTUAL source, so it is the only way to reach that code from a test.
+constexpr double k_scale = 0.001;
 
 struct source_t
 {
   std::vector<int32_t> xyz;
   std::vector<uint16_t> intensity;
+  int32_t max_coord = 0;
 };
 
 source_t g_source;
 uint32_t g_emitted = 0;
 
-source_t make_source()
+void add_point(source_t &out, int32_t x, int32_t y, int32_t z)
 {
+  out.xyz.push_back(x);
+  out.xyz.push_back(y);
+  out.xyz.push_back(z);
+  out.intensity.push_back(uint16_t((x + y + z) & 0xFFFF));
+  out.max_coord = std::max({out.max_coord, x, y, z});
+}
+
+// A filled cube: balanced octree, compact leaves, no virtual promotion.
+source_t make_uniform_source()
+{
+  constexpr int32_t side = 40;
   source_t out;
-  out.xyz.reserve(size_t(k_point_count) * 3);
-  out.intensity.reserve(k_point_count);
-  for (uint32_t z = 0; z < k_side; z++)
-    for (uint32_t y = 0; y < k_side; y++)
-      for (uint32_t x = 0; x < k_side; x++)
-      {
-        out.xyz.push_back(int32_t(x));
-        out.xyz.push_back(int32_t(y));
-        out.xyz.push_back(int32_t(z));
-        out.intensity.push_back(uint16_t(x + y + z));
-      }
+  for (int32_t z = 0; z < side; z++)
+    for (int32_t y = 0; y < side; y++)
+      for (int32_t x = 0; x < side; x++)
+        add_point(out, x, y, z);
   return out;
+}
+
+// Deliberately lopsided. A leaf is promoted to a virtual source only when it is a leaf, holds more
+// than virtual_min_points (256), and its points span more than lod_quantize_full_detail_level (9)
+// morton levels -- i.e. it covers a wide region without ever exceeding the point limit. Scattering a
+// few thousand points across 2^18 grid units gives exactly that; the dense blob then forces the
+// opposite extreme on one branch so the tree really is unbalanced rather than merely sparse.
+source_t make_unbalanced_source()
+{
+  constexpr int32_t span = 1 << 18;
+  source_t out;
+  // Sparse background. A cheap deterministic hash rather than <random>, so the dataset is identical
+  // on every platform and a failure is reproducible.
+  uint32_t state = 12345;
+  auto next = [&state]() {
+    state = state * 1664525u + 1013904223u;
+    return state;
+  };
+  for (int i = 0; i < 12000; i++)
+    add_point(out, int32_t(next() % span), int32_t(next() % span), int32_t(next() % span));
+
+  // Dense blob in one corner: forces that branch to subdivide far past everything else.
+  constexpr int32_t blob_side = 40;
+  constexpr int32_t blob_origin = span / 2;
+  for (int32_t z = 0; z < blob_side; z++)
+    for (int32_t y = 0; y < blob_side; y++)
+      for (int32_t x = 0; x < blob_side; x++)
+        add_point(out, blob_origin + x, blob_origin + y, blob_origin + z);
+  return out;
+}
+
+uint32_t source_point_count()
+{
+  return uint32_t(g_source.intensity.size());
 }
 
 dew_converter_file_pre_init_info_t pre_init(const char *, size_t, dew_error_t **)
 {
   dew_converter_file_pre_init_info_t info{};
-  info.approximate_point_count = k_point_count;
+  info.approximate_point_count = source_point_count();
   info.found_point_count = 1;
   info.approximate_point_size_bytes = 16;
   info.scale[0] = info.scale[1] = info.scale[2] = k_scale;
@@ -105,22 +149,24 @@ dew_converter_file_pre_init_info_t pre_init(const char *, size_t, dew_error_t **
 
 void init(const char *, size_t, dew_converter_header_t *header, dew_attributes_t *attributes, void **, dew_error_t **)
 {
-  header->point_count = k_point_count;
+  header->point_count = source_point_count();
   for (int i = 0; i < 3; i++)
   {
     header->offset[i] = 0.0;
     header->scale[i] = k_scale;
     header->min[i] = 0.0;
-    header->max[i] = double(k_side - 1) * k_scale;
+    header->max[i] = double(g_source.max_coord) * k_scale;
   }
   dew_attributes_add_attribute(attributes, DEW_ATTRIBUTE_XYZ, uint32_t(strlen(DEW_ATTRIBUTE_XYZ)), dew_type_i32, dew_components_3);
   dew_attributes_add_attribute(attributes, DEW_ATTRIBUTE_INTENSITY, uint32_t(strlen(DEW_ATTRIBUTE_INTENSITY)), dew_type_u16, dew_components_1);
   g_emitted = 0;
 }
 
-void convert_data(void *, const dew_converter_header_t *, const dew_attribute_t *, uint32_t, uint32_t max_points, dew_blob_t *buffers, uint32_t buffer_count, uint32_t *points_read, uint8_t *done, dew_error_t **)
+void convert_data(void *, const dew_converter_header_t *, const dew_attribute_t *, uint32_t, uint32_t max_points, dew_blob_t *buffers, uint32_t buffer_count, uint32_t *points_read, uint8_t *done,
+                  dew_error_t **)
 {
-  const uint32_t remaining = k_point_count - g_emitted;
+  const uint32_t total = source_point_count();
+  const uint32_t remaining = total - g_emitted;
   const uint32_t n = remaining < max_points ? remaining : max_points;
   if (buffer_count >= 1)
     memcpy(buffers[0].data, g_source.xyz.data() + size_t(g_emitted) * 3, size_t(n) * 3 * sizeof(int32_t));
@@ -128,12 +174,12 @@ void convert_data(void *, const dew_converter_header_t *, const dew_attribute_t 
     memcpy(buffers[1].data, g_source.intensity.data() + g_emitted, size_t(n) * sizeof(uint16_t));
   g_emitted += n;
   *points_read = n;
-  *done = g_emitted >= k_point_count ? 1 : 0;
+  *done = g_emitted >= total ? 1 : 0;
 }
 
-bool build_dataset(const char *path)
+bool build_dataset(const char *path, source_t source, uint32_t node_point_limit)
 {
-  g_source = make_source();
+  g_source = std::move(source);
   std::remove(path);
   dew_error_t *error = nullptr;
   auto *converter = dew_converter_create(path, uint32_t(strlen(path)), dew_open_file_semantics_truncate, &error);
@@ -148,9 +194,9 @@ bool build_dataset(const char *path)
   callbacks.init = init;
   callbacks.convert_data = convert_data;
   dew_converter_set_file_converter_callbacks(converter, callbacks);
-  // Force a real octree. With the default limit the whole cube lands in one node and there is no LOD
+  // Force a real octree. With the default limit everything lands in one node and there is no LOD
   // structure for the walker to descend, which would make every assertion below trivially true.
-  dew_converter_set_node_point_limit(converter, 2000);
+  dew_converter_set_node_point_limit(converter, node_point_limit);
 
   dew_converter_str_buffer name{"synthetic", 9};
   dew_converter_add_data_file(converter, &name, 1);
@@ -342,21 +388,22 @@ template <typename Predicate> frame_summary_t render_until(dew_renderer_t *rende
 }
 
 const char *k_path = "render_callback_test.dew";
+const char *k_unbalanced_path = "render_callback_unbalanced.dew";
 
 // Everything a test needs, torn down in the order a real consumer must use: data source first (it
 // releases its GPU buffers), then the renderer.
 struct render_fixture_t
 {
-  render_fixture_t()
+  explicit render_fixture_t(const char *path = k_path, source_t source = make_uniform_source(), uint32_t node_point_limit = 2000)
   {
-    REQUIRE(build_dataset(k_path));
+    REQUIRE(build_dataset(path, std::move(source), node_point_limit));
     renderer = dew_renderer_create();
     REQUIRE(renderer);
     dew_renderer_set_callback(renderer, consumer.callbacks(), &consumer);
 
     // dew_error_t is opaque, so the handle has to be allocated rather than declared.
     dew_error_t *error = dew_error_create();
-    data_source = dew_converter_data_source_create(k_path, uint32_t(strlen(k_path)), error, renderer);
+    data_source = dew_converter_data_source_create(path, uint32_t(strlen(path)), error, renderer);
     REQUIRE(data_source);
     dew_error_destroy(error);
 
@@ -524,4 +571,65 @@ TEST_CASE("render: a frame with no data source produces no draw groups")
 
   dew_camera_destroy(camera);
   dew_renderer_destroy(renderer);
+}
+
+TEST_CASE("render: an unbalanced octree promotes leaves to virtual sources")
+{
+  // Virtual subnodes are part of the render interface and had no coverage at all. They exist for the
+  // "dense patch" inversion: a LEAF that covers a huge region (so it is never subdivided) but holds
+  // enough points to be worth drawing coarsely. A uniform cube never produces one -- every leaf is
+  // compact -- which is why this needs its own deliberately lopsided dataset.
+  render_fixture_t fixture(k_unbalanced_path, make_unbalanced_source(), 4000);
+  fixture.look_from(1, 1, 1, 2.0);
+
+  uint32_t promoted = 0;
+  uint64_t gpu_bytes = 0;
+  uint64_t resident_cpu_bytes = 0;
+  uint32_t nodes_drawn = 0;
+  // Settle rather than stop at the first promotion: promotions are capped per frame, so the first one
+  // says almost nothing about whether the rest of the tree is reached.
+  uint32_t last_drawn = 0;
+  int quiet = 0;
+  render_until(fixture.renderer, fixture.camera, fixture.consumer, [&](const frame_summary_t &) {
+    dew_converter_data_source_get_virtual_stats(fixture.data_source, &promoted, &gpu_bytes, &resident_cpu_bytes, &nodes_drawn);
+    if (nodes_drawn == last_drawn && promoted > 0 && nodes_drawn > 0)
+      return ++quiet >= 40;
+    last_drawn = nodes_drawn;
+    quiet = 0;
+    return false;
+  });
+
+  MESSAGE("virtual promoted: ", promoted, "  nodes drawn: ", nodes_drawn, "  gpu: ", gpu_bytes, "  resident cpu: ", resident_cpu_bytes);
+  REQUIRE(promoted > 0);
+  // Promotion alone proves only that a leaf QUALIFIED. Drawn virtual nodes prove the rest of the path
+  // ran: split_octants, materialize on the convert pool, upload, and emit.
+  REQUIRE(nodes_drawn > 0);
+  REQUIRE(gpu_bytes > 0);
+  REQUIRE(resident_cpu_bytes > 0);
+}
+
+TEST_CASE("render: virtual subtrees can be switched off")
+{
+  // The A/B toggle is public API (dew_converter_data_source_set_enable_virtual_subtrees) and the way a
+  // host backs out of the feature. If it did nothing, the previous test would still pass.
+  render_fixture_t fixture(k_unbalanced_path, make_unbalanced_source(), 4000);
+  dew_converter_data_source_set_enable_virtual_subtrees(fixture.data_source, 0);
+  REQUIRE(dew_converter_data_source_get_enable_virtual_subtrees(fixture.data_source) == 0);
+
+  fixture.look_from(1, 1, 1, 2.0);
+  auto summary = render_until_points(fixture.renderer, fixture.camera, fixture.consumer);
+  render_frames(fixture.renderer, fixture.camera, fixture.consumer, 60);
+
+  uint32_t promoted = 0;
+  uint64_t gpu_bytes = 0;
+  uint64_t resident_cpu_bytes = 0;
+  uint32_t nodes_drawn = 0;
+  dew_converter_data_source_get_virtual_stats(fixture.data_source, &promoted, &gpu_bytes, &resident_cpu_bytes, &nodes_drawn);
+
+  MESSAGE("with virtual off -- promoted: ", promoted, "  nodes drawn: ", nodes_drawn, "  points: ", summary.point_draw_size);
+  REQUIRE(promoted == 0);
+  REQUIRE(nodes_drawn == 0);
+  // And the dataset still renders: switching the feature off must not cost the points, it just draws
+  // the leaf's own monolith instead of a virtual cut.
+  REQUIRE(summary.point_draw_size > 0);
 }
