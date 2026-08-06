@@ -212,7 +212,7 @@ def test_data_source_get_returns_token_struct(semantic):
 
 def test_awaitable_annotations(semantic):
     # The `//= awaitable:` annotation is the whole protocol: keep looking until poll() stops
-    # reporting `pending`. Both generated wrappers (C++ dew/access/await.hpp, and dew.aio) rest on
+    # reporting `pending`. Both generated wrappers (C++ bindings/cpp/dew/await.hpp, and dew.aio) rest on
     # it, so a drift here is a drift in both at once.
     request = _class(semantic, "Request")
     assert request["awaitable"] == {
@@ -231,17 +231,17 @@ def test_awaitable_annotations(semantic):
 
 
 def test_generated_cpp_await_header_is_up_to_date(semantic):
-    # dew/access/await.hpp is CHECKED IN, because generating it needs libclang and an ordinary C++
-    # build must not. That means it can go stale against the annotations, and this is what notices --
+    # bindings/cpp/dew/await.hpp is CHECKED IN, because generating it needs libclang and an ordinary
+    # C++ build must not. That means it can go stale against the annotations, and this is what notices --
     # otherwise the first symptom would be a consumer awaiting a handle the header does not know.
     import generate_cpp_await
 
     root = pathlib.Path(__file__).resolve().parents[2]
-    checked_in = root / "src" / "access" / "dew" / "access" / "await.hpp"
+    checked_in = root / "bindings" / "cpp" / "dew" / "await.hpp"
     assert checked_in.exists(), f"{checked_in} is missing"
     expected = generate_cpp_await.generate(semantic)
     assert checked_in.read_text() == expected, (
-        "src/access/dew/access/await.hpp is stale -- rerun tools/bindgen/generate_cpp_await.py"
+        "bindings/cpp/dew/await.hpp is stale -- rerun tools/bindgen/generate_cpp_await.py"
     )
 
 

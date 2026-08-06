@@ -174,7 +174,7 @@ endif ()
 # Layout inside site-packages:
 #   dew/__init__.py, dew/_dew.<abi3>.so       the package + extension
 #   dew/lib/libdew_{common,render,converter}  the shared libraries
-#   dew/include/dew/**/*.h                    public C headers
+#   dew/include/dew/**/*.h{,pp}               public C headers + the C++ await wrappers
 #   dew/cmake/dewConfig.cmake                 find_package(dew) for consumers
 #   <env>/bin/dew                             the CLI (statically linked)
 # ---------------------------------------------------------------------------
@@ -211,9 +211,13 @@ if (SKBUILD)
                 "${CMAKE_SOURCE_DIR}/src/access/dew"
                 "${CMAKE_SOURCE_DIR}/src/render/dew"
                 "${CMAKE_SOURCE_DIR}/src/converter/dew"
+                # The generated C++ await wrappers travel with the C headers, so a wheel consumer
+                # doing find_package(dew) gets `#include <dew/await.hpp>` for free.
+                "${CMAKE_SOURCE_DIR}/bindings/cpp/dew"
             DESTINATION "${_dew_pkg}/include" COMPONENT dew_devel
             FILES_MATCHING
                 PATTERN "*.h"
+                PATTERN "*.hpp"
                 # legacy duplicate of dew/core/error.h (same include guard);
                 # excluded from the bindgen manifest, keep it out of the wheel too
                 PATTERN "dew/error.h" EXCLUDE)

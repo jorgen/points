@@ -101,6 +101,9 @@ if (NOT EMSCRIPTEN)
     add_subdirectory(tools)
 endif ()
 
+# Header-only and checked in, so it needs no generator at build time and is always available.
+add_subdirectory(bindings/cpp)
+
 if (DEW_BUILD_PYTHON AND NOT EMSCRIPTEN)
     add_subdirectory(bindings/python)
 endif ()

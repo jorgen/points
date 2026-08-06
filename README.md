@@ -237,8 +237,10 @@ everything else. Use a `Session` directly to drive several datasets from one pum
 `Dataset.query_box_submit()` → `Request` API is still there for hosts with their own loop. If a
 thread per query is acceptable, `await asyncio.to_thread(ds.query_box, ...)` needs none of this.
 
-The C++ side is [`dew/access/await.hpp`](https://github.com/jorgen/dewfall/blob/master/src/access/dew/access/await.hpp),
-a header-only wrapper **generated** from the `//= awaitable:` annotations on the C handles:
+The C++ side is [`bindings/cpp/dew/await.hpp`](https://github.com/jorgen/dewfall/blob/master/bindings/cpp/dew/await.hpp),
+a header-only wrapper **generated** from the `//= awaitable:` annotations on the C handles. It lives
+in `bindings/` beside the Python bindings, because that is what it is — a consumer of the public C
+surface rather than part of it:
 
 ```cpp
 VIO_MAIN(loop, argc, argv)
@@ -252,8 +254,9 @@ VIO_MAIN(loop, argc, argv)
 }
 ```
 
-The host brings its own vio loop; nothing extra is linked. Making a handle awaitable is one
-annotation — `//= awaitable: poll=<fn> pending=<constant>` — and the generator does the rest. See
+Link the `dew::await` INTERFACE target for the include paths; the host brings its own vio loop and
+links the dew libraries as usual. Making a handle awaitable is one annotation —
+`//= awaitable: poll=<fn> pending=<constant>` — and the generator does the rest. See
 [`examples/query_async/`](https://github.com/jorgen/dewfall/tree/master/examples/query_async).
 
 Because the wheel also ships the libraries, headers and a CMake config, a C or C++ project can

@@ -6,7 +6,7 @@
  * the host dispatches them with dew_pump_poll on a thread of its choosing. This header is that
  * handshake, expressed as coroutines, so a program with its own loop can write straight-line code:
  *
- *     #include <dew/access/await.hpp>
+ *     #include <dew/await.hpp>
  *     #include <vio/run.h>
  *
  *     VIO_MAIN(loop, argc, argv)

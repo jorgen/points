@@ -11,9 +11,6 @@
 #
 # Deliberately excluded, one '!' line each so a forgotten header is
 # distinguishable from an intentional omission (parse_headers.py audits this):
-# Generated C++ await wrappers (from the //= awaitable: annotations). C++-only and header-only, so
-# it is not part of the C surface the language bindings are built from -- it is a CONSUMER of it.
-!access/dew/access/await.hpp
 !access/dew/access/export.h
 !core/dew/core/export.h
 !converter/dew/converter/export.h

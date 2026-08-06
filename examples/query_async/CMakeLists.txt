@@ -18,12 +18,8 @@ add_executable(query_async
         query_async.cpp
 )
 
-target_link_libraries(query_async PRIVATE dew_access dew_core)
+target_link_libraries(query_async PRIVATE dew::await dew_access dew_core)
 target_link_libraries(query_async PRIVATE vio_objstore fmt)
-target_include_directories(query_async PRIVATE
-        ${PROJECT_SOURCE_DIR}/src/access/dew/..
-        ${PROJECT_SOURCE_DIR}/src/core/dew/..
-)
 copy_dll_for_target(query_async dew_access dew_core)
 setWarningFlagsForTarget(query_async)
 set_example_properties(query_async)

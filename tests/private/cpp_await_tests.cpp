@@ -18,7 +18,7 @@
 
 // The GENERATED C++ await wrappers, driven on a real vio loop.
 //
-// dew/access/await.hpp is produced from the `//= awaitable:` annotations, and test_ir.py already
+// dew/await.hpp is produced from the `//= awaitable:` annotations, and test_ir.py already
 // checks the checked-in copy matches the annotations. That is a text comparison, though: it proves
 // the file is current, not that the code in it works. These run it.
 //
@@ -29,7 +29,7 @@
 
 #include <doctest/doctest.h>
 
-#include <dew/access/await.hpp>
+#include <dew/await.hpp>
 #include <dew/access/query.h>
 #include <dew/converter/converter.h>
 #include <dew/core/default_attribute_names.h>

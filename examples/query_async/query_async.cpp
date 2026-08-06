@@ -35,12 +35,12 @@
 // spawned twice here, deliberately, and their reads interleave), and it is what makes the API usable
 // from a program that already has a loop it must not block -- a server, a renderer, a browser.
 //
-// The adapter is GENERATED: dew/access/await.hpp comes from the `//= awaitable:` annotations on
+// The adapter is GENERATED: dew/await.hpp comes from the `//= awaitable:` annotations on
 // dew_dataset_t and dew_request_t, so adding an awaitable handle to the C API is one annotation and
 // no new code here. It is header-only and inline -- this example links the public C library and
 // brings its own vio loop, nothing else.
 
-#include <dew/access/await.hpp>
+#include <dew/await.hpp>
 #include <dew/access/query.h>
 #include <dew/core/error.h>
 
