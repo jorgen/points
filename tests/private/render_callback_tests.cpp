@@ -633,3 +633,62 @@ TEST_CASE("render: virtual subtrees can be switched off")
   // the leaf's own monolith instead of a virtual cut.
   REQUIRE(summary.point_draw_size > 0);
 }
+
+TEST_CASE("render: the bounding-box data source emits its own line groups")
+{
+  // A second data source over the same octree, and a different draw type. Worth its own test because
+  // it is the one place a consumer sees dew_node_bbox_lines, and because it shares the renderer's
+  // buffer callbacks with the point source -- a handle collision between the two would surface here.
+  render_fixture_t fixture;
+  dew_converter_data_source_set_show_bounding_boxes(fixture.data_source, 1);
+  dew_renderer_add_data_source(fixture.renderer, dew_converter_data_source_get_bbox_data_source(fixture.data_source));
+  fixture.look_from(1, 1, 1, 2.0);
+
+  // Wait for BOTH: the boxes come straight from the walker, but the points need their IO to land, so
+  // stopping at the first frame with a box catches a frame that has no points yet.
+  auto summary = render_until(fixture.renderer, fixture.camera, fixture.consumer, [](const frame_summary_t &s) {
+    return s.point_group_count > 0 && std::find(s.types.begin(), s.types.end(), dew_node_bbox_lines) != s.types.end();
+  });
+
+  const int bbox_groups = int(std::count(summary.types.begin(), summary.types.end(), dew_node_bbox_lines));
+  MESSAGE("bbox groups: ", bbox_groups, "  total groups: ", summary.group_count);
+  REQUIRE(bbox_groups > 0);
+  // The points are still drawn alongside them; the boxes are an overlay, not a replacement.
+  REQUIRE(summary.point_group_count > 0);
+}
+
+TEST_CASE("render: points_rendered agrees with the emitted draw groups")
+{
+  // dew_converter_data_source_get_points_rendered is what a host puts on screen as a statistic. It is
+  // computed inside the emit rather than derived from the draw groups, so the two can drift apart
+  // without anything else noticing.
+  render_fixture_t fixture;
+  fixture.look_from(1, 1, 1, 2.0);
+  auto summary = render_until_points(fixture.renderer, fixture.camera, fixture.consumer);
+
+  // Re-render one frame and compare THAT frame's groups against the counter it just produced.
+  summary = run_frame(fixture.renderer, fixture.camera, fixture.consumer);
+  const uint64_t reported = dew_converter_data_source_get_points_rendered(fixture.data_source);
+
+  MESSAGE("points_rendered: ", reported, "  summed draw_size: ", summary.point_draw_size);
+  REQUIRE(reported > 0);
+  REQUIRE(reported == summary.point_draw_size);
+}
+
+TEST_CASE("render: removing the data source stops the draw groups")
+{
+  // dew_renderer_remove_data_source is how a host swaps datasets. If removal left the source
+  // registered, the next frame would keep drawing data the host believes it has detached -- and the
+  // buffers would outlive the handle it used to reach them.
+  render_fixture_t fixture;
+  fixture.look_from(1, 1, 1, 2.0);
+  auto before = render_until_points(fixture.renderer, fixture.camera, fixture.consumer);
+  REQUIRE(before.point_group_count > 0);
+
+  dew_renderer_remove_data_source(fixture.renderer, dew_converter_data_source_get(fixture.data_source));
+
+  auto after = run_frame(fixture.renderer, fixture.camera, fixture.consumer);
+  MESSAGE("groups before removal: ", before.group_count, "  after: ", after.group_count);
+  REQUIRE(after.group_count == 0);
+  REQUIRE(after.point_draw_size == 0);
+}
