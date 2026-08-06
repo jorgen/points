@@ -1,0 +1,84 @@
+name: Save cmake-dep third-party sources
+description: >-
+  Stamp the fetched 3rdparty/ tree and roll the cache forward if it changed. Invoke with
+  `if: always() && <configure step>.outcome == 'success'` so a failing build still leaves a usable
+  cache behind, while a failing configure never blesses a half-fetched tree.
+
+inputs:
+  dir:
+    description: The third-party directory. Must match the restore step byte for byte.
+    default: 3rdparty
+  manifest:
+    description: The manifest path output by the restore action.
+    required: true
+  prefix:
+    description: The key prefix output by the restore action.
+    required: true
+  matched-key:
+    description: >-
+      The matched-key output from the restore action. Required: actions/cache/save does not
+      self-skip the way the all-in-one action does ("NO-OP in case of SaveOnly action" in its
+      saveImpl.ts), so without this comparison every green run would re-tar the whole tree only to
+      have the reservation rejected.
+    required: true
+  removed:
+    description: The removed output from the restore action; see below.
+    default: "0"
+  deep:
+    description: Must match the restore step's value, or every stamp will mismatch on the next run.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Stamp the fetched dependencies
+      id: stamp
+      shell: bash
+      env:
+        CMDEP_DEEP: ${{ inputs.deep == 'true' && '1' || '0' }}
+      run: |
+        set -euo pipefail
+        guard="${GITHUB_ACTION_PATH}/../guard.sh"
+        chmod +x "$guard"
+
+        # Nothing to save if configure never got far enough to fetch. Saving a path that resolves to
+        # zero files is a hard error inside the cache toolkit.
+        if [ -z "$(find "${{ inputs.dir }}" -type f -print -quit 2>/dev/null)" ]; then
+          echo "no fetched dependencies under ${{ inputs.dir }} — nothing to save"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        "$guard" stamp --manifest "${{ inputs.manifest }}" --dir "${{ inputs.dir }}" \
+          --enumerate "${GITHUB_ACTION_PATH}/../enumerate.cmake"
+
+        digest=$("$guard" digest --manifest "${{ inputs.manifest }}" --dir "${{ inputs.dir }}" |
+                   sed -n 's/^digest=//p')
+        key="${{ inputs.prefix }}${digest}"
+
+        # Healing changes nothing about the digest — a refetched dependency reproduces its original
+        # stamp — so a bad entry would keep matching the key it was saved under and never be
+        # replaced. Keys are immutable, so the healed tree goes under a distinct key instead; being
+        # newer, it wins the next prefix lookup and the bad entry ages out.
+        if [ "${{ inputs.removed }}" != "0" ] && [ -n "${{ inputs.matched-key }}" ]; then
+          key="${key}-heal${GITHUB_RUN_ID}"
+          echo "restored entry needed ${{ inputs.removed }} repair(s) — superseding it"
+        fi
+        echo "key=$key" >> "$GITHUB_OUTPUT"
+
+        # The whole point of a rolling cache: a new entry only when the tree actually moved. On an
+        # ordinary run the digest reproduces the restored key exactly and nothing is uploaded.
+        if [ "$key" = "${{ inputs.matched-key }}" ]; then
+          echo "tree unchanged since $key — not re-saving"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "tree changed: ${{ inputs.matched-key }} -> $key"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Save third-party sources
+      if: steps.stamp.outputs.skip != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ inputs.dir }}
+        key: ${{ steps.stamp.outputs.key }}

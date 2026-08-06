@@ -51,6 +51,60 @@ Build options:
 On the Mac the build dirs are `cmake-build-debug`, `cmake-build-release`, `cmake-build-wasm`; the
 wasm build needs `source ~/dev/emsdk/emsdk_env.sh` first (system python is too old for emcc).
 
+## CI dependency cache
+
+`3rdparty/` is cached on GitHub Actions by the composite actions in `.github/actions/cmake-deps/`
+(restore + verify) and `.github/actions/cmake-deps/save` (stamp + roll forward). Used by `ci.yml`
+and by `wheels.yml`'s macOS/Windows legs.
+
+The cache **rolls forward** rather than being keyed on the pins: cmake-dep updates `3rdparty/` in
+place, so bumping one pin costs one download. The key is a stable prefix
+`cmdep-<epoch>-<profile>-<os>-<cmake-dep-pin>-`, used as both `key` and `restore-keys` so the exact
+lookup always misses and the prefix search returns the newest entry. The save key is that prefix
+plus a digest of the resulting tree, and the save is skipped when that equals the restored key — so
+an unchanged run uploads nothing.
+
+**Why a verify step exists at all.** cmake-dep's entire "already fetched" test is
+`if (NOT EXISTS "${dir}")`. An empty or truncated directory is skipped forever, and a pin whose
+URL/hash moves without changing the version string is never noticed (`cmakerc`, `argh` and `vio`
+all carry truncated shas as their "version"). That is survivable for a local tree and not
+survivable for one restored into every future run. So each dependency carries a `.cmdep-stamp`
+written after a *successful* configure; on restore each is re-fingerprinted, and anything that
+fails is deleted so the next configure refetches exactly it. `3rdparty/vio-<sha>/3rdparty/` — vio's
+own dependencies, about a third of the bytes — is enumerated from vio's packages file inside the
+fetched tree and verified the same way, but never pruned by name.
+
+**Invalidating it**, in increasing order of bluntness:
+
+| Lever | Effect |
+|---|---|
+| nothing | per-dependency corruption heals itself on the next restore |
+| `CACHE_FORMAT` in `guard.sh` | restored trees are discarded on arrival; the key does not move |
+| `.github/deps-cache-epoch` | changes the key prefix; existing entries are abandoned |
+| the **Purge caches** workflow | `workflow_dispatch`, deletes entries through the API (`gh cache delete`) |
+
+The purge workflow is the only option that reclaims quota immediately, which matters: the limit is
+10 GB per repo and eviction is by last access, so large per-commit entries evict small long-lived
+ones.
+
+`guard.sh` runs standalone if you need to debug it:
+
+```bash
+cmake -DCMDEP_PACKAGES_FILE=$PWD/CMake/3rdPartyPackages.cmake -DCMDEP_ENUM_OUT=/tmp/m.txt \
+      -DCMDEP_PROJECT=dewfall -P .github/actions/cmake-deps/enumerate.cmake
+CMDEP_ALLOW_LOCAL=1 .github/actions/cmake-deps/guard.sh verify --manifest /tmp/m.txt \
+      --dir 3rdparty --enumerate .github/actions/cmake-deps/enumerate.cmake
+```
+
+`verify` **deletes** unverifiable directories, so it refuses to run outside CI without
+`CMDEP_ALLOW_LOCAL=1`. Pointing it at your working `3rdparty/` forces a refetch of anything it
+cannot vouch for — including everything, if the tree predates stamping.
+
+`CMDEP_DEEP=1` hashes file contents instead of just paths and sizes; it catches a flipped byte at
+unchanged file size, which the default mode cannot. The mode is recorded in each stamp (`v1q`/`v1d`)
+because switching modes invalidates every stamp, and that should read as a mode change rather than
+as mass corruption.
+
 ## Running Tests
 
 Test framework is doctest. The MSVC test executable lives at `build/tests/Debug/private_interface_unit_tests.exe`.
