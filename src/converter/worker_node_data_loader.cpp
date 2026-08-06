@@ -26,6 +26,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 namespace
 {
@@ -63,8 +64,8 @@ bool decode_worker_pool_available()
   return !pool.isNull() && !pool.isUndefined();
 }
 
-worker_node_data_loader_t::worker_node_data_loader_t(storage_handler_t &storage_handler)
-  : _storage_handler(storage_handler)
+worker_node_data_loader_t::worker_node_data_loader_t(blob_reader_t &reader)
+  : _reader(reader)
   , _pool(emscripten::val::global("__dewDecodePool"))
 {
 }
@@ -82,7 +83,7 @@ render::load_handle_t worker_node_data_loader_t::request_load(const void *reques
   {
     p.format[i] = req.format[i];
     if (req.locations[i].size > 0)
-      p.reads[i] = _storage_handler.read(req.locations[i], /*raw=*/true);
+      p.reads[i] = _reader.read(req.locations[i], read_options_t{/*raw=*/true, false, {}});
   }
   _pending.emplace(handle, std::move(p));
   return handle;
@@ -218,7 +219,7 @@ render::loaded_node_data_t worker_node_data_loader_t::get_data(render::load_hand
     auto rr0 = std::make_shared<read_request_t>();
     uint32_t pts_size = 0;
     rr0->buffer = copy_val_to_wasm(salvage_points, pts_size);
-    rr0->buffer_info = dew_converter_buffer_t(rr0->buffer.get(), pts_size);
+    rr0->buffer_info = dew_blob_t(rr0->buffer.get(), pts_size);
     rr0->_done = true;
     dew_error_t derr{};
     deserialize_points(rr0->buffer_info, handler->header, handler->data_info[0], derr);
@@ -230,7 +231,7 @@ render::loaded_node_data_t worker_node_data_loader_t::get_data(render::load_hand
       auto rr1 = std::make_shared<read_request_t>();
       uint32_t attr_size = 0;
       rr1->buffer = copy_val_to_wasm(salvage_attr, attr_size);
-      rr1->buffer_info = dew_converter_buffer_t(rr1->buffer.get(), attr_size);
+      rr1->buffer_info = dew_blob_t(rr1->buffer.get(), attr_size);
       rr1->_done = true;
       handler->data_info[1] = rr1->buffer_info;
       handler->read_request.push_back(std::move(rr1));

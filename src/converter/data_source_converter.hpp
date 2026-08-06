@@ -78,11 +78,11 @@ struct dew_converter_data_source_t
   // budget, and an in-flight-IO clamp; the ctor and set_memory_budget() keep derived state + the storage
   // caches in sync. Default 1GB reproduces the historical sub-budget defaults exactly.
   uint64_t total_memory_budget = uint64_t(1024) * 1024 * 1024;
-  dew::converter::derived_budgets_t derived_budgets = dew::converter::derive_budgets(total_memory_budget);
+  dew::core::derived_budgets_t derived_budgets = dew::core::derive_budgets(total_memory_budget);
   // Heap-pressure brake (wasm): watches the real heap vs its link-time ceiling each frame and tightens the
   // per-frame caps at 80%/90% so the hard OOM trap is never reached. Inert on native (probe reports 0/0).
   // Tests inject a fake probe; when unset the emscripten probe (or 0/0) is used.
-  dew::converter::brake_level_t brake_level = dew::converter::brake_level_t::none;
+  dew::core::brake_level_t brake_level = dew::core::brake_level_t::none;
   std::function<void(uint64_t &heap_bytes, uint64_t &heap_max)> heap_probe_override;
   uint64_t heap_bytes_last = 0;
   uint64_t heap_max_last = 0;
@@ -108,7 +108,7 @@ struct dew_converter_data_source_t
   uint64_t points_rendered_last_frame = 0;
   dew::converter::frame_timings_t frame_timings;
 
-  dew::converter::compression_stats_t attribute_stats;
+  dew::core::compression_stats_t attribute_stats;
   double current_attr_min = 0.0;
   double current_attr_max = 1.0;
 

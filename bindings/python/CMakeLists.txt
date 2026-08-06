@@ -110,27 +110,40 @@ if (DEW_PYTHON_REQUIRE_STABLE_ABI)
                             "${SKBUILD_SABI_VERSION}")
     endif ()
     nanobind_add_module(dew_python NB_STATIC STABLE_ABI ${_generated} dew_py_support.cpp
-        dew_py_support.h custom/file_convert_callbacks.h)
+        dew_py_support.h custom/file_convert_callbacks.h custom/query.h custom/query_async.h)
 else ()
     nanobind_add_module(dew_python NB_STATIC ${_generated} dew_py_support.cpp
-        dew_py_support.h custom/file_convert_callbacks.h)
+        dew_py_support.h custom/file_convert_callbacks.h custom/query.h custom/query_async.h)
 endif ()
 
 set_target_properties(dew_python PROPERTIES OUTPUT_NAME "_dew")
 target_include_directories(dew_python PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(dew_python PRIVATE dew_converter dew_render dew_common)
+target_link_libraries(dew_python PRIVATE dew_converter dew_render dew_access dew_core)
 
 # Build the extension into a `dew/` directory next to a copy of the package's
 # __init__.py, so the build tree imports exactly the way the wheel does
 # (`import dew` -> package -> ._dew) and the tests exercise that path.
 set_target_properties(dew_python PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/dew")
-add_custom_command(TARGET dew_python POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/dew/__init__.py"
-            "${CMAKE_CURRENT_BINARY_DIR}/dew/__init__.py"
-    VERBATIM
-    COMMENT "staging dew/__init__.py next to the extension")
+# Tracked as a real dependency rather than a POST_BUILD step: POST_BUILD only fires when the
+# extension itself relinks, so editing only __init__.py used to leave a stale copy in the build tree
+# and the tests would import the old package.
+# Every .py in the package is staged, not just __init__ -- dew/aio.py is part of the public surface.
+set(_dew_py_modules __init__.py aio.py)
+set(_dew_py_staged)
+foreach(_mod IN LISTS _dew_py_modules)
+    add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/dew/${_mod}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/dew"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/dew/${_mod}"
+                "${CMAKE_CURRENT_BINARY_DIR}/dew/${_mod}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/dew/${_mod}"
+        COMMENT "staging dew/${_mod} next to the extension")
+    list(APPEND _dew_py_staged "${CMAKE_CURRENT_BINARY_DIR}/dew/${_mod}")
+endforeach()
+add_custom_target(dew_python_package ALL DEPENDS ${_dew_py_staged})
+
+add_dependencies(dew_python_package dew_python)
 
 if (DEW_PYTHON_REQUIRE_STABLE_ABI)
     # Ground truth after the fact: nanobind links the -abi3 variant of its
@@ -152,7 +165,7 @@ if (APPLE)
     set_target_properties(dew_python PROPERTIES BUILD_RPATH "@loader_path")
 endif ()
 if (WIN32)
-    copy_dll_for_target(dew_python dew_render dew_converter dew_common)
+    copy_dll_for_target(dew_python dew_render dew_converter dew_core)
 endif ()
 
 # ---------------------------------------------------------------------------
@@ -161,7 +174,7 @@ endif ()
 # Layout inside site-packages:
 #   dew/__init__.py, dew/_dew.<abi3>.so       the package + extension
 #   dew/lib/libdew_{common,render,converter}  the shared libraries
-#   dew/include/dew/**/*.h                    public C headers
+#   dew/include/dew/**/*.h{,pp}               public C headers + the C++ await wrappers
 #   dew/cmake/dewConfig.cmake                 find_package(dew) for consumers
 #   <env>/bin/dew                             the CLI (statically linked)
 # ---------------------------------------------------------------------------
@@ -182,7 +195,7 @@ if (SKBUILD)
     # where delvewheel expects to find them when it repairs the wheel. The
     # import libraries stay in lib/ for linking. Elsewhere the rpath set above
     # points at lib/, so the shared libraries live there.
-    install(TARGETS dew_common dew_render dew_converter
+    install(TARGETS dew_core dew_access dew_render dew_converter
             LIBRARY DESTINATION "${_dew_pkg}/lib" COMPONENT dew_runtime
             RUNTIME DESTINATION "${_dew_pkg}" COMPONENT dew_runtime
             ARCHIVE DESTINATION "${_dew_pkg}/lib" COMPONENT dew_devel)
@@ -194,13 +207,18 @@ if (SKBUILD)
     endif ()
 
     install(DIRECTORY
-                "${CMAKE_SOURCE_DIR}/src/common/dew"
+                "${CMAKE_SOURCE_DIR}/src/core/dew"
+                "${CMAKE_SOURCE_DIR}/src/access/dew"
                 "${CMAKE_SOURCE_DIR}/src/render/dew"
                 "${CMAKE_SOURCE_DIR}/src/converter/dew"
+                # The generated C++ await wrappers travel with the C headers, so a wheel consumer
+                # doing find_package(dew) gets `#include <dew/await.hpp>` for free.
+                "${CMAKE_SOURCE_DIR}/bindings/cpp/dew"
             DESTINATION "${_dew_pkg}/include" COMPONENT dew_devel
             FILES_MATCHING
                 PATTERN "*.h"
-                # legacy duplicate of dew/common/error.h (same include guard);
+                PATTERN "*.hpp"
+                # legacy duplicate of dew/core/error.h (same include guard);
                 # excluded from the bindgen manifest, keep it out of the wheel too
                 PATTERN "dew/error.h" EXCLUDE)
 

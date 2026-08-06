@@ -8,7 +8,7 @@
 
 #include <nanobind/nanobind.h>
 
-#include <dew/common/error.h>
+#include <dew/core/error.h>
 
 #include <cstdint>
 #include <string>

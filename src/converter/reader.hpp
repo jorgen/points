@@ -33,12 +33,13 @@
 #include <vio/thread_pool.h>
 
 #include "attributes_configs.hpp"
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "error.hpp"
 #include "perf_stats.hpp"
 
 namespace dew::converter
 {
+using namespace dew::core;
 class storage_handler_t;
 struct get_points_file_t
 {

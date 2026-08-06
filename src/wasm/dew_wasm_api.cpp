@@ -41,6 +41,7 @@
 #include <vector>
 
 using namespace dew::converter;
+using namespace dew::core;
 using emscripten::val;
 
 namespace
@@ -362,9 +363,9 @@ static val dew_read_node(int handle)
   if (!read_blob_decompressed(backend, pos_loc, pos_buf, pos_size))
     return val::null();
   storage_header_t header{};
-  dew_converter_buffer_t point_data{};
+  dew_blob_t point_data{};
   dew_error_t derr;
-  if (!deserialize_points(dew_converter_buffer_t(pos_buf.get(), pos_size), header, point_data, derr))
+  if (!deserialize_points(dew_blob_t(pos_buf.get(), pos_size), header, point_data, derr))
   {
     g_last_error = derr.msg.empty() ? "deserialize_points failed" : derr.msg;
     return val::null();
@@ -376,7 +377,7 @@ static val dew_read_node(int handle)
   dh.header = header;
   dh.read_request.push_back(std::make_shared<read_request_t>());
   dh.read_request[0]->buffer = pos_buf;
-  dh.read_request[0]->buffer_info = dew_converter_buffer_t(pos_buf.get(), pos_size);
+  dh.read_request[0]->buffer_info = dew_blob_t(pos_buf.get(), pos_size);
   dh.data_info[0] = point_data;
   dh.target_count = 1;
   dh.done = 1;

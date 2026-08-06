@@ -13,7 +13,7 @@
 
 namespace
 {
-using namespace dew::converter;
+using namespace dew::core;
 
 TEST_CASE("residency: local blobs have no entries and accounting tracks resident bytes")
 {
@@ -162,15 +162,15 @@ TEST_CASE("hole punch reclaims blocks or reports unsupported")
   struct stat before = {};
   REQUIRE(fstat(fd, &before) == 0);
 
-  auto result = dew::converter::file_hole_punch(fd, 4096, (1 << 20) - 8192);
-  if (result.status == dew::converter::hole_punch_status_t::unsupported)
+  auto result = dew::core::file_hole_punch(fd, 4096, (1 << 20) - 8192);
+  if (result.status == dew::core::hole_punch_status_t::unsupported)
   {
     // Legit on exotic filesystems: the backend degrades to mark-only eviction.
     WARN("hole punch unsupported on this filesystem -- degraded mode only");
   }
   else
   {
-    REQUIRE(result.status == dew::converter::hole_punch_status_t::ok);
+    REQUIRE(result.status == dew::core::hole_punch_status_t::ok);
     struct stat after = {};
     REQUIRE(fstat(fd, &after) == 0);
     REQUIRE(after.st_size == before.st_size);     // logical size unchanged (KEEP_SIZE semantics)

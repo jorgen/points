@@ -47,6 +47,17 @@ _CUSTOM_CLASS_SNIPPETS = {
         "dewpy::bind_set_file_converter_callbacks(cls, m);",
     ),
     "dew_laszip_callbacks": ("Converter", "dewpy::bind_use_laszip_callbacks(cls);"),
+    # The C request lifecycle (opaque handle, borrowed buffers, explicit release) is not what a
+    # Python caller wants; Dataset.query_box() runs it end to end and hands back NumPy arrays.
+    "dew_dataset_request_region": ("Dataset", "dewpy::bind_query_box(cls);\n  dewpy::bind_query_submit<PyRequest>(cls);"),
+    # The pump is how a Python event loop drives the library without blocking: a wake callback says
+    # "look again", poll() dispatches. Both are py.skip in the header because their C signatures carry
+    # a raw user_ptr the generators cannot express.
+    "dew_pump_create": ("Pump", "dewpy::bind_pump_async(cls);"),
+    # Hangs the request accessors off the GENERATED Request holder. It must be the generated one:
+    # the opaque dew_request_t already produces an (empty) Request class, registered last, which
+    # would overwrite a second nb::class_ of the same name.
+    "dew_request_status": ("Request", "dewpy::bind_request_async(cls);"),
 }
 
 
@@ -895,6 +906,8 @@ class Emitter:
         parts.append("} // namespace")
         parts.append("")
         parts.append('#include "custom/file_convert_callbacks.h"')
+        parts.append('#include "custom/query.h"')
+        parts.append('#include "custom/query_async.h"')
         parts.append("")
         parts.append("namespace")
         parts.append("{")

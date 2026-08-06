@@ -38,7 +38,7 @@ std::string uuid_hex(const uint8_t (&uuid)[16])
 // neither and print nothing.
 void print_local_cache_state(const std::string &path)
 {
-  namespace pc = dew::converter;
+  namespace pc = dew::core;
   FILE *f = fopen(path.c_str(), "rb");
   if (!f)
     return;
@@ -119,7 +119,7 @@ void print_local_cache_state(const std::string &path)
 // through the converter above; their manifest is not re-fetched here.)
 void print_dir_bucket_state(const std::string &dir_path)
 {
-  namespace pc = dew::converter;
+  namespace pc = dew::core;
   auto manifest_path = dir_path + "/" + pc::bucket_root_manifest_name();
   FILE *f = fopen(manifest_path.c_str(), "rb");
   if (!f)
@@ -187,7 +187,7 @@ int cmd_info(int argc, char **argv)
     // State sections come first: they read the raw superblock/manifest directly, so they also work
     // for datasets the full open below would refuse (e.g. an incomplete DEW2 bucket).
     {
-      auto parsed = dew::converter::parse_url(filename);
+      auto parsed = dew::core::parse_url(filename);
       if (parsed.scheme.empty() || parsed.scheme == "file")
         print_local_cache_state(parsed.path);
       else if (parsed.scheme == "dir")

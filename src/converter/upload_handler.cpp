@@ -31,6 +31,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 static dew_error_t from_vio_error(const vio::error_t &e)
 {

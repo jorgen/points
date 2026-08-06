@@ -25,7 +25,7 @@
 #include "worker_node_data_loader.hpp" // decode-worker loader (used when the web app installs a worker pool)
 #include <emscripten/heap.h>           // emscripten_get_heap_size/_max (heap-pressure brake probe)
 #endif
-#include <dew/common/format.h>
+#include <dew/core/format.h>
 #include <dew/converter/converter_data_source.h>
 
 #include <vio/objstore/create_object_store.h> // apply_connection_override, clear_*_config_override
@@ -40,6 +40,7 @@
 
 using namespace dew;
 using namespace dew::converter;
+using namespace dew::core;
 
 // Estimate a leaf's resident_source_t CPU footprint from its data_handler (matches build_resident_source's
 // cpu_bytes), so in-flight async builds count against the CPU-resident budget before they finalize (bug #2).
@@ -109,11 +110,11 @@ dew_converter_data_source_t::dew_converter_data_source_t(const std::string &a_ur
   // On the web, route decode through a pool of Web Workers when the app installed one (globalThis
   // .__dewDecodePool); otherwise fall back to decoding inline on the main thread.
   if (decode_worker_pool_available())
-    node_loader = std::make_unique<worker_node_data_loader_t>(processor.storage_handler());
+    node_loader = std::make_unique<worker_node_data_loader_t>(processor.storage_handler().reader());
   else
-    node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler());
+    node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler().reader());
 #else
-  node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler());
+  node_loader = std::make_unique<native_node_data_loader_t>(processor.storage_handler().reader());
 #endif
 
   // Apply the default memory budget's derived cache sizes (the storage_handler ctor defaults predate the
@@ -125,7 +126,12 @@ dew_converter_data_source_t::dew_converter_data_source_t(const std::string &a_ur
   // Read compression stats for attribute normalization
   attribute_stats = processor.storage_handler().get_compression_stats();
 
-  if (processor.attrib_name_registry_count() > 2)
+  // Index 0 is the positions, so index 1 is the first attribute worth colouring by -- which exists as
+  // soon as there are TWO entries, not three. The old `> 2` skipped selection entirely on a dataset
+  // with exactly one non-position attribute, leaving current_attribute_name empty; the walker then
+  // asked for the attribute "" on every node and the render path fell over on the null buffer that
+  // produced. render_callback_tests covers the two-attribute case for that reason.
+  if (processor.attrib_name_registry_count() > 1)
   {
     char buffer[256];
     auto str_size = processor.attrib_name_registry_get(1, buffer, sizeof(buffer));

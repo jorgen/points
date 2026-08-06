@@ -21,7 +21,7 @@
 #include "morton.hpp"                     // morton192_t
 #include "point_buffer_render_helper.hpp" // dyn_points_data_handler_t
 
-#include <dew/common/format.h> // dew_type_t
+#include <dew/core/format.h> // dew_type_t
 
 #include <array>
 #include <cstdint>
@@ -29,6 +29,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // A downloaded leaf kept resident in CPU memory so the renderer can grow a virtual octree from it without
 // re-reading from storage. Holds the PRE-reorder morton-sorted code array (the octant split needs morton

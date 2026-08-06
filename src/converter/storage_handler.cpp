@@ -38,45 +38,15 @@
 
 namespace dew::converter
 {
-
-#ifdef __EMSCRIPTEN__
-// Mark a read complete on the single-thread cooperative build: resume the awaiting coroutine (if any)
-// on its owning loop instead of notifying a condition variable no thread is waiting on.
-static void complete_read_request(read_request_t &r)
-{
-  r._done = true;
-  if (r._continuation)
-  {
-    auto c = r._continuation;
-    auto *loop = r._continuation_loop;
-    r._continuation = nullptr;
-    loop->run_in_loop([c]() { c.resume(); });
-  }
-}
-#endif
-
-void read_request_t::wait_for_read()
-{
-#ifdef __EMSCRIPTEN__
-  // Cooperative fallback: the render path co_awaits await_on() instead, so this only runs for the
-  // (currently unused-on-wasm) write/LOD read paths. Spin the browser event loop until the read lands;
-  // safe only at the top of the call stack (never re-entered from inside a loop handler).
-  while (!_done)
-  {
-    vio::wasm::pump();
-    emscripten_sleep(0);
-  }
-#else
-  std::unique_lock<std::mutex> lock(_mutex);
-  _block_for_read.wait(lock, [this] { return this->_done; });
-#endif
-}
+using namespace dew::core;
 
 storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t &thread_pool, attributes_configs_t &attributes_configs, perf_stats_t &perf_stats, vio::event_pipe_t<void> &index_written,
                                      vio::event_pipe_t<dew_error_t> &storage_error_pipe, dew_error_t &error)
   : _thread_pool(thread_pool)
-  , _event_loop_thread()
-  , _event_loop(_event_loop_thread.event_loop())
+  // No connection string here: the converter installs its credentials as vio's process-global
+  // override in dew_converter_set_destination, before any backend is built.
+  , _reader(url, std::string_view{}, thread_pool, perf_stats, storage_error_pipe, error)
+  , _event_loop(_reader.event_loop())
   , _attributes_configs(attributes_configs)
   , _perf_stats(perf_stats)
   , _index_written(index_written)
@@ -85,56 +55,28 @@ storage_handler_t::storage_handler_t(const std::string &url, vio::thread_pool_t 
   , _write_trees_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_trees))
   , _write_tree_registry_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_tree_registry))
   , _write_blob_locations_and_update_header_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_write_blob_locations_and_update_header))
-  , _read_request_pipe(_event_loop, vio::event_bind_t::bind(*this, &storage_handler_t::handle_read_request))
-  , _read_cache(256 * 1024 * 1024)
-  , _decompressed_cache(256 * 1024 * 1024)
 {
   set_compressor(compression_method_t::zstd);
-  _backend = create_storage_backend(url, _event_loop, error);
 }
 
 storage_handler_t::~storage_handler_t()
 {
-  // Safety net: join the storage loop before _read_cache / _backend / the pipes destruct. An in-flight
-  // do_read_request touches all of them (and locks the lru cache mutex); stopping the loop first drains it.
+  // Safety net: quiesce the shared loop before this object's write pipes destruct. The reader owns the
+  // loop and the backend, so its stop_loop does the draining; ordering matters because an in-flight read
+  // and a queued write both run on that one loop.
   stop_loop();
 }
 
 void storage_handler_t::stop_loop()
 {
-  // The backend's keep-alive connection pool holds open libuv handles; closing the loop with any still open
-  // makes ~event_loop_t's uv_loop_close abort. So drain and close everything on the loop thread first.
-  if (_backend)
-  {
-    auto run_on_loop_sync = [this](std::function<void()> fn) {
-      std::promise<void> done;
-      auto fut = done.get_future();
-      _event_loop.run_in_loop([&fn, &done]() { fn(); done.set_value(); });
-      fut.wait();
-    };
-    // (1) Dispatch any queued read requests into in-flight coroutines, then wait for every in-flight read to
-    //     finish -- each holds the backend and a pooled connection across its network co_await. No new reads
-    //     are posted during teardown (the render loader is gone, tree loads are quiesced), so this converges;
-    //     the loop advances the reads on its own thread.
-    run_on_loop_sync([]() {});
-    while (_reads_in_flight.load(std::memory_order_acquire) > 0)
-      std::this_thread::yield();
-    // (2) Nothing holds the backend now. Destroy it on the loop thread (dropping the io_manager + pool ->
-    //     uv_close on every idle connection), then pump the loop so those close callbacks -- deferred for TLS
-    //     while close_notify flushes -- run to completion before the loop is closed.
-    run_on_loop_sync([this]() { _backend.reset(); });
-    for (int i = 0; i < 16; ++i)
-      run_on_loop_sync([]() {});
-  }
-
-  _event_loop_thread.stop_and_join();
+  _reader.stop_loop();
 }
 
 dew_error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs_buffer, uint32_t &free_blobs_size, std::unique_ptr<uint8_t[]> &attribute_configs_buffer, uint32_t &attribute_configs_size,
                                       std::unique_ptr<uint8_t[]> &tree_registry_buffer, uint32_t &tree_registry_size)
 {
   index_load_t load;
-  auto error = _backend->read_index(load);
+  auto error = _reader.read_index(load);
   if (error.code != 0)
     return error;
 
@@ -155,12 +97,12 @@ dew_error_t storage_handler_t::read_index(std::unique_ptr<uint8_t[]> &free_blobs
 
 dew_error_t storage_handler_t::deserialize_free_blobs(const std::unique_ptr<uint8_t[]> &data, uint32_t size)
 {
-  return _backend->restore_allocator(data, size);
+  return _reader.backend()->restore_allocator(data, size);
 }
 
 dew_error_t storage_handler_t::upgrade_to_write(bool truncate)
 {
-  auto error = _backend->open_for_write(truncate);
+  auto error = _reader.backend()->open_for_write(truncate);
   if (error.code != 0)
   {
     auto error_copy = error;
@@ -225,7 +167,7 @@ static void compute_attribute_min_max(const uint8_t *data, uint32_t size, const 
   }
 }
 
-static bool serialize_points(const storage_header_t &header, const dew_converter_buffer_t &points, dew_converter_buffer_t &serialize_data, std::shared_ptr<uint8_t[]> &data_owner)
+static bool serialize_points(const storage_header_t &header, const dew_blob_t &points, dew_blob_t &serialize_data, std::shared_ptr<uint8_t[]> &data_owner)
 {
   serialize_data.size = sizeof(header) + points.size;
   data_owner = std::make_shared<uint8_t[]>(serialize_data.size);
@@ -243,9 +185,8 @@ vio::task_t<void> storage_handler_t::do_write(const std::shared_ptr<uint8_t[]> &
   // The blob manager reuses freed offsets, so an offset previously read (and cached) may now
   // hold different data. Invalidate the stale read-cache entry for this (file_id, offset) so a
   // later read does not return the old blob's bytes.
-  _read_cache.erase(cache_key_t{location.file_id, location.offset});
-  _decompressed_cache.erase(cache_key_t{location.file_id, location.offset});
-  auto error = co_await _backend->write_allocated(location, data);
+  _reader.invalidate(location);
+  auto error = co_await _reader.backend()->write_allocated(location, data);
   if (error.code != 0)
   {
     _storage_error.post_event(std::move(error));
@@ -289,7 +230,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
     auto &info = buffer_infos[i];
     if (i == 0)
     {
-      dew_converter_buffer_t buffer_data;
+      dew_blob_t buffer_data;
       serialize_points(header, attribute_buffers.buffers[i], buffer_data, info.data_owner);
       info.raw = static_cast<uint8_t *>(buffer_data.data);
       info.size = buffer_data.size;
@@ -389,7 +330,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
       _compression_stats.accumulate(wd.attribute_name, wd.format, wd.uncompressed_size, wd.size, wd.min_value, wd.max_value, compression_flags, wd.is_lod);
 
       auto &location = locations[wd.buffer_index];
-      _backend->allocate_blob(wd.size, storage_backend_t::blob_kind_t::data, location);
+      _reader.backend()->allocate_blob(wd.size, storage_backend_t::blob_kind_t::data, location);
 
       co_await do_write(wd.data, location);
     }
@@ -402,7 +343,7 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
       _compression_stats.accumulate(info.attr_name, info.format, info.size, info.size, std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(), 0, info.is_lod);
 
       auto &location = locations[i];
-      _backend->allocate_blob(info.size, storage_backend_t::blob_kind_t::data, location);
+      _reader.backend()->allocate_blob(info.size, storage_backend_t::blob_kind_t::data, location);
 
       co_await do_write(info.data_owner, location);
     }
@@ -412,8 +353,8 @@ vio::task_t<void> storage_handler_t::do_write_events(storage_header_t header, at
   // after landing this node's blobs; when only a checkpoint can relieve pressure (pending remote
   // facts need their durable flip), request one -- debounced until the processor rearms after the
   // checkpoint completes.
-  _backend->maybe_evict();
-  if (_backend->wants_checkpoint() && _on_checkpoint_request && !_checkpoint_requested.exchange(true, std::memory_order_acq_rel))
+  _reader.backend()->maybe_evict();
+  if (_reader.backend()->wants_checkpoint() && _on_checkpoint_request && !_checkpoint_requested.exchange(true, std::memory_order_acq_rel))
     _on_checkpoint_request();
 
   auto write_end = std::chrono::steady_clock::now();
@@ -451,13 +392,13 @@ vio::task_t<void> storage_handler_t::do_write_trees(std::vector<tree_id_t> tree_
 
   for (int i = 0; i < int(tree_ids.size()); i++)
   {
-    _backend->allocate_blob(serialized_trees[i].size, storage_backend_t::blob_kind_t::metadata, locations[i]);
+    _reader.backend()->allocate_blob(serialized_trees[i].size, storage_backend_t::blob_kind_t::metadata, locations[i]);
   }
   lock.unlock();
 
   for (int i = 0; i < int(tree_ids.size()); i++)
   {
-    auto result = co_await _backend->write_allocated(locations[i], serialized_trees[i].data);
+    auto result = co_await _reader.backend()->write_allocated(locations[i], serialized_trees[i].data);
     if (result.code != 0 && error.code == 0)
     {
       error = result;
@@ -484,10 +425,10 @@ vio::task_t<void> storage_handler_t::do_write_tree_registry(serialized_tree_regi
 {
   std::unique_lock<std::mutex> lock(_mutex);
   storage_location_t location;
-  _backend->allocate_blob(uint32_t(serialized_tree_registry.size), storage_backend_t::blob_kind_t::metadata, location);
+  _reader.backend()->allocate_blob(uint32_t(serialized_tree_registry.size), storage_backend_t::blob_kind_t::metadata, location);
   lock.unlock();
 
-  dew_error_t error = co_await _backend->write_allocated(location, serialized_tree_registry.data);
+  dew_error_t error = co_await _reader.backend()->write_allocated(location, serialized_tree_registry.data);
 
   if (done)
   {
@@ -532,7 +473,7 @@ vio::task_t<void> storage_handler_t::do_write_blob_locations_and_update_header(s
 
   // The backend writes the metadata blobs, then the index/manifest LAST, fsyncs, commits, and only
   // then reclaims the freed blobs. The index-written event fires only after that whole barrier succeeds.
-  auto error = co_await _backend->write_index(std::move(checkpoint));
+  auto error = co_await _reader.backend()->write_index(std::move(checkpoint));
   if (error.code != 0)
   {
     done(std::move(error));
@@ -574,23 +515,6 @@ void storage_handler_t::set_compression_level(int level)
   }
 }
 
-void storage_handler_t::set_read_cache_size(uint64_t max_bytes)
-{
-  // No clear(): set_max_bytes evicts LRU-first down to the new cap, so a runtime cap change (budget knob,
-  // heap-pressure brake) shrinks the cache without discarding the hot entries that still fit.
-  _read_cache.set_max_bytes(max_bytes);
-}
-
-void storage_handler_t::set_decompressed_cache_size(uint64_t max_bytes)
-{
-  _decompressed_cache.set_max_bytes(max_bytes);
-}
-
-uint64_t storage_handler_t::read_cache_current_bytes()
-{
-  return _read_cache.current_bytes();
-}
-
 #ifdef __EMSCRIPTEN__
 // The cache tier is native-only (packed local file + spill/upload); wasm streams remotely.
 dew_error_t storage_handler_t::configure_cache_tier(uint64_t, const std::string &, const std::string &)
@@ -618,9 +542,9 @@ bool storage_handler_t::get_cache_tier_stats(cache_tier_stats_t &) const
 #else
 dew_error_t storage_handler_t::configure_cache_tier(uint64_t cap_bytes, const std::string &destination_url, const std::string &connection)
 {
-  if (!_backend || !_backend->is_packed_file())
+  if (!_reader.backend() || !_reader.backend()->is_packed_file())
     return {1, "The cache tier requires a local cache file (packed storage)"};
-  auto *packed = static_cast<packed_file_backend_t *>(_backend.get());
+  auto *packed = static_cast<packed_file_backend_t *>(_reader.backend());
   packed->enable_cache_tier(cap_bytes);
   if (!destination_url.empty())
   {
@@ -635,9 +559,9 @@ dew_error_t storage_handler_t::configure_cache_tier(uint64_t cap_bytes, const st
 void storage_handler_t::set_cache_max_bytes(uint64_t cap_bytes)
 {
   _event_loop.run_in_loop([this, cap_bytes]() {
-    if (!_backend->is_packed_file())
+    if (!_reader.backend()->is_packed_file())
       return;
-    auto *packed = static_cast<packed_file_backend_t *>(_backend.get());
+    auto *packed = static_cast<packed_file_backend_t *>(_reader.backend());
     if (packed->residency())
     {
       packed->residency()->set_cap(cap_bytes);
@@ -648,7 +572,7 @@ void storage_handler_t::set_cache_max_bytes(uint64_t cap_bytes)
 
 void storage_handler_t::ensure_dataset_uuid(uint8_t (&out)[16])
 {
-  auto *packed = static_cast<packed_file_backend_t *>(_backend.get());
+  auto *packed = static_cast<packed_file_backend_t *>(_reader.backend());
   const auto &current = packed->dataset_uuid();
   bool all_zero = true;
   for (auto b : current)
@@ -668,9 +592,9 @@ void storage_handler_t::ensure_dataset_uuid(uint8_t (&out)[16])
 
 dew_error_t storage_handler_t::run_spill_bootstrap()
 {
-  if (!_backend->is_packed_file())
+  if (!_reader.backend()->is_packed_file())
     return {};
-  auto *packed = static_cast<packed_file_backend_t *>(_backend.get());
+  auto *packed = static_cast<packed_file_backend_t *>(_reader.backend());
   std::promise<dew_error_t> done_promise;
   auto fut = done_promise.get_future();
   _event_loop.run_in_loop([packed, &done_promise]() -> vio::task_t<void> {
@@ -684,15 +608,15 @@ dew_error_t storage_handler_t::run_spill_bootstrap()
 
 void storage_handler_t::set_clean_shutdown_next_checkpoint()
 {
-  if (_backend->is_packed_file())
-    static_cast<packed_file_backend_t *>(_backend.get())->set_clean_shutdown_next_checkpoint();
+  if (_reader.backend()->is_packed_file())
+    static_cast<packed_file_backend_t *>(_reader.backend())->set_clean_shutdown_next_checkpoint();
 }
 
 bool storage_handler_t::get_cache_tier_stats(cache_tier_stats_t &out) const
 {
-  if (!_backend || !_backend->is_packed_file())
+  if (!_reader.backend() || !_reader.backend()->is_packed_file())
     return false;
-  auto *packed = static_cast<packed_file_backend_t *>(const_cast<storage_backend_t *>(_backend.get()));
+  auto *packed = static_cast<packed_file_backend_t *>(const_cast<storage_backend_t *>(_reader.backend()));
   auto *residency = packed->residency();
   if (!residency)
     return false;
@@ -740,9 +664,9 @@ void storage_handler_t::note_blobs_uploaded(std::vector<std::pair<uint64_t, stor
     {
       assert(bucket_location.offset == 0 && "dataset objects hold exactly one blob");
       const uint64_t remote_id = uint64_t(bucket_location.file_id) << 32;
-      _backend->note_blob_uploaded(cache_offset, bucket_location.size, remote_id);
+      _reader.backend()->note_blob_uploaded(cache_offset, bucket_location.size, remote_id);
     }
-    _backend->maybe_evict();
+    _reader.backend()->maybe_evict();
   });
 }
 
@@ -756,199 +680,4 @@ void storage_handler_t::drain_posted_events()
   _event_loop.run_in_loop([&done]() { done.set_value(); });
   fut.get();
 }
-
-std::shared_ptr<read_request_t> storage_handler_t::read(storage_location_t location, bool raw, bool decompress_inline)
-{
-  auto ret = std::make_shared<read_request_t>();
-  ret->raw = raw;
-
-  cache_key_t key{location.file_id, location.offset};
-  if (decompress_inline && !raw)
-  {
-    auto decompressed_hit = _decompressed_cache.get(key);
-    if (decompressed_hit.has_value())
-    {
-      _perf_stats.cache_hits.fetch_add(1, std::memory_order_relaxed);
-      ret->buffer = decompressed_hit->data;
-      ret->buffer_info.data = ret->buffer.get();
-      ret->buffer_info.size = decompressed_hit->size;
-#ifdef __EMSCRIPTEN__
-      complete_read_request(*ret);
-#else
-      std::unique_lock<std::mutex> lock(ret->_mutex);
-      ret->_done = true;
-      ret->_block_for_read.notify_all();
-#endif
-      return ret;
-    }
-  }
-  auto cached = _read_cache.get(key);
-  if (cached.has_value())
-  {
-    _perf_stats.cache_hits.fetch_add(1, std::memory_order_relaxed);
-    auto &cv = cached.value();
-    if (raw)
-    {
-      // Hand back the COMPRESSED bytes unchanged; the caller (the wasm decode worker) decompresses off-thread.
-      ret->buffer = cv.compressed_data;
-      ret->buffer_info = dew_converter_buffer_t(ret->buffer.get(), cv.compressed_size);
-#ifdef __EMSCRIPTEN__
-      complete_read_request(*ret);
-#else
-      std::unique_lock<std::mutex> lock(ret->_mutex);
-      ret->_done = true;
-      ret->_block_for_read.notify_all();
-#endif
-      return ret;
-    }
-    const bool compressed = has_compression_magic(cv.compressed_data.get(), cv.compressed_size);
-#ifndef __EMSCRIPTEN__
-    if (compressed && !decompress_inline)
-    {
-      // read() is called on the RENDER thread from the per-frame scheduler (request_load). Decompressing a
-      // cache hit inline here is what spikes "Refine" -- a camera move that re-exposes many still-cached blobs
-      // fires dozens of decompresses in one frame. Hand it to the shared pool instead; the request completes
-      // (is_done() flips) when the worker lands, one/few frames later, off the render thread. The pool is
-      // drained at teardown (~processor thread_pool.join), and this task touches neither backend nor loop.
-      _thread_pool.enqueue_detached([ret, data = cv.compressed_data, size = cv.compressed_size]() {
-        auto decompressed = decompress_any(data.get(), size);
-        if (decompressed.error.code == 0)
-        {
-          ret->buffer = std::move(decompressed.data);
-          ret->buffer_info.data = ret->buffer.get();
-          ret->buffer_info.size = decompressed.size;
-        }
-        else
-        {
-          ret->error = std::move(decompressed.error);
-        }
-        std::unique_lock<std::mutex> lock(ret->_mutex);
-        ret->_done = true;
-        ret->_block_for_read.notify_all();
-      });
-      return ret;
-    }
-#endif
-    if (compressed)
-    {
-      auto decompressed = decompress_any(cv.compressed_data.get(), cv.compressed_size);
-      if (decompressed.error.code == 0)
-      {
-        ret->buffer = std::move(decompressed.data);
-        ret->buffer_info.data = ret->buffer.get();
-        ret->buffer_info.size = decompressed.size;
-        if (decompress_inline)
-          _decompressed_cache.put(key, decompressed_cache_value_t{ret->buffer, ret->buffer_info.size}, ret->buffer_info.size);
-      }
-      else
-      {
-        ret->error = std::move(decompressed.error);
-      }
-    }
-    else
-    {
-      ret->buffer = cv.compressed_data;
-      ret->buffer_info.data = ret->buffer.get();
-      ret->buffer_info.size = cv.compressed_size;
-    }
-#ifdef __EMSCRIPTEN__
-    complete_read_request(*ret);
-#else
-    std::unique_lock<std::mutex> lock(ret->_mutex);
-    ret->_done = true;
-    ret->_block_for_read.notify_all();
-#endif
-    return ret;
-  }
-
-  _perf_stats.cache_misses.fetch_add(1, std::memory_order_relaxed);
-  auto copy = ret;
-  _read_request_pipe.post_event(std::move(copy), std::move(location));
-  return ret;
-}
-
-void storage_handler_t::handle_read_request(std::shared_ptr<read_request_t> &&read_request, storage_location_t &&location)
-{
-  [](storage_handler_t *self, std::shared_ptr<read_request_t> req, storage_location_t loc) -> vio::detached_task_t
-  {
-    co_await self->do_read_request(std::move(req), std::move(loc));
-  }(this, std::move(read_request), std::move(location));
-}
-
-vio::task_t<void> storage_handler_t::do_read_request(std::shared_ptr<read_request_t> read_request, storage_location_t location)
-{
-  // Track in-flight reads so stop_loop() can wait them out before tearing down the backend (each read holds
-  // the backend and a pooled connection across its co_await). The guard decrements on every co_return path.
-  _reads_in_flight.fetch_add(1, std::memory_order_acq_rel);
-  struct in_flight_guard_t
-  {
-    std::atomic<int> *counter;
-    ~in_flight_guard_t() { counter->fetch_sub(1, std::memory_order_acq_rel); }
-  } in_flight_guard{&_reads_in_flight};
-  auto read_start = std::chrono::steady_clock::now();
-  auto buffer = std::make_shared<uint8_t[]>(location.size);
-  uint32_t bytes_read = 0;
-  auto result = co_await _backend->read_blob(location, buffer.get(), bytes_read);
-
-  if (result.code != 0)
-  {
-    // The waiter sees the per-request error; ALSO flag the conversion (a failed LOD/upload source
-    // read means the produced dataset cannot be trusted -- e.g. an unreachable destination for a
-    // spilled blob). Readers must still check per-request errors and skip, never dereference.
-    read_request->error = result;
-    _storage_error.post_event(std::move(result));
-  }
-  else
-  {
-    // Cache the raw compressed data before decompression
-    cache_key_t key{location.file_id, location.offset};
-    _read_cache.put(key, cache_value_t{buffer, location.size}, location.size);
-
-    // If cancelled, skip decompression but keep cached compressed data
-    if (read_request->is_cancelled())
-    {
-      auto read_end = std::chrono::steady_clock::now();
-      auto read_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(read_end - read_start).count());
-      _perf_stats.lod_read.record(location.size, read_us);
-
-      std::unique_lock<std::mutex> lock(read_request->_mutex);
-      read_request->_done = true;
-      read_request->_block_for_read.notify_all();
-      co_return;
-    }
-
-    read_request->buffer = buffer;
-    read_request->buffer_info.size = bytes_read;
-    read_request->buffer_info.data = buffer.get();
-
-    // Decompress if needed -- unless this is a raw read (the decode worker decompresses off-thread).
-    if (!read_request->raw && read_request->buffer && has_compression_magic(read_request->buffer.get(), read_request->buffer_info.size))
-    {
-      auto decompressed = decompress_any(read_request->buffer.get(), read_request->buffer_info.size);
-      if (decompressed.error.code == 0)
-      {
-        read_request->buffer = std::move(decompressed.data);
-        read_request->buffer_info.data = read_request->buffer.get();
-        read_request->buffer_info.size = decompressed.size;
-      }
-      else
-      {
-        read_request->error = std::move(decompressed.error);
-      }
-    }
-  }
-
-  auto read_end = std::chrono::steady_clock::now();
-  auto read_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(read_end - read_start).count());
-  _perf_stats.lod_read.record(location.size, read_us);
-
-#ifdef __EMSCRIPTEN__
-  complete_read_request(*read_request);
-#else
-  std::unique_lock<std::mutex> lock(read_request->_mutex);
-  read_request->_done = true;
-  read_request->_block_for_read.notify_all();
-#endif
-}
-
 } // namespace dew::converter

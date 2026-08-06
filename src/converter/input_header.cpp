@@ -19,32 +19,9 @@
 
 #include <assert.h>
 
-using namespace dew::converter;
-
-void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components)
-{
-  attributes->attribute_names.emplace_back(new char[name_size + 1]);
-  memcpy(attributes->attribute_names.back().get(), name, name_size);
-  attributes->attribute_names.back().get()[name_size] = 0;
-  attributes->attributes.push_back({attributes->attribute_names.back().get(), name_size, format, components});
-}
-
 namespace dew::converter
 {
-
-void attributes_copy(const dew_converter_attributes_t &source, dew_converter_attributes_t &target)
-{
-  assert(target.attributes.empty());
-  assert(target.attribute_names.empty());
-  target.attributes = source.attributes;
-  for (int i = 0; i < int(source.attributes.size()); i++)
-  {
-    auto &target_attrib_name = target.attribute_names.emplace_back(new char[source.attributes[i].name_size + 1]);
-    memcpy(target_attrib_name.get(), source.attribute_names[i].get(), source.attributes[i].name_size);
-    target.attribute_names[i].get()[source.attributes[i].name_size] = 0;
-    target.attributes[i].name = target.attribute_names[i].get();
-  }
-}
+using namespace dew::core;
 
 void attribute_buffers_initialize(const std::vector<point_format_t> &attributes_def, attribute_buffers_t &buffers, uint32_t point_count)
 {

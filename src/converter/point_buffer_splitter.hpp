@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "input_header.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 #include "storage_handler.hpp"
@@ -28,6 +28,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 template <typename T, size_t C>
 void verify_points_range(const read_only_points_t &points, int start_index, int end_index, const morton::morton192_t &min, const morton::morton192_t &max)
 {

@@ -17,7 +17,7 @@
 ************************************************************************/
 #include "processor.hpp"
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "converter.hpp"
 #include "frustum_tree_walker.hpp"
 
@@ -30,6 +30,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 processor_t::processor_t(std::string url, file_existence_requirement_t existence_requirement, dew_error_t &error, const destination_config_t &destination)
   : _url(std::move(url))
   , _thread_pool(int(std::thread::hardware_concurrency()))
@@ -340,7 +341,7 @@ void processor_t::about_to_block()
   }
 }
 
-const dew_converter_attributes_t &processor_t::get_attributes(attributes_id_t id)
+const dew_attributes_t &processor_t::get_attributes(attributes_id_t id)
 {
   return _attributes_configs.get(id);
 }

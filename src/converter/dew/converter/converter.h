@@ -21,9 +21,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <dew/common/error.h>
-#include <dew/common/format.h>
+#include <dew/core/error.h>
+#include <dew/core/format.h>
 #include <dew/converter/export.h>
+#include <dew/core/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,48 +39,9 @@ struct dew_converter_header_t
   double max[3];
 };
 
-struct dew_converter_attributes_t;
-DEW_CONVERTER_EXPORT void dew_converter_attributes_add_attribute(struct dew_converter_attributes_t *attributes, const char *name, uint32_t name_size, enum dew_type_t format, enum dew_components_t components);
-
-//= py.skip
-struct dew_converter_attribute_t
-{
-#ifdef __cplusplus
-  dew_converter_attribute_t(const char *a_name, uint32_t a_name_size, enum dew_type_t format, enum dew_components_t a_components)
-    : name(a_name)
-    , name_size(a_name_size)
-    , type(format)
-    , components(a_components)
-  {
-  }
-#endif
-
-  const char *name;
-  uint32_t name_size;
-  enum dew_type_t type;
-  enum dew_components_t components;
-};
-
-//= py.skip
-struct dew_converter_buffer_t
-{
-#ifdef __cplusplus
-  dew_converter_buffer_t()
-    : data(nullptr)
-    , size(0)
-  {
-  }
-
-  dew_converter_buffer_t(void *a_data, uint32_t a_size)
-    : data(a_data)
-    , size(a_size)
-  {
-  }
-#endif
-
-  void *data;
-  uint32_t size;
-};
+/* dew_attributes_t, dew_attribute_t and dew_blob_t -- and the dew_attributes_add_attribute builder
+ * that fills the first -- live in <dew/core/types.h> (included above). They describe data, not
+ * conversion, and the dataset read path is expressed in terms of them. */
 
 struct dew_converter_file_pre_init_info_t
 {
@@ -99,9 +61,9 @@ struct dew_converter_file_pre_init_info_t
 
 typedef struct dew_converter_file_pre_init_info_t (*dew_converter_file_pre_init_callback_t)(const char *filename, size_t filename_size, struct dew_error_t **error);
 
-typedef void (*dew_converter_file_init_callback_t)(const char *filename, size_t filename_size, struct dew_converter_header_t *header, struct dew_converter_attributes_t *attributes, void **user_ptr, struct dew_error_t **error);
+typedef void (*dew_converter_file_init_callback_t)(const char *filename, size_t filename_size, struct dew_converter_header_t *header, struct dew_attributes_t *attributes, void **user_ptr, struct dew_error_t **error);
 
-typedef void (*dew_converter_file_convert_data_callback_t)(void *user_ptr, const struct dew_converter_header_t *header, const struct dew_converter_attribute_t *attributes, uint32_t attributes_size, uint32_t max_points_to_convert, struct dew_converter_buffer_t *buffers,
+typedef void (*dew_converter_file_convert_data_callback_t)(void *user_ptr, const struct dew_converter_header_t *header, const struct dew_attribute_t *attributes, uint32_t attributes_size, uint32_t max_points_to_convert, struct dew_blob_t *buffers,
                                                        uint32_t buffers_size, uint32_t *points_read, uint8_t *done, struct dew_error_t **error);
 
 typedef void (*dew_converter_file_destroy_user_ptr_t)(void *user_ptr);

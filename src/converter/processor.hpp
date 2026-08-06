@@ -34,7 +34,7 @@
 #include <vio/thread_pool.h>
 
 #include "attributes_configs.hpp"
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "frustum_tree_walker.hpp"
 #include "input_data_source_registry.hpp"
 #include "perf_stats.hpp"
@@ -45,6 +45,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 enum class processor_open_file_semantics_t
 {
   read,
@@ -130,7 +131,7 @@ public:
     return _perf_stats;
   }
 
-  const dew_converter_attributes_t &get_attributes(attributes_id_t id);
+  const dew_attributes_t &get_attributes(attributes_id_t id);
 
 private:
   std::string _url;

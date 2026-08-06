@@ -189,12 +189,101 @@ than corrupting the dataset. Dropping a `Converter` drains its pipeline first, s
 running conversion blocks rather than racing the teardown; call `wait_idle()` yourself to control
 when that happens.
 
-`examples/python/numpy_to_dew.py` is a complete, runnable version of the above — xyz + rgb +
-intensity + classification from numpy arrays, chunked feeding, progress, and a read-back:
+Reading a dataset is request-based: ask for a region, get numpy arrays back.
+
+```python
+ds = dew.open_dataset("out.dew")
+result = ds.query_box([0, 0, 0], [10, 10, 10], attributes=["intensity"])
+xyz = result["xyz"]              # (N, 3) float64, absolute world coordinates
+intensity = result["intensity"]  # (N,)   uint16
+```
+
+`query_box` runs the request to completion and copies the results into arrays Python owns, so
+nothing points into library memory once it returns. `clip_points=True` (the default) returns
+exactly the points inside the box — the octree selects whole nodes, so a box query otherwise
+overshoots. `lod="level"` or `lod="budget"` return a subsample instead of every point, for a quick
+look at a large region.
+
+### Runnable examples
+
+All of them live in [`examples/python/`](https://github.com/jorgen/dewfall/tree/master/examples/python):
+
+| Script | What it shows |
+|---|---|
+| [`numpy_to_dew.py`](https://github.com/jorgen/dewfall/blob/master/examples/python/numpy_to_dew.py) | Converting from numpy arrays: xyz + rgb + intensity + classification, chunked feeding, progress, read-back |
+| [`query_box.py`](https://github.com/jorgen/dewfall/blob/master/examples/python/query_box.py) | Querying a sub-box out of a dataset and rendering the points with matplotlib |
+| [`query_asyncio.py`](https://github.com/jorgen/dewfall/blob/master/examples/python/query_asyncio.py) | Awaiting queries from asyncio: `Pump.set_wake_callback` + `Pump.poll` + `Dataset.query_box_submit`, several in flight, event loop never blocked |
 
 ```bash
 python examples/python/numpy_to_dew.py out.dew --points 2000000
+python examples/python/query_box.py out.dew --box 0,0,0,50,50,20 --color intensity -o box.png
+python examples/python/query_asyncio.py out.dew
 ```
+
+`query_box()` blocks the calling thread, which is what a script wants. On an event loop it is the
+wrong shape, so the package ships `dew.aio`:
+
+```python
+import dew.aio
+
+async with dew.aio.open_dataset("scan.dew") as ds:
+    result = await ds.query_box([0, 0, 0], [10, 10, 10], attributes=["intensity"])
+```
+
+Underneath, dewfall signals through the pump's wake callback, the host calls `Pump.poll()` on its own
+thread, and the completion surfaces there — `dew.aio.Session` owns that handshake so callers do not
+rewrite it. Several queries can be in flight at once (`asyncio.gather`) and the loop keeps serving
+everything else. Use a `Session` directly to drive several datasets from one pump; the raw
+`Dataset.query_box_submit()` → `Request` API is still there for hosts with their own loop. If a
+thread per query is acceptable, `await asyncio.to_thread(ds.query_box, ...)` needs none of this.
+
+### C++
+
+The whole C API is also available as C++, generated from the same IR the Python bindings come from —
+header-only, namespace `dewpp`, under [`bindings/cpp/dew/`](https://github.com/jorgen/dewfall/tree/master/bindings/cpp/dew).
+The tree **mirrors the C headers**, so `<dew/access/query.hpp>` is the C++ for `<dew/access/query.h>`
+and each header compiles on its own; `<dew/dewpp.hpp>` is an umbrella over all of them:
+
+```cpp
+#include <dew/dewpp.hpp>
+
+auto opened = dewpp::converter_t::create("out.dew", dew_open_file_semantics_truncate);
+if (!opened)
+  return fail(opened.error().message());
+dewpp::converter_t conv = std::move(*opened);
+conv.set_node_point_limit(512);
+conv.add_data_file(files);
+conv.wait_idle();
+```
+
+RAII handles (move-only, with `release()` to escape), `std::string_view` in and `std::string` out, and
+errors returned by value as `dewpp::result_t<T>` = `std::expected<T, dewpp::error_t>` — the project builds
+`-fno-exceptions`, so a failing constructor cannot throw and handles are created through static
+factories instead. Enums, value structs and constants are `using` aliases of the C types rather than
+parallel declarations that could drift. It has no vio dependency.
+
+Anything driven by the pump is an async candidate, and `//= awaitable:` on the handle marks one. Those
+get **`_async` siblings** next to their sync headers — `dew/access/query_async.hpp` beside
+`dew/access/query.hpp`, with the driver in `dew/core/pump_async.hpp`. That is the only part of the
+tree that needs vio, which is why it is separable: a caller with no event loop includes the sync
+headers and never pays for it.
+
+```cpp
+VIO_MAIN(loop, argc, argv)
+{
+  dewpp::async::driver_t driver(loop);
+  auto *ds = dew_dataset_create(url, len, nullptr, 0, nullptr, driver.pump(), &error);
+  if (co_await dewpp::async::ready(driver, ds) != dew_dataset_ready)
+    co_return 1;
+  dewpp::request_t req(dew_dataset_request_region(ds, &spec, &error));
+  if (co_await dewpp::async::ready(driver, req) == dew_request_completed) { /* ... */ }
+}
+```
+
+Link the `dew::await` INTERFACE target for the include paths; the host brings its own vio loop and
+links the dew libraries as usual. Making a handle awaitable is one annotation —
+`//= awaitable: poll=<fn> pending=<constant>` — and the generator does the rest. See
+[`examples/query_async/`](https://github.com/jorgen/dewfall/tree/master/examples/query_async).
 
 Because the wheel also ships the libraries, headers and a CMake config, a C or C++ project can
 build against the installed package without a source checkout:

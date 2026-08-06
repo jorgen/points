@@ -29,7 +29,7 @@
 #ifdef __EMSCRIPTEN__
 
 #include "node_data_loader.hpp" // render::node_data_loader_t / loaded_node_data_t
-#include "storage_handler.hpp"  // storage_handler_t, read_request_t
+#include "blob_reader.hpp" // blob_reader_t, read_request_t
 
 #include <emscripten/val.h>
 
@@ -41,6 +41,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 // True iff the web app installed a decode-worker pool as globalThis.__dewDecodePool. The data source only
 // routes decode through a worker when this is true; otherwise it keeps the inline (main-thread) decode path.
@@ -49,7 +50,7 @@ bool decode_worker_pool_available();
 class worker_node_data_loader_t final : public render::node_data_loader_t
 {
 public:
-  explicit worker_node_data_loader_t(storage_handler_t &storage_handler);
+  explicit worker_node_data_loader_t(blob_reader_t &reader);
 
   render::load_handle_t request_load(const void *request_data, uint32_t request_size) override;
   bool is_ready(render::load_handle_t handle) override;
@@ -80,7 +81,7 @@ private:
   // Build the postMessage payload from a pending entry's completed reads and hand it to the pool.
   void post_to_worker(uint64_t id, pending_t &p);
 
-  storage_handler_t &_storage_handler;
+  blob_reader_t &_reader;
   emscripten::val _pool; // globalThis.__dewDecodePool
   uint64_t _next_handle = 1;
   std::unordered_map<uint64_t, pending_t> _pending;

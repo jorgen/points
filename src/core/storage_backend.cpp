@@ -1,0 +1,81 @@
+/************************************************************************
+** dewfall - point cloud management software.
+** Copyright (C) 2024  Jørgen Lind
+**
+** This program is free software: you can redistribute it and/or modify
+** it under the terms of the GNU Affero General Public License as published by
+** the Free Software Foundation, either version 3 of the License, or
+** (at your option) any later version.
+**
+** This program is distributed in the hope that it will be useful,
+** but WITHOUT ANY WARRANTY; without even the implied warranty of
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+** GNU Affero General Public License for more details.
+**
+** You should have received a copy of the GNU Affero General Public License
+** along with this program.  If not, see <https://www.gnu.org/licenses/>.
+************************************************************************/
+#include "storage_backend.hpp"
+
+#include "object_backend.hpp"
+#include "url.hpp"
+#ifndef __EMSCRIPTEN__
+#include "packed_file_backend.hpp" // pulls libuv; the browser build has no single-file/local backend
+#endif
+
+#include <vio/objstore/create_object_store.h>
+#ifndef __EMSCRIPTEN__
+#include <vio/objstore/http_cache.h>
+#include <vio/objstore/http_object_store.h> // set_default_http_cache
+#endif
+
+#include <cstdlib>
+
+namespace dew::core
+{
+
+std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, std::string_view connection, vio::event_loop_t &event_loop, dew_error_t &error)
+{
+  auto parsed = parse_url(url);
+
+  // No scheme (a bare path) or file:// -> the single packed file backend. Local files carry no
+  // credentials, so `connection` is ignored here.
+  if (parsed.scheme.empty() || parsed.scheme == "file")
+  {
+#ifdef __EMSCRIPTEN__
+    error = {-1, "the packed/local-file storage backend is unavailable in the WebAssembly build; use an object-store URL (s3://, dir://, mem://)"};
+    return nullptr;
+#else
+    return std::make_unique<packed_file_backend_t>(parsed.path, event_loop, error);
+#endif
+  }
+
+#ifndef __EMSCRIPTEN__
+  // Turn on the persistent HTTP cache for network object stores so repeat reads of (immutable) blobs are
+  // served from local disk instead of the network. Browser-like defaults (OS cache dir, 1 GiB), overridable
+  // via VIO_HTTP_CACHE_DIR / VIO_HTTP_CACHE_MAX_BYTES; set VIO_HTTP_CACHE_DISABLE to turn it off. Installed
+  // once as the process-global default (magic-static, thread-safe); http_io_manager adopts it on construction.
+  if ((parsed.scheme == "s3" || parsed.scheme == "az" || parsed.scheme == "azure" || parsed.scheme == "http" || parsed.scheme == "https") && !std::getenv("VIO_HTTP_CACHE_DISABLE"))
+  {
+    static vio::objstore::http_cache_t s_http_cache;
+    vio::objstore::set_default_http_cache(&s_http_cache);
+  }
+#endif
+
+  // Object-per-blob over a vio object store (dir:// / mem:// / s3:// / az://), selected by the scheme.
+  // Credentials/endpoint/region resolve from `connection` first, then the AWS_*/AZURE_* environment.
+  auto io = vio::objstore::create_io_manager(url, connection, event_loop);
+  if (!io.has_value())
+  {
+    error = {io.error().code != 0 ? io.error().code : -1, io.error().msg};
+    return nullptr;
+  }
+  return std::make_unique<object_backend_t>(std::move(io.value()), event_loop);
+}
+
+std::unique_ptr<storage_backend_t> create_storage_backend(const std::string &url, vio::event_loop_t &event_loop, dew_error_t &error)
+{
+  return create_storage_backend(url, std::string_view{}, event_loop, error);
+}
+
+} // namespace dew::core

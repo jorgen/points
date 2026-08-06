@@ -25,6 +25,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 frustum_tree_walker_t::frustum_tree_walker_t(const glm::dmat4 view_perspective, lod_params_t lod_params, std::vector<std::string> attribute_names)
   : m_view_perspective(view_perspective)
   , m_lod_params(lod_params)

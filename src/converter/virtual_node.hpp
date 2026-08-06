@@ -29,6 +29,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 enum class virtual_mat_state : uint8_t
 {

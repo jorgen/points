@@ -28,6 +28,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 tree_collapse_runner_t::tree_collapse_runner_t(vio::event_loop_t &event_loop, vio::thread_pool_t &thread_pool, tree_registry_t &tree_registry, storage_handler_t &storage, attributes_configs_t &attributes_configs)
   : _event_loop(event_loop)

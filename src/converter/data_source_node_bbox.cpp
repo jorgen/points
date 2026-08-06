@@ -17,7 +17,7 @@
 ************************************************************************/
 #include "data_source_node_bbox.hpp"
 
-#include <dew/common/format.h>
+#include <dew/core/format.h>
 #include "renderer.hpp"
 
 namespace dew::converter

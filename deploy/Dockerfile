@@ -11,13 +11,30 @@
 FROM emscripten/emsdk:6.0.3 AS wasm
 WORKDIR /src
 # The emsdk image ships CMake 3.28; the dewfall build requires >= 3.30, so install a newer CMake (pip puts it
-# in /usr/local/bin, ahead of the image's cmake on PATH).
-RUN pip3 install --break-system-packages --no-cache-dir cmake
-COPY . ./
+# in /usr/local/bin, ahead of the image's cmake on PATH). Ninja comes from the same place: without it emcmake
+# falls back to Unix Makefiles and the build runs single-threaded.
+RUN pip3 install --break-system-packages --no-cache-dir cmake ninja
+
+# Only what the wasm target actually compiles, instead of the whole context. The point is layer reuse: with
+# `COPY . ./` any change anywhere — backend/, tools/, tests/, and above all examples/renderer/web/ — busts this
+# layer and re-runs a multi-minute Emscripten build that could not possibly be affected by it. The SPA lives in
+# examples/renderer/web/ and is deliberately excluded here; it is copied into the `web` stage instead.
+#
+# This set is exact, not approximate — it was validated by building both wasm targets from a tree pruned to
+# precisely these paths. src/wasm/CMakeLists.txt reaches into examples/renderer for renderer_wasm.cpp,
+# gl_renderer.cpp and the cmrc-embedded shaders, and CMakeLists.txt adds bindings/cpp unconditionally.
+COPY CMakeLists.txt CMakePresets.json ./
+COPY CMake/ ./CMake/
+COPY src/ ./src/
+COPY bindings/cpp/ ./bindings/cpp/
+COPY examples/renderer/shaders/ ./examples/renderer/shaders/
+COPY examples/renderer/include/ ./examples/renderer/include/
+COPY examples/renderer/renderer_wasm.cpp examples/renderer/gl_renderer.cpp examples/renderer/gl_renderer.h ./examples/renderer/
+
 # Configure the dewfall project under Emscripten and build only the WebGL2 renderer module. (The build-preset
 # 'emscripten' defaults to dew_data_wasm, so the target is named explicitly.) Fetches the pinned CmDep
 # dependencies (vio, zstd, fmt, glm, ...) during configure.
-RUN emcmake cmake -S . -B /wasm-build -DCMAKE_BUILD_TYPE=Release \
+RUN emcmake cmake -S . -B /wasm-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
  && cmake --build /wasm-build --target dew_render_wasm dew_decode_worker \
  && test -f /wasm-build/src/wasm/dew_render.mjs \
  && test -f /wasm-build/src/wasm/dew_render.wasm \

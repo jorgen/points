@@ -17,13 +17,16 @@
 ************************************************************************/
 #pragma once
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
+
+#include <dew/converter/converter.h>
 
 #include <ankerl/unordered_dense.h>
 #include <optional>
 
 namespace dew::converter
 {
+using namespace dew::core;
 struct input_data_source_t
 {
   input_data_id_t input_id;

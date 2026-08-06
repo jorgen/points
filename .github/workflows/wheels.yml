@@ -59,8 +59,42 @@ jobs:
             }
           }
 
+      # macOS and Windows build in the workspace itself, so an ordinary restore/save works. The
+      # Linux legs are skipped on purpose: cibuildwheel streams the project INTO the manylinux
+      # container and copies only /output back out, so a host-side save would capture whatever the
+      # restore left and nothing the build fetched. Making it work needs CMDEP_DIR pointed at the
+      # /host mount, which is unproven here.
+      #
+      # DEW_BUILD_PYTHON=ON comes from pyproject.toml, not from this workflow, so enumeration has
+      # to be told about it — these legs fetch nanobind and robin_map on top of ci.yml's set.
+      #
+      # Scope note: wheels.yml never runs on a push to master, and a pull_request save is scoped to
+      # refs/pull/N/merge, so this warms re-runs of the same PR rather than PRs in general.
+      - name: Restore 3rdparty dependencies
+        id: deps
+        if: runner.os != 'Linux'
+        uses: ./.github/actions/cmake-deps
+        with:
+          profile: python
+          cmake-args: -DDEW_BUILD_PYTHON=ON
+
       - name: Build wheel
+        id: build
         uses: pypa/cibuildwheel@v3.2.0
+
+      # Stricter than ci.yml, which saves on a failed build as long as configure succeeded.
+      # cibuildwheel fuses configure, build and test into one step, so a successful build is the
+      # only available proof that the fetch actually finished — and stamping a tree that was cut
+      # short mid-extraction would bless the truncation permanently. This workflow also sets
+      # cancel-in-progress, which makes mid-extraction kills a real event rather than a theory.
+      - name: Save 3rdparty dependencies
+        if: always() && runner.os != 'Linux' && steps.build.outcome == 'success'
+        uses: ./.github/actions/cmake-deps/save
+        with:
+          manifest: ${{ steps.deps.outputs.manifest }}
+          prefix: ${{ steps.deps.outputs.prefix }}
+          matched-key: ${{ steps.deps.outputs.matched-key }}
+          removed: ${{ steps.deps.outputs.removed }}
 
       # Independent, symbol-level proof that the binary really is limited-API
       # and not a version-locked build mislabelled as abi3. The CMake

@@ -32,6 +32,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 bool render_node_less_than(const tree_walker_data_t &lhs, const tree_walker_data_t &rhs)
 {

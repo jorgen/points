@@ -32,6 +32,8 @@ dependencies = ["numpy>=1.23"]
 [project.urls]
 Homepage = "https://dewfall.limilind.com"
 Source = "https://github.com/jorgen/dewfall"
+Examples = "https://github.com/jorgen/dewfall/tree/master/examples/python"
+Issues = "https://github.com/jorgen/dewfall/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
@@ -130,7 +132,7 @@ manylinux-aarch64-image = "manylinux_2_28"
 # against the shipped headers).
 repair-wheel-command = """
 auditwheel repair -w {dest_dir} {wheel} \
-  --exclude libdew_common.so --exclude libdew_render.so --exclude libdew_converter.so
+  --exclude libdew_core.so --exclude libdew_render.so --exclude libdew_converter.so
 """
 
 [tool.cibuildwheel.macos]

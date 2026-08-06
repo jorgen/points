@@ -37,7 +37,7 @@
 // lifetime), and the JS worker transfers them to the main thread. Node-smoke-tested; browser E2E still wants
 // a look. See examples/renderer/web/src/decodeWorker.ts (worker side) and the integration notes at the bottom.
 
-#include "../converter/compressor.hpp"                 // decompress_any, has_compression_magic
+#include "../core/compressor.hpp"                 // decompress_any, has_compression_magic
 #include "../converter/node_decode.hpp"                // decode_node, decode_input_t
 #include "../converter/point_buffer_render_helper.hpp" // decode_input_t
 #include "../converter/storage_handler.hpp"            // deserialize_points  (TODO: extract to trim deps)
@@ -50,6 +50,7 @@
 #include <vector>
 
 using namespace dew::converter;
+using namespace dew::core;
 using namespace dew::render;
 
 namespace
@@ -127,7 +128,7 @@ emscripten::val decode_node_js(emscripten::val msg)
     auto raw = copy_in(buffers[i], raw_size);
     uint32_t dsize = 0;
     in.buffers[i] = decompress_slot(raw, raw_size, dsize, error);
-    in.data_info[i] = dew_converter_buffer_t(in.buffers[i] ? in.buffers[i].get() : nullptr, dsize);
+    in.data_info[i] = dew_blob_t(in.buffers[i] ? in.buffers[i].get() : nullptr, dsize);
   }
 
   // A leaf that may be promoted to virtual subnodes needs its raw (decompressed, pre-reorder) points + attr
@@ -208,7 +209,7 @@ EMSCRIPTEN_BINDINGS(dew_decode_worker)
 //    the reply's transferred ArrayBuffers (_impl_data owns the copies). data_source_converter picks it over
 //    the inline native loader when globalThis.__dewDecodePool exists. [DONE]
 // 3. A pool of these workers (decodeWorkerPool.ts, ~hardwareConcurrency) parallelises decode. [DONE]
-// 4. deserialize_points now lives in conversion_types.hpp (storage-free), so this worker links a lean source
+// 4. deserialize_points now lives in dataset_types.hpp (storage-free), so this worker links a lean source
 //    set (node_decode + compressor + tree + morton) instead of the whole converter. [DONE]
 //
 // REMAINING: browser end-to-end verification (render a live S3 dataset with the pool installed) -- everything

@@ -33,7 +33,7 @@
 #include <dew/converter/connection_cli.h>
 
 #include "bucket_format.hpp"
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "error.hpp"
 #include "input_storage_map.hpp"
 #include "packed_file_backend.hpp"
@@ -60,6 +60,7 @@
 #include <vector>
 
 using namespace dew::converter;
+using namespace dew::core;
 
 namespace
 {

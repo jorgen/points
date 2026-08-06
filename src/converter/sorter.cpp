@@ -22,7 +22,7 @@
 #include "morton.hpp"
 #include "morton_tree_coordinate_transform.hpp"
 
-#include <dew/converter/default_attribute_names.h>
+#include <dew/core/default_attribute_names.h>
 
 #include "type_from_type.hpp"
 #include <limits>
@@ -35,6 +35,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 template <typename T>
 struct vec_t
 {
@@ -418,7 +419,7 @@ void convert_and_sort_morton(const tree_config_t &tree_config, attributes_config
   points.buffers.buffers[0].size = buffer_size;
 
   auto &orig_attributes = attributes_config.get(points.attributes_id);
-  dew_converter_attributes_t attributes;
+  dew_attributes_t attributes;
   attributes_copy(orig_attributes, attributes);
   attributes.attributes[0].type = type;
   if (store_original_order)

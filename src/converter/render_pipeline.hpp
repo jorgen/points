@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "render_node.hpp"
 #include "renderer_callbacks.hpp"
 
@@ -35,6 +35,7 @@ struct frame_camera_cpp_t;
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 using render_node_ptr = std::unique_ptr<render_node_t>;
 using render_list_t = std::vector<render_node_ptr>;

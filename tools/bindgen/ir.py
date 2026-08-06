@@ -39,11 +39,11 @@ ERROR_ARG_CALLER_OWNED = "error_arg_caller_owned"  # caller passes a dew_error_t
 # Updated deliberately whenever the public API grows; a mismatch is a loud
 # warning from parse_headers.py and an assertion in test_ir.py.
 EXPECTED_COUNTS = {
-    "functions": 125,
-    "opaque_types": 16,
-    "enums": 16,
-    "structs": 22,
-    "callbacks": 23,
+    "functions": 151,
+    "opaque_types": 19,
+    "enums": 21,
+    "structs": 28,
+    "callbacks": 25,
     "macro_constants": 19,
 }
 
@@ -61,4 +61,6 @@ KNOWN_ANNOTATIONS = {
     "nullable",    # nullable: a, b
     "returns",     # returns: new|borrowed
     "blocking",    # blocking
+    "awaitable",   # awaitable: poll=<fn> pending=<enum constant> [release=<fn>]
+    "destroy",     # destroy: <fn>   -- when the destructor is not named *_destroy
 }

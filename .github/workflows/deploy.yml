@@ -34,27 +34,77 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # PR gate: prove the renderer WASM + SPA still build. On push to master the image job rebuilds everything
-  # in Docker, so this check is not repeated there.
+  # PR gate: prove the renderer WASM + SPA still build. It also runs on master, where it gates nothing —
+  # the image job rebuilds all of this in Docker — and exists only to populate the ccache below.
   build:
     name: Build renderer WASM + SPA
-    if: github.event_name == 'pull_request'
+    # Also runs on master, which it did not before. Not to gate anything there — the image job
+    # rebuilds all of this in Docker — but because a cache written by a pull_request run is scoped to
+    # refs/pull/N/merge and cannot be read by any other PR. Without a master leg there is nothing for
+    # the ccache below to ever restore from. It runs in parallel with the image job, so it costs
+    # minutes, not wall clock.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      EM_VERSION: 6.0.3
+      CCACHE_DIR: ${{ github.workspace }}/.ccache-wasm
     steps:
       - uses: actions/checkout@v4
-      - name: Install toolchain (Ninja, CMake >= 3.30)
+      - name: Install toolchain (Ninja, CMake >= 3.30, ccache)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ninja-build
+          sudo apt-get install -y --no-install-recommends ninja-build ccache
           pipx install cmake
       - uses: mymindstorm/setup-emsdk@v14
         with:
-          version: 6.0.3
+          version: ${{ env.EM_VERSION }}
+
+      # ccache identifies "the compiler" by the mtime and size of em++ — which is a 1 KB /bin/sh stub
+      # that dispatches to emcc.py. That stub is byte-identical between Emscripten releases (3.1.74
+      # and 4.0.0 hash the same, across an LLVM change) and emsdk untars it with the archive's own
+      # mtime, so the default check can carry hits across a toolchain bump. Pin the identity to what
+      # emcc actually reports instead; it carries the version and the git revision.
+      #
+      # Not the `%compiler% -v` command form: `em++ -v` with no input blocks on stdin, and any command
+      # form pays a Python interpreter start on every single ccache lookup.
+      - name: Pin ccache's compiler identity to the emsdk build
+        run: echo "CCACHE_COMPILERCHECK=string:$(emcc --version | head -n1)" >> "$GITHUB_ENV"
+
+      - name: Restore wasm ccache
+        id: ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: wasm-ccache-${{ env.EM_VERSION }}-${{ github.sha }}
+          restore-keys: wasm-ccache-${{ env.EM_VERSION }}-
+
+      # -G Ninja is the larger half of this and has nothing to do with ccache: emcmake with no
+      # generator picks Unix Makefiles, and `cmake --build` then compiles single-threaded. This job
+      # has been installing ninja-build and not using it. Measured on this target: the compile phase
+      # goes from 92.6s serial to 23.6s at -j4, for a byte-identical .wasm.
+      #
+      # The link (wasm-ld + wasm-opt --asyncify -O3) is ~90% of the build, is one process at 100% CPU,
+      # and is cached by nothing. It is the floor here.
+      #
+      # ccache itself is applied by CMakeLists.txt's RULE_LAUNCH_COMPILE once ccache is on PATH, so
+      # there is no -DCMAKE_CXX_COMPILER_LAUNCHER to pass.
       - name: Build the WebGL2 renderer WASM
         run: |
-          emcmake cmake -S . -B cmake-build-wasm -DCMAKE_BUILD_TYPE=Release
+          ccache --max-size=100M
+          ccache --zero-stats
+          emcmake cmake -S . -B cmake-build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build cmake-build-wasm --target dew_render_wasm
+          ccache --show-stats
+
+      # Only master writes. A PR-written entry is unreadable by every other PR, so saving from PRs
+      # would be pure churn against a cache pool that is already over its 10 GB quota.
+      - name: Save wasm ccache
+        if: always() && github.ref == 'refs/heads/master'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: wasm-ccache-${{ env.EM_VERSION }}-${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20

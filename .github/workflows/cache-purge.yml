@@ -1,0 +1,92 @@
+name: Purge caches
+
+# Manual escape hatch for the Actions cache. Actions cache entries are immutable — you cannot
+# overwrite a key, only abandon it — so when an entry has gone bad there are exactly two moves:
+# change the key (bump .github/deps-cache-epoch, which needs a commit) or delete the entry, which
+# is what this does.
+#
+# Also useful for the quota. The limit is 10 GB per repository and eviction is by last-access,
+# oldest first, so a workflow that mints large entries on every commit will silently evict small
+# long-lived ones. The per-commit ccache entries in ci.yml are ~700 MB each; the dependency cache
+# they compete with is ~40 MB.
+
+on:
+  workflow_dispatch:
+    inputs:
+      prefix:
+        description: "Delete caches whose key starts with this (e.g. cmdep- , ccache- ). Use EVERYTHING to match all."
+        required: true
+        default: "cmdep-"
+      dry_run:
+        description: "List what would be deleted without deleting it"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  purge:
+    name: Purge "${{ inputs.prefix }}"
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report usage, then purge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PREFIX: ${{ inputs.prefix }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          usage() {
+            gh api "repos/${GH_REPO}/actions/cache/usage" \
+              --jq '"\(.active_caches_count) entries, \(.active_caches_size_in_bytes / 1073741824 * 100 | round / 100) GB"'
+          }
+          echo "Before: $(usage)"
+
+          # An empty prefix would sweep up buildkit-* and index-buildkit-*, which are deploy.yml's
+          # Docker layer cache — deleting those costs a ~10 minute image rebuild. Matching everything
+          # has to be spelled out.
+          if [ -z "$PREFIX" ]; then
+            echo "::error::prefix is required. Pass EVERYTHING to match all caches."
+            exit 1
+          fi
+
+          # Oldest-first. The default listing is newest-first, which for a repo that is over quota
+          # deletes exactly the entries still in active use and leaves the stale ones behind.
+          if [ "$PREFIX" = "EVERYTHING" ]; then
+            echo "Matching ALL caches, including deploy.yml's buildkit layer cache."
+            caches=$(gh cache list --limit 100 --sort last_accessed_at --order asc --json id,key,sizeInBytes,ref)
+          else
+            caches=$(gh cache list --key "$PREFIX" --limit 100 --sort last_accessed_at --order asc --json id,key,sizeInBytes,ref)
+          fi
+
+          count=$(echo "$caches" | jq 'length')
+          if [ "$count" -eq 0 ]; then
+            echo "No caches match prefix '${PREFIX}'."
+            exit 0
+          fi
+
+          echo "$caches" | jq -r '.[] | "  \(.key)  [\(.ref)]  \(.sizeInBytes / 1048576 | round) MiB"'
+          freed=$(echo "$caches" | jq '[.[].sizeInBytes] | add')
+          echo "$count entries, $((freed / 1048576)) MiB"
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run — nothing deleted. Re-run with dry_run unchecked to delete."
+            exit 0
+          fi
+
+          # Delete by id: keys are not unique across refs, and a PR-scoped entry can share a key
+          # with the default branch's. One failure must not abandon the rest of the sweep.
+          failed=0
+          while read -r id; do
+            if gh cache delete "$id"; then echo "deleted $id"; else failed=$((failed + 1)); fi
+          done < <(echo "$caches" | jq -r '.[].id')
+
+          echo "After: $(usage)"
+          [ "$failed" -eq 0 ] || { echo "::warning::$failed cache(s) could not be deleted"; }
+          # 100 is gh's page cap; re-run if there is more.
+          [ "$count" -lt 100 ] || echo "::notice::hit the 100-entry page limit — re-run to continue"

@@ -17,7 +17,7 @@
 ************************************************************************/
 #pragma once
 
-#include "conversion_types.hpp"
+#include "dataset_types.hpp"
 #include "frustum_tree_walker.hpp"
 #include "node_data_loader.hpp"
 #include "node_decode.hpp" // decode_node + loaded_node_impl_data_t
@@ -29,6 +29,8 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
+// Reads go through the shared blob reader; nothing here touches the write pipeline.
 
 struct native_load_request_t
 {
@@ -52,7 +54,7 @@ struct pending_request_t
 class native_node_data_loader_t final : public render::node_data_loader_t
 {
 public:
-  explicit native_node_data_loader_t(storage_handler_t &storage_handler);
+  explicit native_node_data_loader_t(blob_reader_t &reader);
 
   render::load_handle_t request_load(const void *request_data, uint32_t request_size) override;
   bool is_ready(render::load_handle_t handle) override;
@@ -60,7 +62,7 @@ public:
   void cancel(render::load_handle_t handle) override;
 
 private:
-  storage_handler_t &_storage_handler;
+  blob_reader_t &_reader;
   std::mutex _mutex;
   std::atomic<uint64_t> _next_handle{1};
   std::unordered_map<uint64_t, pending_request_t> _pending;

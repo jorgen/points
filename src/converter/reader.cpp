@@ -25,13 +25,14 @@
 
 #include <fmt/printf.h>
 
-#include <dew/converter/default_attribute_names.h>
+#include <dew/core/default_attribute_names.h>
 
 #include <assert.h>
 #include <chrono>
 
 namespace dew::converter
 {
+using namespace dew::core;
 get_data_worker_t::get_data_worker_t(point_reader_file_t &a_point_reader_file, attributes_configs_t &a_attribute_configs, perf_stats_t &a_perf_stats, const get_points_file_t &a_file,
                                      vio::event_pipe_t<std::tuple<input_data_id_t, attributes_id_t, dew_converter_header_t>> &a_input_init_pipe, vio::event_pipe_t<input_data_id_t> &a_sub_added,
                                      vio::event_pipe_t<unsorted_points_event_t> &a_unsorted_points_queue)
@@ -76,7 +77,7 @@ void get_data_worker_t::work()
   // made any init-stage error (a failing user callback, or the xyz-first
   // check) abort the process on a garbage registry lookup.
   storage_header.input_id = file.id;
-  dew_converter_attributes_t tmp_attributes;
+  dew_attributes_t tmp_attributes;
   dew_error_t *local_error = nullptr;
   // The init callback is expected to fill this, but it may fail before doing
   // so and callback_closer hands it to destroy_user_ptr regardless.

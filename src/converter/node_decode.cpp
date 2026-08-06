@@ -25,6 +25,7 @@
 
 namespace dew::converter
 {
+using namespace dew::core;
 
 render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_config_t &tree_config, std::shared_ptr<dyn_points_data_handler_t> salvage_handler)
 {
@@ -61,13 +62,13 @@ render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_conf
       const uint32_t vstride = 3u * uint32_t(sizeof(float));
       auto reordered_vertex = reorder_points_by_perm(static_cast<const uint8_t *>(tmp.data_info[0].data), n, vstride, perm);
       tmp.data[0] = reordered_vertex;
-      tmp.data_info[0] = dew_converter_buffer_t(reordered_vertex.get(), n * vstride);
+      tmp.data_info[0] = dew_blob_t(reordered_vertex.get(), n * vstride);
       if (tmp.data_info[1].data && tmp.data_info[1].size)
       {
         const uint32_t astride = tmp.data_info[1].size / n;
         auto reordered_attribute = reorder_points_by_perm(static_cast<const uint8_t *>(tmp.data_info[1].data), n, astride, perm);
         tmp.data[1] = reordered_attribute;
-        tmp.data_info[1] = dew_converter_buffer_t(reordered_attribute.get(), n * astride);
+        tmp.data_info[1] = dew_blob_t(reordered_attribute.get(), n * astride);
       }
       // rep_level is already in perm (coarse->fine) order; copy into an owned buffer.
       rep_level_buffer = std::make_shared<uint8_t[]>(n);
@@ -94,7 +95,7 @@ render::loaded_node_data_t decode_node(const decode_input_t &in, const tree_conf
   {
     auto constant = std::make_shared<uint8_t[]>(tmp.point_count);
     memset(constant.get(), 200, tmp.point_count);
-    tmp.data_info[1] = dew_converter_buffer_t(constant.get(), tmp.point_count);
+    tmp.data_info[1] = dew_blob_t(constant.get(), tmp.point_count);
     tmp.data[1] = std::move(constant);
     tmp.format[1] = point_format_t(dew_type_u8, dew_components_1);
     tmp.draw_type = dew_dyn_points_1;

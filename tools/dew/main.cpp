@@ -42,6 +42,7 @@ constexpr command_t k_commands[] = {
   {"extract", cmd_extract, "inspect a dataset's octree and extract attribute buffers"},
   {"copy", cmd_copy, "copy a dataset between storage locations (packed file, dir://, s3://, az://)"},
   {"laz", cmd_laz, "introspect a LAS/LAZ file: header, VLRs, point subranges"},
+  {"query", cmd_query, "query the points inside a box and write them out (CSV or raw)"},
 };
 
 void print_usage()

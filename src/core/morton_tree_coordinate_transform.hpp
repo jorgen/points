@@ -1,0 +1,73 @@
+/************************************************************************
+** dewfall - point cloud management software.
+** Copyright (C) 2021  Jørgen Lind
+**
+** This program is free software: you can redistribute it and/or modify
+** it under the terms of the GNU Affero General Public License as published by
+** the Free Software Foundation, either version 3 of the License, or
+** (at your option) any later version.
+**
+** This program is distributed in the hope that it will be useful,
+** but WITHOUT ANY WARRANTY; without even the implied warranty of
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+** GNU Affero General Public License for more details.
+**
+** You should have received a copy of the GNU Affero General Public License
+** along with this program.  If not, see <https://www.gnu.org/licenses/>.
+************************************************************************/
+#pragma once
+
+#include "dataset_types.hpp"
+#include "morton.hpp"
+
+namespace dew
+{
+namespace core
+{
+
+template <typename T, size_t C>
+inline void convert_morton_to_pos(const double scale, const double (&offset)[3], const morton::morton_t<T, C> &morton, double (&pos)[3])
+{
+  uint64_t ipos[3];
+  morton::decode(morton, ipos);
+  pos[0] = double(ipos[0]) * scale + offset[0];
+  pos[1] = double(ipos[1]) * scale + offset[1];
+  pos[2] = double(ipos[2]) * scale + offset[2];
+}
+
+template <typename T, size_t C>
+inline void convert_pos_to_morton(const double scale, const double (&offset)[3], const double (&pos)[3], morton::morton_t<T, C> &morton)
+{
+  uint64_t ipos[3];
+  ipos[0] = uint64_t(round((pos[0] - offset[0]) / scale));
+  ipos[1] = uint64_t(round((pos[1] - offset[1]) / scale));
+  ipos[2] = uint64_t(round((pos[2] - offset[2]) / scale));
+  encode(ipos, morton);
+}
+
+template <typename T, size_t C>
+inline void convert_world_morton_to_local(const morton::morton192_t &world, morton::morton_t<T, C> &morton)
+{
+  morton::morton_downcast(world, morton);
+}
+
+template <typename T, size_t C>
+inline void convert_local_morton_to_world(const morton::morton_t<T, C> &local, const morton::morton192_t &min, morton::morton192_t &world)
+{
+  morton::morton_upcast(local, min, world);
+}
+
+inline dew_type_t morton_type_from_lod(int lod)
+{
+  int top_index = lod * 3 + 3;
+  if (top_index < 32)
+    return dew_type_m32;
+  if (top_index < 64)
+    return dew_type_m64;
+  if (top_index < 128)
+    return dew_type_m128;
+  return dew_type_m192;
+}
+
+} // namespace core
+} // namespace dew

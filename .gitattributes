@@ -1,0 +1,2 @@
+# guard.sh runs under Git-Bash on Windows runners; CRLF would break the shebang.
+*.sh text eol=lf

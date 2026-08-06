@@ -6,7 +6,7 @@
 #include <compressor_ans.hpp>
 #include <compression_preprocess.hpp>
 #include <input_header.hpp>
-#include <dew/converter/default_attribute_names.h>
+#include <dew/core/default_attribute_names.h>
 
 #include <algorithm>
 #include <cmath>
@@ -17,6 +17,7 @@
 #include <vector>
 
 using namespace dew::converter;
+using namespace dew::core;
 
 static std::vector<uint8_t> make_random_buffer(uint32_t size, uint32_t seed = 42)
 {
@@ -1311,9 +1312,9 @@ TEST_CASE("create_compressor returns ans")
 
 // --- LOD attribute format excludes original_order ---
 
-static dew_converter_attributes_t make_test_attributes(std::initializer_list<std::tuple<const char *, dew_type_t, dew_components_t>> specs)
+static dew_attributes_t make_test_attributes(std::initializer_list<std::tuple<const char *, dew_type_t, dew_components_t>> specs)
 {
-  dew_converter_attributes_t attrs;
+  dew_attributes_t attrs;
   for (auto &[name, type, comp] : specs)
   {
     auto len = uint32_t(strlen(name));
@@ -1475,8 +1476,8 @@ TEST_CASE("attributes_configs serialize round trip (no heap overflow for small c
 {
   attributes_configs_t configs;
 
-  dew_converter_attributes_t attrs;
-  dew_converter_attributes_add_attribute(&attrs, DEW_ATTRIBUTE_XYZ, uint32_t(strlen(DEW_ATTRIBUTE_XYZ)), dew_type_m64, dew_components_1);
+  dew_attributes_t attrs;
+  dew_attributes_add_attribute(&attrs, DEW_ATTRIBUTE_XYZ, uint32_t(strlen(DEW_ATTRIBUTE_XYZ)), dew_type_m64, dew_components_1);
   auto id = configs.get_attribute_config_index(std::move(attrs));
 
   auto serialized = configs.serialize();

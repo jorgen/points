@@ -82,11 +82,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache 3rdparty dependencies
-        uses: actions/cache@v4
-        with:
-          path: 3rdparty
-          key: 3rdparty-${{ hashFiles('CMake/3rdPartyPackages.cmake', 'CMakeLists.txt') }}
+      - name: Restore 3rdparty dependencies
+        id: deps
+        uses: ./.github/actions/cmake-deps
 
       - name: Cache ccache
         uses: actions/cache@v4
@@ -96,9 +94,16 @@ jobs:
           restore-keys: ccache-${{ matrix.name }}-
 
       - name: Configure
+        id: configure
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          # The ccache key is per-commit, so every run mints a fresh entry; at ~700 MB x 3 legs that
+          # is ~2 GB per push against a 10 GB repository quota, and eviction is by last access. Left
+          # unbounded, the sanitizer caches evict everything else in the repo — including the 40 MB
+          # dependency cache restored just above. --max-size writes the cap into the cache dir's own
+          # config, so it applies to the Build step too; an env var on this step alone would not.
+          ccache --max-size=350M
           ccache --zero-stats
           cmake -G Ninja -B build \
             -DCMAKE_BUILD_TYPE=Debug \
@@ -123,3 +128,19 @@ jobs:
         run: |
           ./build/tests/public_interface_unit_tests
           ./build/tests/private_interface_unit_tests
+
+      # Deliberately after the tests and deliberately always(): a red build must still leave the
+      # dependency cache behind, or the run you are actively debugging refetches every time.
+      # actions/cache@v4 cannot do this — its post step is post-if: success() — which is why the
+      # restore and save halves are separate actions.
+      #
+      # Only one leg saves. All three compute the same key (they share a container, so runner.os
+      # does not separate them), and the losers of that race just waste time taring the tree.
+      - name: Save 3rdparty dependencies
+        if: always() && matrix.name == 'asan' && steps.configure.outcome == 'success'
+        uses: ./.github/actions/cmake-deps/save
+        with:
+          manifest: ${{ steps.deps.outputs.manifest }}
+          prefix: ${{ steps.deps.outputs.prefix }}
+          matched-key: ${{ steps.deps.outputs.matched-key }}
+          removed: ${{ steps.deps.outputs.removed }}

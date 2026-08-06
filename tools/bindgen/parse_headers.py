@@ -88,7 +88,7 @@ def parse_translation_unit(entries, source_root):
         "c",
         "-std=c11",
         "-fparse-all-comments",
-        "-DDEW_COMMON_STATIC_DEFINE",
+        "-DDEW_CORE_STATIC_DEFINE",
         "-DDEW_CONVERTER_STATIC_DEFINE",
         "-DDEW_RENDER_STATIC_DEFINE",
     ]

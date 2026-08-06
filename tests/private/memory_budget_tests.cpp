@@ -28,6 +28,7 @@ namespace
 {
 using namespace dew;
 using namespace dew::converter;
+using namespace dew::core;
 
 constexpr uint64_t operator""_mb(unsigned long long v)
 {

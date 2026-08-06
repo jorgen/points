@@ -23,6 +23,8 @@ add_executable(renderer_example
 )
 
 target_include_directories(renderer_example PRIVATE include ${imgui_SOURCE_DIR})
+# The generated C++ wrapper (header-only): include paths only, nothing to link.
+target_link_libraries(renderer_example PRIVATE dew::await)
 cmrc_add_resource_library(renderer_example_shaders ALIAS renderer_example::shaders NAMESPACE shaders
         shaders/aabb.frag
         shaders/aabb.vert
@@ -66,7 +68,7 @@ if(TARGET SDL3::SDL3main)
     list(APPEND _renderer_example_deps SDL3::SDL3main)
 endif()
 CmDepTargetLinkLibrary(renderer_example PRIVATE ${_renderer_example_deps})
-copy_dll_for_target(renderer_example dew_render dew_converter dew_common SDL3::SDL3)
+copy_dll_for_target(renderer_example dew_render dew_converter dew_core SDL3::SDL3)
 setWarningFlagsForTarget(renderer_example)
 if(NOT MSVC)
     target_compile_options(renderer_example PRIVATE -Wno-language-extension-token)

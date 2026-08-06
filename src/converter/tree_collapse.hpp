@@ -41,10 +41,15 @@
 #include <functional>
 #include <vector>
 
+namespace dew::core
+{
+class attributes_configs_t;
+}
+
 namespace dew::converter
 {
+using namespace dew::core;
 class storage_handler_t;
-class attributes_configs_t;
 
 struct collapse_job_t
 {
