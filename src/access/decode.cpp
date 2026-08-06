@@ -143,7 +143,10 @@ uint32_t clip_to_box(void *positions, position_format_t format, const double ori
   uint32_t kept = 0;
   for (uint32_t i = 0; i < point_count; i++)
   {
-    double p[3];
+    // Zero-initialised, not merely assigned by world_at: that switch has no default, so a format
+    // outside the enum would leave this unwritten and the comparison below would read rubbish.
+    // GCC 14 spots it (-Werror=maybe-uninitialized) where clang does not.
+    double p[3] = {};
     world_at(i, p);
     if (p[0] < box_min[0] || p[0] > box_max[0] || p[1] < box_min[1] || p[1] > box_max[1] || p[2] < box_min[2] || p[2] > box_max[2])
       continue;

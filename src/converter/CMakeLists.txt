@@ -54,7 +54,16 @@ set(sources
 )
 
 add_library(dew_converter_objects OBJECT ${public_headers} ${private_headers} ${sources})
-target_link_libraries(dew_converter_objects PRIVATE fmt glm unordered_dense dew_render dew_core vio_objstore libzstd_static)
+# dew_core is consumed for its INCLUDE PATHS ONLY, never linked.
+#
+# Its objects are spliced into the shared library below (they have to be: the cross-module API is
+# internal C++ and the build sets CXX_VISIBILITY_PRESET=hidden, so those symbols are not exported from
+# libdew_core). Linking dew_core as well would put its exported C entry points in the binary TWICE --
+# once from the spliced objects, once from the import library. ld tolerates that; MSVC does not, and
+# says so as LNK2005 (dew_pump_create already defined in pump.cpp.obj).
+target_link_libraries(dew_converter_objects PRIVATE fmt glm unordered_dense dew_render vio_objstore libzstd_static)
+target_include_directories(dew_converter_objects PRIVATE $<TARGET_PROPERTY:dew_core,INTERFACE_INCLUDE_DIRECTORIES>)
+target_compile_definitions(dew_converter_objects PRIVATE $<TARGET_PROPERTY:dew_core,INTERFACE_COMPILE_DEFINITIONS>)
 target_link_libraries(dew_converter_objects PRIVATE laszip)
 target_include_directories(dew_converter_objects
         PUBLIC
