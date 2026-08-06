@@ -73,11 +73,11 @@ namespace dewpp
 // is a poor payload for std::expected. Copy once, at the boundary, and be done.
 //
 // dew_error_t itself therefore gets no wrapper class here -- it would only ever be a detail of this.
-class error
+class error_t
 {
 public:
-  error() = default;
-  error(int code, std::string message)
+  error_t() = default;
+  error_t(int code, std::string message)
     : _code(code)
     , _message(std::move(message))
   {
@@ -94,25 +94,25 @@ private:
 
 // The return type of anything that can fail. Note again: with -fno-exceptions, .value() on an error
 // aborts rather than throwing -- check has_value() first.
-template <class T> using result = std::expected<T, error>;
+template <class T> using result_t = std::expected<T, error_t>;
 // For a fallible call with nothing to return.
-using status = std::expected<void, error>;
+using status_t = std::expected<void, error_t>;
 
 namespace detail
 {
 // Copy a dew_error_t into a value. A null handle, or one nobody set, becomes `fallback` -- the C API
 // has calls that fail without writing an error, and silently returning a blank one would be worse.
-inline error read_error(const dew_error_t *handle, const char *fallback)
+inline error_t read_error(const dew_error_t *handle, const char *fallback)
 {
   if (!handle)
-    return error(-1, fallback);
+    return error_t(-1, fallback);
   int code = 0;
   const char *text = nullptr;
   size_t length = 0;
   dew_error_get_info(handle, &code, &text, &length);
   if (code == 0 && length == 0)
-    return error(-1, fallback);
-  return error(code, std::string(text ? text : "", length));
+    return error_t(-1, fallback);
+  return error_t(code, std::string(text ? text : "", length));
 }
 
 // For an ACCESSOR: is there actually an error in there?
@@ -120,7 +120,7 @@ inline error read_error(const dew_error_t *handle, const char *fallback)
 // Not the same question as "was a handle written". dew_dataset_get_error / dew_request_get_error go
 // through fill_error, which ALWAYS allocates -- it copies the stored error even when that error is
 // blank. So a non-null handle proves nothing and only the content can answer.
-inline std::optional<error> read_error_or_none(const dew_error_t *handle)
+inline std::optional<error_t> read_error_or_none(const dew_error_t *handle)
 {
   if (!handle)
     return std::nullopt;
@@ -130,27 +130,27 @@ inline std::optional<error> read_error_or_none(const dew_error_t *handle)
   dew_error_get_info(handle, &code, &text, &length);
   if (code == 0 && length == 0)
     return std::nullopt;
-  return error(code, std::string(text ? text : "", length));
+  return error_t(code, std::string(text ? text : "", length));
 }
 
 // The dew_error_t ** convention: the callee allocates, the caller destroys.
-class error_out
+class error_out_t
 {
 public:
-  error_out() = default;
-  ~error_out()
+  error_out_t() = default;
+  ~error_out_t()
   {
     if (_handle)
       dew_error_destroy(_handle);
   }
-  error_out(const error_out &) = delete;
-  error_out &operator=(const error_out &) = delete;
+  error_out_t(const error_out_t &) = delete;
+  error_out_t &operator=(const error_out_t &) = delete;
 
   [[nodiscard]] dew_error_t **slot() { return &_handle; }
   [[nodiscard]] bool set() const { return _handle != nullptr; }
-  [[nodiscard]] error take(const char *fallback) const { return read_error(_handle, fallback); }
+  [[nodiscard]] error_t take(const char *fallback) const { return read_error(_handle, fallback); }
   // For accessors, where a written handle does not mean a real error.
-  [[nodiscard]] std::optional<error> take_if_set() const { return read_error_or_none(_handle); }
+  [[nodiscard]] std::optional<error_t> take_if_set() const { return read_error_or_none(_handle); }
 
 private:
   dew_error_t *_handle = nullptr;
@@ -159,20 +159,20 @@ private:
 // The dew_error_t * convention: the CALLER allocates, so the object always exists and its existence
 // says nothing. "Did it fail" is `code != 0 || length != 0` -- an untouched dew_error_create() has
 // code 0 and an empty (but non-null) message.
-class scoped_error
+class scoped_error_t
 {
 public:
-  scoped_error()
+  scoped_error_t()
     : _handle(dew_error_create())
   {
   }
-  ~scoped_error()
+  ~scoped_error_t()
   {
     if (_handle)
       dew_error_destroy(_handle);
   }
-  scoped_error(const scoped_error &) = delete;
-  scoped_error &operator=(const scoped_error &) = delete;
+  scoped_error_t(const scoped_error_t &) = delete;
+  scoped_error_t &operator=(const scoped_error_t &) = delete;
 
   [[nodiscard]] dew_error_t *get() const { return _handle; }
   [[nodiscard]] bool set() const
@@ -185,7 +185,7 @@ public:
     dew_error_get_info(_handle, &code, &text, &length);
     return code != 0 || length != 0;
   }
-  [[nodiscard]] error take(const char *fallback) const { return read_error(_handle, fallback); }
+  [[nodiscard]] error_t take(const char *fallback) const { return read_error(_handle, fallback); }
 
 private:
   dew_error_t *_handle = nullptr;
@@ -209,56 +209,56 @@ template <class Fn> inline std::string out_string(Fn &&call)
 
 // ---- enums, value structs and constants: aliases of the C declarations ----
 
-using type = dew_type_t;
-using components = dew_components_t;
-using draw_type = dew_draw_type_t;
-using buffer_type = dew_buffer_type_t;
-using texture_type = dew_texture_type_t;
-using aabb_mesh_buffer_mapping = dew_aabb_mesh_buffer_mapping_t;
-using skybox_buffer_mapping = dew_skybox_buffer_mapping_t;
-using buffer_mapping = dew_buffer_mapping_t;
-using dyn_points_buffer_mapping = dew_dyn_points_buffer_mapping_t;
-using axis_gizmo_buffer_mapping = dew_axis_gizmo_buffer_mapping_t;
-using origin_anchor_buffer_mapping = dew_origin_anchor_buffer_mapping_t;
-using environment_buffer_mapping = dew_environment_buffer_mapping_t;
-using node_bbox_buffer_mapping = dew_node_bbox_buffer_mapping_t;
-using dataset_state = dew_dataset_state_t;
-using request_status = dew_request_status_t;
-using lod_mode = dew_lod_mode_t;
-using clip_mode = dew_clip_mode_t;
-using position_format = dew_position_format_t;
-using converter_conversion_status = dew_converter_conversion_status_t;
-using converter_open_file_semantics = dew_converter_open_file_semantics_t;
-using converter_compression = dew_converter_compression_t;
+using type_t = dew_type_t;
+using components_t = dew_components_t;
+using draw_type_t = dew_draw_type_t;
+using buffer_type_t = dew_buffer_type_t;
+using texture_type_t = dew_texture_type_t;
+using aabb_mesh_buffer_mapping_t = dew_aabb_mesh_buffer_mapping_t;
+using skybox_buffer_mapping_t = dew_skybox_buffer_mapping_t;
+using buffer_mapping_t = dew_buffer_mapping_t;
+using dyn_points_buffer_mapping_t = dew_dyn_points_buffer_mapping_t;
+using axis_gizmo_buffer_mapping_t = dew_axis_gizmo_buffer_mapping_t;
+using origin_anchor_buffer_mapping_t = dew_origin_anchor_buffer_mapping_t;
+using environment_buffer_mapping_t = dew_environment_buffer_mapping_t;
+using node_bbox_buffer_mapping_t = dew_node_bbox_buffer_mapping_t;
+using dataset_state_t = dew_dataset_state_t;
+using request_status_t = dew_request_status_t;
+using lod_mode_t = dew_lod_mode_t;
+using clip_mode_t = dew_clip_mode_t;
+using position_format_t = dew_position_format_t;
+using converter_conversion_status_t = dew_converter_conversion_status_t;
+using converter_open_file_semantics_t = dew_converter_open_file_semantics_t;
+using converter_compression_t = dew_converter_compression_t;
 
-using attribute = dew_attribute_t;
-using blob = dew_blob_t;
-using aabb = dew_aabb_t;
-using draw_buffer = dew_draw_buffer_t;
-using draw_group = dew_draw_group_t;
-using frame_camera = dew_frame_camera_t;
-using data_source = dew_data_source_t;
-using frame = dew_frame_t;
-using renderer_callbacks = dew_renderer_callbacks_t;
-using skybox_data = dew_skybox_data_t;
-using dataset_options = dew_dataset_options_t;
-using dataset_info = dew_dataset_info_t;
-using region_request = dew_region_request_t;
-using attribute_buffer = dew_attribute_buffer_t;
-using result_node = dew_result_node_t;
-using request_result = dew_request_result_t;
-using converter_header = dew_converter_header_t;
-using converter_file_pre_init_info = dew_converter_file_pre_init_info_t;
-using converter_file_convert_callbacks = dew_converter_file_convert_callbacks_t;
-using converter_runtime_callbacks = dew_converter_runtime_callbacks_t;
-using converter_upload_callbacks = dew_converter_upload_callbacks_t;
-using converter_upload_state = dew_converter_upload_state_t;
-using converter_buffer_callbacks = dew_converter_buffer_callbacks_t;
-using converter_str_buffer = dew_converter_str_buffer;
-using converter_attribute_stats = dew_converter_attribute_stats_t;
-using converter_stats = dew_converter_stats_t;
-using converter_io_stats = dew_converter_io_stats_t;
-using converter_perf_stats = dew_converter_perf_stats_t;
+using attribute_t = dew_attribute_t;
+using blob_t = dew_blob_t;
+using aabb_t = dew_aabb_t;
+using draw_buffer_t = dew_draw_buffer_t;
+using draw_group_t = dew_draw_group_t;
+using frame_camera_t = dew_frame_camera_t;
+using data_source_t = dew_data_source_t;
+using frame_t = dew_frame_t;
+using renderer_callbacks_t = dew_renderer_callbacks_t;
+using skybox_data_t = dew_skybox_data_t;
+using dataset_options_t = dew_dataset_options_t;
+using dataset_info_t = dew_dataset_info_t;
+using region_request_t = dew_region_request_t;
+using attribute_buffer_t = dew_attribute_buffer_t;
+using result_node_t = dew_result_node_t;
+using request_result_t = dew_request_result_t;
+using converter_header_t = dew_converter_header_t;
+using converter_file_pre_init_info_t = dew_converter_file_pre_init_info_t;
+using converter_file_convert_callbacks_t = dew_converter_file_convert_callbacks_t;
+using converter_runtime_callbacks_t = dew_converter_runtime_callbacks_t;
+using converter_upload_callbacks_t = dew_converter_upload_callbacks_t;
+using converter_upload_state_t = dew_converter_upload_state_t;
+using converter_buffer_callbacks_t = dew_converter_buffer_callbacks_t;
+using converter_str_buffer_t = dew_converter_str_buffer;
+using converter_attribute_stats_t = dew_converter_attribute_stats_t;
+using converter_stats_t = dew_converter_stats_t;
+using converter_io_stats_t = dew_converter_io_stats_t;
+using converter_perf_stats_t = dew_converter_perf_stats_t;
 
 inline constexpr auto attribute_xyz = DEW_ATTRIBUTE_XYZ;
 inline constexpr auto attribute_intensity = DEW_ATTRIBUTE_INTENSITY;
@@ -282,34 +282,34 @@ inline constexpr auto attribute_original_order = DEW_ATTRIBUTE_ORIGINAL_ORDER;
 
 // ---- handles ----
 
-class attributes;
-class pump;
-class buffer;
-class camera;
-class arcball;
-class fps;
-class to_render;
-class renderer;
-class aabb_data_source;
-class axis_gizmo_data_source;
-class environment_data_source;
-class flat_points_data_source;
-class origin_anchor_data_source;
-class skybox_data_source;
-class dataset;
-class request;
-class converter;
-class converter_data_source;
+class attributes_t;
+class pump_t;
+class buffer_t;
+class camera_t;
+class arcball_t;
+class fps_t;
+class to_render_t;
+class renderer_t;
+class aabb_data_source_t;
+class axis_gizmo_data_source_t;
+class environment_data_source_t;
+class flat_points_data_source_t;
+class origin_anchor_data_source_t;
+class skybox_data_source_t;
+class dataset_t;
+class request_t;
+class converter_t;
+class converter_data_source_t;
 
 //  Opaque, append-only attribute set. Built by the file-convert `init` callback and consumed by the
 //  attribute registry; the C++ definition lives with the internal dataset types.
 // A BORROWED dew_attributes_t -- the library owns it. Copyable, destroys nothing, and valid only
 // for as long as whatever produced it says.
-class attributes
+class attributes_t
 {
 public:
-  attributes() = default;
-  explicit attributes(dew_attributes_t *handle)
+  attributes_t() = default;
+  explicit attributes_t(dew_attributes_t *handle)
     : _handle(handle)
   {
   }
@@ -326,22 +326,22 @@ private:
 };
 
 // Owns its dew_pump_t: move-only, destroyed with dew_pump_destroy.
-class pump
+class pump_t
 {
 public:
-  pump() = default;
-  explicit pump(dew_pump_t *handle)
+  pump_t() = default;
+  explicit pump_t(dew_pump_t *handle)
     : _handle(handle)
   {
   }
 
-  ~pump() { reset(); }
-  pump(pump &&other) noexcept
+  ~pump_t() { reset(); }
+  pump_t(pump_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  pump &operator=(pump &&other) noexcept
+  pump_t &operator=(pump_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -351,8 +351,8 @@ public:
     }
     return *this;
   }
-  pump(const pump &) = delete;
-  pump &operator=(const pump &) = delete;
+  pump_t(const pump_t &) = delete;
+  pump_t &operator=(const pump_t &) = delete;
 
   void reset()
   {
@@ -374,7 +374,7 @@ public:
   [[nodiscard]] dew_pump_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<pump> create();
+  static result_t<pump_t> create();
 
   //  Replaces any previous callback and rearms. Pass NULL to stop being woken; polling still works.
   void set_wake_callback(dew_wake_callback_t callback, void * callback_user_ptr) const;
@@ -400,11 +400,11 @@ private:
 
 // A BORROWED dew_buffer_t -- the library owns it. Copyable, destroys nothing, and valid only
 // for as long as whatever produced it says.
-class buffer
+class buffer_t
 {
 public:
-  buffer() = default;
-  explicit buffer(dew_buffer_t *handle)
+  buffer_t() = default;
+  explicit buffer_t(dew_buffer_t *handle)
     : _handle(handle)
   {
   }
@@ -422,7 +422,7 @@ private:
   dew_buffer_t *_handle = nullptr;
 };
 
-struct camera_perspective_properties_result
+struct camera_perspective_properties_result_t
 {
   double fov;
   double aspect;
@@ -431,22 +431,22 @@ struct camera_perspective_properties_result
 };
 
 // Owns its dew_camera_t: move-only, destroyed with dew_camera_destroy.
-class camera
+class camera_t
 {
 public:
-  camera() = default;
-  explicit camera(dew_camera_t *handle)
+  camera_t() = default;
+  explicit camera_t(dew_camera_t *handle)
     : _handle(handle)
   {
   }
 
-  ~camera() { reset(); }
-  camera(camera &&other) noexcept
+  ~camera_t() { reset(); }
+  camera_t(camera_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  camera &operator=(camera &&other) noexcept
+  camera_t &operator=(camera_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -456,8 +456,8 @@ public:
     }
     return *this;
   }
-  camera(const camera &) = delete;
-  camera &operator=(const camera &) = delete;
+  camera_t(const camera_t &) = delete;
+  camera_t &operator=(const camera_t &) = delete;
 
   void reset()
   {
@@ -479,7 +479,7 @@ public:
   [[nodiscard]] dew_camera_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<camera> create();
+  static result_t<camera_t> create();
 
   void look_at(const std::array<double, 3> & eye, const std::array<double, 3> & center, const std::array<double, 3> & up) const;
 
@@ -495,7 +495,7 @@ public:
 
   void set_perspective(double fov, double width, double height, double near, double far) const;
 
-  camera_perspective_properties_result perspective_properties() const;
+  camera_perspective_properties_result_t perspective_properties() const;
 
   std::array<double, 3> get_eye() const;
 
@@ -506,22 +506,22 @@ private:
 };
 
 // Owns its dew_arcball_t: move-only, destroyed with dew_arcball_destroy.
-class arcball
+class arcball_t
 {
 public:
-  arcball() = default;
-  explicit arcball(dew_arcball_t *handle)
+  arcball_t() = default;
+  explicit arcball_t(dew_arcball_t *handle)
     : _handle(handle)
   {
   }
 
-  ~arcball() { reset(); }
-  arcball(arcball &&other) noexcept
+  ~arcball_t() { reset(); }
+  arcball_t(arcball_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  arcball &operator=(arcball &&other) noexcept
+  arcball_t &operator=(arcball_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -531,8 +531,8 @@ public:
     }
     return *this;
   }
-  arcball(const arcball &) = delete;
-  arcball &operator=(const arcball &) = delete;
+  arcball_t(const arcball_t &) = delete;
+  arcball_t &operator=(const arcball_t &) = delete;
 
   void reset()
   {
@@ -554,7 +554,7 @@ public:
   [[nodiscard]] dew_arcball_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<arcball> create(const camera & camera, const std::array<double, 3> & center);
+  static result_t<arcball_t> create(const camera_t & camera, const std::array<double, 3> & center);
 
   void reset() const;
 
@@ -581,22 +581,22 @@ private:
 };
 
 // Owns its dew_fps_t: move-only, destroyed with dew_fps_destroy.
-class fps
+class fps_t
 {
 public:
-  fps() = default;
-  explicit fps(dew_fps_t *handle)
+  fps_t() = default;
+  explicit fps_t(dew_fps_t *handle)
     : _handle(handle)
   {
   }
 
-  ~fps() { reset(); }
-  fps(fps &&other) noexcept
+  ~fps_t() { reset(); }
+  fps_t(fps_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  fps &operator=(fps &&other) noexcept
+  fps_t &operator=(fps_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -606,8 +606,8 @@ public:
     }
     return *this;
   }
-  fps(const fps &) = delete;
-  fps &operator=(const fps &) = delete;
+  fps_t(const fps_t &) = delete;
+  fps_t &operator=(const fps_t &) = delete;
 
   void reset()
   {
@@ -629,7 +629,7 @@ public:
   [[nodiscard]] dew_fps_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<fps> create(const camera & camera);
+  static result_t<fps_t> create(const camera_t & camera);
 
   void reset() const;
 
@@ -643,11 +643,11 @@ private:
 
 // A BORROWED dew_to_render_t -- the library owns it. Copyable, destroys nothing, and valid only
 // for as long as whatever produced it says.
-class to_render
+class to_render_t
 {
 public:
-  to_render() = default;
-  explicit to_render(dew_to_render_t *handle)
+  to_render_t() = default;
+  explicit to_render_t(dew_to_render_t *handle)
     : _handle(handle)
   {
   }
@@ -664,22 +664,22 @@ private:
 };
 
 // Owns its dew_renderer_t: move-only, destroyed with dew_renderer_destroy.
-class renderer
+class renderer_t
 {
 public:
-  renderer() = default;
-  explicit renderer(dew_renderer_t *handle)
+  renderer_t() = default;
+  explicit renderer_t(dew_renderer_t *handle)
     : _handle(handle)
   {
   }
 
-  ~renderer() { reset(); }
-  renderer(renderer &&other) noexcept
+  ~renderer_t() { reset(); }
+  renderer_t(renderer_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  renderer &operator=(renderer &&other) noexcept
+  renderer_t &operator=(renderer_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -689,8 +689,8 @@ public:
     }
     return *this;
   }
-  renderer(const renderer &) = delete;
-  renderer &operator=(const renderer &) = delete;
+  renderer_t(const renderer_t &) = delete;
+  renderer_t &operator=(const renderer_t &) = delete;
 
   void reset()
   {
@@ -712,13 +712,13 @@ public:
   [[nodiscard]] dew_renderer_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<renderer> create();
+  static result_t<renderer_t> create();
 
-  void add_camera(const camera & camera) const;
+  void add_camera(const camera_t & camera) const;
 
-  void remove_camera(const camera & camera) const;
+  void remove_camera(const camera_t & camera) const;
 
-  dew_frame_t frame(const camera & camera) const;
+  dew_frame_t frame(const camera_t & camera) const;
 
   void set_callback(dew_renderer_callbacks_t callbacks, void * callbacks_user_ptr) const;
 
@@ -731,22 +731,22 @@ private:
 };
 
 // Owns its dew_aabb_data_source_t: move-only, destroyed with dew_aabb_data_source_destroy.
-class aabb_data_source
+class aabb_data_source_t
 {
 public:
-  aabb_data_source() = default;
-  explicit aabb_data_source(dew_aabb_data_source_t *handle)
+  aabb_data_source_t() = default;
+  explicit aabb_data_source_t(dew_aabb_data_source_t *handle)
     : _handle(handle)
   {
   }
 
-  ~aabb_data_source() { reset(); }
-  aabb_data_source(aabb_data_source &&other) noexcept
+  ~aabb_data_source_t() { reset(); }
+  aabb_data_source_t(aabb_data_source_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  aabb_data_source &operator=(aabb_data_source &&other) noexcept
+  aabb_data_source_t &operator=(aabb_data_source_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -756,8 +756,8 @@ public:
     }
     return *this;
   }
-  aabb_data_source(const aabb_data_source &) = delete;
-  aabb_data_source &operator=(const aabb_data_source &) = delete;
+  aabb_data_source_t(const aabb_data_source_t &) = delete;
+  aabb_data_source_t &operator=(const aabb_data_source_t &) = delete;
 
   void reset()
   {
@@ -779,7 +779,7 @@ public:
   [[nodiscard]] dew_aabb_data_source_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<aabb_data_source> create(const renderer & renderer, const std::array<double, 3> & offset);
+  static result_t<aabb_data_source_t> create(const renderer_t & renderer, const std::array<double, 3> & offset);
 
   dew_data_source_t get() const;
 
@@ -796,22 +796,22 @@ private:
 };
 
 // Owns its dew_axis_gizmo_data_source_t: move-only, destroyed with dew_axis_gizmo_data_source_destroy.
-class axis_gizmo_data_source
+class axis_gizmo_data_source_t
 {
 public:
-  axis_gizmo_data_source() = default;
-  explicit axis_gizmo_data_source(dew_axis_gizmo_data_source_t *handle)
+  axis_gizmo_data_source_t() = default;
+  explicit axis_gizmo_data_source_t(dew_axis_gizmo_data_source_t *handle)
     : _handle(handle)
   {
   }
 
-  ~axis_gizmo_data_source() { reset(); }
-  axis_gizmo_data_source(axis_gizmo_data_source &&other) noexcept
+  ~axis_gizmo_data_source_t() { reset(); }
+  axis_gizmo_data_source_t(axis_gizmo_data_source_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  axis_gizmo_data_source &operator=(axis_gizmo_data_source &&other) noexcept
+  axis_gizmo_data_source_t &operator=(axis_gizmo_data_source_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -821,8 +821,8 @@ public:
     }
     return *this;
   }
-  axis_gizmo_data_source(const axis_gizmo_data_source &) = delete;
-  axis_gizmo_data_source &operator=(const axis_gizmo_data_source &) = delete;
+  axis_gizmo_data_source_t(const axis_gizmo_data_source_t &) = delete;
+  axis_gizmo_data_source_t &operator=(const axis_gizmo_data_source_t &) = delete;
 
   void reset()
   {
@@ -844,7 +844,7 @@ public:
   [[nodiscard]] dew_axis_gizmo_data_source_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<axis_gizmo_data_source> create(const renderer & renderer, const std::array<double, 3> & center, double axis_length);
+  static result_t<axis_gizmo_data_source_t> create(const renderer_t & renderer, const std::array<double, 3> & center, double axis_length);
 
   dew_data_source_t get() const;
 
@@ -857,22 +857,22 @@ private:
 };
 
 // Owns its dew_environment_data_source_t: move-only, destroyed with dew_environment_data_source_destroy.
-class environment_data_source
+class environment_data_source_t
 {
 public:
-  environment_data_source() = default;
-  explicit environment_data_source(dew_environment_data_source_t *handle)
+  environment_data_source_t() = default;
+  explicit environment_data_source_t(dew_environment_data_source_t *handle)
     : _handle(handle)
   {
   }
 
-  ~environment_data_source() { reset(); }
-  environment_data_source(environment_data_source &&other) noexcept
+  ~environment_data_source_t() { reset(); }
+  environment_data_source_t(environment_data_source_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  environment_data_source &operator=(environment_data_source &&other) noexcept
+  environment_data_source_t &operator=(environment_data_source_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -882,8 +882,8 @@ public:
     }
     return *this;
   }
-  environment_data_source(const environment_data_source &) = delete;
-  environment_data_source &operator=(const environment_data_source &) = delete;
+  environment_data_source_t(const environment_data_source_t &) = delete;
+  environment_data_source_t &operator=(const environment_data_source_t &) = delete;
 
   void reset()
   {
@@ -905,7 +905,7 @@ public:
   [[nodiscard]] dew_environment_data_source_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<environment_data_source> create(const renderer & renderer, double ground_z, double grid_size);
+  static result_t<environment_data_source_t> create(const renderer_t & renderer, double ground_z, double grid_size);
 
   dew_data_source_t get() const;
 
@@ -915,29 +915,29 @@ private:
   dew_environment_data_source_t *_handle = nullptr;
 };
 
-struct flat_points_data_source_get_aabb_result
+struct flat_points_data_source_get_aabb_result_t
 {
   std::array<double, 3> aabb_min;
   std::array<double, 3> aabb_max;
 };
 
 // Owns its dew_flat_points_data_source_t: move-only, destroyed with dew_flat_points_data_source_destroy.
-class flat_points_data_source
+class flat_points_data_source_t
 {
 public:
-  flat_points_data_source() = default;
-  explicit flat_points_data_source(dew_flat_points_data_source_t *handle)
+  flat_points_data_source_t() = default;
+  explicit flat_points_data_source_t(dew_flat_points_data_source_t *handle)
     : _handle(handle)
   {
   }
 
-  ~flat_points_data_source() { reset(); }
-  flat_points_data_source(flat_points_data_source &&other) noexcept
+  ~flat_points_data_source_t() { reset(); }
+  flat_points_data_source_t(flat_points_data_source_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  flat_points_data_source &operator=(flat_points_data_source &&other) noexcept
+  flat_points_data_source_t &operator=(flat_points_data_source_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -947,8 +947,8 @@ public:
     }
     return *this;
   }
-  flat_points_data_source(const flat_points_data_source &) = delete;
-  flat_points_data_source &operator=(const flat_points_data_source &) = delete;
+  flat_points_data_source_t(const flat_points_data_source_t &) = delete;
+  flat_points_data_source_t &operator=(const flat_points_data_source_t &) = delete;
 
   void reset()
   {
@@ -970,33 +970,33 @@ public:
   [[nodiscard]] dew_flat_points_data_source_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<flat_points_data_source> create(const renderer & renderer, std::string_view url);
+  static result_t<flat_points_data_source_t> create(const renderer_t & renderer, std::string_view url);
 
   dew_data_source_t get() const;
 
-  flat_points_data_source_get_aabb_result get_aabb() const;
+  flat_points_data_source_get_aabb_result_t get_aabb() const;
 
 private:
   dew_flat_points_data_source_t *_handle = nullptr;
 };
 
 // Owns its dew_origin_anchor_data_source_t: move-only, destroyed with dew_origin_anchor_data_source_destroy.
-class origin_anchor_data_source
+class origin_anchor_data_source_t
 {
 public:
-  origin_anchor_data_source() = default;
-  explicit origin_anchor_data_source(dew_origin_anchor_data_source_t *handle)
+  origin_anchor_data_source_t() = default;
+  explicit origin_anchor_data_source_t(dew_origin_anchor_data_source_t *handle)
     : _handle(handle)
   {
   }
 
-  ~origin_anchor_data_source() { reset(); }
-  origin_anchor_data_source(origin_anchor_data_source &&other) noexcept
+  ~origin_anchor_data_source_t() { reset(); }
+  origin_anchor_data_source_t(origin_anchor_data_source_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  origin_anchor_data_source &operator=(origin_anchor_data_source &&other) noexcept
+  origin_anchor_data_source_t &operator=(origin_anchor_data_source_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -1006,8 +1006,8 @@ public:
     }
     return *this;
   }
-  origin_anchor_data_source(const origin_anchor_data_source &) = delete;
-  origin_anchor_data_source &operator=(const origin_anchor_data_source &) = delete;
+  origin_anchor_data_source_t(const origin_anchor_data_source_t &) = delete;
+  origin_anchor_data_source_t &operator=(const origin_anchor_data_source_t &) = delete;
 
   void reset()
   {
@@ -1029,7 +1029,7 @@ public:
   [[nodiscard]] dew_origin_anchor_data_source_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<origin_anchor_data_source> create(const renderer & renderer, const std::array<double, 3> & center, double arrow_size);
+  static result_t<origin_anchor_data_source_t> create(const renderer_t & renderer, const std::array<double, 3> & center, double arrow_size);
 
   dew_data_source_t get() const;
 
@@ -1042,22 +1042,22 @@ private:
 };
 
 // Owns its dew_skybox_data_source_t: move-only, destroyed with dew_skybox_data_source_destroy.
-class skybox_data_source
+class skybox_data_source_t
 {
 public:
-  skybox_data_source() = default;
-  explicit skybox_data_source(dew_skybox_data_source_t *handle)
+  skybox_data_source_t() = default;
+  explicit skybox_data_source_t(dew_skybox_data_source_t *handle)
     : _handle(handle)
   {
   }
 
-  ~skybox_data_source() { reset(); }
-  skybox_data_source(skybox_data_source &&other) noexcept
+  ~skybox_data_source_t() { reset(); }
+  skybox_data_source_t(skybox_data_source_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  skybox_data_source &operator=(skybox_data_source &&other) noexcept
+  skybox_data_source_t &operator=(skybox_data_source_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -1067,8 +1067,8 @@ public:
     }
     return *this;
   }
-  skybox_data_source(const skybox_data_source &) = delete;
-  skybox_data_source &operator=(const skybox_data_source &) = delete;
+  skybox_data_source_t(const skybox_data_source_t &) = delete;
+  skybox_data_source_t &operator=(const skybox_data_source_t &) = delete;
 
   void reset()
   {
@@ -1090,7 +1090,7 @@ public:
   [[nodiscard]] dew_skybox_data_source_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<skybox_data_source> create(const renderer & renderer, const dew_skybox_data_t & data);
+  static result_t<skybox_data_source_t> create(const renderer_t & renderer, const dew_skybox_data_t & data);
 
   dew_data_source_t get() const;
 
@@ -1109,11 +1109,11 @@ private:
 //  dew.aio for Python. Adding an awaitable handle is this annotation and nothing else.
 // A BORROWED dew_dataset_t -- the library owns it. Copyable, destroys nothing, and valid only
 // for as long as whatever produced it says.
-class dataset
+class dataset_t
 {
 public:
-  dataset() = default;
-  explicit dataset(dew_dataset_t *handle)
+  dataset_t() = default;
+  explicit dataset_t(dew_dataset_t *handle)
     : _handle(handle)
   {
   }
@@ -1130,13 +1130,13 @@ public:
   //  `pump` is where completions are delivered. Pass one to drive several subsystems from a single
   //  wake, or NULL to have the dataset own a private pump -- in which case dew_dataset_poll drives it
   //  and you need not know the pump exists.
-  static result<dataset> create(std::string_view url, std::string_view connection, const dew_dataset_options_t & options, const pump & pump);
+  static result_t<dataset_t> create(std::string_view url, std::string_view connection, const dew_dataset_options_t & options, const pump_t & pump);
 
   void close() const;
 
   dew_dataset_state_t state() const;
 
-  std::optional<error> get_error() const;
+  std::optional<error_t> get_error() const;
 
   //  Dispatch this dataset's completions on the calling thread; returns how many were dispatched.
   //
@@ -1159,7 +1159,7 @@ private:
   dew_dataset_t *_handle = nullptr;
 };
 
-struct request_get_result_result
+struct request_get_result_result_t
 {
   uint8_t return_;
   dew_request_result_t out;
@@ -1167,11 +1167,11 @@ struct request_get_result_result
 
 // A BORROWED dew_request_t -- the library owns it. Copyable, destroys nothing, and valid only
 // for as long as whatever produced it says.
-class request
+class request_t
 {
 public:
-  request() = default;
-  explicit request(dew_request_t *handle)
+  request_t() = default;
+  explicit request_t(dew_request_t *handle)
     : _handle(handle)
   {
   }
@@ -1187,13 +1187,13 @@ public:
 
   void cancel() const;
 
-  std::optional<error> get_error() const;
+  std::optional<error_t> get_error() const;
 
   void release() const;
 
   float completion_factor() const;
 
-  request_get_result_result get_result() const;
+  request_get_result_result_t get_result() const;
 
   uint64_t attribute_size(uint32_t attribute_index) const;
 
@@ -1205,22 +1205,22 @@ private:
 };
 
 // Owns its dew_converter_t: move-only, destroyed with dew_converter_destroy.
-class converter
+class converter_t
 {
 public:
-  converter() = default;
-  explicit converter(dew_converter_t *handle)
+  converter_t() = default;
+  explicit converter_t(dew_converter_t *handle)
     : _handle(handle)
   {
   }
 
-  ~converter() { reset(); }
-  converter(converter &&other) noexcept
+  ~converter_t() { reset(); }
+  converter_t(converter_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  converter &operator=(converter &&other) noexcept
+  converter_t &operator=(converter_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -1230,8 +1230,8 @@ public:
     }
     return *this;
   }
-  converter(const converter &) = delete;
-  converter &operator=(const converter &) = delete;
+  converter_t(const converter_t &) = delete;
+  converter_t &operator=(const converter_t &) = delete;
 
   void reset()
   {
@@ -1253,13 +1253,13 @@ public:
   [[nodiscard]] dew_converter_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<converter> create(std::string_view cache_filename, dew_converter_open_file_semantics_t open_file_semantics);
+  static result_t<converter_t> create(std::string_view cache_filename, dew_converter_open_file_semantics_t open_file_semantics);
 
   //  As dew_converter_create, but first applies `connection` (a vendor connection string -- credentials /
   //  endpoint / region; see connection_cli.h + vio connection_string.h) for the output URL's provider, so a
   //  dataset can be written directly to a cloud store. `connection` may be null/empty for local outputs or
   //  when credentials come from the environment. `open_file_semantics` is typically truncate.
-  static result<converter> create_with_connection(std::string_view url, std::string_view connection, dew_converter_open_file_semantics_t open_file_semantics);
+  static result_t<converter_t> create_with_connection(std::string_view url, std::string_view connection, dew_converter_open_file_semantics_t open_file_semantics);
 
   //  Destination mode: convert into a LOCAL cache file (`cache_path`, a bare path or file:// URL) while
   //  finalized subtrees upload incrementally to `destination_url` (s3:// az:// dir://; DEW2 layout).
@@ -1270,7 +1270,7 @@ public:
   //  destination's credentials (null/empty = environment). Reopening the same cache+destination resumes:
   //  committed bands are never re-uploaded (a destination belonging to a different dataset generation is
   //  refused via the embedded uuid).
-  static result<converter> create_with_destination(std::string_view cache_path, std::string_view destination_url, std::string_view connection, dew_converter_open_file_semantics_t open_file_semantics);
+  static result_t<converter_t> create_with_destination(std::string_view cache_path, std::string_view destination_url, std::string_view connection, dew_converter_open_file_semantics_t open_file_semantics);
 
   //  Cache-file resident-bytes cap for destination mode. 0 = unlimited (the default). Callable any
   //  time; lowering it triggers eviction/spill passes.
@@ -1338,7 +1338,7 @@ private:
   dew_converter_t *_handle = nullptr;
 };
 
-struct converter_data_source_get_memory_stats_result
+struct converter_data_source_get_memory_stats_result_t
 {
   uint64_t heap_bytes;
   uint64_t heap_max;
@@ -1349,7 +1349,7 @@ struct converter_data_source_get_memory_stats_result
   uint32_t brake_level;
 };
 
-struct converter_data_source_get_frame_timings_result
+struct converter_data_source_get_frame_timings_result_t
 {
   double tree_walk_ms;
   double buffer_reconciliation_ms;
@@ -1371,7 +1371,7 @@ struct converter_data_source_get_frame_timings_result
   int io_in_flight;
 };
 
-struct converter_data_source_get_virtual_stats_result
+struct converter_data_source_get_virtual_stats_result_t
 {
   uint32_t promoted;
   uint64_t gpu_bytes;
@@ -1379,29 +1379,29 @@ struct converter_data_source_get_virtual_stats_result
   uint32_t nodes_drawn;
 };
 
-struct converter_data_source_get_tight_aabb_result
+struct converter_data_source_get_tight_aabb_result_t
 {
   std::array<double, 3> min;
   std::array<double, 3> max;
 };
 
 // Owns its dew_converter_data_source_t: move-only, destroyed with dew_converter_data_source_destroy.
-class converter_data_source
+class converter_data_source_t
 {
 public:
-  converter_data_source() = default;
-  explicit converter_data_source(dew_converter_data_source_t *handle)
+  converter_data_source_t() = default;
+  explicit converter_data_source_t(dew_converter_data_source_t *handle)
     : _handle(handle)
   {
   }
 
-  ~converter_data_source() { reset(); }
-  converter_data_source(converter_data_source &&other) noexcept
+  ~converter_data_source_t() { reset(); }
+  converter_data_source_t(converter_data_source_t &&other) noexcept
     : _handle(other._handle)
   {
     other._handle = nullptr;
   }
-  converter_data_source &operator=(converter_data_source &&other) noexcept
+  converter_data_source_t &operator=(converter_data_source_t &&other) noexcept
   {
     if (this != &other)
     {
@@ -1411,8 +1411,8 @@ public:
     }
     return *this;
   }
-  converter_data_source(const converter_data_source &) = delete;
-  converter_data_source &operator=(const converter_data_source &) = delete;
+  converter_data_source_t(const converter_data_source_t &) = delete;
+  converter_data_source_t &operator=(const converter_data_source_t &) = delete;
 
   void reset()
   {
@@ -1434,7 +1434,7 @@ public:
   [[nodiscard]] dew_converter_data_source_t *handle() const { return _handle; }
   [[nodiscard]] explicit operator bool() const { return _handle != nullptr; }
 
-  static result<converter_data_source> create(std::string_view url, const renderer & renderer);
+  static result_t<converter_data_source_t> create(std::string_view url, const renderer_t & renderer);
 
   //  As dew_converter_data_source_create, but first applies `connection` (a vendor connection string --
   //  credentials / endpoint / region; same grammar/keys as dew_converter_create_with_connection, see vio
@@ -1442,7 +1442,7 @@ public:
   //  store (s3://bucket/prefix, az://container/prefix). `connection` may be null/empty for local files
   //  (file://, bare paths) or when credentials come from the AWS_*/AZURE_* environment; for a public bucket
   //  pass "anonymous=true" (optionally with "region=..."). A no-op for local/dir/mem URLs.
-  static result<converter_data_source> create_with_connection(std::string_view url, std::string_view connection, const renderer & renderer);
+  static result_t<converter_data_source_t> create_with_connection(std::string_view url, std::string_view connection, const renderer_t & renderer);
 
   dew_data_source_t get() const;
 
@@ -1480,13 +1480,13 @@ public:
   //  heap size and its link-time ceiling as probed on the last rendered frame (0/0 on native); backlog_bytes
   //  is the estimated CPU held by in-flight + decoded-awaiting-upload nodes last frame; brake_level is
   //  0 none / 1 high (>=80% of ceiling) / 2 critical (>=90%). Any out-pointer may be null.
-  converter_data_source_get_memory_stats_result get_memory_stats() const;
+  converter_data_source_get_memory_stats_result_t get_memory_stats() const;
 
   uint64_t get_points_rendered() const;
 
   uint8_t is_animating() const;
 
-  converter_data_source_get_frame_timings_result get_frame_timings() const;
+  converter_data_source_get_frame_timings_result_t get_frame_timings() const;
 
   void set_debug_transitions(uint8_t enabled) const;
 
@@ -1498,13 +1498,13 @@ public:
 
   //  Observability: how many spanning leaves are currently promoted, the GPU bytes their virtual nodes hold, the
   //  CPU bytes their resident sources pin, and how many virtual nodes were drawn last frame.
-  converter_data_source_get_virtual_stats_result get_virtual_stats() const;
+  converter_data_source_get_virtual_stats_result_t get_virtual_stats() const;
 
   void set_show_bounding_boxes(uint8_t enabled) const;
 
   dew_data_source_t get_bbox_data_source() const;
 
-  converter_data_source_get_tight_aabb_result get_tight_aabb() const;
+  converter_data_source_get_tight_aabb_result_t get_tight_aabb() const;
 
 private:
   dew_converter_data_source_t *_handle = nullptr;
@@ -1515,724 +1515,724 @@ private:
 // Out-of-line because a body that calls another wrapper's get() needs that wrapper to be a
 // complete type, and the classes reference each other in both directions.
 
-inline void attributes::add_attribute(std::string_view name, dew_type_t format, dew_components_t components) const
+inline void attributes_t::add_attribute(std::string_view name, dew_type_t format, dew_components_t components) const
 {
   dew_attributes_add_attribute(_handle, name.data(), static_cast<uint32_t>(name.size()), format, components);
 }
 
-inline result<pump> pump::create()
+inline result_t<pump_t> pump_t::create()
 {
   dew_pump_t *handle_ = dew_pump_create();
   if (!handle_)
-    return std::unexpected(error(-1, "dew_pump_create failed"));
-  return pump(handle_);
+    return std::unexpected(error_t(-1, "dew_pump_create failed"));
+  return pump_t(handle_);
 }
 
-inline void pump::set_wake_callback(dew_wake_callback_t callback, void * callback_user_ptr) const
+inline void pump_t::set_wake_callback(dew_wake_callback_t callback, void * callback_user_ptr) const
 {
   dew_pump_set_wake_callback(_handle, callback, callback_user_ptr);
 }
 
-inline uint32_t pump::poll() const
+inline uint32_t pump_t::poll() const
 {
   uint32_t return_ = dew_pump_poll(_handle);
   return return_;
 }
 
-inline uint32_t pump::pending_count() const
+inline uint32_t pump_t::pending_count() const
 {
   uint32_t return_ = dew_pump_pending_count(_handle);
   return return_;
 }
 
-inline void buffer::set_rendered() const
+inline void buffer_t::set_rendered() const
 {
   dew_buffer_set_rendered(_handle);
 }
 
-inline void buffer::release_data() const
+inline void buffer_t::release_data() const
 {
   dew_buffer_release_data(_handle);
 }
 
-inline result<camera> camera::create()
+inline result_t<camera_t> camera_t::create()
 {
   dew_camera_t *handle_ = dew_camera_create();
   if (!handle_)
-    return std::unexpected(error(-1, "dew_camera_create failed"));
-  return camera(handle_);
+    return std::unexpected(error_t(-1, "dew_camera_create failed"));
+  return camera_t(handle_);
 }
 
-inline void camera::look_at(const std::array<double, 3> & eye, const std::array<double, 3> & center, const std::array<double, 3> & up) const
+inline void camera_t::look_at(const std::array<double, 3> & eye, const std::array<double, 3> & center, const std::array<double, 3> & up) const
 {
   dew_camera_look_at(_handle, eye.data(), center.data(), up.data());
 }
 
-inline void camera::look_at_aabb(const dew_aabb_t & aabb, const std::array<double, 3> & direction, const std::array<double, 3> & up) const
+inline void camera_t::look_at_aabb(const dew_aabb_t & aabb, const std::array<double, 3> & direction, const std::array<double, 3> & up) const
 {
   dew_camera_look_at_aabb(_handle, const_cast<dew_aabb_t *>(&aabb), direction.data(), up.data());
 }
 
-inline std::array<double, 16> camera::get_view_matrix() const
+inline std::array<double, 16> camera_t::get_view_matrix() const
 {
   std::array<double, 16> data_out{};
   dew_camera_get_view_matrix(_handle, data_out.data());
   return data_out;
 }
 
-inline void camera::set_view_matrix(const std::array<double, 16> & data) const
+inline void camera_t::set_view_matrix(const std::array<double, 16> & data) const
 {
   dew_camera_set_view_matrix(_handle, data.data());
 }
 
-inline std::array<double, 16> camera::get_perspective_matrix() const
+inline std::array<double, 16> camera_t::get_perspective_matrix() const
 {
   std::array<double, 16> data_out{};
   dew_camera_get_perspective_matrix(_handle, data_out.data());
   return data_out;
 }
 
-inline void camera::set_perspective_matrix(const std::array<double, 16> & data) const
+inline void camera_t::set_perspective_matrix(const std::array<double, 16> & data) const
 {
   dew_camera_set_perspective_matrix(_handle, data.data());
 }
 
-inline void camera::set_perspective(double fov, double width, double height, double near, double far) const
+inline void camera_t::set_perspective(double fov, double width, double height, double near, double far) const
 {
   dew_camera_set_perspective(_handle, fov, width, height, near, far);
 }
 
-inline camera_perspective_properties_result camera::perspective_properties() const
+inline camera_perspective_properties_result_t camera_t::perspective_properties() const
 {
   double fov_out{};
   double aspect_out{};
   double near_out{};
   double far_out{};
   dew_camera_perspective_properties(_handle, &fov_out, &aspect_out, &near_out, &far_out);
-  return camera_perspective_properties_result{fov_out, aspect_out, near_out, far_out};
+  return camera_perspective_properties_result_t{fov_out, aspect_out, near_out, far_out};
 }
 
-inline std::array<double, 3> camera::get_eye() const
+inline std::array<double, 3> camera_t::get_eye() const
 {
   std::array<double, 3> eye_out{};
   dew_camera_get_eye(_handle, eye_out.data());
   return eye_out;
 }
 
-inline std::array<double, 3> camera::get_forward() const
+inline std::array<double, 3> camera_t::get_forward() const
 {
   std::array<double, 3> forward_out{};
   dew_camera_get_forward(_handle, forward_out.data());
   return forward_out;
 }
 
-inline result<arcball> arcball::create(const camera & camera, const std::array<double, 3> & center)
+inline result_t<arcball_t> arcball_t::create(const camera_t & camera, const std::array<double, 3> & center)
 {
   dew_arcball_t *handle_ = dew_arcball_create(camera.handle(), center.data());
   if (!handle_)
-    return std::unexpected(error(-1, "dew_arcball_create failed"));
-  return arcball(handle_);
+    return std::unexpected(error_t(-1, "dew_arcball_create failed"));
+  return arcball_t(handle_);
 }
 
-inline void arcball::reset() const
+inline void arcball_t::reset() const
 {
   dew_arcball_reset(_handle);
 }
 
-inline void arcball::detect_upside_down() const
+inline void arcball_t::detect_upside_down() const
 {
   dew_arcball_detect_upside_down(_handle);
 }
 
-inline void arcball::rotate(float normalized_dx, float normalized_dy, float normalized_dz) const
+inline void arcball_t::rotate(float normalized_dx, float normalized_dy, float normalized_dz) const
 {
   dew_arcball_rotate(_handle, normalized_dx, normalized_dy, normalized_dz);
 }
 
-inline void arcball::pan(float normalized_dx, float normalized_dy) const
+inline void arcball_t::pan(float normalized_dx, float normalized_dy) const
 {
   dew_arcball_pan(_handle, normalized_dx, normalized_dy);
 }
 
-inline void arcball::pan_ground(float normalized_dx, float normalized_dy) const
+inline void arcball_t::pan_ground(float normalized_dx, float normalized_dy) const
 {
   dew_arcball_pan_ground(_handle, normalized_dx, normalized_dy);
 }
 
-inline void arcball::dolly(float normalized_dz) const
+inline void arcball_t::dolly(float normalized_dz) const
 {
   dew_arcball_dolly(_handle, normalized_dz);
 }
 
-inline void arcball::zoom(float normalized_zoom) const
+inline void arcball_t::zoom(float normalized_zoom) const
 {
   dew_arcball_zoom(_handle, normalized_zoom);
 }
 
-inline void arcball::set_up_axis(const std::array<double, 3> & up) const
+inline void arcball_t::set_up_axis(const std::array<double, 3> & up) const
 {
   dew_arcball_set_up_axis(_handle, up.data());
 }
 
-inline std::array<double, 3> arcball::get_up_axis() const
+inline std::array<double, 3> arcball_t::get_up_axis() const
 {
   std::array<double, 3> up_out{};
   dew_arcball_get_up_axis(_handle, up_out.data());
   return up_out;
 }
 
-inline std::array<double, 3> arcball::get_center() const
+inline std::array<double, 3> arcball_t::get_center() const
 {
   std::array<double, 3> center_out{};
   dew_arcball_get_center(_handle, center_out.data());
   return center_out;
 }
 
-inline result<fps> fps::create(const camera & camera)
+inline result_t<fps_t> fps_t::create(const camera_t & camera)
 {
   dew_fps_t *handle_ = dew_fps_create(camera.handle());
   if (!handle_)
-    return std::unexpected(error(-1, "dew_fps_create failed"));
-  return fps(handle_);
+    return std::unexpected(error_t(-1, "dew_fps_create failed"));
+  return fps_t(handle_);
 }
 
-inline void fps::reset() const
+inline void fps_t::reset() const
 {
   dew_fps_reset(_handle);
 }
 
-inline void fps::rotate(float normalized_dx, float normalized_dy, float normalized_dz) const
+inline void fps_t::rotate(float normalized_dx, float normalized_dy, float normalized_dz) const
 {
   dew_fps_rotate(_handle, normalized_dx, normalized_dy, normalized_dz);
 }
 
-inline void fps::move(float dx, float dy, float dz) const
+inline void fps_t::move(float dx, float dy, float dz) const
 {
   dew_fps_move(_handle, dx, dy, dz);
 }
 
-inline void to_render::add_render_group(const dew_draw_group_t & draw_group) const
+inline void to_render_t::add_render_group(const dew_draw_group_t & draw_group) const
 {
   dew_to_render_add_render_group(_handle, draw_group);
 }
 
-inline result<renderer> renderer::create()
+inline result_t<renderer_t> renderer_t::create()
 {
   dew_renderer_t *handle_ = dew_renderer_create();
   if (!handle_)
-    return std::unexpected(error(-1, "dew_renderer_create failed"));
-  return renderer(handle_);
+    return std::unexpected(error_t(-1, "dew_renderer_create failed"));
+  return renderer_t(handle_);
 }
 
-inline void renderer::add_camera(const camera & camera) const
+inline void renderer_t::add_camera(const camera_t & camera) const
 {
   dew_renderer_add_camera(_handle, camera.handle());
 }
 
-inline void renderer::remove_camera(const camera & camera) const
+inline void renderer_t::remove_camera(const camera_t & camera) const
 {
   dew_renderer_remove_camera(_handle, camera.handle());
 }
 
-inline dew_frame_t renderer::frame(const camera & camera) const
+inline dew_frame_t renderer_t::frame(const camera_t & camera) const
 {
   dew_frame_t return_ = dew_renderer_frame(_handle, camera.handle());
   return return_;
 }
 
-inline void renderer::set_callback(dew_renderer_callbacks_t callbacks, void * callbacks_user_ptr) const
+inline void renderer_t::set_callback(dew_renderer_callbacks_t callbacks, void * callbacks_user_ptr) const
 {
   dew_renderer_set_callback(_handle, callbacks, callbacks_user_ptr);
 }
 
-inline void renderer::add_data_source(const dew_data_source_t & data_source) const
+inline void renderer_t::add_data_source(const dew_data_source_t & data_source) const
 {
   dew_renderer_add_data_source(_handle, data_source);
 }
 
-inline void renderer::remove_data_source(const dew_data_source_t & data_source) const
+inline void renderer_t::remove_data_source(const dew_data_source_t & data_source) const
 {
   dew_renderer_remove_data_source(_handle, data_source);
 }
 
-inline result<aabb_data_source> aabb_data_source::create(const renderer & renderer, const std::array<double, 3> & offset)
+inline result_t<aabb_data_source_t> aabb_data_source_t::create(const renderer_t & renderer, const std::array<double, 3> & offset)
 {
   dew_aabb_data_source_t *handle_ = dew_aabb_data_source_create(renderer.handle(), offset.data());
   if (!handle_)
-    return std::unexpected(error(-1, "dew_aabb_data_source_create failed"));
-  return aabb_data_source(handle_);
+    return std::unexpected(error_t(-1, "dew_aabb_data_source_create failed"));
+  return aabb_data_source_t(handle_);
 }
 
-inline dew_data_source_t aabb_data_source::get() const
+inline dew_data_source_t aabb_data_source_t::get() const
 {
   dew_data_source_t return_ = dew_aabb_data_source_get(_handle);
   return return_;
 }
 
-inline int aabb_data_source::add_aabb(const std::array<double, 3> & min, const std::array<double, 3> & max) const
+inline int aabb_data_source_t::add_aabb(const std::array<double, 3> & min, const std::array<double, 3> & max) const
 {
   int return_ = dew_aabb_data_source_add_aabb(_handle, min.data(), max.data());
   return return_;
 }
 
-inline void aabb_data_source::remove_aabb(int id) const
+inline void aabb_data_source_t::remove_aabb(int id) const
 {
   dew_aabb_data_source_remove_aabb(_handle, id);
 }
 
-inline void aabb_data_source::modify_aabb(int id, const std::array<double, 3> & min, const std::array<double, 3> & max) const
+inline void aabb_data_source_t::modify_aabb(int id, const std::array<double, 3> & min, const std::array<double, 3> & max) const
 {
   dew_aabb_data_source_modify_aabb(_handle, id, min.data(), max.data());
 }
 
-inline std::array<double, 3> aabb_data_source::get_center(int id) const
+inline std::array<double, 3> aabb_data_source_t::get_center(int id) const
 {
   std::array<double, 3> center_out{};
   dew_aabb_data_source_get_center(_handle, id, center_out.data());
   return center_out;
 }
 
-inline result<axis_gizmo_data_source> axis_gizmo_data_source::create(const renderer & renderer, const std::array<double, 3> & center, double axis_length)
+inline result_t<axis_gizmo_data_source_t> axis_gizmo_data_source_t::create(const renderer_t & renderer, const std::array<double, 3> & center, double axis_length)
 {
   dew_axis_gizmo_data_source_t *handle_ = dew_axis_gizmo_data_source_create(renderer.handle(), center.data(), axis_length);
   if (!handle_)
-    return std::unexpected(error(-1, "dew_axis_gizmo_data_source_create failed"));
-  return axis_gizmo_data_source(handle_);
+    return std::unexpected(error_t(-1, "dew_axis_gizmo_data_source_create failed"));
+  return axis_gizmo_data_source_t(handle_);
 }
 
-inline dew_data_source_t axis_gizmo_data_source::get() const
+inline dew_data_source_t axis_gizmo_data_source_t::get() const
 {
   dew_data_source_t return_ = dew_axis_gizmo_data_source_get(_handle);
   return return_;
 }
 
-inline void axis_gizmo_data_source::set_center(const std::array<double, 3> & center) const
+inline void axis_gizmo_data_source_t::set_center(const std::array<double, 3> & center) const
 {
   dew_axis_gizmo_data_source_set_center(_handle, center.data());
 }
 
-inline void axis_gizmo_data_source::set_axis_length(double axis_length) const
+inline void axis_gizmo_data_source_t::set_axis_length(double axis_length) const
 {
   dew_axis_gizmo_data_source_set_axis_length(_handle, axis_length);
 }
 
-inline result<environment_data_source> environment_data_source::create(const renderer & renderer, double ground_z, double grid_size)
+inline result_t<environment_data_source_t> environment_data_source_t::create(const renderer_t & renderer, double ground_z, double grid_size)
 {
   dew_environment_data_source_t *handle_ = dew_environment_data_source_create(renderer.handle(), ground_z, grid_size);
   if (!handle_)
-    return std::unexpected(error(-1, "dew_environment_data_source_create failed"));
-  return environment_data_source(handle_);
+    return std::unexpected(error_t(-1, "dew_environment_data_source_create failed"));
+  return environment_data_source_t(handle_);
 }
 
-inline dew_data_source_t environment_data_source::get() const
+inline dew_data_source_t environment_data_source_t::get() const
 {
   dew_data_source_t return_ = dew_environment_data_source_get(_handle);
   return return_;
 }
 
-inline void environment_data_source::set_ground_z(double ground_z) const
+inline void environment_data_source_t::set_ground_z(double ground_z) const
 {
   dew_environment_data_source_set_ground_z(_handle, ground_z);
 }
 
-inline result<flat_points_data_source> flat_points_data_source::create(const renderer & renderer, std::string_view url)
+inline result_t<flat_points_data_source_t> flat_points_data_source_t::create(const renderer_t & renderer, std::string_view url)
 {
   dew_flat_points_data_source_t *handle_ = dew_flat_points_data_source_create(renderer.handle(), url.data(), static_cast<int>(url.size()));
   if (!handle_)
-    return std::unexpected(error(-1, "dew_flat_points_data_source_create failed"));
-  return flat_points_data_source(handle_);
+    return std::unexpected(error_t(-1, "dew_flat_points_data_source_create failed"));
+  return flat_points_data_source_t(handle_);
 }
 
-inline dew_data_source_t flat_points_data_source::get() const
+inline dew_data_source_t flat_points_data_source_t::get() const
 {
   dew_data_source_t return_ = dew_flat_points_data_source_get(_handle);
   return return_;
 }
 
-inline flat_points_data_source_get_aabb_result flat_points_data_source::get_aabb() const
+inline flat_points_data_source_get_aabb_result_t flat_points_data_source_t::get_aabb() const
 {
   std::array<double, 3> aabb_min_out{};
   std::array<double, 3> aabb_max_out{};
   dew_flat_points_get_aabb(_handle, aabb_min_out.data(), aabb_max_out.data());
-  return flat_points_data_source_get_aabb_result{aabb_min_out, aabb_max_out};
+  return flat_points_data_source_get_aabb_result_t{aabb_min_out, aabb_max_out};
 }
 
-inline result<origin_anchor_data_source> origin_anchor_data_source::create(const renderer & renderer, const std::array<double, 3> & center, double arrow_size)
+inline result_t<origin_anchor_data_source_t> origin_anchor_data_source_t::create(const renderer_t & renderer, const std::array<double, 3> & center, double arrow_size)
 {
   dew_origin_anchor_data_source_t *handle_ = dew_origin_anchor_data_source_create(renderer.handle(), center.data(), arrow_size);
   if (!handle_)
-    return std::unexpected(error(-1, "dew_origin_anchor_data_source_create failed"));
-  return origin_anchor_data_source(handle_);
+    return std::unexpected(error_t(-1, "dew_origin_anchor_data_source_create failed"));
+  return origin_anchor_data_source_t(handle_);
 }
 
-inline dew_data_source_t origin_anchor_data_source::get() const
+inline dew_data_source_t origin_anchor_data_source_t::get() const
 {
   dew_data_source_t return_ = dew_origin_anchor_data_source_get(_handle);
   return return_;
 }
 
-inline void origin_anchor_data_source::set_center(const std::array<double, 3> & center) const
+inline void origin_anchor_data_source_t::set_center(const std::array<double, 3> & center) const
 {
   dew_origin_anchor_data_source_set_center(_handle, center.data());
 }
 
-inline void origin_anchor_data_source::set_arrow_size(double arrow_size) const
+inline void origin_anchor_data_source_t::set_arrow_size(double arrow_size) const
 {
   dew_origin_anchor_data_source_set_arrow_size(_handle, arrow_size);
 }
 
-inline result<skybox_data_source> skybox_data_source::create(const renderer & renderer, const dew_skybox_data_t & data)
+inline result_t<skybox_data_source_t> skybox_data_source_t::create(const renderer_t & renderer, const dew_skybox_data_t & data)
 {
   dew_skybox_data_source_t *handle_ = dew_skybox_data_source_create(renderer.handle(), data);
   if (!handle_)
-    return std::unexpected(error(-1, "dew_skybox_data_source_create failed"));
-  return skybox_data_source(handle_);
+    return std::unexpected(error_t(-1, "dew_skybox_data_source_create failed"));
+  return skybox_data_source_t(handle_);
 }
 
-inline dew_data_source_t skybox_data_source::get() const
+inline dew_data_source_t skybox_data_source_t::get() const
 {
   dew_data_source_t return_ = dew_skybox_data_source_get(_handle);
   return return_;
 }
 
-inline result<dataset> dataset::create(std::string_view url, std::string_view connection, const dew_dataset_options_t & options, const pump & pump)
+inline result_t<dataset_t> dataset_t::create(std::string_view url, std::string_view connection, const dew_dataset_options_t & options, const pump_t & pump)
 {
-  detail::error_out error_;
+  detail::error_out_t error_;
   dew_dataset_t *handle_ = dew_dataset_create(url.data(), static_cast<uint32_t>(url.size()), connection.data(), static_cast<uint32_t>(connection.size()), &options, pump.handle(), error_.slot());
   if (!handle_)
     return std::unexpected(error_.take("dew_dataset_create failed"));
-  return dataset(handle_);
+  return dataset_t(handle_);
 }
 
-inline void dataset::close() const
+inline void dataset_t::close() const
 {
   dew_dataset_close(_handle);
 }
 
-inline dew_dataset_state_t dataset::state() const
+inline dew_dataset_state_t dataset_t::state() const
 {
   dew_dataset_state_t return_ = dew_dataset_state(_handle);
   return return_;
 }
 
-inline std::optional<error> dataset::get_error() const
+inline std::optional<error_t> dataset_t::get_error() const
 {
-  detail::error_out error_;
+  detail::error_out_t error_;
   dew_dataset_get_error(_handle, error_.slot());
   return error_.take_if_set();
 }
 
-inline uint32_t dataset::poll() const
+inline uint32_t dataset_t::poll() const
 {
   uint32_t return_ = dew_dataset_poll(_handle);
   return return_;
 }
 
-inline uint32_t dataset::pending_count() const
+inline uint32_t dataset_t::pending_count() const
 {
   uint32_t return_ = dew_dataset_pending_count(_handle);
   return return_;
 }
 
-inline dew_dataset_state_t dataset::wait_ready(int32_t timeout_ms) const
+inline dew_dataset_state_t dataset_t::wait_ready(int32_t timeout_ms) const
 {
   dew_dataset_state_t return_ = dew_dataset_wait_ready(_handle, timeout_ms);
   return return_;
 }
 
-inline dew_dataset_info_t dataset::get_info() const
+inline dew_dataset_info_t dataset_t::get_info() const
 {
   dew_dataset_info_t info_out{};
   dew_dataset_get_info(_handle, &info_out);
   return info_out;
 }
 
-inline uint32_t dataset::attribute_count() const
+inline uint32_t dataset_t::attribute_count() const
 {
   uint32_t return_ = dew_dataset_attribute_count(_handle);
   return return_;
 }
 
-inline std::string dataset::get_attribute_name(uint32_t index) const
+inline std::string dataset_t::get_attribute_name(uint32_t index) const
 {
   return detail::out_string([&](char *buffer_, uint32_t capacity_) {
     return dew_dataset_get_attribute_name(_handle, index, buffer_, capacity_);
   });
 }
 
-inline dew_request_status_t request::status() const
+inline dew_request_status_t request_t::status() const
 {
   dew_request_status_t return_ = dew_request_status(_handle);
   return return_;
 }
 
-inline dew_request_status_t request::wait(int32_t timeout_ms) const
+inline dew_request_status_t request_t::wait(int32_t timeout_ms) const
 {
   dew_request_status_t return_ = dew_request_wait(_handle, timeout_ms);
   return return_;
 }
 
-inline void request::cancel() const
+inline void request_t::cancel() const
 {
   dew_request_cancel(_handle);
 }
 
-inline std::optional<error> request::get_error() const
+inline std::optional<error_t> request_t::get_error() const
 {
-  detail::error_out error_;
+  detail::error_out_t error_;
   dew_request_get_error(_handle, error_.slot());
   return error_.take_if_set();
 }
 
-inline void request::release() const
+inline void request_t::release() const
 {
   dew_request_release(_handle);
 }
 
-inline float request::completion_factor() const
+inline float request_t::completion_factor() const
 {
   float return_ = dew_request_completion_factor(_handle);
   return return_;
 }
 
-inline request_get_result_result request::get_result() const
+inline request_get_result_result_t request_t::get_result() const
 {
   dew_request_result_t out_out{};
   uint8_t return_ = dew_request_get_result(_handle, &out_out);
-  return request_get_result_result{return_, out_out};
+  return request_get_result_result_t{return_, out_out};
 }
 
-inline uint64_t request::attribute_size(uint32_t attribute_index) const
+inline uint64_t request_t::attribute_size(uint32_t attribute_index) const
 {
   uint64_t return_ = dew_request_attribute_size(_handle, attribute_index);
   return return_;
 }
 
-inline result<converter> converter::create(std::string_view cache_filename, dew_converter_open_file_semantics_t open_file_semantics)
+inline result_t<converter_t> converter_t::create(std::string_view cache_filename, dew_converter_open_file_semantics_t open_file_semantics)
 {
-  detail::error_out error_;
+  detail::error_out_t error_;
   dew_converter_t *handle_ = dew_converter_create(cache_filename.data(), static_cast<uint64_t>(cache_filename.size()), open_file_semantics, error_.slot());
   if (!handle_)
     return std::unexpected(error_.take("dew_converter_create failed"));
-  return converter(handle_);
+  return converter_t(handle_);
 }
 
-inline result<converter> converter::create_with_connection(std::string_view url, std::string_view connection, dew_converter_open_file_semantics_t open_file_semantics)
+inline result_t<converter_t> converter_t::create_with_connection(std::string_view url, std::string_view connection, dew_converter_open_file_semantics_t open_file_semantics)
 {
-  detail::error_out error_;
+  detail::error_out_t error_;
   dew_converter_t *handle_ = dew_converter_create_with_connection(url.data(), static_cast<uint64_t>(url.size()), connection.data(), static_cast<uint64_t>(connection.size()), open_file_semantics, error_.slot());
   if (!handle_)
     return std::unexpected(error_.take("dew_converter_create_with_connection failed"));
-  return converter(handle_);
+  return converter_t(handle_);
 }
 
-inline result<converter> converter::create_with_destination(std::string_view cache_path, std::string_view destination_url, std::string_view connection, dew_converter_open_file_semantics_t open_file_semantics)
+inline result_t<converter_t> converter_t::create_with_destination(std::string_view cache_path, std::string_view destination_url, std::string_view connection, dew_converter_open_file_semantics_t open_file_semantics)
 {
-  detail::error_out error_;
+  detail::error_out_t error_;
   dew_converter_t *handle_ = dew_converter_create_with_destination(cache_path.data(), static_cast<uint64_t>(cache_path.size()), destination_url.data(), static_cast<uint64_t>(destination_url.size()), connection.data(), static_cast<uint64_t>(connection.size()), open_file_semantics, error_.slot());
   if (!handle_)
     return std::unexpected(error_.take("dew_converter_create_with_destination failed"));
-  return converter(handle_);
+  return converter_t(handle_);
 }
 
-inline void converter::set_cache_max_bytes(uint64_t max_bytes) const
+inline void converter_t::set_cache_max_bytes(uint64_t max_bytes) const
 {
   dew_converter_set_cache_max_bytes(_handle, max_bytes);
 }
 
-inline void converter::set_read_cache_bytes(uint64_t max_bytes) const
+inline void converter_t::set_read_cache_bytes(uint64_t max_bytes) const
 {
   dew_converter_set_read_cache_bytes(_handle, max_bytes);
 }
 
-inline void converter::set_upload_callbacks(dew_converter_upload_callbacks_t callbacks, void * callbacks_user_ptr) const
+inline void converter_t::set_upload_callbacks(dew_converter_upload_callbacks_t callbacks, void * callbacks_user_ptr) const
 {
   dew_converter_set_upload_callbacks(_handle, callbacks, callbacks_user_ptr);
 }
 
-inline std::optional<dew_converter_upload_state_t> converter::get_upload_state() const
+inline std::optional<dew_converter_upload_state_t> converter_t::get_upload_state() const
 {
   dew_converter_upload_state_t state_out{};
   bool ok_ = dew_converter_get_upload_state(_handle, &state_out);
   return ok_ ? std::optional<dew_converter_upload_state_t>(state_out) : std::nullopt;
 }
 
-inline void converter::wait_local_complete() const
+inline void converter_t::wait_local_complete() const
 {
   dew_converter_wait_local_complete(_handle);
 }
 
-inline void converter::set_file_converter_callbacks(dew_converter_file_convert_callbacks_t callbacks) const
+inline void converter_t::set_file_converter_callbacks(dew_converter_file_convert_callbacks_t callbacks) const
 {
   dew_converter_set_file_converter_callbacks(_handle, callbacks);
 }
 
-inline void converter::set_runtime_callbacks(dew_converter_runtime_callbacks_t callbacks, void * callbacks_user_ptr) const
+inline void converter_t::set_runtime_callbacks(dew_converter_runtime_callbacks_t callbacks, void * callbacks_user_ptr) const
 {
   dew_converter_set_runtime_callbacks(_handle, callbacks, callbacks_user_ptr);
 }
 
-inline void converter::set_compression(dew_converter_compression_t compression) const
+inline void converter_t::set_compression(dew_converter_compression_t compression) const
 {
   dew_converter_set_compression(_handle, compression);
 }
 
-inline void converter::set_store_original_order(bool store) const
+inline void converter_t::set_store_original_order(bool store) const
 {
   dew_converter_set_store_original_order(_handle, store);
 }
 
-inline void converter::set_compression_level(int level) const
+inline void converter_t::set_compression_level(int level) const
 {
   dew_converter_set_compression_level(_handle, level);
 }
 
-inline void converter::set_node_point_limit(uint32_t points) const
+inline void converter_t::set_node_point_limit(uint32_t points) const
 {
   dew_converter_set_node_point_limit(_handle, points);
 }
 
-inline void converter::set_tree_scale(double scale) const
+inline void converter_t::set_tree_scale(double scale) const
 {
   dew_converter_set_tree_scale(_handle, scale);
 }
 
-inline void converter::set_lod_all_attributes(uint8_t all) const
+inline void converter_t::set_lod_all_attributes(uint8_t all) const
 {
   dew_converter_set_lod_all_attributes(_handle, all);
 }
 
-inline void converter::set_read_chunk_bytes(uint64_t bytes) const
+inline void converter_t::set_read_chunk_bytes(uint64_t bytes) const
 {
   dew_converter_set_read_chunk_bytes(_handle, bytes);
 }
 
-inline void converter::add_data_file(const std::vector<dew_converter_str_buffer> & buffers) const
+inline void converter_t::add_data_file(const std::vector<dew_converter_str_buffer> & buffers) const
 {
   dew_converter_add_data_file(_handle, const_cast<dew_converter_str_buffer *>(buffers.data()), static_cast<uint32_t>(buffers.size()));
 }
 
-inline void converter::wait_idle() const
+inline void converter_t::wait_idle() const
 {
   dew_converter_wait_idle(_handle);
 }
 
-inline dew_converter_conversion_status_t converter::status() const
+inline dew_converter_conversion_status_t converter_t::status() const
 {
   dew_converter_conversion_status_t return_ = dew_converter_status(_handle);
   return return_;
 }
 
-inline std::optional<dew_converter_stats_t> converter::get_compression_stats() const
+inline std::optional<dew_converter_stats_t> converter_t::get_compression_stats() const
 {
   dew_converter_stats_t stats_out{};
   bool ok_ = dew_converter_get_compression_stats(_handle, &stats_out);
   return ok_ ? std::optional<dew_converter_stats_t>(stats_out) : std::nullopt;
 }
 
-inline std::optional<dew_converter_perf_stats_t> converter::get_perf_stats() const
+inline std::optional<dew_converter_perf_stats_t> converter_t::get_perf_stats() const
 {
   dew_converter_perf_stats_t perf_stats_out{};
   bool ok_ = dew_converter_get_perf_stats(_handle, &perf_stats_out);
   return ok_ ? std::optional<dew_converter_perf_stats_t>(perf_stats_out) : std::nullopt;
 }
 
-inline std::optional<dew_converter_perf_stats_t> converter::get_live_perf_stats() const
+inline std::optional<dew_converter_perf_stats_t> converter_t::get_live_perf_stats() const
 {
   dew_converter_perf_stats_t perf_stats_out{};
   bool ok_ = dew_converter_get_live_perf_stats(_handle, &perf_stats_out);
   return ok_ ? std::optional<dew_converter_perf_stats_t>(perf_stats_out) : std::nullopt;
 }
 
-inline result<converter_data_source> converter_data_source::create(std::string_view url, const renderer & renderer)
+inline result_t<converter_data_source_t> converter_data_source_t::create(std::string_view url, const renderer_t & renderer)
 {
-  detail::scoped_error error_;
+  detail::scoped_error_t error_;
   dew_converter_data_source_t *handle_ = dew_converter_data_source_create(url.data(), static_cast<uint32_t>(url.size()), error_.get(), renderer.handle());
   if (!handle_)
     return std::unexpected(error_.take("dew_converter_data_source_create failed"));
-  return converter_data_source(handle_);
+  return converter_data_source_t(handle_);
 }
 
-inline result<converter_data_source> converter_data_source::create_with_connection(std::string_view url, std::string_view connection, const renderer & renderer)
+inline result_t<converter_data_source_t> converter_data_source_t::create_with_connection(std::string_view url, std::string_view connection, const renderer_t & renderer)
 {
-  detail::scoped_error error_;
+  detail::scoped_error_t error_;
   dew_converter_data_source_t *handle_ = dew_converter_data_source_create_with_connection(url.data(), static_cast<uint32_t>(url.size()), connection.data(), static_cast<uint32_t>(connection.size()), error_.get(), renderer.handle());
   if (!handle_)
     return std::unexpected(error_.take("dew_converter_data_source_create_with_connection failed"));
-  return converter_data_source(handle_);
+  return converter_data_source_t(handle_);
 }
 
-inline dew_data_source_t converter_data_source::get() const
+inline dew_data_source_t converter_data_source_t::get() const
 {
   dew_data_source_t return_ = dew_converter_data_source_get(_handle);
   return return_;
 }
 
-inline void converter_data_source::request_aabb(dew_converter_data_source_request_aabb_callback_t callback, void * callback_user_ptr) const
+inline void converter_data_source_t::request_aabb(dew_converter_data_source_request_aabb_callback_t callback, void * callback_user_ptr) const
 {
   dew_converter_data_source_request_aabb(_handle, callback, callback_user_ptr);
 }
 
-inline uint32_t converter_data_source::attribute_count() const
+inline uint32_t converter_data_source_t::attribute_count() const
 {
   uint32_t return_ = dew_converter_data_attribute_count(_handle);
   return return_;
 }
 
-inline std::string converter_data_source::get_attribute_name(int index) const
+inline std::string converter_data_source_t::get_attribute_name(int index) const
 {
   return detail::out_string([&](char *buffer_, uint32_t capacity_) {
     return dew_converter_data_get_attribute_name(_handle, index, buffer_, capacity_);
   });
 }
 
-inline void converter_data_source::set_rendered_attribute(std::string_view name) const
+inline void converter_data_source_t::set_rendered_attribute(std::string_view name) const
 {
   dew_converter_data_set_rendered_attribute(_handle, name.data(), static_cast<uint32_t>(name.size()));
 }
 
-inline void converter_data_source::set_viewport(int width, int height) const
+inline void converter_data_source_t::set_viewport(int width, int height) const
 {
   dew_converter_data_source_set_viewport(_handle, width, height);
 }
 
-inline void converter_data_source::set_pixel_error_threshold(double threshold) const
+inline void converter_data_source_t::set_pixel_error_threshold(double threshold) const
 {
   dew_converter_data_source_set_pixel_error_threshold(_handle, threshold);
 }
 
-inline void converter_data_source::set_render_density_px(double density_px) const
+inline void converter_data_source_t::set_render_density_px(double density_px) const
 {
   dew_converter_data_source_set_render_density_px(_handle, density_px);
 }
 
-inline void converter_data_source::set_gpu_memory_budget(size_t budget_bytes) const
+inline void converter_data_source_t::set_gpu_memory_budget(size_t budget_bytes) const
 {
   dew_converter_data_source_set_gpu_memory_budget(_handle, budget_bytes);
 }
 
-inline void converter_data_source::set_upload_budget_per_frame(size_t budget_bytes) const
+inline void converter_data_source_t::set_upload_budget_per_frame(size_t budget_bytes) const
 {
   dew_converter_data_source_set_upload_budget_per_frame(_handle, budget_bytes);
 }
 
-inline void converter_data_source::set_max_in_flight_io(int max_requests) const
+inline void converter_data_source_t::set_max_in_flight_io(int max_requests) const
 {
   dew_converter_data_source_set_max_in_flight_io(_handle, max_requests);
 }
 
-inline void converter_data_source::set_memory_budget(uint64_t total_bytes) const
+inline void converter_data_source_t::set_memory_budget(uint64_t total_bytes) const
 {
   dew_converter_data_source_set_memory_budget(_handle, total_bytes);
 }
 
-inline uint64_t converter_data_source::get_memory_budget() const
+inline uint64_t converter_data_source_t::get_memory_budget() const
 {
   uint64_t return_ = dew_converter_data_source_get_memory_budget(_handle);
   return return_;
 }
 
-inline converter_data_source_get_memory_stats_result converter_data_source::get_memory_stats() const
+inline converter_data_source_get_memory_stats_result_t converter_data_source_t::get_memory_stats() const
 {
   uint64_t heap_bytes_out{};
   uint64_t heap_max_out{};
@@ -2242,22 +2242,22 @@ inline converter_data_source_get_memory_stats_result converter_data_source::get_
   uint64_t resident_cpu_bytes_out{};
   uint32_t brake_level_out{};
   dew_converter_data_source_get_memory_stats(_handle, &heap_bytes_out, &heap_max_out, &budget_bytes_out, &backlog_bytes_out, &read_cache_bytes_out, &resident_cpu_bytes_out, &brake_level_out);
-  return converter_data_source_get_memory_stats_result{heap_bytes_out, heap_max_out, budget_bytes_out, backlog_bytes_out, read_cache_bytes_out, resident_cpu_bytes_out, brake_level_out};
+  return converter_data_source_get_memory_stats_result_t{heap_bytes_out, heap_max_out, budget_bytes_out, backlog_bytes_out, read_cache_bytes_out, resident_cpu_bytes_out, brake_level_out};
 }
 
-inline uint64_t converter_data_source::get_points_rendered() const
+inline uint64_t converter_data_source_t::get_points_rendered() const
 {
   uint64_t return_ = dew_converter_data_source_get_points_rendered(_handle);
   return return_;
 }
 
-inline uint8_t converter_data_source::is_animating() const
+inline uint8_t converter_data_source_t::is_animating() const
 {
   uint8_t return_ = dew_converter_data_source_is_animating(_handle);
   return return_;
 }
 
-inline converter_data_source_get_frame_timings_result converter_data_source::get_frame_timings() const
+inline converter_data_source_get_frame_timings_result_t converter_data_source_t::get_frame_timings() const
 {
   double tree_walk_ms_out{};
   double buffer_reconciliation_ms_out{};
@@ -2278,52 +2278,52 @@ inline converter_data_source_get_frame_timings_result converter_data_source::get
   int walker_trees_to_load_out{};
   int io_in_flight_out{};
   dew_converter_data_source_get_frame_timings(_handle, &tree_walk_ms_out, &buffer_reconciliation_ms_out, &gpu_upload_ms_out, &refine_strategy_ms_out, &frontier_scheduling_ms_out, &draw_emission_ms_out, &eviction_ms_out, &total_ms_out, &registry_node_count_out, &active_set_size_out, &nodes_drawn_out, &transitioning_count_out, &nodes_evicted_out, &nodes_reconcile_destroyed_out, &walker_node_count_out, &walker_total_points_out, &walker_trees_to_load_out, &io_in_flight_out);
-  return converter_data_source_get_frame_timings_result{tree_walk_ms_out, buffer_reconciliation_ms_out, gpu_upload_ms_out, refine_strategy_ms_out, frontier_scheduling_ms_out, draw_emission_ms_out, eviction_ms_out, total_ms_out, registry_node_count_out, active_set_size_out, nodes_drawn_out, transitioning_count_out, nodes_evicted_out, nodes_reconcile_destroyed_out, walker_node_count_out, walker_total_points_out, walker_trees_to_load_out, io_in_flight_out};
+  return converter_data_source_get_frame_timings_result_t{tree_walk_ms_out, buffer_reconciliation_ms_out, gpu_upload_ms_out, refine_strategy_ms_out, frontier_scheduling_ms_out, draw_emission_ms_out, eviction_ms_out, total_ms_out, registry_node_count_out, active_set_size_out, nodes_drawn_out, transitioning_count_out, nodes_evicted_out, nodes_reconcile_destroyed_out, walker_node_count_out, walker_total_points_out, walker_trees_to_load_out, io_in_flight_out};
 }
 
-inline void converter_data_source::set_debug_transitions(uint8_t enabled) const
+inline void converter_data_source_t::set_debug_transitions(uint8_t enabled) const
 {
   dew_converter_data_source_set_debug_transitions(_handle, enabled);
 }
 
-inline void converter_data_source::set_enable_virtual_subtrees(uint8_t enabled) const
+inline void converter_data_source_t::set_enable_virtual_subtrees(uint8_t enabled) const
 {
   dew_converter_data_source_set_enable_virtual_subtrees(_handle, enabled);
 }
 
-inline uint8_t converter_data_source::get_enable_virtual_subtrees() const
+inline uint8_t converter_data_source_t::get_enable_virtual_subtrees() const
 {
   uint8_t return_ = dew_converter_data_source_get_enable_virtual_subtrees(_handle);
   return return_;
 }
 
-inline converter_data_source_get_virtual_stats_result converter_data_source::get_virtual_stats() const
+inline converter_data_source_get_virtual_stats_result_t converter_data_source_t::get_virtual_stats() const
 {
   uint32_t promoted_out{};
   uint64_t gpu_bytes_out{};
   uint64_t resident_cpu_bytes_out{};
   uint32_t nodes_drawn_out{};
   dew_converter_data_source_get_virtual_stats(_handle, &promoted_out, &gpu_bytes_out, &resident_cpu_bytes_out, &nodes_drawn_out);
-  return converter_data_source_get_virtual_stats_result{promoted_out, gpu_bytes_out, resident_cpu_bytes_out, nodes_drawn_out};
+  return converter_data_source_get_virtual_stats_result_t{promoted_out, gpu_bytes_out, resident_cpu_bytes_out, nodes_drawn_out};
 }
 
-inline void converter_data_source::set_show_bounding_boxes(uint8_t enabled) const
+inline void converter_data_source_t::set_show_bounding_boxes(uint8_t enabled) const
 {
   dew_converter_data_source_set_show_bounding_boxes(_handle, enabled);
 }
 
-inline dew_data_source_t converter_data_source::get_bbox_data_source() const
+inline dew_data_source_t converter_data_source_t::get_bbox_data_source() const
 {
   dew_data_source_t return_ = dew_converter_data_source_get_bbox_data_source(_handle);
   return return_;
 }
 
-inline converter_data_source_get_tight_aabb_result converter_data_source::get_tight_aabb() const
+inline converter_data_source_get_tight_aabb_result_t converter_data_source_t::get_tight_aabb() const
 {
   std::array<double, 3> min_out{};
   std::array<double, 3> max_out{};
   dew_converter_data_source_get_tight_aabb(_handle, min_out.data(), max_out.data());
-  return converter_data_source_get_tight_aabb_result{min_out, max_out};
+  return converter_data_source_get_tight_aabb_result_t{min_out, max_out};
 }
 
 // ---- free functions ----

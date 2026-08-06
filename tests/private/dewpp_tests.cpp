@@ -101,10 +101,10 @@ bool build_dataset()
       }
   std::remove(k_path);
 
-  auto opened = dewpp::converter::create(k_path, dew_open_file_semantics_truncate);
+  auto opened = dewpp::converter_t::create(k_path, dew_open_file_semantics_truncate);
   if (!opened)
     return false;
-  dewpp::converter converter = std::move(*opened);
+  dewpp::converter_t converter = std::move(*opened);
 
   dew_converter_file_convert_callbacks_t callbacks{};
   callbacks.pre_init = pre_init;
@@ -125,9 +125,9 @@ TEST_CASE("dewpp: a dataset converts and queries back through the generated wrap
 {
   REQUIRE(build_dataset());
 
-  auto opened = dewpp::dataset::create(k_path, "", dew_dataset_options_t{}, dewpp::pump());
+  auto opened = dewpp::dataset_t::create(k_path, "", dew_dataset_options_t{}, dewpp::pump_t());
   REQUIRE(opened);
-  dewpp::dataset dataset = std::move(*opened);
+  dewpp::dataset_t dataset = std::move(*opened);
 
   // Opening is deferred, so the wrapper has to expose the wait as well as the state.
   REQUIRE(dataset.wait_ready(-1) == dew_dataset_ready);
@@ -152,18 +152,18 @@ TEST_CASE("dewpp: handles are move-only and destroy exactly once")
   // and a move that forgot to null the source would too.
   REQUIRE(build_dataset());
 
-  static_assert(!std::is_copy_constructible_v<dewpp::converter>, "an owning handle must not be copyable");
-  static_assert(std::is_move_constructible_v<dewpp::converter>, "an owning handle must be movable");
+  static_assert(!std::is_copy_constructible_v<dewpp::converter_t>, "an owning handle must not be copyable");
+  static_assert(std::is_move_constructible_v<dewpp::converter_t>, "an owning handle must be movable");
   // A borrowed view is the opposite: the library owns it, so copying is free and correct.
-  static_assert(std::is_copy_constructible_v<dewpp::attributes>, "a borrowed view should be copyable");
+  static_assert(std::is_copy_constructible_v<dewpp::attributes_t>, "a borrowed view should be copyable");
 
-  auto opened = dewpp::converter::create("dewpp_move_test.dew", dew_open_file_semantics_truncate);
+  auto opened = dewpp::converter_t::create("dewpp_move_test.dew", dew_open_file_semantics_truncate);
   REQUIRE(opened);
-  dewpp::converter first = std::move(*opened);
+  dewpp::converter_t first = std::move(*opened);
   REQUIRE(first);
   dew_converter_t *raw = first.handle();
 
-  dewpp::converter second = std::move(first);
+  dewpp::converter_t second = std::move(first);
   REQUIRE(second.handle() == raw);
   REQUIRE(!first); // moved-from is empty, so its destructor does nothing
 
@@ -179,8 +179,8 @@ TEST_CASE("dewpp: a failing factory returns the error rather than a handle")
 {
   // The whole reason handles are created through a static factory: with -fno-exceptions a
   // constructor cannot report. An unwritable path is the cheapest genuine failure.
-  auto opened = dewpp::converter::create("/definitely/not/a/directory/out.dew", dew_open_file_semantics_truncate);
+  auto opened = dewpp::converter_t::create("/definitely/not/a/directory/out.dew", dew_open_file_semantics_truncate);
   REQUIRE(!opened.has_value());
-  // And the message survives the copy out of the dew_error_t, which is why dewpp::error is a value.
+  // And the message survives the copy out of the dew_error_t, which is why dewpp::error_t is a value.
   REQUIRE(!opened.error().message().empty());
 }

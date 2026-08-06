@@ -263,6 +263,22 @@ def test_dewpp_wraps_the_whole_surface(api):
     )
 
 
+def test_dewpp_rejects_a_name_collision(api):
+    # Enums, structs and handles are named independently from their own bound_name, so two of them
+    # CAN land on the same dewpp:: name. Left unchecked that is a redeclaration error inside generated
+    # code, pointing nowhere near the header that caused it.
+    import copy
+
+    import generate_cpp
+
+    doctored = copy.deepcopy(api)
+    enums = doctored["semantic"]["enums"]
+    classes = doctored["semantic"]["classes"]
+    enums[0]["bound_name"] = classes[-1]["bound_name"]
+    with pytest.raises(generate_cpp.EmitError, match="declared twice"):
+        generate_cpp.Generator(doctored).generate()
+
+
 def test_generated_cpp_await_header_is_up_to_date(semantic):
     # bindings/cpp/dew/await.hpp is CHECKED IN, because generating it needs libclang and an ordinary
     # C++ build must not. That means it can go stale against the annotations, and this is what notices --

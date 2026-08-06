@@ -246,17 +246,17 @@ header-only, namespace `dewpp`:
 ```cpp
 #include <dew/dewpp.hpp>
 
-auto opened = dewpp::converter::create("out.dew", dew_open_file_semantics_truncate);
+auto opened = dewpp::converter_t::create("out.dew", dew_open_file_semantics_truncate);
 if (!opened)
   return fail(opened.error().message());
-dewpp::converter conv = std::move(*opened);
+dewpp::converter_t conv = std::move(*opened);
 conv.set_node_point_limit(512);
 conv.add_data_file(files);
 conv.wait_idle();
 ```
 
 RAII handles (move-only, with `release()` to escape), `std::string_view` in and `std::string` out, and
-errors returned by value as `dewpp::result<T>` = `std::expected<T, dewpp::error>` — the project builds
+errors returned by value as `dewpp::result_t<T>` = `std::expected<T, dewpp::error_t>` — the project builds
 `-fno-exceptions`, so a failing constructor cannot throw and handles are created through static
 factories instead. Enums, value structs and constants are `using` aliases of the C types rather than
 parallel declarations that could drift. It has no vio dependency.
