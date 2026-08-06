@@ -208,6 +208,83 @@ int main(int argc, char **argv)
   };
   browse_state_t browse{url_buf, sizeof(url_buf), conn_buf};
 
+  // The open dialog, drawn from two places: the startup loop, and again from the Input panel once a
+  // dataset is loaded -- otherwise there is no way to point the viewer at a URL that is not one of the
+  // presets without restarting.
+  enum class open_dialog_result_t
+  {
+    none,
+    load,
+    cancel,
+    quit,
+  };
+  auto draw_open_dialog = [&](bool allow_cancel) -> open_dialog_result_t {
+    open_dialog_result_t result = open_dialog_result_t::none;
+    // Centre on the VIEWPORT, always. ImGui works in logical units while SDL_GetWindowSizeInPixels
+    // returns pixels, so on a HiDPI display centring on width/height put the dialog off toward the
+    // bottom right; and ImGuiCond_Appearing only positions it the first time it is shown, so it never
+    // re-centred when the window was resized or the dialog reopened.
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::Begin("Open dataset", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings);
+    ImGui::TextUnformatted("Local .dew file, or a cloud object store:");
+    ImGui::BulletText("s3://bucket/prefix");
+    ImGui::BulletText("az://container/prefix");
+    ImGui::PushItemWidth(440);
+    ImGui::InputText("URL", url_buf, sizeof(url_buf));
+    ImGui::InputTextWithHint("Connection", "anonymous=true;region=eu-north-1", conn_buf, sizeof(conn_buf));
+    ImGui::PopItemWidth();
+    ImGui::TextDisabled("Cloud only. Public bucket: anonymous=true. Azure: account=...;account_key=... or ...;sas=...");
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Public datasets:");
+    for (const auto &dataset : k_public_datasets)
+    {
+      if (ImGui::Button(dataset.label))
+      {
+        snprintf(url_buf, sizeof(url_buf), "%s", dataset.url);
+        snprintf(conn_buf, sizeof(conn_buf), "%s", k_default_connection);
+        result = open_dialog_result_t::load;
+      }
+      ImGui::SameLine();
+    }
+    ImGui::NewLine();
+    if (ImGui::Button("Browse local file..."))
+    {
+      SDL_DialogFileFilter filters[] = {{"Dewfall files", "dew"}};
+      SDL_ShowOpenFileDialog(
+        [](void *ud, const char *const *files, int) {
+          auto *b = static_cast<browse_state_t *>(ud);
+          if (files && *files)
+          {
+            snprintf(b->url_buf, b->url_cap, "%s", *files);
+            b->conn_buf[0] = '\0';
+          }
+        },
+        &browse, window, filters, 1, nullptr, false);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Open"))
+      result = open_dialog_result_t::load;
+    ImGui::SameLine();
+    if (allow_cancel)
+    {
+      if (ImGui::Button("Cancel"))
+        result = open_dialog_result_t::cancel;
+    }
+    else if (ImGui::Button("Quit"))
+    {
+      result = open_dialog_result_t::quit;
+    }
+    if (!load_error.empty())
+    {
+      ImGui::Spacing();
+      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Failed to open:");
+      ImGui::TextWrapped("%s", load_error.c_str());
+    }
+    ImGui::End();
+    return result;
+  };
+
   bool do_load = (argc > 1); // a url on the command line loads immediately; otherwise wait for the dialog
   while (true)
   {
@@ -234,56 +311,16 @@ int main(int argc, char **argv)
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::SetNextWindowPos(ImVec2(width * 0.5f, height * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::Begin("Open dataset", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-    ImGui::TextUnformatted("Local .dew file, or a cloud object store:");
-    ImGui::BulletText("s3://bucket/prefix");
-    ImGui::BulletText("az://container/prefix");
-    ImGui::PushItemWidth(440);
-    ImGui::InputText("URL", url_buf, sizeof(url_buf));
-    ImGui::InputTextWithHint("Connection", "anonymous=true;region=eu-north-1", conn_buf, sizeof(conn_buf));
-    ImGui::PopItemWidth();
-    ImGui::TextDisabled("Cloud only. Public bucket: anonymous=true. Azure: account=...;account_key=... or ...;sas=...");
-    ImGui::Spacing();
-    ImGui::TextUnformatted("Public datasets:");
-    for (const auto &dataset : k_public_datasets)
+    switch (draw_open_dialog(false))
     {
-      if (ImGui::Button(dataset.label))
-      {
-        snprintf(url_buf, sizeof(url_buf), "%s", dataset.url);
-        snprintf(conn_buf, sizeof(conn_buf), "%s", k_default_connection);
-        do_load = true;
-      }
-      ImGui::SameLine();
-    }
-    ImGui::NewLine();
-    if (ImGui::Button("Browse local file..."))
-    {
-      SDL_DialogFileFilter filters[] = {{"Dewfall files", "dew"}};
-      SDL_ShowOpenFileDialog(
-        [](void *ud, const char *const *files, int) {
-          auto *b = static_cast<browse_state_t *>(ud);
-          if (files && *files)
-          {
-            snprintf(b->url_buf, b->url_cap, "%s", *files);
-            b->conn_buf[0] = '\0';
-          }
-        },
-        &browse, window, filters, 1, nullptr, false);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Open"))
+    case open_dialog_result_t::load:
       do_load = true;
-    ImGui::SameLine();
-    if (ImGui::Button("Quit"))
+      break;
+    case open_dialog_result_t::quit:
       return 0;
-    if (!load_error.empty())
-    {
-      ImGui::Spacing();
-      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Failed to open:");
-      ImGui::TextWrapped("%s", load_error.c_str());
+    default:
+      break;
     }
-    ImGui::End();
 
     ImGui::Render();
     glViewport(0, 0, width, height);
@@ -338,11 +375,17 @@ int main(int argc, char **argv)
     auto &name = attribute_names[selected_attribute];
     dew_converter_data_set_rendered_attribute(converter_points.handle(), name.c_str(), uint32_t(name.size()));
   }
-  {
+  // The dataset's extent, asked for ASYNCHRONOUSLY and waited on.
+  //
+  // Not dew_converter_data_source_get_tight_aabb: that returns an accumulator which fills in as nodes
+  // are streamed, so straight after opening it is still empty -- framing the camera on it points at
+  // nothing and the screen stays black. request_aabb answers once the root tree is in.
+  auto wait_for_aabb = [](dew_converter_data_source_t *source, dew_aabb_t &out) {
     struct aabb_callback_state_t
     {
       std::mutex wait;
       std::condition_variable cv;
+      bool done = false;
       double aabb_min[3];
       double aabb_max[3];
     };
@@ -352,15 +395,20 @@ int main(int argc, char **argv)
     auto callback = [](double aabb_min[3], double aabb_max[3], void *user_ptr)
     {
       auto state = (aabb_callback_state_t *)user_ptr;
+      std::unique_lock<std::mutex> inner(state->wait);
       memcpy(state->aabb_min, aabb_min, sizeof(state->aabb_min));
       memcpy(state->aabb_max, aabb_max, sizeof(state->aabb_max));
+      state->done = true;
       state->cv.notify_one();
     };
-    dew_converter_data_source_request_aabb(converter_points.handle(), callback, &state);
-    state.cv.wait(lock);
-    memcpy(aabb.min, state.aabb_min, sizeof(state.aabb_min));
-    memcpy(aabb.max, state.aabb_max, sizeof(state.aabb_max));
-  }
+    dew_converter_data_source_request_aabb(source, callback, &state);
+    // Predicate, not a bare wait: the callback can land before we get here, and a lost notify would
+    // hang the app -- which is worse than the black screen it replaced.
+    state.cv.wait(lock, [&state] { return state.done; });
+    memcpy(out.min, state.aabb_min, sizeof(state.aabb_min));
+    memcpy(out.max, state.aabb_max, sizeof(state.aabb_max));
+  };
+  wait_for_aabb(converter_points.handle(), aabb);
 
   double ground_z = aabb.min[2];
   double grid_size = std::max({aabb.max[0] - aabb.min[0], aabb.max[1] - aabb.min[1]}) / 10.0;
@@ -414,6 +462,7 @@ int main(int argc, char **argv)
   // int aabb2_id =  -1; //dew_flat_points_aabb_data_source_add_aabb(aabb_ds.get(), aabb.min, aabb.max);
 
   bool loop = true;
+  bool show_open_dialog = false;
   bool left_pressed = false;
   bool right_pressed = false;
   bool middle_pressed = false;
@@ -435,16 +484,29 @@ int main(int argc, char **argv)
   // matters -- dew_converter_data_source_destroy frees the GPU buffers those draw groups name, and a
   // renderer still holding them would hand the consumer dead handles on the next frame.
   auto switch_dataset = [&](const char *url, const char *connection) {
+    // Open the NEW source before tearing the old one down. The other order leaves a failed switch
+    // with nothing registered at all -- an empty scene the user reads as a crash -- and this way a
+    // bad URL just shows its error over the dataset that is still rendering.
+    std::string conn = connection;
+    if (conn.empty() && std::string(url).rfind("s3://", 0) == 0)
+      conn = "anonymous=true";
+    auto opened = dewpp::converter_data_source_t::create_with_connection(url, conn, renderer);
+    if (!opened)
+    {
+      load_error = opened.error().message();
+      fprintf(stderr, "Failed to open dataset '%s': %d - %s\n", url, opened.error().code(), load_error.c_str());
+      return false;
+    }
+    load_error.clear();
     snprintf(url_buf, sizeof(url_buf), "%s", url);
-    snprintf(conn_buf, sizeof(conn_buf), "%s", connection);
+    snprintf(conn_buf, sizeof(conn_buf), "%s", conn.c_str());
 
     dew_renderer_remove_data_source(renderer.handle(), dew_converter_data_source_get(converter_points.handle()));
     dew_renderer_remove_data_source(renderer.handle(), dew_converter_data_source_get_bbox_data_source(converter_points.handle()));
     dew_renderer_remove_data_source(renderer.handle(), dew_environment_data_source_get(environment.handle()));
-    converter_points.reset();
-
-    if (!try_open())
-      return false;
+    // Destroying frees the GPU buffers the old draw groups name, so it has to happen AFTER the
+    // renderer has let them go.
+    converter_points = std::move(*opened);
 
     attribute_count = dew_converter_data_attribute_count(converter_points.handle());
     attribute_names.assign(attribute_count, std::string());
@@ -463,7 +525,7 @@ int main(int argc, char **argv)
       dew_converter_data_set_rendered_attribute(converter_points.handle(), name.c_str(), uint32_t(name.size()));
     }
 
-    dew_converter_data_source_get_tight_aabb(converter_points.handle(), aabb.min, aabb.max);
+    wait_for_aabb(converter_points.handle(), aabb);
 
     auto rebuilt = dewpp::environment_data_source_t::create(renderer, aabb.min[2], std::max({aabb.max[0] - aabb.min[0], aabb.max[1] - aabb.min[1]}) / 10.0);
     if (rebuilt)
@@ -661,7 +723,7 @@ int main(int argc, char **argv)
     ImGui::Begin("Input", 0, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
     ImGui::PushItemWidth(200);
 
-    // Dataset knob: switch between the public demos without restarting.
+    // Dataset knob: switch between the public demos, or open any other URL, without restarting.
     ImGui::TextUnformatted("Dataset");
     for (const auto &dataset : k_public_datasets)
     {
@@ -676,6 +738,11 @@ int main(int argc, char **argv)
       if (active)
         ImGui::EndDisabled();
       ImGui::SameLine();
+    }
+    if (ImGui::Button("Open other..."))
+    {
+      load_error.clear();
+      show_open_dialog = true;
     }
     ImGui::NewLine();
     ImGui::TextDisabled("%s", url_buf);
@@ -814,6 +881,25 @@ int main(int argc, char **argv)
     }
     ImGui::PopItemWidth();
     ImGui::End();
+
+    // The same dialog the app opens with, reachable again from "Open other..." so a URL that is not
+    // one of the presets does not mean restarting.
+    if (show_open_dialog)
+    {
+      switch (draw_open_dialog(true))
+      {
+      case open_dialog_result_t::load:
+        if (switch_dataset(url_buf, conn_buf))
+          show_open_dialog = false;
+        break;
+      case open_dialog_result_t::cancel:
+        load_error.clear();
+        show_open_dialog = false;
+        break;
+      default:
+        break;
+      }
+    }
 
     // ImGui::ShowDemoWindow();
 

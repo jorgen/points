@@ -59,7 +59,9 @@ export function ConnectForm({ initial, connected, busy, onConnect, onDisconnect 
     onConnect(connection);
   };
 
-  const disabled = connected || busy;
+  // Editable WHILE connected: pointing the viewer at another dataset should not mean disconnecting
+  // first, retyping the URL and reconnecting. Only an in-flight connect locks the fields.
+  const disabled = busy;
 
   // Switching dataset works whether or not one is loaded: the renderer tears the old data source down
   // and builds the new one, which is the same path Connect takes. Without this, trying another demo
@@ -120,18 +122,17 @@ export function ConnectForm({ initial, connected, busy, onConnect, onDisconnect 
 
       {formError && <p className="connect__error">{formError}</p>}
 
-      {/* The distinct keys are load-bearing. Without them React reuses the same <button> DOM node across
-          the connected/disconnected swap and merely mutates its `type` from "button" to "submit" during
-          the click's synchronous flush — so the in-flight "Disconnect" click then lands on a submit button
-          and submits the form, immediately re-connecting (the "briefly Connecting…, then Disconnect again"
-          symptom). Distinct keys force React to replace the node instead of morphing it. */}
-      {connected ? (
+      {/* Two SEPARATE buttons with distinct keys, never one whose `type` flips. React would otherwise
+          reuse the same <button> DOM node across the connected/disconnected swap and merely mutate
+          `type` from "button" to "submit" during the click's synchronous flush — so an in-flight
+          "Disconnect" click would land on a submit button and re-connect immediately (the "briefly
+          Connecting…, then Disconnect again" symptom). */}
+      <button key="connect" type="submit" className="btn" disabled={busy}>
+        {busy ? 'Connecting…' : connected ? 'Load' : 'Connect'}
+      </button>
+      {connected && (
         <button key="disconnect" type="button" className="btn btn--ghost" onClick={onDisconnect}>
           Disconnect
-        </button>
-      ) : (
-        <button key="connect" type="submit" className="btn" disabled={busy}>
-          {busy ? 'Connecting…' : 'Connect'}
         </button>
       )}
     </form>
