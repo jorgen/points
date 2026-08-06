@@ -8,7 +8,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "dewfall"
-version = "0.0.1"
+version = "0.1.0"
 description = "Point cloud conversion, inspection and streaming: morton-ordered octrees with LOD"
 readme = "README.md"
 requires-python = ">=3.12"
