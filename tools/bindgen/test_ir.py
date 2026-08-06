@@ -36,6 +36,12 @@ def raw(document):
 
 
 @pytest.fixture(scope="session")
+def api(document):
+    """The whole document, which is what the C++ generators consume."""
+    return document
+
+
+@pytest.fixture(scope="session")
 def semantic(document):
     return document["semantic"]
 
@@ -228,6 +234,33 @@ def test_awaitable_annotations(semantic):
     # Nothing else claims to be awaitable; a stray annotation would silently grow the generated API.
     awaitables = sorted(c["bound_name"] for c in semantic["classes"] if c.get("awaitable"))
     assert awaitables == ["Dataset", "Request"]
+
+
+def test_generated_dewpp_header_is_up_to_date(semantic, api):
+    # Same reasoning as the await header: bindings/cpp/dew/dewpp.hpp is checked in because generating
+    # it needs libclang and an ordinary C++ build must not, so it can drift from the C API without
+    # anything noticing. It wraps the WHOLE surface, so a drift is a whole missing method.
+    import generate_cpp
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    checked_in = root / "bindings" / "cpp" / "dew" / "dewpp.hpp"
+    assert checked_in.exists(), f"{checked_in} is missing"
+    expected = generate_cpp.Generator(api).generate()
+    assert checked_in.read_text() == expected, (
+        "bindings/cpp/dew/dewpp.hpp is stale -- rerun tools/bindgen/generate_cpp.py"
+    )
+
+
+def test_dewpp_wraps_the_whole_surface(api):
+    # The generator SKIPS anything whose shape it cannot express, and a silent skip is how a wrapper
+    # quietly stops covering the API. Pin the exception list so a new one has to be looked at.
+    import generate_cpp
+
+    generator = generate_cpp.Generator(api)
+    generator.generate()
+    assert [fn for _, fn in generator.problems] == ["dew_request_copy_attribute"], (
+        f"unexpected unwrapped functions: {generator.problems}"
+    )
 
 
 def test_generated_cpp_await_header_is_up_to_date(semantic):

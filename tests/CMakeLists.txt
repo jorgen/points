@@ -33,6 +33,7 @@ add_executable(private_interface_unit_tests
         private/tree_set_tests.cpp
         private/render_callback_tests.cpp
         private/cpp_await_tests.cpp
+        private/dewpp_tests.cpp
         private/pump_tests.cpp
         private/access_query_tests.cpp
         $<TARGET_OBJECTS:dew_access_objects>

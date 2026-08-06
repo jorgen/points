@@ -237,7 +237,31 @@ everything else. Use a `Session` directly to drive several datasets from one pum
 `Dataset.query_box_submit()` → `Request` API is still there for hosts with their own loop. If a
 thread per query is acceptable, `await asyncio.to_thread(ds.query_box, ...)` needs none of this.
 
-The C++ side is [`bindings/cpp/dew/await.hpp`](https://github.com/jorgen/dewfall/blob/master/bindings/cpp/dew/await.hpp),
+### C++
+
+The whole C API is also available as C++, generated from the same IR the Python bindings come from —
+[`bindings/cpp/dew/dewpp.hpp`](https://github.com/jorgen/dewfall/blob/master/bindings/cpp/dew/dewpp.hpp),
+header-only, namespace `dewpp`:
+
+```cpp
+#include <dew/dewpp.hpp>
+
+auto opened = dewpp::converter::create("out.dew", dew_open_file_semantics_truncate);
+if (!opened)
+  return fail(opened.error().message());
+dewpp::converter conv = std::move(*opened);
+conv.set_node_point_limit(512);
+conv.add_data_file(files);
+conv.wait_idle();
+```
+
+RAII handles (move-only, with `release()` to escape), `std::string_view` in and `std::string` out, and
+errors returned by value as `dewpp::result<T>` = `std::expected<T, dewpp::error>` — the project builds
+`-fno-exceptions`, so a failing constructor cannot throw and handles are created through static
+factories instead. Enums, value structs and constants are `using` aliases of the C types rather than
+parallel declarations that could drift. It has no vio dependency.
+
+The awaiting side is [`bindings/cpp/dew/await.hpp`](https://github.com/jorgen/dewfall/blob/master/bindings/cpp/dew/await.hpp),
 a header-only wrapper **generated** from the `//= awaitable:` annotations on the C handles. It lives
 in `bindings/` beside the Python bindings, because that is what it is — a consumer of the public C
 surface rather than part of it:
