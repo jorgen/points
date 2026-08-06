@@ -23,6 +23,8 @@ add_executable(renderer_example
 )
 
 target_include_directories(renderer_example PRIVATE include ${imgui_SOURCE_DIR})
+# The generated C++ wrapper (header-only): include paths only, nothing to link.
+target_link_libraries(renderer_example PRIVATE dew::await)
 cmrc_add_resource_library(renderer_example_shaders ALIAS renderer_example::shaders NAMESPACE shaders
         shaders/aabb.frag
         shaders/aabb.vert
