@@ -198,7 +198,7 @@ vio::task_t<bool> run_region_request(dataset_impl_t &dataset, const region_job_t
       const auto &node = walked.nodes[i];
       if (node.point_count.data == 0)
         continue;
-      const tree_t *tree = dataset.registry.get(node.tree_id);
+      const tree_t *tree = dataset.registry().get(node.tree_id);
       if (!tree)
         continue;
 
@@ -270,7 +270,7 @@ vio::task_t<bool> run_region_request(dataset_impl_t &dataset, const region_job_t
         const auto *src = static_cast<const uint8_t *>(point_data.data) + uint64_t(offset) * src_stride;
 
         stage->positions.resize(size_t(count) * position_stride_bytes);
-        if (!decode_positions(src, count * src_stride, count, header.point_format, header.morton_min, header.lod_span, dataset.registry.tree_config, position_format, stage->positions.data(),
+        if (!decode_positions(src, count * src_stride, count, header.point_format, header.morton_min, header.lod_span, dataset.registry().tree_config, position_format, stage->positions.data(),
                               uint64_t(count) * position_stride_bytes, stage->origin))
         {
           stage->error = {1, "failed to decode node positions"};
@@ -296,7 +296,7 @@ vio::task_t<bool> run_region_request(dataset_impl_t &dataset, const region_job_t
         uint32_t kept = count;
         if (spec.clip_mode == dew_clip_point && !query.whole_dataset && !entry->node->fully_inside)
         {
-          kept = clip_to_box(stage->positions.data(), position_format, stage->origin, dataset.registry.tree_config.scale, count, spec.box_min, spec.box_max, spans.data(), attribute_count);
+          kept = clip_to_box(stage->positions.data(), position_format, stage->origin, dataset.registry().tree_config.scale, count, spec.box_min, spec.box_max, spans.data(), attribute_count);
           stage->positions.resize(size_t(kept) * position_stride_bytes);
           for (uint32_t a = 0; a < attribute_count; a++)
           {

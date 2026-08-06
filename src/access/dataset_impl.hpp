@@ -27,6 +27,7 @@
 #include "pump.hpp"
 #include "region_walk.hpp"
 #include "tree.hpp"
+#include "tree_set.hpp"
 
 #include <atomic>
 #include <memory>
@@ -65,11 +66,9 @@ struct dataset_impl_t
   ~dataset_impl_t();
 
   void on_storage_error(const dew_error_t &&e);
-  // Read and install one tree blob. Trees load lazily, so a walk reports what it needs and this
-  // fetches it; installing only ever fills a slot the registry already sized at open.
-  // Coroutine forms. Nothing on the query path may block: under wasm a blocking read stalls the
-  // whole program, and natively it would tie up the dataset loop that other requests run on.
-  vio::task_t<bool> co_load_tree(tree_id_t id);
+  // Nothing on the query path may block: under wasm a blocking read stalls the whole program, and
+  // natively it would tie up the dataset loop that other requests run on. Tree loading itself lives
+  // in dew::core::tree_set_t, shared with the renderer's frame-driven path.
   vio::task_t<bool> co_walk_to_convergence(const region_query_t &query, region_result_t &out);
   // The deferred open: index, attribute configs, tree registry, root tree. Ends in ready or error.
   vio::task_t<void> co_open();
@@ -95,7 +94,10 @@ struct dataset_impl_t
   uint32_t max_reads_in_flight = 16;
   std::unique_ptr<blob_reader_t> reader;
   attributes_configs_t attributes;
-  tree_registry_t registry;
+  std::unique_ptr<tree_set_t> trees;
+
+  [[nodiscard]] const tree_registry_t &registry() const { return trees->registry(); }
+  [[nodiscard]] tree_registry_t &registry() { return trees->registry(); }
   size_t registry_size_at_open = 0;
 
   dew_error_t error;

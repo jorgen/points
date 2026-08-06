@@ -26,6 +26,7 @@ set(private_headers
         byte_shuffle.hpp
         budget.hpp
         tree.hpp
+        tree_set.hpp
         input_storage_map.hpp
         attributes_configs.hpp
         storage_backend.hpp
@@ -51,6 +52,7 @@ set(sources
         compression_preprocess.cpp
         byte_shuffle.cpp
         tree.cpp
+        tree_set.cpp
         input_storage_map.cpp
         attributes_configs.cpp
         storage_backend.cpp

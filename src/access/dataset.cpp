@@ -58,6 +58,9 @@ dataset_impl_t::dataset_impl_t(std::string a_url, std::string a_connection, cons
   }
   reader->set_read_cache_size(budgets.read_cache_bytes);
   reader->set_decompressed_cache_size(budgets.decompressed_cache_bytes);
+  // Loads run on the dataset's own loop, which is also where the walks happen -- that pairing is what
+  // makes tree_set_t's residency checks lock-free.
+  trees = std::make_unique<tree_set_t>(*reader, loop_thread.event_loop());
 
   // Everything past this point is deferred. dew_dataset_create returns with the dataset `opening`;
   // the existence probe, the index read, the registry and the root tree all happen on the dataset's
@@ -119,7 +122,7 @@ vio::task_t<void> dataset_impl_t::co_open()
     set_state(dew_dataset_error);
     co_return;
   }
-  error = tree_registry_deserialize(load.tree_registry, load.tree_registry_size, registry);
+  error = trees->initialize(load.tree_registry, load.tree_registry_size);
   if (error.code != 0)
   {
     set_state(dew_dataset_error);
@@ -127,9 +130,9 @@ vio::task_t<void> dataset_impl_t::co_open()
   }
   // The registry is fully sized here and the read path never grows it. Every lock-free reader --
   // and the synchronous node accessors -- depend on that invariant holding.
-  registry_size_at_open = registry.data.size();
+  registry_size_at_open = registry().data.size();
 
-  if (!co_await co_load_tree(registry.root))
+  if (!co_await trees->load(trees->root(), error))
   {
     set_state(dew_dataset_error);
     co_return;
@@ -143,6 +146,10 @@ dataset_impl_t::~dataset_impl_t()
   // then join the pool and the loop -- the reader's loop is still needed while in-flight reads
   // unwind, so it goes last.
   pump_unregister(pump, this);
+  // Stop starting new tree loads before anything is torn down; the ones already in flight still
+  // complete against a live reader, which stop_loop below waits out.
+  if (trees)
+    trees->begin_shutdown();
   for (auto &request : requests)
     request->cancel();
   requests.clear();
@@ -200,40 +207,6 @@ void dataset_impl_t::on_storage_error(const dew_error_t &&e)
     error = e;
 }
 
-vio::task_t<bool> dataset_impl_t::co_load_tree(tree_id_t id)
-{
-  if (id.data >= registry.locations.size())
-    co_return false;
-  if (id.data < registry.tree_id_initialized.size() && registry.tree_id_initialized[id.data])
-    co_return true;
-  const auto location = registry.locations[id.data];
-  if (location.size == 0)
-    co_return false;
-
-  std::shared_ptr<read_request_t> request;
-  co_await co_read(*reader, location, read_options_t{false, true, {}}, loop_thread.event_loop(), request);
-  if (request->error.code != 0)
-  {
-    error = request->error;
-    co_return false;
-  }
-  serialized_tree_t serialized;
-  serialized.size = int(request->buffer_info.size);
-  serialized.data = request->buffer;
-
-  auto tree = std::make_unique<tree_t>();
-  dew_error_t tree_error;
-  if (!tree_deserialize(serialized, *tree, tree_error))
-  {
-    error = tree_error;
-    co_return false;
-  }
-  tree_compute_leaves_collapsed(*tree, registry);
-  registry.data[id.data] = std::move(tree);
-  registry.tree_id_initialized[id.data] = 1;
-  co_return true;
-}
-
 // Walk, load whatever sub-trees the walk asked for, walk again. The walk itself never reads storage,
 // so this loop is the only place a region query blocks.
 vio::task_t<bool> dataset_impl_t::co_walk_to_convergence(const region_query_t &query, region_result_t &out)
@@ -241,12 +214,12 @@ vio::task_t<bool> dataset_impl_t::co_walk_to_convergence(const region_query_t &q
   constexpr int max_rounds = 64;
   for (int round = 0; round < max_rounds; round++)
   {
-    region_walk(registry, query, out);
+    region_walk(registry(), query, out);
     if (out.trees_to_load.empty())
       co_return true;
     for (auto id : out.trees_to_load)
     {
-      if (!co_await co_load_tree(id))
+      if (!co_await trees->load(id, error))
         co_return false;
     }
   }
@@ -257,15 +230,15 @@ vio::task_t<bool> dataset_impl_t::co_walk_to_convergence(const region_query_t &q
 void dataset_impl_t::info(dew_dataset_info_t &out) const
 {
   memset(&out, 0, sizeof(out));
-  out.scale = registry.tree_config.scale;
+  out.scale = registry().tree_config.scale;
   for (int i = 0; i < 3; i++)
-    out.offset[i] = registry.tree_config.offset[i];
-  out.node_point_limit = registry.tree_config.node_point_limit;
+    out.offset[i] = registry().tree_config.offset[i];
+  out.node_point_limit = registry().tree_config.node_point_limit;
   out.attribute_count = attributes.attrib_name_registry_count();
 
-  if (registry.root.data < registry.tree_id_initialized.size() && registry.tree_id_initialized[registry.root.data])
+  if (registry().root.data < registry().tree_id_initialized.size() && registry().tree_id_initialized[registry().root.data])
   {
-    const auto *root = registry.get(registry.root);
+    const auto *root = registry().get(registry().root);
     if (root)
     {
       // The root octree CELL, which is a power-of-two cube that can be considerably larger than the
@@ -280,8 +253,8 @@ void dataset_impl_t::info(dew_dataset_info_t &out) const
       // of what comes back.
       double lo[3];
       double hi[3];
-      convert_morton_to_pos(registry.tree_config.scale, registry.tree_config.offset, root->morton_min, lo);
-      convert_morton_to_pos(registry.tree_config.scale, registry.tree_config.offset, root->morton_max, hi);
+      convert_morton_to_pos(registry().tree_config.scale, registry().tree_config.offset, root->morton_min, lo);
+      convert_morton_to_pos(registry().tree_config.scale, registry().tree_config.offset, root->morton_max, hi);
       for (int i = 0; i < 3; i++)
       {
         out.aabb_min[i] = lo[i];
