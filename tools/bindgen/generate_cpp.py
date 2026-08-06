@@ -291,6 +291,10 @@ _SUPPRESSED_CLASSES = {"dew_error_t"}
 # closed and checked at generate time, so a new one has to be classified deliberately.
 _ERROR_ACCESSORS = {"dew_dataset_get_error", "dew_request_get_error"}
 
+# Return types that mean "did it work" when the function also has out-params. uint8_t is in here
+# because the C API spells booleans that way.
+_FLAG_RETURNS = {"bool", "uint8_t"}
+
 
 class Generator:
     def __init__(self, api):
@@ -425,7 +429,12 @@ class Generator:
             role = result["role"]
             t = result["type"]
             if result["source"] == "return":
-                if len(results) > 1 and t.get("name") == "bool":
+                if len(results) > 1 and t.get("name") in _FLAG_RETURNS:
+                    # A return value ALONGSIDE out-params is a "did it work" flag, and the out-params
+                    # are only meaningful when it is true -- so the pair becomes std::optional.
+                    # uint8_t as well as bool: the C API spells booleans uint8_t (see CLAUDE.md), and
+                    # dew_request_get_result does exactly that. test_ir.py pins the set of functions
+                    # with this shape so a new one has to be looked at rather than assumed.
                     gated = True
                 else:
                     returns_value = t["name"]
@@ -563,7 +572,7 @@ class Generator:
         gated = False
         for r in results:
             if r["source"] == "return":
-                if len(results) > 1 and r["type"].get("name") == "bool":
+                if len(results) > 1 and r["type"].get("name") in _FLAG_RETURNS:
                     gated = True
                 else:
                     returns_value = r["type"]["name"]

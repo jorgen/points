@@ -62,4 +62,5 @@ KNOWN_ANNOTATIONS = {
     "returns",     # returns: new|borrowed
     "blocking",    # blocking
     "awaitable",   # awaitable: poll=<fn> pending=<enum constant> [release=<fn>]
+    "destroy",     # destroy: <fn>   -- when the destructor is not named *_destroy
 }

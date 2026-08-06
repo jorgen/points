@@ -29,7 +29,7 @@
 
 #include <doctest/doctest.h>
 
-#include <dew/await.hpp>
+#include <dew/access/query_async.hpp>
 #include <dew/access/query.h>
 #include <dew/converter/converter.h>
 #include <dew/core/default_attribute_names.h>
@@ -139,7 +139,7 @@ struct outcome_t
 // anywhere and the loop free the whole time.
 vio::task_t<void> run(vio::event_loop_t &loop, outcome_t &out)
 {
-  dew::await::driver_t driver(loop);
+  dewpp::async::driver_t driver(loop);
 
   dew_error_t *error = nullptr;
   dew_dataset_t *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, nullptr, driver.pump(), &error);
@@ -151,7 +151,7 @@ vio::task_t<void> run(vio::event_loop_t &loop, outcome_t &out)
   // rests on, and the reason there is anything to await at all.
   out.observed_opening = dew_dataset_state(dataset) == dew_dataset_opening;
 
-  out.dataset_state = int(co_await dew::await::ready(driver, dataset));
+  out.dataset_state = int(co_await dewpp::async::ready(driver, dataset));
   if (out.dataset_state != int(dew_dataset_ready))
   {
     dew_dataset_close(dataset);
@@ -171,15 +171,16 @@ vio::task_t<void> run(vio::event_loop_t &loop, outcome_t &out)
 
   dew_request_t *raw = dew_dataset_request_region(dataset, &spec, &error);
   REQUIRE(raw);
-  // The generated RAII guard, so an early return cannot leak the request.
-  dew::await::request_guard_t request(raw);
+  // The sync wrapper owns the handle (//= destroy: dew_request_release), so an early return
+  // cannot leak it -- and ready() takes the wrapper directly.
+  dewpp::request_t request(raw);
 
-  out.observed_pending = dew_request_status(request) == dew_request_pending;
-  out.request_status = int(co_await dew::await::ready(driver, request));
+  out.observed_pending = request.status() == dew_request_pending;
+  out.request_status = int(co_await dewpp::async::ready(driver, request));
 
-  dew_request_result_t result = {};
-  if (dew_request_get_result(request, &result))
-    out.point_count = result.point_count;
+  // Through the sync wrapper's own methods: a gated bool + struct out-param becomes an optional.
+  if (auto result = request.get_result())
+    out.point_count = result->point_count;
 
   request.reset(); // invalidates `result`
   dew_dataset_close(dataset);
@@ -194,16 +195,16 @@ vio::task_t<void> run(vio::event_loop_t &loop, outcome_t &out)
 // loop_blocking.hpp documents the same rule for the same reason.
 vio::task_t<void> run_double_await(vio::event_loop_t &loop, bool &returned, int &second_status)
 {
-  dew::await::driver_t driver(loop);
+  dewpp::async::driver_t driver(loop);
   dew_error_t *error = nullptr;
   dew_dataset_t *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, nullptr, driver.pump(), &error);
   REQUIRE(dataset);
   if (error)
     dew_error_destroy(error);
-  REQUIRE(co_await dew::await::ready(driver, dataset) == dew_dataset_ready);
+  REQUIRE(co_await dewpp::async::ready(driver, dataset) == dew_dataset_ready);
   // Second time: already terminal, so this must fall straight through rather than park forever
   // waiting for a wake that is never coming.
-  second_status = int(co_await dew::await::ready(driver, dataset));
+  second_status = int(co_await dewpp::async::ready(driver, dataset));
   returned = true;
   dew_dataset_close(dataset);
   loop.stop();
@@ -212,13 +213,13 @@ vio::task_t<void> run_double_await(vio::event_loop_t &loop, bool &returned, int 
 
 vio::task_t<void> run_guard(vio::event_loop_t &loop)
 {
-  dew::await::driver_t driver(loop);
+  dewpp::async::driver_t driver(loop);
   dew_error_t *error = nullptr;
   dew_dataset_t *dataset = dew_dataset_create(k_path, uint32_t(strlen(k_path)), nullptr, 0, nullptr, driver.pump(), &error);
   REQUIRE(dataset);
   if (error)
     dew_error_destroy(error);
-  REQUIRE(co_await dew::await::ready(driver, dataset) == dew_dataset_ready);
+  REQUIRE(co_await dewpp::async::ready(driver, dataset) == dew_dataset_ready);
 
   dew_dataset_info_t info = {};
   dew_dataset_get_info(dataset, &info);
@@ -230,12 +231,12 @@ vio::task_t<void> run_guard(vio::event_loop_t &loop)
   spec.clip_mode = dew_clip_node;
 
   {
-    dew::await::request_guard_t request(dew_dataset_request_region(dataset, &spec, &error));
-    REQUIRE(request.get());
-    co_await dew::await::ready(driver, request);
+    dewpp::request_t request(dew_dataset_request_region(dataset, &spec, &error));
+    REQUIRE(request.handle());
+    co_await dewpp::async::ready(driver, request);
     request.reset();
-    REQUIRE(request.get() == nullptr);
-    // Destructor runs here on an already-reset guard.
+    REQUIRE(request.handle() == nullptr);
+    // Destructor runs here on an already-reset wrapper.
   }
   dew_dataset_close(dataset);
   loop.stop();
@@ -279,11 +280,12 @@ TEST_CASE("cpp await: awaiting an already-terminal handle does not suspend")
   REQUIRE(second_status == int(dew_dataset_ready));
 }
 
-TEST_CASE("cpp await: the request guard releases exactly once")
+TEST_CASE("cpp await: the request wrapper releases exactly once")
 {
-  // dew_request_release is idempotent, but the guard still has to null its handle -- otherwise an
+  // dew_request_release is idempotent, but the wrapper still has to null its handle -- otherwise an
   // explicit reset() followed by the destructor would release a request the dataset has already
-  // dropped, which is a use-after-free rather than a no-op.
+  // dropped, which is a use-after-free rather than a no-op. This is the //= destroy: annotation
+  // doing its job: without it dewpp::request_t would be a borrowed view and leak every request.
   REQUIRE(build_dataset(k_path));
 
   vio::event_loop_t loop;

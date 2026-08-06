@@ -60,9 +60,14 @@ extern "C" {
  *
  * tools/bindgen turns these into await wrappers: dew/await/dew_await.hpp for C++ coroutines and
  * dew.aio for Python. Adding an awaitable handle is this annotation and nothing else. */
+/* Both handles are OWNED -- the wrappers must destroy them -- but neither destructor is named
+ * *_destroy, which is the only thing the generators infer from. So say it: without this a generated
+ * wrapper treats them as borrowed views and quietly leaks every dataset and every request. */
 //= awaitable: poll=dew_dataset_state pending=dew_dataset_opening
+//= destroy: dew_dataset_close
 struct dew_dataset_t;
 //= awaitable: poll=dew_request_status pending=dew_request_pending release=dew_request_release
+//= destroy: dew_request_release
 struct dew_request_t;
 
 enum dew_dataset_state_t

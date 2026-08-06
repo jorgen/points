@@ -40,7 +40,7 @@
 // no new code here. It is header-only and inline -- this example links the public C library and
 // brings its own vio loop, nothing else.
 
-#include <dew/await.hpp>
+#include <dew/access/query_async.hpp>
 #include <dew/access/query.h>
 #include <dew/core/error.h>
 
@@ -107,7 +107,7 @@ void print_error(const char *prefix, dew_error_t *error)
 // One query, start to finish, without ever blocking the loop. Note what is NOT a parameter: the
 // awaiter needs no reference to the driver, because a request already has a completion callback. Only
 // dataset OPEN needs the driver, since readiness is a polled state rather than a callback.
-vio::task_t<void> run_query(dew::await::driver_t &driver, dew_dataset_t *dataset, const char *label, const double (&aabb_min)[3], const double (&aabb_max)[3], dew_lod_mode_t lod_mode,
+vio::task_t<void> run_query(dewpp::async::driver_t &driver, dew_dataset_t *dataset, const char *label, const double (&aabb_min)[3], const double (&aabb_max)[3], dew_lod_mode_t lod_mode,
                             uint64_t max_points)
 {
   static const char *const attribute_names[] = {"intensity"};
@@ -129,29 +129,29 @@ vio::task_t<void> run_query(dew::await::driver_t &driver, dew_dataset_t *dataset
     print_error(fmt::format("[{}] could not start the request", label).c_str(), error);
     co_return;
   }
-  // The generated RAII guard: releasing is what frees the request and its decoded points, and it has
-  // to happen on every exit below.
-  dew::await::request_guard_t request(raw_request);
+  // dewpp::request_t owns the handle: releasing frees the request and its decoded points, and it
+  // has to happen on every exit below.
+  dewpp::request_t request(raw_request);
 
-  fmt::print("[{}] issued, status={} -- returning to the loop\n", label, int(dew_request_status(request)));
+  fmt::print("[{}] issued, status={} -- returning to the loop\n", label, int(request.status()));
 
   // The line this example exists for. The thread goes back to the loop; the other query proceeds.
-  dew_request_status_t status = co_await dew::await::ready(driver, request);
+  dew_request_status_t status = co_await dewpp::async::ready(driver, request);
 
   if (status != dew_request_completed)
   {
-    dew_error_t *request_error = nullptr;
-    dew_request_get_error(request, &request_error);
-    print_error(fmt::format("[{}] request failed (status {})", label, int(status)).c_str(), request_error);
+    auto request_error = request.get_error();
+    fmt::print(stderr, "[{}] request failed (status {}): {}\n", label, int(status), request_error ? request_error->message() : "no detail");
     co_return;
   }
 
-  dew_request_result_t result = {};
-  if (!dew_request_get_result(request, &result))
+  auto maybe_result = request.get_result();
+  if (!maybe_result)
   {
     fmt::print(stderr, "[{}] no result\n", label);
     co_return;
   }
+  const dew_request_result_t &result = *maybe_result;
 
   fmt::print("[{}] {} points across {} node(s)\n", label, result.point_count, result.node_count);
   for (uint32_t i = 0; i < result.buffer_count; i++)
@@ -166,11 +166,11 @@ vio::task_t<void> run_query(dew::await::driver_t &driver, dew_dataset_t *dataset
     fmt::print("[{}]   first point: [{:.3f}, {:.3f}, {:.3f}]\n", label, xyz[0], xyz[1], xyz[2]);
   }
 
-  // request_guard_t releases here, which invalidates every pointer in `result`.
+  // dewpp::request_t releases here, which invalidates every pointer in `result`.
 }
 
 // Open the dataset, then run two overlapping queries on it.
-vio::task_t<int> run(dew::await::driver_t &driver, const args_t &args)
+vio::task_t<int> run(dewpp::async::driver_t &driver, const args_t &args)
 {
   dew_error_t *error = nullptr;
   dew_dataset_t *dataset = dew_dataset_create(args.url.c_str(), uint32_t(args.url.size()), args.connection.c_str(), uint32_t(args.connection.size()), nullptr, driver.pump(), &error);
@@ -184,7 +184,7 @@ vio::task_t<int> run(dew::await::driver_t &driver, const args_t &args)
   // index read happens on the dataset's own loop.
   fmt::print("opening (state={}) -- nothing has blocked\n", int(dew_dataset_state(dataset)));
 
-  if (co_await dew::await::ready(driver, dataset) != dew_dataset_ready)
+  if (co_await dewpp::async::ready(driver, dataset) != dew_dataset_ready)
   {
     dew_error_t *open_error = nullptr;
     dew_dataset_get_error(dataset, &open_error);
@@ -262,6 +262,6 @@ VIO_MAIN(loop, argc, argv)
     co_return 2;
   }
 
-  dew::await::driver_t driver(loop);
+  dewpp::async::driver_t driver(loop);
   co_return co_await run(driver, args);
 }

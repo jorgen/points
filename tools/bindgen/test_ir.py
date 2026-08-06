@@ -250,10 +250,12 @@ def test_generated_dewpp_header_is_up_to_date(semantic, api):
         assert path.read_text() == text, f"{relative} is stale -- rerun tools/bindgen/generate_cpp.py"
     # An EXTRA .hpp is as much a drift as a missing one: it means a C header went away and its
     # wrapper did not. await.hpp comes from the other generator.
+    import generate_cpp_await
+
+    async_files = generate_cpp_await.generate_files(api)
     on_disk = {str(p.relative_to(root)) for p in root.rglob("*.hpp")}
-    assert on_disk - set(expected) == {"dew/await.hpp"}, (
-        f"unexpected generated headers: {sorted(on_disk - set(expected) - {'dew/await.hpp'})}"
-    )
+    unexpected = on_disk - set(expected) - set(async_files)
+    assert not unexpected, f"unexpected generated headers: {sorted(unexpected)}"
     # The layout mirrors the C headers, which is the point.
     assert "dew/access/query.hpp" in expected
     assert "dew/core/pump.hpp" in expected
@@ -272,6 +274,32 @@ def test_dewpp_wraps_the_whole_surface(api):
     )
 
 
+def test_dewpp_flag_returns_are_all_success_flags(semantic):
+    # A function with BOTH a return value and out-params is read as "flag + payload" and wrapped as
+    # std::optional. That is right for every one of these -- they are all `did it work` -- but it
+    # would be wrong for a function whose return is a real value. Pin the set so a new one is looked
+    # at rather than silently reinterpreted.
+    shaped = []
+    for cls in semantic["classes"]:
+        for method in cls["constructors"] + cls["methods"]:
+            results = method["results"]
+            returns = [r for r in results if r["source"] == "return"]
+            outs = [r for r in results if r["source"] != "return"]
+            if returns and outs:
+                shaped.append((method["function"], returns[0]["type"].get("name")))
+    assert sorted(shaped) == sorted(
+        [
+            ("dew_converter_get_compression_stats", "bool"),
+            ("dew_converter_get_live_perf_stats", "bool"),
+            ("dew_converter_get_perf_stats", "bool"),
+            ("dew_converter_get_upload_state", "bool"),
+            # uint8_t, not bool -- the C API's boolean spelling, and the reason the generator accepts
+            # both. Wrapped as bool it would have become a two-field aggregate nobody wants.
+            ("dew_request_get_result", "uint8_t"),
+        ]
+    ), f"new flag+out-param function: {shaped}"
+
+
 def test_dewpp_rejects_a_name_collision(api):
     # Enums, structs and handles are named independently from their own bound_name, so two of them
     # CAN land on the same dewpp:: name. Left unchecked that is a redeclaration error inside generated
@@ -288,19 +316,21 @@ def test_dewpp_rejects_a_name_collision(api):
         generate_cpp.Generator(doctored).generate_files()
 
 
-def test_generated_cpp_await_header_is_up_to_date(semantic):
-    # bindings/cpp/dew/await.hpp is CHECKED IN, because generating it needs libclang and an ordinary
-    # C++ build must not. That means it can go stale against the annotations, and this is what notices --
-    # otherwise the first symptom would be a consumer awaiting a handle the header does not know.
+def test_generated_async_headers_are_up_to_date(api):
+    # The _async siblings are checked in for the same reason as the sync ones, and can go stale the
+    # same way -- the first symptom would otherwise be a consumer awaiting a handle the header does
+    # not know about.
     import generate_cpp_await
 
-    root = pathlib.Path(__file__).resolve().parents[2]
-    checked_in = root / "bindings" / "cpp" / "dew" / "await.hpp"
-    assert checked_in.exists(), f"{checked_in} is missing"
-    expected = generate_cpp_await.generate(semantic)
-    assert checked_in.read_text() == expected, (
-        "bindings/cpp/dew/await.hpp is stale -- rerun tools/bindgen/generate_cpp_await.py"
-    )
+    root = pathlib.Path(__file__).resolve().parents[2] / "bindings" / "cpp"
+    expected = generate_cpp_await.generate_files(api)
+    # The layout is the point: an async sibling next to its sync header, the driver beside the pump.
+    assert "dew/access/query_async.hpp" in expected
+    assert "dew/core/pump_async.hpp" in expected
+    for relative, text in sorted(expected.items()):
+        path = root / relative
+        assert path.exists(), f"{relative} is missing -- rerun tools/bindgen/generate_cpp_await.py"
+        assert path.read_text() == text, f"{relative} is stale -- rerun tools/bindgen/generate_cpp_await.py"
 
 
 if __name__ == "__main__":

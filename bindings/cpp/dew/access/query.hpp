@@ -51,8 +51,10 @@ class request_t;
 //
 //  tools/bindgen turns these into await wrappers: dew/await/dew_await.hpp for C++ coroutines and
 //  dew.aio for Python. Adding an awaitable handle is this annotation and nothing else.
-// A BORROWED dew_dataset_t -- the library owns it. Copyable, destroys nothing, and valid only
-// for as long as whatever produced it says.
+//  Both handles are OWNED -- the wrappers must destroy them -- but neither destructor is named
+//  *_destroy, which is the only thing the generators infer from. So say it: without this a generated
+//  wrapper treats them as borrowed views and quietly leaks every dataset and every request.
+// Owns its dew_dataset_t: move-only, destroyed with dew_dataset_close.
 class dataset_t
 {
 public:
@@ -60,6 +62,40 @@ public:
   explicit dataset_t(dew_dataset_t *handle)
     : _handle(handle)
   {
+  }
+
+  ~dataset_t() { reset(); }
+  dataset_t(dataset_t &&other) noexcept
+    : _handle(other._handle)
+  {
+    other._handle = nullptr;
+  }
+  dataset_t &operator=(dataset_t &&other) noexcept
+  {
+    if (this != &other)
+    {
+      reset();
+      _handle = other._handle;
+      other._handle = nullptr;
+    }
+    return *this;
+  }
+  dataset_t(const dataset_t &) = delete;
+  dataset_t &operator=(const dataset_t &) = delete;
+
+  void reset()
+  {
+    if (_handle)
+      dew_dataset_close(_handle);
+    _handle = nullptr;
+  }
+
+  // Hand the raw handle back, giving up ownership.
+  [[nodiscard]] dew_dataset_t *release()
+  {
+    dew_dataset_t *handle = _handle;
+    _handle = nullptr;
+    return handle;
   }
 
   // Named handle() rather than get(): several data sources already have a `get` method of
@@ -75,8 +111,6 @@ public:
   //  wake, or NULL to have the dataset own a private pump -- in which case dew_dataset_poll drives it
   //  and you need not know the pump exists.
   static result_t<dataset_t> create(std::string_view url, std::string_view connection, const dew_dataset_options_t & options, const pump_t & pump);
-
-  void close() const;
 
   dew_dataset_state_t state() const;
 
@@ -103,14 +137,7 @@ private:
   dew_dataset_t *_handle = nullptr;
 };
 
-struct request_get_result_result_t
-{
-  uint8_t return_;
-  dew_request_result_t out;
-};
-
-// A BORROWED dew_request_t -- the library owns it. Copyable, destroys nothing, and valid only
-// for as long as whatever produced it says.
+// Owns its dew_request_t: move-only, destroyed with dew_request_release.
 class request_t
 {
 public:
@@ -118,6 +145,40 @@ public:
   explicit request_t(dew_request_t *handle)
     : _handle(handle)
   {
+  }
+
+  ~request_t() { reset(); }
+  request_t(request_t &&other) noexcept
+    : _handle(other._handle)
+  {
+    other._handle = nullptr;
+  }
+  request_t &operator=(request_t &&other) noexcept
+  {
+    if (this != &other)
+    {
+      reset();
+      _handle = other._handle;
+      other._handle = nullptr;
+    }
+    return *this;
+  }
+  request_t(const request_t &) = delete;
+  request_t &operator=(const request_t &) = delete;
+
+  void reset()
+  {
+    if (_handle)
+      dew_request_release(_handle);
+    _handle = nullptr;
+  }
+
+  // Hand the raw handle back, giving up ownership.
+  [[nodiscard]] dew_request_t *release()
+  {
+    dew_request_t *handle = _handle;
+    _handle = nullptr;
+    return handle;
   }
 
   // Named handle() rather than get(): several data sources already have a `get` method of
@@ -133,11 +194,9 @@ public:
 
   std::optional<error_t> get_error() const;
 
-  void release() const;
-
   float completion_factor() const;
 
-  request_get_result_result_t get_result() const;
+  std::optional<dew_request_result_t> get_result() const;
 
   uint64_t attribute_size(uint32_t attribute_index) const;
 
@@ -160,11 +219,6 @@ inline result_t<dataset_t> dataset_t::create(std::string_view url, std::string_v
   if (!handle_)
     return std::unexpected(error_.take("dew_dataset_create failed"));
   return dataset_t(handle_);
-}
-
-inline void dataset_t::close() const
-{
-  dew_dataset_close(_handle);
 }
 
 inline dew_dataset_state_t dataset_t::state() const
@@ -242,22 +296,17 @@ inline std::optional<error_t> request_t::get_error() const
   return error_.take_if_set();
 }
 
-inline void request_t::release() const
-{
-  dew_request_release(_handle);
-}
-
 inline float request_t::completion_factor() const
 {
   float return_ = dew_request_completion_factor(_handle);
   return return_;
 }
 
-inline request_get_result_result_t request_t::get_result() const
+inline std::optional<dew_request_result_t> request_t::get_result() const
 {
   dew_request_result_t out_out{};
-  uint8_t return_ = dew_request_get_result(_handle, &out_out);
-  return request_get_result_result_t{return_, out_out};
+  bool ok_ = dew_request_get_result(_handle, &out_out);
+  return ok_ ? std::optional<dew_request_result_t>(out_out) : std::nullopt;
 }
 
 inline uint64_t request_t::attribute_size(uint32_t attribute_index) const

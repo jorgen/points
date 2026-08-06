@@ -262,20 +262,21 @@ errors returned by value as `dewpp::result_t<T>` = `std::expected<T, dewpp::erro
 factories instead. Enums, value structs and constants are `using` aliases of the C types rather than
 parallel declarations that could drift. It has no vio dependency.
 
-The awaiting side is [`bindings/cpp/dew/await.hpp`](https://github.com/jorgen/dewfall/blob/master/bindings/cpp/dew/await.hpp),
-a header-only wrapper **generated** from the `//= awaitable:` annotations on the C handles. It lives
-in `bindings/` beside the Python bindings, because that is what it is — a consumer of the public C
-surface rather than part of it:
+Anything driven by the pump is an async candidate, and `//= awaitable:` on the handle marks one. Those
+get **`_async` siblings** next to their sync headers — `dew/access/query_async.hpp` beside
+`dew/access/query.hpp`, with the driver in `dew/core/pump_async.hpp`. That is the only part of the
+tree that needs vio, which is why it is separable: a caller with no event loop includes the sync
+headers and never pays for it.
 
 ```cpp
 VIO_MAIN(loop, argc, argv)
 {
-  dew::await::driver_t driver(loop);
+  dewpp::async::driver_t driver(loop);
   auto *ds = dew_dataset_create(url, len, nullptr, 0, nullptr, driver.pump(), &error);
-  if (co_await dew::await::ready(driver, ds) != dew_dataset_ready)
+  if (co_await dewpp::async::ready(driver, ds) != dew_dataset_ready)
     co_return 1;
-  dew::await::request_guard_t req(dew_dataset_request_region(ds, &spec, &error));
-  if (co_await dew::await::ready(driver, req) == dew_request_completed) { /* ... */ }
+  dewpp::request_t req(dew_dataset_request_region(ds, &spec, &error));
+  if (co_await dewpp::async::ready(driver, req) == dew_request_completed) { /* ... */ }
 }
 ```
 

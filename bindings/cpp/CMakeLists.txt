@@ -4,15 +4,18 @@
 #   dew/**/*.hpp    the public C API as C++ (RAII handles, std::expected errors). No vio. The tree
 #                   MIRRORS the C headers, so <dew/access/query.hpp> is the C++ for
 #                   <dew/access/query.h>; dew/dewpp.hpp is an umbrella over all of them.
-#   dew/await.hpp   the vio coroutine driver for the awaitable handles. Needs vio.
+#   dew/**/*_async.hpp  co_await siblings for the pump-driven handles -- dew/access/query_async.hpp
+#                   beside dew/access/query.hpp, with the driver in dew/core/pump_async.hpp. This is
+#                   the only part that needs vio, which is why it is separable: a caller with no
+#                   event loop includes the sync headers and never pays for it.
 #
 # Keeping dewpp.hpp free of vio is what lets a consumer that has its own event loop -- or none -- use
 # the C++ API without taking a dependency it does not want.
 #
 # They sit in bindings/ rather than src/ because that is what they are -- CONSUMERS of the public C
-# surface, like bindings/python, not part of it. Both are generated from the bindgen IR
-# (generate_cpp.py and generate_cpp_await.py) and CHECKED IN, because generating them needs libclang
-# and an ordinary C++ build must not. tools/bindgen/test_ir.py fails if either goes stale.
+# surface, like bindings/python, not part of it. All of it is generated from the bindgen IR
+# (generate_cpp.py and generate_cpp_await.py) and CHECKED IN, because generating it needs libclang
+# and an ordinary C++ build must not. tools/bindgen/test_ir.py fails if any of it goes stale.
 #
 # Linking this gives a consumer the include path for the header AND for the dew_* C headers it
 # includes; the dew libraries themselves and vio are still the consumer's to link, which is the point
