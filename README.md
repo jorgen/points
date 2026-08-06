@@ -221,10 +221,23 @@ python examples/python/query_asyncio.py out.dew
 ```
 
 `query_box()` blocks the calling thread, which is what a script wants. On an event loop it is the
-wrong shape, so `query_box_submit()` returns a `Request` instead: dewfall signals through the pump's
-wake callback, the host calls `Pump.poll()` on its own thread, and the completion surfaces there.
-`query_asyncio.py` wraps that handshake into ordinary `await` in about forty lines. The C++ side of
-the same idea is [`examples/query_async/`](https://github.com/jorgen/dewfall/tree/master/examples/query_async),
+wrong shape, so the package ships `dew.aio`:
+
+```python
+import dew.aio
+
+async with dew.aio.open_dataset("scan.dew") as ds:
+    result = await ds.query_box([0, 0, 0], [10, 10, 10], attributes=["intensity"])
+```
+
+Underneath, dewfall signals through the pump's wake callback, the host calls `Pump.poll()` on its own
+thread, and the completion surfaces there — `dew.aio.Session` owns that handshake so callers do not
+rewrite it. Several queries can be in flight at once (`asyncio.gather`) and the loop keeps serving
+everything else. Use a `Session` directly to drive several datasets from one pump; the raw
+`Dataset.query_box_submit()` → `Request` API is still there for hosts with their own loop. If a
+thread per query is acceptable, `await asyncio.to_thread(ds.query_box, ...)` needs none of this.
+
+The C++ side of the same idea is [`examples/query_async/`](https://github.com/jorgen/dewfall/tree/master/examples/query_async),
 which `co_await`s requests on a vio event loop.
 
 Because the wheel also ships the libraries, headers and a CMake config, a C or C++ project can

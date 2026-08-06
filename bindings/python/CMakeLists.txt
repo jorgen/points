@@ -128,15 +128,21 @@ set_target_properties(dew_python PROPERTIES
 # Tracked as a real dependency rather than a POST_BUILD step: POST_BUILD only fires when the
 # extension itself relinks, so editing only __init__.py used to leave a stale copy in the build tree
 # and the tests would import the old package.
-add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/dew/__init__.py"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/dew"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/dew/__init__.py"
-            "${CMAKE_CURRENT_BINARY_DIR}/dew/__init__.py"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/dew/__init__.py"
-    VERBATIM
-    COMMENT "staging dew/__init__.py next to the extension")
-add_custom_target(dew_python_package ALL DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/dew/__init__.py")
+# Every .py in the package is staged, not just __init__ -- dew/aio.py is part of the public surface.
+set(_dew_py_modules __init__.py aio.py)
+set(_dew_py_staged)
+foreach(_mod IN LISTS _dew_py_modules)
+    add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/dew/${_mod}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/dew"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/dew/${_mod}"
+                "${CMAKE_CURRENT_BINARY_DIR}/dew/${_mod}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/dew/${_mod}"
+        COMMENT "staging dew/${_mod} next to the extension")
+    list(APPEND _dew_py_staged "${CMAKE_CURRENT_BINARY_DIR}/dew/${_mod}")
+endforeach()
+add_custom_target(dew_python_package ALL DEPENDS ${_dew_py_staged})
+
 add_dependencies(dew_python_package dew_python)
 
 if (DEW_PYTHON_REQUIRE_STABLE_ABI)

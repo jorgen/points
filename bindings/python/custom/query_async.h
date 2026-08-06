@@ -68,18 +68,27 @@ template <class ClsT> void bind_pump_async(ClsT &cls)
   cls.def(
     "set_wake_callback",
     [](Holder &self, nb::object callback) {
-      if (!callable_set(callback))
+      // DETACH FIRST, WITH THE GIL DROPPED, in both branches. Two things go wrong otherwise, and both
+      // did:
+      //
+      //  * dew_pump_set_wake_callback(NULL) spin-waits for an in-flight wake to return, and that wake
+      //    is a Python callable trying to ACQUIRE the GIL. Holding the GIL across the detach deadlocks
+      //    the interpreter -- non-deterministically, since it needs a wake to be in flight. (The
+      //    giveaway was faulthandler failing to produce a traceback: its watchdog is a Python thread,
+      //    so a GIL held by a blocked C thread silences it.)
+      //  * dropping the old context BEFORE detaching leaves a window where a live wake dereferences
+      //    freed memory. Detach is what closes that window, so it has to come first.
       {
-        // Detaching is what waits out an in-flight wake, so it must happen before the old ctx is
-        // dropped. Clearing ctxs afterwards releases the Python reference.
+        nb::gil_scoped_release unlock;
         dew_pump_set_wake_callback(self.h, nullptr, nullptr);
-        self.ctxs.clear();
-        return;
       }
+      self.ctxs.clear(); // now unreachable from any thread: safe to drop the Python reference
+      if (!callable_set(callback))
+        return;
+
       auto ctx = std::make_unique<wake_cb_ctx_t>();
       ctx->callback = std::move(callback);
       auto *raw = ctx.get();
-      self.ctxs.clear(); // replaces any previous callback; detach happens inside the C call below
       self.ctxs.push_back(std::move(ctx));
       dew_pump_set_wake_callback(self.h, &pump_wake_trampoline, raw);
     },

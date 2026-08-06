@@ -13,10 +13,11 @@ likes. That is precisely the handshake asyncio wants:
 
     wake (library thread)  ->  loop.call_soon_threadsafe  ->  poll (loop thread)  ->  resolve futures
 
-DewAsync below is the whole adapter, about forty lines, and it turns that into plain `await`. The
-demo then runs two queries concurrently with asyncio.gather, uses the coarse one to find where the
-points actually are, and follows up with a third -- all while a heartbeat ticks in parallel. The
-heartbeat is the evidence: it could not print at all during a blocking query.
+`dew.aio` ships that handshake, so this file is just a consumer of it: `dew.aio.Session` owns the
+pump and turns completions into `await`. The demo runs two queries concurrently with asyncio.gather,
+uses the coarse one to find where the points actually are, and follows up with a third -- all while a
+heartbeat ticks in parallel. The heartbeat is the evidence: it could not print at all during a
+blocking query.
 
 For comparison, the same program written the easy way would be:
 
@@ -33,6 +34,7 @@ import sys
 
 try:
     import dew
+    import dew.aio
 except ImportError:  # running from a build tree rather than an installed wheel
     _here = os.path.dirname(os.path.abspath(__file__))
     for _candidate in ("cmake-build-debug", "cmake-build-release", "build"):
@@ -41,68 +43,7 @@ except ImportError:  # running from a build tree rather than an installed wheel
             sys.path.insert(0, os.path.abspath(_path))
             break
     import dew
-
-
-class DewAsync:
-    """Drives a dew.Pump from an asyncio loop, exposing awaits instead of polls."""
-
-    def __init__(self):
-        self._loop = asyncio.get_running_loop()
-        self.pump = dew.Pump()
-        # Anything waiting on a state that only becomes visible after a poll: (predicate, future).
-        self._waiters = []
-        self.pump.set_wake_callback(self._on_wake)
-
-    def close(self):
-        # Detach first. This waits for any wake already in flight to return, so the library cannot
-        # call into a loop we are about to stop using.
-        self.pump.set_wake_callback(None)
-
-    def _on_wake(self):
-        """Runs on a LIBRARY thread. Signal only -- no dewfall calls, no touching self._waiters."""
-        self._loop.call_soon_threadsafe(self._drain)
-
-    def _drain(self):
-        """Runs on the loop thread: dispatch, then resolve whatever became true."""
-        self.pump.poll()
-        pending = []
-        for predicate, future in self._waiters:
-            if future.done():
-                continue
-            if predicate():
-                future.set_result(None)
-            else:
-                pending.append((predicate, future))
-        self._waiters = pending
-
-    async def _until(self, predicate):
-        if predicate():
-            return
-        future = self._loop.create_future()
-        self._waiters.append((predicate, future))
-        # One drain up front closes the race where the completion landed (and its single wake was
-        # already consumed) between the caller's last look and this await.
-        self._drain()
-        await future
-
-    async def open(self, url, connection=""):
-        dataset = dew.Dataset(url, connection, dew.DatasetOptions(), self.pump)
-        # Always `opening` here: create() returns before the index is read. That is the property the
-        # whole design rests on -- opening a remote dataset costs a network round trip, and paying it
-        # inside the constructor would block every caller, browsers included.
-        await self._until(lambda: dataset.state() != dew.DatasetState.opening)
-        if dataset.state() != dew.DatasetState.ready:
-            raise RuntimeError(f"could not open {url}: {dataset.get_error()}")
-        return dataset
-
-    async def query(self, dataset, aabb_min, aabb_max, **kwargs):
-        request = dataset.query_box_submit(aabb_min, aabb_max, **kwargs)
-        try:
-            await self._until(lambda: request.done)
-            return request.result()
-        finally:
-            # Until it is released the dataset holds the request and its decoded points.
-            request.release()
+    import dew.aio
 
 
 async def heartbeat(stop):
@@ -120,9 +61,9 @@ async def main():
     parser.add_argument("--connection", default="", help="cloud credentials for s3:// datasets")
     args = parser.parse_args()
 
-    driver = DewAsync()
-    try:
-        dataset = await driver.open(args.dataset, args.connection)
+    # One session, so both datasets (were there more) would share a single pump and a single poll.
+    with dew.aio.Session() as session:
+        dataset = await session.open(args.dataset, args.connection)
         info = dataset.get_info()
         lo = list(info.aabb_min)
         hi = list(info.aabb_max)
@@ -134,8 +75,8 @@ async def main():
         # Two queries at once. gather submits both before awaiting either, so their reads overlap
         # instead of running back to back -- which is the entire reason for doing this asynchronously.
         preview, full = await asyncio.gather(
-            driver.query(dataset, lo, hi, lod="budget", max_points=50_000),
-            driver.query(dataset, lo, hi, attributes=["intensity"]),
+            dataset.query_box(lo, hi, lod="budget", max_points=50_000),
+            dataset.query_box(lo, hi, attributes=["intensity"]),
         )
 
         # The dataset's aabb is the octree CELL: a power-of-two cube that contains the points but can
@@ -146,7 +87,7 @@ async def main():
         data_hi = xyz.max(axis=0)
         middle_lo = (data_lo + (data_hi - data_lo) * 0.25).tolist()
         middle_hi = (data_lo + (data_hi - data_lo) * 0.75).tolist()
-        middle = await driver.query(dataset, middle_lo, middle_hi, attributes=["intensity"])
+        middle = await dataset.query_box(middle_lo, middle_hi, attributes=["intensity"])
 
         stop.set()
         await beat
@@ -158,8 +99,6 @@ async def main():
         print(f"data extent: {[round(float(v), 3) for v in data_lo]} .. {[round(float(v), 3) for v in data_hi]}")
 
         dataset.close()
-    finally:
-        driver.close()
 
 
 if __name__ == "__main__":
