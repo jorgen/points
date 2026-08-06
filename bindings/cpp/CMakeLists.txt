@@ -1,7 +1,9 @@
 # The generated C++ wrappers: header-only, so this is an INTERFACE target that carries include paths
 # and nothing else. Two headers, deliberately separate:
 #
-#   dew/dewpp.hpp   the whole public C API as C++ (RAII handles, std::expected errors). No vio.
+#   dew/**/*.hpp    the public C API as C++ (RAII handles, std::expected errors). No vio. The tree
+#                   MIRRORS the C headers, so <dew/access/query.hpp> is the C++ for
+#                   <dew/access/query.h>; dew/dewpp.hpp is an umbrella over all of them.
 #   dew/await.hpp   the vio coroutine driver for the awaitable handles. Needs vio.
 #
 # Keeping dewpp.hpp free of vio is what lets a consumer that has its own event loop -- or none -- use
@@ -18,10 +20,10 @@
 add_library(dew_await INTERFACE)
 add_library(dew::await ALIAS dew_await)
 
-target_sources(dew_await INTERFACE FILE_SET HEADERS BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
-        FILES
-        ${CMAKE_CURRENT_SOURCE_DIR}/dew/dewpp.hpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/dew/await.hpp)
+# Globbed rather than listed: the set is whatever generate_cpp.py emitted, and a stale hand-written
+# list would be one more thing to drift. The bindgen test is what notices a missing or extra file.
+file(GLOB_RECURSE _dew_cpp_headers CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/dew/*.hpp)
+target_sources(dew_await INTERFACE FILE_SET HEADERS BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} FILES ${_dew_cpp_headers})
 
 target_include_directories(dew_await INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -34,7 +36,6 @@ target_include_directories(dew_await INTERFACE
         $<INSTALL_INTERFACE:include>
 )
 
-install(FILES
-        ${CMAKE_CURRENT_SOURCE_DIR}/dew/dewpp.hpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/dew/await.hpp
-        DESTINATION include/dew COMPONENT dew_devel)
+# DIRECTORY, so the mirrored dew/core, dew/access, dew/render and dew/converter subtrees land in the
+# same shape a consumer includes them in.
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/dew DESTINATION include COMPONENT dew_devel FILES_MATCHING PATTERN "*.hpp")

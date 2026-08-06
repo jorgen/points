@@ -240,8 +240,9 @@ thread per query is acceptable, `await asyncio.to_thread(ds.query_box, ...)` nee
 ### C++
 
 The whole C API is also available as C++, generated from the same IR the Python bindings come from —
-[`bindings/cpp/dew/dewpp.hpp`](https://github.com/jorgen/dewfall/blob/master/bindings/cpp/dew/dewpp.hpp),
-header-only, namespace `dewpp`:
+header-only, namespace `dewpp`, under [`bindings/cpp/dew/`](https://github.com/jorgen/dewfall/tree/master/bindings/cpp/dew).
+The tree **mirrors the C headers**, so `<dew/access/query.hpp>` is the C++ for `<dew/access/query.h>`
+and each header compiles on its own; `<dew/dewpp.hpp>` is an umbrella over all of them:
 
 ```cpp
 #include <dew/dewpp.hpp>

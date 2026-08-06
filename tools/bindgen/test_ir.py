@@ -242,13 +242,22 @@ def test_generated_dewpp_header_is_up_to_date(semantic, api):
     # anything noticing. It wraps the WHOLE surface, so a drift is a whole missing method.
     import generate_cpp
 
-    root = pathlib.Path(__file__).resolve().parents[2]
-    checked_in = root / "bindings" / "cpp" / "dew" / "dewpp.hpp"
-    assert checked_in.exists(), f"{checked_in} is missing"
-    expected = generate_cpp.Generator(api).generate()
-    assert checked_in.read_text() == expected, (
-        "bindings/cpp/dew/dewpp.hpp is stale -- rerun tools/bindgen/generate_cpp.py"
+    root = pathlib.Path(__file__).resolve().parents[2] / "bindings" / "cpp"
+    expected = generate_cpp.Generator(api).generate_files()
+    for relative, text in sorted(expected.items()):
+        path = root / relative
+        assert path.exists(), f"{relative} is missing -- rerun tools/bindgen/generate_cpp.py"
+        assert path.read_text() == text, f"{relative} is stale -- rerun tools/bindgen/generate_cpp.py"
+    # An EXTRA .hpp is as much a drift as a missing one: it means a C header went away and its
+    # wrapper did not. await.hpp comes from the other generator.
+    on_disk = {str(p.relative_to(root)) for p in root.rglob("*.hpp")}
+    assert on_disk - set(expected) == {"dew/await.hpp"}, (
+        f"unexpected generated headers: {sorted(on_disk - set(expected) - {'dew/await.hpp'})}"
     )
+    # The layout mirrors the C headers, which is the point.
+    assert "dew/access/query.hpp" in expected
+    assert "dew/core/pump.hpp" in expected
+    assert "dew/dewpp.hpp" in expected
 
 
 def test_dewpp_wraps_the_whole_surface(api):
@@ -257,7 +266,7 @@ def test_dewpp_wraps_the_whole_surface(api):
     import generate_cpp
 
     generator = generate_cpp.Generator(api)
-    generator.generate()
+    generator.generate_files()
     assert [fn for _, fn in generator.problems] == ["dew_request_copy_attribute"], (
         f"unexpected unwrapped functions: {generator.problems}"
     )
@@ -276,7 +285,7 @@ def test_dewpp_rejects_a_name_collision(api):
     classes = doctored["semantic"]["classes"]
     enums[0]["bound_name"] = classes[-1]["bound_name"]
     with pytest.raises(generate_cpp.EmitError, match="declared twice"):
-        generate_cpp.Generator(doctored).generate()
+        generate_cpp.Generator(doctored).generate_files()
 
 
 def test_generated_cpp_await_header_is_up_to_date(semantic):
