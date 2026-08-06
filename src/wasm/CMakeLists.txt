@@ -23,6 +23,7 @@ add_executable(dew_data_wasm
     ${_core}/compression_preprocess.cpp
     # Tree (de)serialize + node storage map + attribute configs, for the frustum-walk / readNode path:
     ${_core}/tree.cpp
+    ${_core}/tree_set.cpp
     ${_core}/input_storage_map.cpp
     ${_core}/attributes_configs.cpp
 )
@@ -130,6 +131,7 @@ add_executable(dew_render_wasm
     ${_conv}/tree_collapse.cpp
     ${_conv}/tree_lod_generator.cpp
     ${_core}/tree.cpp
+    ${_core}/tree_set.cpp
     # Tree CONSTRUCTION, needed only because this target compiles tree_handler.cpp (the write
     # pipeline) to reach read access through processor_t. The data + decode-worker modules link
     # tree.cpp alone. Drops out once the streaming data source stops embedding a processor_t.
@@ -291,6 +293,7 @@ add_executable(dew_access_noasyncify
     ${_core}/byte_shuffle.cpp
     ${_core}/compression_preprocess.cpp
     ${_core}/tree.cpp
+    ${_core}/tree_set.cpp
     ${_core}/input_storage_map.cpp
     ${_core}/attributes_configs.cpp
     ${_access}/region_walk.cpp
