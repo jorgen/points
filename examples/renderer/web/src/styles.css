@@ -173,6 +173,31 @@ body {
   color: var(--text);
 }
 
+/* --- public dataset presets --- */
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.btn--preset {
+  margin-top: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.btn--preset:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.btn--preset-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 /* --- viewer --- */
 .content {
   position: relative;

@@ -13,6 +13,15 @@ export const EMPTY_FORM: FormValues = {
   connectionString: '',
 };
 
+/** The public demo datasets. All three live in the same anonymous-read bucket, so one connection string
+ *  serves them; picking one swaps the dataset without retyping anything. */
+export const PUBLIC_CONNECTION = 'region=eu-north-1;anonymous=true';
+export const PUBLIC_DATASETS: { label: string; url: string }[] = [
+  { label: 'Św. Anny', url: 's3://limilind-public/points/g_sw_anny' },
+  { label: 'Kościół Libusza', url: 's3://limilind-public/points/kosciol_libusza' },
+  { label: 'Pałac Moszna', url: 's3://limilind-public/points/palac_moszna' },
+];
+
 /** Build a Connection from form values, or null if the dataset URL is missing. */
 export function buildConnection(v: Partial<FormValues>): Connection | null {
   const url = (v.url ?? '').trim();
@@ -52,8 +61,34 @@ export function ConnectForm({ initial, connected, busy, onConnect, onDisconnect 
 
   const disabled = connected || busy;
 
+  // Switching dataset works whether or not one is loaded: the renderer tears the old data source down
+  // and builds the new one, which is the same path Connect takes. Without this, trying another demo
+  // meant Disconnect, retype the URL, Connect.
+  const pick = (url: string) => {
+    const next = { url, connectionString: PUBLIC_CONNECTION };
+    setValues(next);
+    setFormError(null);
+    onConnect({ url, connectionString: PUBLIC_CONNECTION });
+  };
+
   return (
     <form className="connect" onSubmit={onSubmit}>
+      <div className="field">
+        <span>Public datasets</span>
+        <div className="presets">
+          {PUBLIC_DATASETS.map((dataset) => (
+            <button
+              key={dataset.url}
+              type="button"
+              className={values.url === dataset.url ? 'btn btn--preset btn--preset-active' : 'btn btn--preset'}
+              disabled={busy}
+              onClick={() => pick(dataset.url)}
+            >
+              {dataset.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <label className="field">
         <span>Dataset URL</span>
         <input

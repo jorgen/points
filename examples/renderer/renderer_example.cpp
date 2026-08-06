@@ -150,7 +150,19 @@ int main(int argc, char **argv)
   //
   // CLI: renderer_example [url] [connection]. With no arguments the dialog below opens pre-filled with a
   // public sample dataset; a url on the command line loads straight away.
-  static const char *k_default_url = "s3://limilind-public/points/palac_moszna";
+  // The public demo datasets. All three are anonymous-read in the same bucket, so one connection
+  // string serves them and picking one is a single click -- no retyping a URL to try another.
+  struct public_dataset_t
+  {
+    const char *label;
+    const char *url;
+  };
+  static const public_dataset_t k_public_datasets[] = {
+    {"Sw. Anny", "s3://limilind-public/points/g_sw_anny"},
+    {"Kosciol Libusza", "s3://limilind-public/points/kosciol_libusza"},
+    {"Palac Moszna", "s3://limilind-public/points/palac_moszna"},
+  };
+  static const char *k_default_url = k_public_datasets[0].url;
   static const char *k_default_connection = "anonymous=true;region=eu-north-1";
 
   char url_buf[1024];
@@ -232,6 +244,19 @@ int main(int argc, char **argv)
     ImGui::InputTextWithHint("Connection", "anonymous=true;region=eu-north-1", conn_buf, sizeof(conn_buf));
     ImGui::PopItemWidth();
     ImGui::TextDisabled("Cloud only. Public bucket: anonymous=true. Azure: account=...;account_key=... or ...;sas=...");
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Public datasets:");
+    for (const auto &dataset : k_public_datasets)
+    {
+      if (ImGui::Button(dataset.label))
+      {
+        snprintf(url_buf, sizeof(url_buf), "%s", dataset.url);
+        snprintf(conn_buf, sizeof(conn_buf), "%s", k_default_connection);
+        do_load = true;
+      }
+      ImGui::SameLine();
+    }
+    ImGui::NewLine();
     if (ImGui::Button("Browse local file..."))
     {
       SDL_DialogFileFilter filters[] = {{"Dewfall files", "dew"}};
@@ -401,6 +426,68 @@ int main(int argc, char **argv)
   dewpp::arcball_t arcball = std::move(*dewpp::arcball_t::create(camera, arcball_center));
   dew_arcball_set_up_axis(arcball.handle(), z_up);
   dewpp::fps_t fps;
+
+  // Swap the rendered dataset in place.
+  //
+  // Everything downstream of the data source has to be rebuilt, not just the source: the attribute
+  // list, the extent (which the environment grid and the camera framing are derived from) and the
+  // arcball centre all belong to the dataset. Detaching the old sources from the renderer FIRST
+  // matters -- dew_converter_data_source_destroy frees the GPU buffers those draw groups name, and a
+  // renderer still holding them would hand the consumer dead handles on the next frame.
+  auto switch_dataset = [&](const char *url, const char *connection) {
+    snprintf(url_buf, sizeof(url_buf), "%s", url);
+    snprintf(conn_buf, sizeof(conn_buf), "%s", connection);
+
+    dew_renderer_remove_data_source(renderer.handle(), dew_converter_data_source_get(converter_points.handle()));
+    dew_renderer_remove_data_source(renderer.handle(), dew_converter_data_source_get_bbox_data_source(converter_points.handle()));
+    dew_renderer_remove_data_source(renderer.handle(), dew_environment_data_source_get(environment.handle()));
+    converter_points.reset();
+
+    if (!try_open())
+      return false;
+
+    attribute_count = dew_converter_data_attribute_count(converter_points.handle());
+    attribute_names.assign(attribute_count, std::string());
+    {
+      char buffer[256];
+      for (uint32_t i = 0; i < attribute_count; i++)
+      {
+        auto str_size = dew_converter_data_get_attribute_name(converter_points.handle(), i, buffer, sizeof(buffer));
+        attribute_names[i].assign(buffer, str_size);
+      }
+    }
+    selected_attribute = pick_default_attribute(attribute_names);
+    if (!attribute_names.empty())
+    {
+      auto &name = attribute_names[selected_attribute];
+      dew_converter_data_set_rendered_attribute(converter_points.handle(), name.c_str(), uint32_t(name.size()));
+    }
+
+    dew_converter_data_source_get_tight_aabb(converter_points.handle(), aabb.min, aabb.max);
+
+    auto rebuilt = dewpp::environment_data_source_t::create(renderer, aabb.min[2], std::max({aabb.max[0] - aabb.min[0], aabb.max[1] - aabb.min[1]}) / 10.0);
+    if (rebuilt)
+      environment = std::move(*rebuilt);
+
+    dew_renderer_add_data_source(renderer.handle(), dew_environment_data_source_get(environment.handle()));
+    dew_renderer_add_data_source(renderer.handle(), dew_converter_data_source_get(converter_points.handle()));
+    dew_renderer_add_data_source(renderer.handle(), dew_converter_data_source_get_bbox_data_source(converter_points.handle()));
+    dew_converter_data_source_set_viewport(converter_points.handle(), width, height);
+    dew_converter_data_source_set_gpu_memory_budget(converter_points.handle(), size_t(gpu_memory_budget_mb) * 1024 * 1024);
+    dew_converter_data_source_set_max_in_flight_io(converter_points.handle(), max_in_flight_io);
+    dew_converter_data_source_set_show_bounding_boxes(converter_points.handle(), show_bounding_boxes ? 1 : 0);
+
+    // Re-frame: the new dataset is somewhere else entirely, so keeping the old camera would look like
+    // a failed load.
+    dew_camera_look_at_aabb(camera.handle(), &aabb, view_direction, up);
+    arcball_center = get_aabb_center(aabb);
+    if (arcball)
+    {
+      arcball = std::move(*dewpp::arcball_t::create(camera, arcball_center));
+      dew_arcball_set_up_axis(arcball.handle(), z_up);
+    }
+    return true;
+  };
 
   double dx_aabb = aabb.max[0] - aabb.min[0], dy_aabb = aabb.max[1] - aabb.min[1], dz_aabb = aabb.max[2] - aabb.min[2];
   double gizmo_length = std::sqrt(dx_aabb * dx_aabb + dy_aabb * dy_aabb + dz_aabb * dz_aabb) * 0.05;
@@ -573,6 +660,27 @@ int main(int argc, char **argv)
 
     ImGui::Begin("Input", 0, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
     ImGui::PushItemWidth(200);
+
+    // Dataset knob: switch between the public demos without restarting.
+    ImGui::TextUnformatted("Dataset");
+    for (const auto &dataset : k_public_datasets)
+    {
+      const bool active = std::strcmp(url_buf, dataset.url) == 0;
+      if (active)
+        ImGui::BeginDisabled();
+      if (ImGui::Button(dataset.label))
+      {
+        if (!switch_dataset(dataset.url, k_default_connection))
+          fprintf(stderr, "Failed to switch dataset: %s\n", load_error.c_str());
+      }
+      if (active)
+        ImGui::EndDisabled();
+      ImGui::SameLine();
+    }
+    ImGui::NewLine();
+    ImGui::TextDisabled("%s", url_buf);
+    ImGui::Separator();
+
     if (ImGui::RadioButton("ArcBall", arcball.handle()))
     {
       if (!arcball)

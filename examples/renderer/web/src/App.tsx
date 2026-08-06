@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ConnectForm, buildConnection, type FormValues } from './ConnectForm';
+import { ConnectForm, PUBLIC_CONNECTION, PUBLIC_DATASETS, buildConnection, type FormValues } from './ConnectForm';
 import { Controls } from './Controls';
 import { Viewer } from './Viewer';
 import { usePointCloudRenderer } from './usePointCloudRenderer';
@@ -8,8 +8,8 @@ import type { Connection } from './dewRender';
 // The default demo dataset: a public point cloud in an S3 bucket. It is prefilled (and auto-connected) so
 // the page renders something immediately with no input; the connect form is still there for pointing at
 // another dataset, with credentials for a private bucket.
-const DEFAULT_URL = 's3://limilind-public/points/g_sw_anny';
-const DEFAULT_CONNECTION = 'region=eu-north-1;anonymous=true';
+const DEFAULT_URL = PUBLIC_DATASETS[0].url;
+const DEFAULT_CONNECTION = PUBLIC_CONNECTION;
 
 /**
  * Read connection defaults from the URL query string, e.g.
