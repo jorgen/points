@@ -20,6 +20,7 @@
 #include <algorithm>
 
 #include "input_header.hpp"
+#include "loop_quiesce.hpp"
 #include "morton.hpp"
 #include "sorter.hpp"
 
@@ -256,13 +257,27 @@ void point_reader_t::about_to_block()
   _point_reader_files.erase(finished, _point_reader_files.end());
 }
 
+void point_reader_t::begin_shutdown()
+{
+  // Flip the flag ON the input loop and wait for it, so that after this returns no callback on that
+  // loop can still reach thread_pool.enqueue. See loop_quiesce.hpp for why the wait is shaped this way.
+  core::run_on_loop_and_wait(_event_loop, [this]() { _shutting_down.store(true, std::memory_order_release); });
+}
+
 void point_reader_t::handle_new_files(tree_config_t &&tree_config, get_points_file_t &&new_file)
 {
+  // point_reader_file_t's constructor enqueues its get_data_worker onto the shared pool, so during
+  // teardown it must not be built at all.
+  if (_shutting_down.load(std::memory_order_acquire))
+    return;
   _point_reader_files.emplace_back(new point_reader_file_t(tree_config, _event_loop, _thread_pool, _attributes_configs, _perf_stats, new_file, _input_init_pipe, _sub_added, _unsorted_points, _sorted_points_pipe));
 }
 
 void point_reader_t::handle_unsorted_points(unsorted_points_event_t &&unsorted_points)
 {
+  // Same reason: the sort worker below goes onto the shared pool.
+  if (_shutting_down.load(std::memory_order_acquire))
+    return;
   auto &tree_config = unsorted_points.reader_file.tree_config;
   auto &reader_file = unsorted_points.reader_file;
   unsorted_points.reader_file.sort_workers.emplace_back(new sort_worker_t(tree_config, reader_file, _attributes_configs, _perf_stats, unsorted_points.public_header, std::move(unsorted_points.points)));

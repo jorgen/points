@@ -19,6 +19,7 @@
 
 #include <fmt/printf.h>
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <unordered_set>
@@ -179,6 +180,11 @@ public:
                  vio::event_pipe_t<std::pair<points_t, dew_error_t>> &sorted_points_pipe, vio::event_pipe_t<input_data_id_t> &done_with_file, vio::event_pipe_t<file_error_t> &file_errors);
   void add_file(tree_config_t tree_config, get_points_file_t &&new_file);
 
+  // Teardown barrier: after this returns, this reader will never enqueue onto the shared thread pool
+  // again, so the pool may be joined. Mirrors tree_handler_t::begin_shutdown -- both loops outlive the
+  // pool join in processor_t's ordered teardown, and enqueue-after-stop is a bare abort().
+  void begin_shutdown();
+
   void about_to_block() override;
 
 private:
@@ -197,5 +203,6 @@ private:
   vio::event_pipe_t<tree_config_t, get_points_file_t> _new_files_pipe;
   vio::event_pipe_t<unsorted_points_event_t> _unsorted_points;
   std::vector<std::unique_ptr<point_reader_file_t>> _point_reader_files;
+  std::atomic_bool _shutting_down = false;
 };
 } // namespace dew::converter

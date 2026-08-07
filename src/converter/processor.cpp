@@ -19,6 +19,7 @@
 
 #include "dataset_types.hpp"
 #include "converter.hpp"
+#include "loop_quiesce.hpp"
 #include "frustum_tree_walker.hpp"
 
 #include "morton_tree_coordinate_transform.hpp"
@@ -210,9 +211,17 @@ processor_t::~processor_t()
   }
 #endif
 
-  // (1) No more scheduling. Detach the main-loop about-to-block hook (input file scheduling) and stop the
-  //     tree loop from enqueuing new tree-load tasks. Both run while their loops are still alive.
+  // (1) No more scheduling. Detach the main-loop about-to-block hook (input file scheduling) and stop
+  //     every loop that feeds the shared pool from enqueuing anything else. All three run while their
+  //     loops are still alive, and each barrier returns only once its flag has been observed ON that
+  //     loop -- otherwise a callback already past the check could still reach enqueue.
+  //
+  //     All three are required: the pool is joined in (2) but the main and input loops keep running
+  //     until (4), and vio::thread_pool_t::enqueue answers an enqueue-after-stop with a bare abort()
+  //     -- no message, which is what made this show up in CI as an unexplained SIGABRT.
   _event_loop.remove_about_to_block_listener(this);
+  core::run_on_loop_and_wait(_event_loop, [this]() { _shutting_down.store(true, std::memory_order_release); });
+  _point_reader.begin_shutdown();
   _tree_handler.begin_shutdown();
 
   // (2) Drain + join the shared pool. Its parked tree-load tasks wait_for_read() on the storage loop and
@@ -348,6 +357,14 @@ const dew_attributes_t &processor_t::get_attributes(attributes_id_t id)
 
 void processor_t::handle_new_files(std::vector<std::pair<std::unique_ptr<char[]>, uint32_t>> &&new_files)
 {
+  // Teardown: the coroutine launched at the bottom of this function schedules pre-init work onto the
+  // shared pool, which by now may already be joined. Bail before registering anything.
+  if (_shutting_down.load(std::memory_order_acquire))
+  {
+    std::unique_lock<std::mutex> lock(_idle_mutex);
+    _new_file_events_sent--;
+    return;
+  }
   // Peek, do not seal: the first batch's pre-init results may still adopt the source scale.
   auto tree_config_val = _tree_handler.tree_config_peek();
   std::vector<std::pair<input_data_id_t, input_name_ref_t>> file_refs;
@@ -416,6 +433,11 @@ vio::task_t<void> processor_t::do_handle_new_files(std::vector<std::pair<input_d
       return result;
     });
   }
+
+  // Belt and braces with the check in handle_new_files: schedule_work enqueues onto the shared pool,
+  // and a pool that has been joined aborts rather than refusing.
+  if (_shutting_down.load(std::memory_order_acquire))
+    co_return;
 
   auto results = co_await vio::schedule_work(_event_loop, _thread_pool, std::move(work_items));
 

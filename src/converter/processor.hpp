@@ -17,6 +17,7 @@
 ************************************************************************/
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -145,6 +146,9 @@ private:
 
   bool _generating_lod;
   bool _has_errors;
+  // Set on _event_loop during teardown, before the shared pool is joined: the pre-init coroutine
+  // launched from handle_new_files schedules work onto that pool, and enqueue-after-stop aborts.
+  std::atomic_bool _shutting_down = false;
   morton::morton192_t _lod_done_morton = {};
   morton::morton192_t _current_lod_target_morton = {};
 

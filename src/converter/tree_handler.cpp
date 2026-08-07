@@ -23,6 +23,9 @@
 
 #include "morton_tree_coordinate_transform.hpp"
 #include "storage_handler.hpp"
+
+#include "loop_quiesce.hpp"
+
 #include <atomic>
 #include <chrono>
 
@@ -123,28 +126,8 @@ void tree_handler_t::begin_shutdown()
   // Flip the flag ON the tree loop and wait for it: once this task runs, every previously-queued tree-load
   // batch has already enqueued its pool task, and every later batch sees the flag and enqueues nothing. So
   // after this returns the caller may drain the thread pool without racing an enqueue.
-#ifdef __EMSCRIPTEN__
-  // The loop is COOPERATIVE here: thread_with_event_loop_t spawns no thread, so run_in_loop only
-  // queues and nothing will ever dequeue it while this thread sits on a future. Waiting would hang
-  // the whole program -- which is precisely what tearing a data source down in the browser used to
-  // do: press disconnect, and the page stops responding. Drive the loop ourselves instead, bounded so
-  // teardown terminates even if the flag somehow never lands.
-  bool finished = false;
-  _event_loop.run_in_loop([this, &finished]() {
-    _shutting_down.store(true, std::memory_order_release);
-    finished = true;
-  });
-  for (int i = 0; i < 1024 && !finished; ++i)
-    vio::wasm::pump();
-#else
-  std::promise<void> done;
-  auto fut = done.get_future();
-  _event_loop.run_in_loop([this, &done]() {
-    _shutting_down.store(true, std::memory_order_release);
-    done.set_value();
-  });
-  fut.wait();
-#endif
+  // See loop_quiesce.hpp for why the wait has to be shaped this way (and why it is not run_on_loop_blocking).
+  core::run_on_loop_and_wait(_event_loop, [this]() { _shutting_down.store(true, std::memory_order_release); });
 }
 
 void tree_handler_t::stop_loop()
