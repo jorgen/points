@@ -145,6 +145,34 @@ def test_cancelled_query_releases_the_request(dataset_path):
     assert result["point_count"] == TOTAL
 
 
+def test_a_lost_wake_does_not_hang(dataset_path):
+    # The wake is the primary signal, but it must not be the ONLY one. A wake that never arrives --
+    # a platform where the callback cannot run, a completion landing in a window the arm-once flag
+    # swallows -- would otherwise leave the await hanging forever with no output, which is the worst
+    # way for anything to fail. (It hung a Windows ARM CI job for over two hours.) The Session's
+    # periodic re-poll is what turns that into latency instead.
+    async def main():
+        async with dew.aio.open_dataset(dataset_path) as ds:
+            lo, hi = _whole_box(ds.get_info())
+            # Detach the wake: from here nothing signals, and only the tick can make progress.
+            ds._session.pump.set_wake_callback(None)
+            return await ds.query_box(lo, hi, lod="full", clip_points=False)
+
+    result = asyncio.run(main())
+    assert result["point_count"] == TOTAL
+
+
+def test_an_await_that_can_never_finish_times_out(dataset_path):
+    # The other half of the backstop: something that genuinely never completes has to give up and say
+    # so, rather than pinning the loop until someone kills the process.
+    async def main():
+        async with dew.aio.open_dataset(dataset_path) as ds:
+            await ds._session._until(lambda: False, timeout=0.25)
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(main())
+
+
 def test_one_session_drives_several_datasets(dataset_path):
     # What a Session is FOR: one pump, one wake, one poll draining everything. Two datasets on
     # separate private pumps would also pass a naive test, so both are queried and compared.

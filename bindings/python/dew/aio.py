@@ -31,6 +31,19 @@ from . import _dew
 
 __all__ = ["Session", "AsyncDataset", "open_dataset"]
 
+#: How often a Session re-polls while something is being awaited, as a safety net.
+#:
+#: The wake callback is the primary signal and is normally the only one needed. But a wake that never
+#: arrives -- a platform where the callback cannot run, a bug, a completion that lands in a window the
+#: arm-once flag swallows -- would otherwise leave the await hanging FOREVER with no output at all,
+#: which is the worst way for anything to fail. Ticking makes a lost wake cost latency instead of the
+#: process.
+TICK_SECONDS = 0.05
+
+#: How long any single await may take before it gives up. Generous: this is a backstop against a hang,
+#: not a latency budget -- a real query over a slow object store can legitimately take minutes.
+DEFAULT_TIMEOUT_SECONDS = 300.0
+
 
 class Session:
     """A :class:`dew.Pump` wired to the running asyncio loop.
@@ -45,6 +58,7 @@ class Session:
         # Things waiting on a state only visible after a poll: (predicate, future).
         self._waiters = []
         self._closed = False
+        self._tick_handle = None
         self.pump.set_wake_callback(self._on_wake)
 
     def close(self):
@@ -56,6 +70,9 @@ class Session:
         if self._closed:
             return
         self._closed = True
+        if self._tick_handle is not None:
+            self._tick_handle.cancel()
+            self._tick_handle = None
         self.pump.set_wake_callback(None)
         for _, future in self._waiters:
             if not future.done():
@@ -92,8 +109,23 @@ class Session:
             else:
                 pending.append((predicate, future))
         self._waiters = pending
+        if not self._waiters and self._tick_handle is not None:
+            self._tick_handle.cancel()
+            self._tick_handle = None
 
-    async def _until(self, predicate):
+    def _schedule_tick(self):
+        if self._tick_handle is not None or self._closed or not self._waiters:
+            return
+        self._tick_handle = self._loop.call_later(TICK_SECONDS, self._tick)
+
+    def _tick(self):
+        self._tick_handle = None
+        if self._closed:
+            return
+        self._drain()
+        self._schedule_tick()
+
+    async def _until(self, predicate, timeout=DEFAULT_TIMEOUT_SECONDS):
         if predicate():
             return
         future = self._loop.create_future()
@@ -101,7 +133,14 @@ class Session:
         # One drain up front closes the race where the completion landed -- and its single wake was
         # already consumed -- between the caller's last look and this await.
         self._drain()
-        await future
+        if future.done():
+            return
+        # ...and a periodic re-check so a wake that never arrives costs latency, not the process.
+        self._schedule_tick()
+        try:
+            await asyncio.wait_for(future, timeout)
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"dewfall did not complete within {timeout:g}s") from None
 
     async def open(self, url, connection="", options=None):
         """Open a dataset on this session's pump. Returns an :class:`AsyncDataset`."""
