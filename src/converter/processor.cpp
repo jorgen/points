@@ -219,8 +219,12 @@ processor_t::~processor_t()
   //     All three are required: the pool is joined in (2) but the main and input loops keep running
   //     until (4), and vio::thread_pool_t::enqueue answers an enqueue-after-stop with a bare abort()
   //     -- no message, which is what made this show up in CI as an unexplained SIGABRT.
+  //     Each barrier is BOUNDED (loop_quiesce.hpp): a destructor that can wait forever on a loop is
+  //     worse than the abort it prevents, so on timeout the flag is set here and we accept the
+  //     narrow race instead of deadlocking.
   _event_loop.remove_about_to_block_listener(this);
-  core::run_on_loop_and_wait(_event_loop, [this]() { _shutting_down.store(true, std::memory_order_release); });
+  if (!core::run_on_loop_and_wait(_event_loop, [this]() { _shutting_down.store(true, std::memory_order_release); }))
+    _shutting_down.store(true, std::memory_order_release);
   _point_reader.begin_shutdown();
   _tree_handler.begin_shutdown();
 

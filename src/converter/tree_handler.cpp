@@ -126,8 +126,11 @@ void tree_handler_t::begin_shutdown()
   // Flip the flag ON the tree loop and wait for it: once this task runs, every previously-queued tree-load
   // batch has already enqueued its pool task, and every later batch sees the flag and enqueues nothing. So
   // after this returns the caller may drain the thread pool without racing an enqueue.
-  // See loop_quiesce.hpp for why the wait has to be shaped this way (and why it is not run_on_loop_blocking).
-  core::run_on_loop_and_wait(_event_loop, [this]() { _shutting_down.store(true, std::memory_order_release); });
+  // See loop_quiesce.hpp for why the wait has to be shaped this way, and why it is bounded. On the
+  // timeout path the flag is set here instead, which is weaker (a batch already past the check can
+  // still enqueue) but is exactly the pre-barrier behaviour rather than a deadlock.
+  if (!core::run_on_loop_and_wait(_event_loop, [this]() { _shutting_down.store(true, std::memory_order_release); }))
+    _shutting_down.store(true, std::memory_order_release);
 }
 
 void tree_handler_t::stop_loop()

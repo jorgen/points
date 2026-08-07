@@ -260,8 +260,10 @@ void point_reader_t::about_to_block()
 void point_reader_t::begin_shutdown()
 {
   // Flip the flag ON the input loop and wait for it, so that after this returns no callback on that
-  // loop can still reach thread_pool.enqueue. See loop_quiesce.hpp for why the wait is shaped this way.
-  core::run_on_loop_and_wait(_event_loop, [this]() { _shutting_down.store(true, std::memory_order_release); });
+  // loop can still reach thread_pool.enqueue. Bounded -- see loop_quiesce.hpp; on timeout set it
+  // directly and accept the narrow race rather than deadlocking the destructor.
+  if (!core::run_on_loop_and_wait(_event_loop, [this]() { _shutting_down.store(true, std::memory_order_release); }))
+    _shutting_down.store(true, std::memory_order_release);
 }
 
 void point_reader_t::handle_new_files(tree_config_t &&tree_config, get_points_file_t &&new_file)

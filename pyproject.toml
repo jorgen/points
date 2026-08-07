@@ -113,7 +113,10 @@ test-extras = ["test"]
 test-command = [
     "python -c \"import dew; print(dew.__version__, dew.get_include())\"",
     "dew --version",
-    "pytest -q {package}/bindings/python/tests",
+    # -u -v so a hang names the last test that STARTED. `pytest -q` buffers its dots when stdout is
+    # not a tty, which is why two cancelled Windows arm64 jobs produced no evidence at all; the
+    # watchdog in tests/conftest.py supplies the stacks, this supplies the position.
+    "python -u -m pytest -v {package}/bindings/python/tests",
 ]
 
 [tool.cibuildwheel.linux]

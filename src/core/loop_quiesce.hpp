@@ -47,35 +47,56 @@
 #include <future>
 #endif
 
+#include <chrono>
+#include <memory>
 #include <utility>
 
 namespace dew::core
 {
 
-// Run `fn` on `loop` and return only once it has actually run. Safe to call from any thread EXCEPT
-// `loop`'s own (that would wait on work it is itself blocking).
+// Run `fn` on `loop`, returning once it has run -- or once `timeout` expires, whichever comes first.
+// Returns true if `fn` ran on the loop. Safe to call from any thread EXCEPT `loop`'s own (that would
+// wait on work it is itself blocking).
 //
-// Under wasm the caller drives the cooperative loop instead of waiting on it, bounded so teardown
-// terminates even if the task somehow never lands.
+// WHY THE WAIT IS BOUNDED, and why that is not a cop-out. This is used from destructors. An
+// unbounded wait there converts every "the loop did not service its queue" condition -- a stopped
+// loop, a loop thread wedged in a callback, a run_in_loop posted through an async handle that did
+// not wake -- into a PERMANENT hang inside dew_converter_destroy. That is strictly worse than the
+// enqueue-after-stop abort() the barrier exists to prevent: the abort is loud and bounded, the hang
+// is silent and forever. Two ~2.5h Windows arm64 wheel jobs were burned learning that.
+//
+// So on timeout the caller carries on. It should still apply `fn`'s effect directly (setting an
+// atomic flag is the only use here), which degrades to the pre-barrier behaviour -- a narrow race
+// rather than a guaranteed deadlock. Callers that care can branch on the return value.
+//
+// The promise is heap-owned via shared_ptr because on the timeout path THIS FRAME GOES AWAY while
+// the queued task may still be pending: a stack promise would be a use-after-free the moment the
+// loop got around to running it. `fn` is copied into the task for the same reason.
 template <typename Fn>
-void run_on_loop_and_wait(vio::event_loop_t &loop, Fn &&fn)
+bool run_on_loop_and_wait(vio::event_loop_t &loop, Fn fn, std::chrono::milliseconds timeout = std::chrono::milliseconds(2000))
 {
 #ifdef __EMSCRIPTEN__
-  bool finished = false;
-  loop.run_in_loop([&fn, &finished]() {
+  // The loop is COOPERATIVE here: thread_with_event_loop_t spawns no thread, so run_in_loop only
+  // queues and nothing will ever dequeue it while this thread waits. Drive it ourselves instead --
+  // waiting would hang the whole program, which is precisely what tearing a data source down in the
+  // browser used to do: press Disconnect, and the page stops responding.
+  (void)timeout;
+  auto finished = std::make_shared<bool>(false);
+  loop.run_in_loop([fn, finished]() {
     fn();
-    finished = true;
+    *finished = true;
   });
-  for (int i = 0; i < 1024 && !finished; ++i)
+  for (int i = 0; i < 1024 && !*finished; ++i)
     vio::wasm::pump();
+  return *finished;
 #else
-  std::promise<void> done;
-  auto fut = done.get_future();
-  loop.run_in_loop([&fn, &done]() {
+  auto done = std::make_shared<std::promise<void>>();
+  auto fut = done->get_future();
+  loop.run_in_loop([fn, done]() {
     fn();
-    done.set_value();
+    done->set_value();
   });
-  fut.wait();
+  return fut.wait_for(timeout) == std::future_status::ready;
 #endif
 }
 
