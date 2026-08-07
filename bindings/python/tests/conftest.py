@@ -3,7 +3,7 @@
 ctest sets PYTHONPATH to the module's build dir; for manual runs, look for a
 built module in the cmake-build-* trees.
 
-Also installs a hang watchdog -- see below.
+Also enables faulthandler -- see below.
 """
 
 import faulthandler
@@ -11,24 +11,19 @@ import glob
 import os
 import sys
 
-# A wheel job that hangs must say WHERE, not burn six hours and tell us nothing.
+# A wheel job that hangs must say WHERE, not burn hours and tell us nothing. Two ~2.5h Windows arm64
+# jobs were cancelled with logs ending before pytest printed anything, because `pytest -q` buffers
+# its dots when stdout is not a tty.
 #
-# This has cost real time twice on the Windows arm64 runner: two ~2.5h jobs cancelled with a log
-# ending at the last line before pytest started, because `pytest -q` buffers its dots when stdout is
-# not a tty, so a hang is indistinguishable from silence.
+# The watchdog itself is pytest's faulthandler plugin (faulthandler_timeout in pyproject.toml), NOT a
+# dump_traceback_later call here: conftest is imported after pytest has already replaced fd 2 with
+# its capture pipe, so a hand-rolled watchdog fires but its traceback lands in the capture buffer and
+# dies with the process -- observed exactly once, costing a 612s run that named the test and printed
+# no stacks. The plugin writes to the real stderr and re-arms per test.
 #
-# dump_traceback_later runs its timer on a **C thread**, which is the whole point: the failure modes
-# worth catching here are blocking C calls (an unbounded wait inside the library, a callback waiting
-# on a loop that never runs), and during one of those the GIL is held, so anything driven by a Python
-# thread -- including asyncio timeouts -- never gets to run. A pure-Python watchdog would stay silent
-# for exactly the bugs this is here to catch.
-#
-# exit=True makes the process die after dumping, so the job fails fast with every thread's stack in
-# the log instead of hitting the runner's job timeout.
-_TIMEOUT = float(os.environ.get("DEW_TEST_WATCHDOG_SECONDS", "600"))
-if _TIMEOUT > 0:
-    faulthandler.enable()
-    faulthandler.dump_traceback_later(_TIMEOUT, exit=True)
+# faulthandler.enable() is still worth having for the other half: it catches a hard crash (SIGSEGV,
+# SIGABRT) rather than a hang, and vio's thread pool aborts bare on enqueue-after-stop.
+faulthandler.enable()
 
 try:
     import dew  # noqa: F401

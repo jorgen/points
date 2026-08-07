@@ -103,6 +103,15 @@ CPython 3.12+ on linux-x86_64/aarch64, macOS and Windows -- if pip chose this
 sdist, your platform or interpreter is not one of them.
 """
 
+[tool.pytest.ini_options]
+# Per-test hang watchdog. pytest's own faulthandler plugin is used rather than a hand-rolled
+# dump_traceback_later in conftest.py, because conftest is imported AFTER pytest has replaced fd 2
+# with its capture pipe: the hand-rolled version fired correctly but its traceback went into the
+# capture buffer and died with the process, so a 612s failure told us the test name and nothing else.
+# This plugin writes to the real stderr and re-arms per test, so the log gets the offending test AND
+# every thread's stack.
+faulthandler_timeout = 300
+
 [tool.cibuildwheel]
 build = "cp312-*"          # abi3: this one build covers 3.12, 3.13, 3.14, ...
 archs = ["auto64"]
